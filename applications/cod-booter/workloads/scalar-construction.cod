@@ -1,21 +1,21 @@
 using symbol "std:io" @print;
 
-proc advance(ref cursor:u64 in O) -> void where {owner O} {
+proc advance(ref cursor:UInt64 in O) -> void where {owner O} {
     (cursor <- cursor + 2u64):void;
     return;
 }
 
-proc show(val number:u64) -> void { behave @print(number); return; }
+proc show(val number:UInt64) -> void { behave @print(number); return; }
 
 proc read_field() -> void {
     val attempts <- 0u64;
-    ptr cursor:u64 = make u64 in here {
+    ptr cursor:UInt64 = make UInt64 in here {
         attempts <- attempts + 1u64;
         40u64
     };
-    ptr saved:u64 = cursor;
-    ptr absent:u64 = null in here;
-    ptr separate:u64 = make typeof(absent) { 40u64 };
+    ptr saved:UInt64 = cursor;
+    ptr absent:UInt64 = null in here;
+    ptr separate:UInt64 = make typeof(absent) { 40u64 };
     advance(saved);
     defer show(cursor);
     (cursor <- cursor + 1u64):void;

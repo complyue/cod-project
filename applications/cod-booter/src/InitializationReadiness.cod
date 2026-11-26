@@ -6,16 +6,16 @@ using "./InitializationFlow.cod" InitializationAccess { ResetAccess, EstablishAc
 using "./InitializationControl.cod" InitializationStates;
 
 export data InitializationResult {
-    diagnostic:u8;
-    node:u64;
+    diagnostic:UInt8;
+    node:UInt64;
 }
 
-func unproved_initialization() -> u8 { return 13u8; }
-func unproved_local_binding() -> u8 { return 17u8; }
-func incomplete_place_initialization() -> u8 { return 19u8; }
+func unproved_initialization() -> UInt8 { return 13u8; }
+func unproved_local_binding() -> UInt8 { return 17u8; }
+func incomplete_place_initialization() -> UInt8 { return 19u8; }
 
 func add_predecessor(heads:InitializationIndices in I, links:InitializationIndices in I,
-                     edge:u64, target:u64) -> void where {owner I} {
+                     edge:UInt64, target:UInt64) -> void where {owner I} {
     if (target != no_node()) {
         links[edge] <- heads[target];
         (heads[target] <- edge):void
@@ -26,7 +26,7 @@ func add_predecessor(heads:InitializationIndices in I, links:InitializationIndic
 # without retaining another word per edge. Group obligations by tag once.
 func index_readiness(operations:const InitializationOperations in O, states:const InitializationStates in S,
                      pred_heads:InitializationIndices in I, pred_links:InitializationIndices in I,
-                     tag_heads:InitializationIndices in I, uses:InitializationIndices in I, states_used:u64) -> void
+                     tag_heads:InitializationIndices in I, uses:InitializationIndices in I, states_used:UInt64) -> void
     where {const owner O, const owner S, owner I} {
     val at <- no_node();
     val tag <- 0u64;
@@ -42,8 +42,8 @@ func index_readiness(operations:const InitializationOperations in O, states:cons
     };
 }
 
-func add_influence(marks:InitializationIndices in W, work:InitializationIndices in W, count:u64 in W,
-                   tag:u64, state:u64) -> void where {owner W} {
+func add_influence(marks:InitializationIndices in W, work:InitializationIndices in W, count:UInt64 in W,
+                   tag:UInt64, state:UInt64) -> void where {owner W} {
     if (marks[state] != tag) {
         marks[state] <- tag;
         work[count] <- state;
@@ -51,8 +51,8 @@ func add_influence(marks:InitializationIndices in W, work:InitializationIndices 
     };
 }
 
-func seed_influence(uses:const InitializationIndices in I, first_use:u64, tag:u64,
-                    marks:InitializationIndices in W, work:InitializationIndices in W, count:u64 in W) -> void
+func seed_influence(uses:const InitializationIndices in I, first_use:UInt64, tag:UInt64,
+                    marks:InitializationIndices in W, work:InitializationIndices in W, count:UInt64 in W) -> void
     where {const owner I, owner W} {
     val use <- first_use;
     for (unused in 0u64 .. intrinsic (len)(uses)) {
@@ -63,8 +63,8 @@ func seed_influence(uses:const InitializationIndices in I, first_use:u64, tag:u6
 }
 
 func visit_predecessors(operations:const InitializationOperations in O, states:const InitializationStates in S,
-                        pred_links:const InitializationIndices in I, first_edge:u64, tag:u64,
-                        marks:InitializationIndices in W, work:InitializationIndices in W, count:u64 in W) -> bool
+                        pred_links:const InitializationIndices in I, first_edge:UInt64, tag:UInt64,
+                        marks:InitializationIndices in W, work:InitializationIndices in W, count:UInt64 in W) -> bool
     where {const owner O, const owner S, const owner I, owner W} {
     val origin <- false;
     val edge <- first_edge;
@@ -91,8 +91,8 @@ func visit_predecessors(operations:const InitializationOperations in O, states:c
 func collect_influence(operations:const InitializationOperations in O, states:const InitializationStates in S,
                        roots:const InitializationIndices in S, pred_heads:const InitializationIndices in I,
                        pred_links:const InitializationIndices in I, uses:const InitializationIndices in I,
-                       first_use:u64, tag:u64, marks:InitializationIndices in W, work:InitializationIndices in W,
-                       origins:InitializationTags in W, count:u64 in W) -> void
+                       first_use:UInt64, tag:UInt64, marks:InitializationIndices in W, work:InitializationIndices in W,
+                       origins:InitializationTags in W, count:UInt64 in W) -> void
     where {const owner O, const owner S, const owner I, owner W} {
     seed_influence(uses, first_use, tag, marks, work, count);
     val state <- no_node();
@@ -108,7 +108,7 @@ func collect_influence(operations:const InitializationOperations in O, states:co
 }
 
 func add_unready(marks:const InitializationIndices in I, unready:InitializationTags in W,
-                 work:InitializationIndices in W, count:u64, tag:u64, state:u64) -> u64
+                 work:InitializationIndices in W, count:UInt64, tag:UInt64, state:UInt64) -> UInt64
     where {const owner I, owner W} {
     if (state == no_node() || marks[state] != tag || unready[state]) return count;
     unready[state] <- true;
@@ -120,7 +120,7 @@ func add_unready(marks:const InitializationIndices in I, unready:InitializationT
 # A failed use in one state does not mark a different use of the same tag.
 func complete_unready(operations:const InitializationOperations in O, states:const InitializationStates in S,
                       marks:const InitializationIndices in I, influence:const InitializationIndices in I,
-                      origins:const InitializationTags in I, influence_count:u64, tag:u64,
+                      origins:const InitializationTags in I, influence_count:UInt64, tag:UInt64,
                       unready:InitializationTags in W, work:InitializationIndices in W,
                       rejected:InitializationTags in R) -> void
     where {const owner O, const owner S, const owner I, owner W, owner R} {
@@ -147,7 +147,7 @@ func complete_unready(operations:const InitializationOperations in O, states:con
 
 export func complete_initialization_readiness(
     operations:const InitializationOperations in O, states:const InitializationStates in S,
-    roots:const InitializationIndices in S, states_used:u64, tags:u64, rejected:InitializationTags in R) -> void
+    roots:const InitializationIndices in S, states_used:UInt64, tags:UInt64, rejected:InitializationTags in R) -> void
     where {const owner O, const owner S, owner R} {
     ref pred_heads = make InitializationIndices(states_used, no_node());
     ref pred_links = make InitializationIndices(states_used * 2u64, no_node());
@@ -160,7 +160,7 @@ export func complete_initialization_readiness(
     ref origins = make InitializationTags(states_used, false);
     ref work = make InitializationIndices(states_used, no_node());
     ref unready = make InitializationTags(states_used, false);
-    ref influence_count = make u64 { 0u64 };
+    ref influence_count = make UInt64 { 0u64 };
     val first_use <- no_node();
     for (tag in 1u64 .. tags) {
         first_use <- tag_heads[tag];

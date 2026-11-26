@@ -5,7 +5,7 @@ using "std:text-storage" { utf8_size, utf8_byte };
 data Entry { name:String; }
 
 proc reject() -> void throws NullPointerException {
-    ptr missing:u64 = null in here;
+    ptr missing:UInt64 = null in here;
     behave @print(missing);
     return;
 }
@@ -18,11 +18,11 @@ proc (<-)(init val var out:String in D, input:const String in S) -> void
     return;
 }
 
-proc inspect(entry:const Entry in D) -> u64 where {const owner D} {
+proc inspect(entry:const Entry in D) -> UInt64 where {const owner D} {
     return utf8_size(entry.name);
 }
 
-proc exercise() -> u64 {
+proc exercise() -> UInt64 {
     try {
         ref rejected_before_write = make Entry { name <- ""; };
         behave @print(inspect(rejected_before_write));

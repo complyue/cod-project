@@ -9,20 +9,20 @@ using "./ParserStorage.cod" { Tokens, len, no_node };
 using "./Lexer.cod" { scan_token, end_of_source, lexical_error };
 
 export data ScanResult {
-    used:u64;
-    next:u64;
+    used:UInt64;
+    next:UInt64;
     complete:bool;
     invalid_source:bool;
 }
 
-func opener_for(mark:u8) -> u8 {
+func opener_for(mark:UInt8) -> UInt8 {
     if (mark == RIGHT_PAREN) return LEFT_PAREN;
     if (mark == RIGHT_BRACKET) return LEFT_BRACKET;
     if (mark == RIGHT_BRACE) return LEFT_BRACE;
     return 0u8
 }
 
-func mark_delimiter(tokens:Tokens in T, at:u64, link:const DelimiterLink in L) -> void
+func mark_delimiter(tokens:Tokens in T, at:UInt64, link:const DelimiterLink in L) -> void
     where {owner T, const owner L} {
     tokens[at] <- make Token {
         kind <- tokens[at].kind;
@@ -33,8 +33,8 @@ func mark_delimiter(tokens:Tokens in T, at:u64, link:const DelimiterLink in L) -
     return
 }
 
-func close_delimiter(source:const SourceBytes in S, tokens:Tokens in T, open:u64 in O,
-                     closing:u64, expected:u8) -> void where {const owner S, owner T, owner O} {
+func close_delimiter(source:const SourceBytes in S, tokens:Tokens in T, open:UInt64 in O,
+                     closing:UInt64, expected:UInt8) -> void where {const owner S, owner T, owner O} {
     val previous <- no_node();
     val crossed <- false;
     for (step in 0u64 .. closing) {
@@ -55,7 +55,7 @@ func close_delimiter(source:const SourceBytes in S, tokens:Tokens in T, open:u64
     }
 }
 
-func index_delimiters(source:const SourceBytes in S, tokens:Tokens in T, eof:u64) -> void
+func index_delimiters(source:const SourceBytes in S, tokens:Tokens in T, eof:UInt64) -> void
     where {const owner S, owner T} {
     val open <- no_node();
     val mark <- 0u8;

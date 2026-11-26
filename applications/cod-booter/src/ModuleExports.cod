@@ -32,33 +32,33 @@ export data SelectionSpelling =
     CatalogSpelling { span:SourceSpan; } |
     GraphSpelling { span:SourceSpan; };
 
-export array StagedExportNames[u64]:SelectionSpelling;
-export array StagedExportUses[u64]:u64;
+export array StagedExportNames[UInt64]:SelectionSpelling;
+export array StagedExportUses[UInt64]:UInt64;
 
 export data CheckedSelection =
     UnpublishedSelection {} |
     SelectedResource {
-        revision:u64;
-        site:u64;
+        revision:UInt64;
+        site:UInt64;
         mode:ModuleSelectionMode;
         nature:ResourceNature;
-        members:u64;
-        default_member_first:u64;
-        default_member_past:u64;
+        members:UInt64;
+        default_member_first:UInt64;
+        default_member_past:UInt64;
         local:SelectionSpelling;
         published:SelectionSpelling;
-        public_row:u64;
-        export_kind:u8;
-        checked:u8;
-        publishing_module:u64;
-        defining_module:u64;
-        identity:u64;
-        owner_module:u64;
-        owner_identity:u64;
-        shape:u8;
+        public_row:UInt64;
+        export_kind:UInt8;
+        checked:UInt8;
+        publishing_module:UInt64;
+        defining_module:UInt64;
+        identity:UInt64;
+        owner_module:UInt64;
+        owner_identity:UInt64;
+        shape:UInt8;
     };
-export array CheckedSelections[u64]:CheckedSelection;
-export enum SelectionComparison:u8 {
+export array CheckedSelections[UInt64]:CheckedSelection;
+export enum SelectionComparison:UInt8 {
     DistinctSpelling;
     RepeatedSelection;
     ConflictingSelection;
@@ -66,7 +66,7 @@ export enum SelectionComparison:u8 {
 }
 
 func bounded_selection_spelling(
-    spelling:const SelectionSpelling in L, source_size:u64, catalog_size:u64, graph_used:u64)
+    spelling:const SelectionSpelling in L, source_size:UInt64, catalog_size:UInt64, graph_used:UInt64)
     -> bool where {const owner L} {
     return case spelling of {
         SourceSpelling { val range <- span; } -> range.first < range.past && range.past <= source_size;
@@ -77,8 +77,8 @@ func bounded_selection_spelling(
 
 export func selected_spelling_matches(
     spelling:const SelectionSpelling in L, source:const SourceBytes in S,
-    catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:u64,
-    name:const SourceBytes in M, first:u64, past:u64)
+    catalog:const SourceBytes in B, graph:const SourceBytes in G, graph_used:UInt64,
+    name:const SourceBytes in M, first:UInt64, past:UInt64)
     -> bool where {const owner L, const owner S, const owner B, const owner G, const owner M} {
     if (first >= past || past > intrinsic (len)(name) || graph_used > intrinsic (len)(graph))
         return false;
@@ -99,9 +99,9 @@ export func selected_spelling_matches(
 }
 
 export func selected_name_matches(
-    selections:const CheckedSelections in F, used:u64, index:u64, revision:u64,
+    selections:const CheckedSelections in F, used:UInt64, index:UInt64, revision:UInt64,
     source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
-    graph_used:u64, first:u64, past:u64)
+    graph_used:UInt64, first:UInt64, past:UInt64)
     -> bool where {const owner F, const owner S, const owner B, const owner G} {
     if (index >= used || used > intrinsic (len)(selections)) return false;
     return case selections[index] of {
@@ -115,10 +115,10 @@ export func selected_name_matches(
 }
 
 export func find_selected_name(
-    selections:const CheckedSelections in F, used:u64, revision:u64,
+    selections:const CheckedSelections in F, used:UInt64, revision:UInt64,
     source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
-    graph_used:u64, first:u64, past:u64)
-    -> u64 where {const owner F, const owner S, const owner B, const owner G} {
+    graph_used:UInt64, first:UInt64, past:UInt64)
+    -> UInt64 where {const owner F, const owner S, const owner B, const owner G} {
     if (used > intrinsic (len)(selections)) return no_node();
     for (index in 0u64 .. used) {
         if (selected_name_matches(selections, used, index, revision, source,
@@ -130,7 +130,7 @@ export func find_selected_name(
 export func same_selection_spelling(
     left:const SelectionSpelling in L, right:const SelectionSpelling in R,
     source:const SourceBytes in S, catalog:const SourceBytes in B,
-    graph:const SourceBytes in G, graph_used:u64)
+    graph:const SourceBytes in G, graph_used:UInt64)
     -> bool where {const owner L, const owner R, const owner S, const owner B, const owner G} {
     return case left of {
         (SourceSpelling { val range <- span; }) -> {
@@ -150,9 +150,9 @@ export func same_selection_spelling(
 }
 
 export func compare_selected_bindings(
-    selections:const CheckedSelections in F, used:u64, revision:u64, before:u64, after:u64,
+    selections:const CheckedSelections in F, used:UInt64, revision:UInt64, before:UInt64, after:UInt64,
     source:const SourceBytes in S, catalog:const SourceBytes in B,
-    graph:const SourceBytes in G, graph_used:u64)
+    graph:const SourceBytes in G, graph_used:UInt64)
     -> SelectionComparison where {const owner F, const owner S, const owner B, const owner G} {
     if (before >= used || after >= used || used > intrinsic (len)(selections) ||
         graph_used > intrinsic (len)(graph))
@@ -193,9 +193,9 @@ export func compare_selected_bindings(
 }
 
 func validate_checked_selections(
-    selections:const CheckedSelections in F, used:u64, tree:const ParseResult in T,
+    selections:const CheckedSelections in F, used:UInt64, tree:const ParseResult in T,
     source:const SourceBytes in S, catalog:const SourceBytes in B, graph:const SourceBytes in G,
-    graph_used:u64, report:ExportResolutionResult in R)
+    graph_used:UInt64, report:ExportResolutionResult in R)
     -> bool where {const owner F, const owner T, const owner S, const owner B, const owner G, owner R} {
     if (used > intrinsic (len)(selections) || graph_used > intrinsic (len)(graph)) return false;
     val source_size <- intrinsic (len)(source);
@@ -231,41 +231,41 @@ func validate_checked_selections(
 
 export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
-    dependency_module:u64;
-    checked_resource:u64;
-    selection_site:u64;
-    selection_public_row:u64;
-    identity:u64;
-    kind:u8;
-    checked:u8;
-    origin_module:u64;
-    owner_module:u64;
-    owner_identity:u64;
-    shape:u8;
-    enum_head:u64;
-    enum_code:u64;
-    sum_head:u64;
-    next_sum_selection:u64;
-    constructor_selection:u64;
-    constructor_row:u64;
+    dependency_module:UInt64;
+    checked_resource:UInt64;
+    selection_site:UInt64;
+    selection_public_row:UInt64;
+    identity:UInt64;
+    kind:UInt8;
+    checked:UInt8;
+    origin_module:UInt64;
+    owner_module:UInt64;
+    owner_identity:UInt64;
+    shape:UInt8;
+    enum_head:UInt64;
+    enum_code:UInt64;
+    sum_head:UInt64;
+    next_sum_selection:UInt64;
+    constructor_selection:UInt64;
+    constructor_row:UInt64;
 }
-export array SelectedExports[u64]:SelectedExport;
+export array SelectedExports[UInt64]:SelectedExport;
 
 export data ExportResolutionResult {
-    diagnostic:u8;
-    node:u64;
+    diagnostic:UInt8;
+    node:UInt64;
 }
 
-export func exception_type_export() -> u8 { return 1u8; }
-export func symbol_export() -> u8 { return 2u8; }
-export func builder_storage_export() -> u8 { return 11u8; }
-export func lexical_result_export() -> u8 { return 14u8; }
-export func text_size_export() -> u8 { return 15u8; }
-export func text_byte_export() -> u8 { return 16u8; }
+export func exception_type_export() -> UInt8 { return 1u8; }
+export func symbol_export() -> UInt8 { return 2u8; }
+export func builder_storage_export() -> UInt8 { return 11u8; }
+export func lexical_result_export() -> UInt8 { return 14u8; }
+export func text_size_export() -> UInt8 { return 15u8; }
+export func text_byte_export() -> UInt8 { return 16u8; }
 
 # The canonical catalog occupies the lower half, including builtin meanings
 # carried by a re-export. The remaining meanings belong only to source rows.
-func first_source_export_kind() -> u8 { return 128u8; }
+func first_source_export_kind() -> UInt8 { return 128u8; }
 func valid_builtin_catalog(exports:const ModuleExports in B) -> bool where {const owner B} {
     for (at in 0u64 .. intrinsic (len)(exports)) {
         if (exports[at].kind == 0u8 || exports[at].kind >= first_source_export_kind())
@@ -273,31 +273,31 @@ func valid_builtin_catalog(exports:const ModuleExports in B) -> bool where {cons
     };
     return true
 }
-export func sum_export() -> u8 { return first_source_export_kind(); }
-export func native_handle_export() -> u8 { return 129u8; }
-export func record_export() -> u8 { return 130u8; }
-export func array_export() -> u8 { return 131u8; }
-export func nominal_exception_export() -> u8 { return 132u8; }
-export func callable_export() -> u8 { return 133u8; }
-export func enum_export() -> u8 { return 134u8; }
-export func enum_member_export() -> u8 { return 135u8; }
-export func abstract_type_export() -> u8 { return 136u8; }
-export func lexical_builder_export() -> u8 { return 137u8; }
-export func scalar_type_export() -> u8 { return 138u8; }
-export func ordinary_callable_shape() -> u8 { return 1u8; }
-export func array_slot_callable_shape() -> u8 { return 2u8; }
-export func numeric_record_shape() -> u8 { return 2u8; }
+export func sum_export() -> UInt8 { return first_source_export_kind(); }
+export func native_handle_export() -> UInt8 { return 129u8; }
+export func record_export() -> UInt8 { return 130u8; }
+export func array_export() -> UInt8 { return 131u8; }
+export func nominal_exception_export() -> UInt8 { return 132u8; }
+export func callable_export() -> UInt8 { return 133u8; }
+export func enum_export() -> UInt8 { return 134u8; }
+export func enum_member_export() -> UInt8 { return 135u8; }
+export func abstract_type_export() -> UInt8 { return 136u8; }
+export func lexical_builder_export() -> UInt8 { return 137u8; }
+export func scalar_type_export() -> UInt8 { return 138u8; }
+export func ordinary_callable_shape() -> UInt8 { return 1u8; }
+export func array_slot_callable_shape() -> UInt8 { return 2u8; }
+export func numeric_record_shape() -> UInt8 { return 2u8; }
 
-export func aggregate_export_shape(storage:AggregateStorage, numeric:bool) -> u8 {
+export func aggregate_export_shape(storage:AggregateStorage, numeric:bool) -> UInt8 {
     if (storage == CLayoutBitsRecord) return if (numeric) { numeric_record_shape() } else { 1u8 };
     if (storage == NonBitsAggregate) return 3u8;
     if (storage == CoDBitsAggregate) return 4u8;
     return 0u8;
 }
 
-export func print_export_identity() -> u64 { return 0u64; }
+export func print_export_identity() -> UInt64 { return 0u64; }
 
-func export_nature(exports:const ModuleExports in E, row:u64, nature:ResourceNature in R)
+func export_nature(exports:const ModuleExports in E, row:UInt64, nature:ResourceNature in R)
     -> bool where {const owner E, owner R} {
     if (row >= intrinsic (len)(exports) || exports[row].kind == 0u8) return false;
     if (exports[row].kind != symbol_export()) {
@@ -314,38 +314,38 @@ func export_nature(exports:const ModuleExports in E, row:u64, nature:ResourceNat
     return true
 }
 
-export func matches_export_nature(exports:const ModuleExports in E, row:u64,
+export func matches_export_nature(exports:const ModuleExports in E, row:UInt64,
                                   nature:ResourceNature) -> bool where {const owner E} {
     ref actual = make ResourceNature { OrdinaryResource };
     return export_nature(exports, row, actual) && actual == nature
 }
 
-export func exception_root_identity() -> u64 { return 0u64; }
-export func error_root_identity() -> u64 { return 11u64; }
-export func null_pointer_identity() -> u64 { return 4u64; }
-export func out_of_memory_identity() -> u64 { return 1u64; }
-export func region_capacity_identity() -> u64 { return 2u64; }
-export func invalid_capacity_identity() -> u64 { return 3u64; }
-export func missing_return_identity() -> u64 { return 5u64; }
-export func index_out_of_bounds_identity() -> u64 { return 8u64; }
-export func unexpected_case_identity() -> u64 { return 9u64; }
-export func type_assertion_failed_identity() -> u64 { return 10u64; }
-export func assertion_failed_identity() -> u64 { return 13u64; }
+export func exception_root_identity() -> UInt64 { return 0u64; }
+export func error_root_identity() -> UInt64 { return 11u64; }
+export func null_pointer_identity() -> UInt64 { return 4u64; }
+export func out_of_memory_identity() -> UInt64 { return 1u64; }
+export func region_capacity_identity() -> UInt64 { return 2u64; }
+export func invalid_capacity_identity() -> UInt64 { return 3u64; }
+export func missing_return_identity() -> UInt64 { return 5u64; }
+export func index_out_of_bounds_identity() -> UInt64 { return 8u64; }
+export func unexpected_case_identity() -> UInt64 { return 9u64; }
+export func type_assertion_failed_identity() -> UInt64 { return 10u64; }
+export func assertion_failed_identity() -> UInt64 { return 13u64; }
 
-export func unproved_module_exports() -> u8 { return 1u8; }
-export func missing_module_export() -> u8 { return 2u8; }
-export func wrong_export_kind() -> u8 { return 3u8; }
-export func export_storage_exhausted() -> u8 { return 4u8; }
-export func invalid_export_tree() -> u8 { return 5u8; }
-export func unproved_import_interpretation() -> u8 { return 12u8; }
-func invalid_member_selection() -> u8 { return 13u8; }
-export func missing_enum_member() -> u8 { return 14u8; }
-func conflicting_enum_members() -> u8 { return 15u8; }
-func missing_sum_constructor() -> u8 { return 17u8; }
-func conflicting_sum_constructors() -> u8 { return 18u8; }
+export func unproved_module_exports() -> UInt8 { return 1u8; }
+export func missing_module_export() -> UInt8 { return 2u8; }
+export func wrong_export_kind() -> UInt8 { return 3u8; }
+export func export_storage_exhausted() -> UInt8 { return 4u8; }
+export func invalid_export_tree() -> UInt8 { return 5u8; }
+export func unproved_import_interpretation() -> UInt8 { return 12u8; }
+func invalid_member_selection() -> UInt8 { return 13u8; }
+export func missing_enum_member() -> UInt8 { return 14u8; }
+func conflicting_enum_members() -> UInt8 { return 15u8; }
+func missing_sum_constructor() -> UInt8 { return 17u8; }
+func conflicting_sum_constructors() -> UInt8 { return 18u8; }
 
-func selection_profile(mode:ModuleSelectionMode, kind:u8, shape:u8, members:u64,
-                       declarations_only:bool) -> u8 {
+func selection_profile(mode:ModuleSelectionMode, kind:UInt8, shape:UInt8, members:UInt64,
+                       declarations_only:bool) -> UInt8 {
     if (mode == MixinResource) return unproved_import_interpretation();
     if (mode == IdentityResource && kind != symbol_export()) return wrong_export_kind();
     if (mode == ImportResource && kind != scalar_type_export() && kind != enum_export() && kind != sum_export() &&
@@ -358,23 +358,23 @@ func selection_profile(mode:ModuleSelectionMode, kind:u8, shape:u8, members:u64,
 }
 
 func valid_graph_public_row(
-    exports:const ModuleExports in G, first:u64, past:u64, row:u64, module:u64, spelling_used:u64)
+    exports:const ModuleExports in G, first:UInt64, past:UInt64, row:UInt64, module:UInt64, spelling_used:UInt64)
     -> bool where {const owner G} {
     return row >= first && row < past && row < intrinsic (len)(exports) &&
         exports[row].publishing_module == module && exports[row].kind != 0u8 &&
         exports[row].name_first < exports[row].name_past && exports[row].name_past <= spelling_used
 }
 
-func selected_bulk_row(defaults:const DefaultExportRefs in G, view:PublicView, at:u64)
-    -> u64 where {const owner G} {
+func selected_bulk_row(defaults:const DefaultExportRefs in G, view:PublicView, at:UInt64)
+    -> UInt64 where {const owner G} {
     if (view == DefaultPublic) return defaults[at].public_row;
     return at
 }
 
 export func measure_bulk_selection(
     exports:const ModuleExports in G, defaults:const DefaultExportRefs in G,
-    ranges:const ModuleSelectionRanges in R, view:PublicView, module:u64, spelling_used:u64,
-    count:u64 in C) -> u8 where {const owner G, const owner R, owner C} {
+    ranges:const ModuleSelectionRanges in R, view:PublicView, module:UInt64, spelling_used:UInt64,
+    count:UInt64 in C) -> UInt8 where {const owner G, const owner R, owner C} {
     if (module == 0u64 || ranges.exports_first > ranges.exports_past ||
         ranges.exports_past > intrinsic (len)(exports) ||
         ranges.defaults_first > ranges.defaults_past ||
@@ -398,10 +398,10 @@ export func measure_bulk_selection(
 }
 
 func stage_selection(
-    exports:const ModuleExports in G, row:u64, mode:ModuleSelectionMode, nature:ResourceNature,
-    revision:u64, site:u64, members:u64, member_first:u64, member_past:u64,
+    exports:const ModuleExports in G, row:UInt64, mode:ModuleSelectionMode, nature:ResourceNature,
+    revision:UInt64, site:UInt64, members:UInt64, member_first:UInt64, member_past:UInt64,
     local:const SelectionSpelling in L,
-    published:const SelectionSpelling in L, selected:CheckedSelections in F, at:u64)
+    published:const SelectionSpelling in L, selected:CheckedSelections in F, at:UInt64)
     -> void where {const owner G, const owner L, owner F} {
     selected[at] <- make SelectedResource {
         revision <- revision; site <- site; mode <- mode; nature <- nature;
@@ -418,8 +418,8 @@ func stage_selection(
 }
 
 func stage_graph_selection(
-    exports:const ModuleExports in G, row:u64, mode:ModuleSelectionMode, nature:ResourceNature,
-    revision:u64, site:u64, member_first:u64, member_past:u64, selected:CheckedSelections in F, at:u64)
+    exports:const ModuleExports in G, row:UInt64, mode:ModuleSelectionMode, nature:ResourceNature,
+    revision:UInt64, site:UInt64, member_first:UInt64, member_past:UInt64, selected:CheckedSelections in F, at:UInt64)
     -> void where {const owner G, owner F} {
     ref spelling = make GraphSpelling { span <- make SourceSpan {
         first <- exports[row].name_first; past <- exports[row].name_past
@@ -432,11 +432,11 @@ func stage_graph_selection(
 
 export func append_bulk_selections(
     exports:const ModuleExports in G, defaults:const DefaultExportRefs in G,
-    ranges:const ModuleSelectionRanges in R, view:PublicView, module:u64, spelling_used:u64,
-    mode:ModuleSelectionMode, revision:u64, site:u64, declarations_only:bool,
-    selected:CheckedSelections in F, used:u64 in C)
-    -> u8 where {const owner G, const owner R, owner F, owner C} {
-    ref past = make u64 { used };
+    ranges:const ModuleSelectionRanges in R, view:PublicView, module:UInt64, spelling_used:UInt64,
+    mode:ModuleSelectionMode, revision:UInt64, site:UInt64, declarations_only:bool,
+    selected:CheckedSelections in F, used:UInt64 in C)
+    -> UInt8 where {const owner G, const owner R, owner F, owner C} {
+    ref past = make UInt64 { used };
     val measured <- measure_bulk_selection(exports, defaults, ranges, view, module,
                                            spelling_used, past);
     if (measured != 0u8) return measured;
@@ -469,8 +469,8 @@ export func append_bulk_selections(
     return 0u8
 }
 
-func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
-                      spellings:const SourceBytes in B, module_first:u64, module_past:u64) -> bool
+func same_module_path(source:const SourceBytes in S, first:UInt64, past:UInt64,
+                      spellings:const SourceBytes in B, module_first:UInt64, module_past:UInt64) -> bool
     where {const owner S, const owner B} {
     # The lexer has already validated the quotes and escapes. Decode as we
     # compare so the source can stay mapped and neither spelling is rebuilt.
@@ -485,7 +485,7 @@ func same_module_path(source:const SourceBytes in S, first:u64, past:u64,
     return position == close_quote;
 }
 
-func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+func builtin_path(source:const SourceBytes in S, first:UInt64, past:UInt64) -> bool where {const owner S} {
     # Quoted path escapes can only produce quote or backslash.
     return past >= first && past - first >= 6u64 && past <= intrinsic (len)(source) &&
         source[first + 1u64] == 115u8 && source[first + 2u64] == 116u8 &&
@@ -493,9 +493,9 @@ func builtin_path(source:const SourceBytes in S, first:u64, past:u64) -> bool wh
 }
 
 export func module_selection_path(
-    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+    nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     named:ModuleSelectionSites in M, bulk:BulkSelectionSites in M)
-    -> u64 where {const owner N, owner M} {
+    -> UInt64 where {const owner N, owner M} {
     if (inspect_module_selection(nodes, revision, used, at, named) == SelectionReady)
         return named.path;
     if (inspect_bulk_selection(nodes, revision, used, at, bulk) == SelectionReady)
@@ -504,9 +504,9 @@ export func module_selection_path(
 }
 
 export func file_dependency_path(
-    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64, at:u64,
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64, at:UInt64,
     named:ModuleSelectionSites in M, bulk:BulkSelectionSites in M)
-    -> u64 where {const owner S, const owner N, owner M} {
+    -> UInt64 where {const owner S, const owner N, owner M} {
     val path <- module_selection_path(nodes, revision, used, at, named, bulk);
     if (path == no_node() || builtin_path(source, syntax_first(nodes, used, path), syntax_past(nodes, used, path)))
         return no_node();
@@ -514,7 +514,7 @@ export func file_dependency_path(
 }
 
 export func next_module_dependency(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                   used:u64, revision:u64, start:u64) -> u64
+                                   used:UInt64, revision:UInt64, start:UInt64) -> UInt64
     where {const owner S, const owner N} {
     if (used > syntax_len(nodes) || start >= used) return no_node();
     ref selection = make ModuleSelectionSites {
@@ -529,13 +529,13 @@ export func next_module_dependency(source:const SourceBytes in S, nodes:const Ex
     return no_node();
 }
 
-export func prepare_module_dependencies(selected:SelectedExports in R, used:u64) -> bool where {owner R} {
+export func prepare_module_dependencies(selected:SelectedExports in R, used:UInt64) -> bool where {owner R} {
     if (used > intrinsic (len)(selected)) return false;
     for (at in 0u64 .. used) { selected[at].dependency_module <- 0u64; };
     return true;
 }
 
-func clear_selection(selected:SelectedExports in R, at:u64) -> void
+func clear_selection(selected:SelectedExports in R, at:UInt64) -> void
     where {owner R} {
     selected[at].checked_resource <- no_node();
     selected[at].selection_site <- no_node();
@@ -555,7 +555,7 @@ func clear_selection(selected:SelectedExports in R, at:u64) -> void
     (selected[at].constructor_row <- no_node()):void;
 }
 
-func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedExports in R, at:u64) -> void
+func select_export(exports:const ModuleExports in E, row:UInt64, selected:SelectedExports in R, at:UInt64) -> void
     where {const owner E, owner R} {
     selected[at].checked_resource <- no_node();
     selected[at].selection_site <- no_node();
@@ -570,11 +570,11 @@ func select_export(exports:const ModuleExports in E, row:u64, selected:SelectedE
 }
 
 func resolve_selection_row(
-    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64,
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64,
     syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
-    exports:const ModuleExports in E, spelling_size:u64,
-    export_first:u64, export_past:u64, dependency:u64,
-    declarations_only:bool, row:u64 in R) -> u8
+    exports:const ModuleExports in E, spelling_size:UInt64,
+    export_first:UInt64, export_past:UInt64, dependency:UInt64,
+    declarations_only:bool, row:UInt64 in R) -> UInt8
     where {const owner S, const owner N, const owner M, const owner B, const owner E, owner R} {
     val name_first <- syntax_first(nodes, used, syntax.resource) +
         if (syntax.symbolic) { 1u64 } else { 0u64 };
@@ -616,12 +616,12 @@ func resolve_selection_row(
 }
 
 func resolve_selection(
-    source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, site:u64,
+    source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, site:UInt64,
     syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
-    exports:const ModuleExports in E, spelling_size:u64, export_count:u64,
-    selected:SelectedExports in R, declarations_only:bool) -> u8
+    exports:const ModuleExports in E, spelling_size:UInt64, export_count:UInt64,
+    selected:SelectedExports in R, declarations_only:bool) -> UInt8
     where {const owner S, const owner N, const owner M, const owner B, const owner E, owner R} {
-    ref row = make u64 { no_node() };
+    ref row = make UInt64 { no_node() };
     val result <- resolve_selection_row(source, nodes, used, syntax, spellings, exports,
                                         spelling_size, 0u64, export_count,
                                         selected[site].dependency_module, declarations_only, row);
@@ -631,15 +631,15 @@ func resolve_selection(
 }
 
 export func append_named_selection(
-    source:const SourceBytes in S, nodes:const ExprNodes in N, revision:u64, used:u64, site:u64,
+    source:const SourceBytes in S, nodes:const ExprNodes in N, revision:UInt64, used:UInt64, site:UInt64,
     syntax:const ModuleSelectionSites in M, spellings:const SourceBytes in B,
-    exports:const ModuleExports in E, spelling_size:u64,
-    export_first:u64, export_past:u64, dependency:u64,
-    declarations_only:bool, selected:CheckedSelections in F, next:u64 in C)
-    -> u8 where {const owner S, const owner N, const owner M, const owner B, const owner E,
+    exports:const ModuleExports in E, spelling_size:UInt64,
+    export_first:UInt64, export_past:UInt64, dependency:UInt64,
+    declarations_only:bool, selected:CheckedSelections in F, next:UInt64 in C)
+    -> UInt8 where {const owner S, const owner N, const owner M, const owner B, const owner E,
                  owner F, owner C} {
     if (next >= intrinsic (len)(selected)) return export_storage_exhausted();
-    ref row = make u64 { no_node() };
+    ref row = make UInt64 { no_node() };
     val result <- resolve_selection_row(source, nodes, used, syntax, spellings, exports,
                                         spelling_size, export_first, export_past,
                                         dependency, declarations_only, row);
@@ -675,9 +675,9 @@ export func append_named_selection(
 
 export func measure_module_selections(
     nodes:const ExprNodes in N, tree:const ParseResult in T, dependencies:const SelectedExports in D,
-    visits:const Visits in G, visit_used:u64, exports:const ModuleExports in G, export_used:u64,
-    defaults:const DefaultExportRefs in G, default_used:u64, spelling_used:u64,
-    count:u64 in C, report:ExportResolutionResult in R)
+    visits:const Visits in G, visit_used:UInt64, exports:const ModuleExports in G, export_used:UInt64,
+    defaults:const DefaultExportRefs in G, default_used:UInt64, spelling_used:UInt64,
+    count:UInt64 in C, report:ExportResolutionResult in R)
     -> bool where {const owner N, const owner T, const owner D, const owner G, owner C, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_export_tree();
@@ -693,7 +693,7 @@ export func measure_module_selections(
     ref ranges = make ModuleSelectionRanges {
         exports_first <- 0u64; exports_past <- 0u64; defaults_first <- 0u64; defaults_past <- 0u64
     };
-    ref measured = make u64 { 0u64 };
+    ref measured = make UInt64 { 0u64 };
     val shape <- InvalidSelection;
     val module <- 0u64;
     for (at in 0u64 .. tree.used) {
@@ -733,10 +733,10 @@ export func measure_module_selections(
 export func stage_module_selections(
     source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
     dependencies:const SelectedExports in D, catalog:const SourceBytes in B,
-    builtins:const ModuleExports in B, visits:const Visits in G, visit_used:u64,
-    exports:const ModuleExports in G, export_used:u64, defaults:const DefaultExportRefs in G,
-    default_used:u64, spellings:const SourceBytes in G, spelling_used:u64,
-    declarations_only:bool, selections:CheckedSelections in F, used:u64 in C,
+    builtins:const ModuleExports in B, visits:const Visits in G, visit_used:UInt64,
+    exports:const ModuleExports in G, export_used:UInt64, defaults:const DefaultExportRefs in G,
+    default_used:UInt64, spellings:const SourceBytes in G, spelling_used:UInt64,
+    declarations_only:bool, selections:CheckedSelections in F, used:UInt64 in C,
     report:ExportResolutionResult in R)
     -> bool where {const owner S, const owner N, const owner T, const owner D, const owner B,
                    const owner G, owner F, owner C, owner R} {
@@ -759,7 +759,7 @@ export func stage_module_selections(
     ref ranges = make ModuleSelectionRanges {
         exports_first <- 0u64; exports_past <- 0u64; defaults_first <- 0u64; defaults_past <- 0u64
     };
-    ref next = make u64 { 0u64 };
+    ref next = make UInt64 { 0u64 };
     val module <- 0u64;
     val shape <- InvalidSelection;
     val result <- 0u8;
@@ -812,8 +812,8 @@ export func stage_module_selections(
     return true
 }
 
-export func defining_symbol_row(exports:const ModuleExports in E, first:u64, past:u64,
-    module:u64, identity:u64, spelling_used:u64) -> u64 where {const owner E} {
+export func defining_symbol_row(exports:const ModuleExports in E, first:UInt64, past:UInt64,
+    module:UInt64, identity:UInt64, spelling_used:UInt64) -> UInt64 where {const owner E} {
     if (first >= past || past > intrinsic (len)(exports) || module == no_node() ||
         identity == no_node()) return no_node();
     val selected <- no_node();
@@ -828,8 +828,8 @@ export func defining_symbol_row(exports:const ModuleExports in E, first:u64, pas
     return selected
 }
 
-export func checked_lexical_selection_kind(selections:const CheckedSelections in F, used:u64,
-    row:u64, revision:u64, syntax_used:u64) -> u8 where {const owner F} {
+export func checked_lexical_selection_kind(selections:const CheckedSelections in F, used:UInt64,
+    row:UInt64, revision:UInt64, syntax_used:UInt64) -> UInt8 where {const owner F} {
     if (row >= used || used > intrinsic (len)(selections)) return 0u8;
     return case selections[row] of {
         SelectedResource {
@@ -844,8 +844,8 @@ export func checked_lexical_selection_kind(selections:const CheckedSelections in
     }
 }
 
-export func project_checked_resource(selections:const CheckedSelections in F, used:u64,
-    row:u64, revision:u64, syntax_used:u64, lexical_use:bool, output:SelectedExport in R) -> bool
+export func project_checked_resource(selections:const CheckedSelections in F, used:UInt64,
+    row:UInt64, revision:UInt64, syntax_used:UInt64, lexical_use:bool, output:SelectedExport in R) -> bool
     where {const owner F, owner R} {
     if (row >= used || used > intrinsic (len)(selections)) return false;
     return case selections[row] of {
@@ -874,8 +874,8 @@ export func project_checked_resource(selections:const CheckedSelections in F, us
     }
 }
 
-export func checked_selection_site(selections:const CheckedSelections in F, used:u64,
-    row:u64, revision:u64) -> u64 where {const owner F} {
+export func checked_selection_site(selections:const CheckedSelections in F, used:UInt64,
+    row:UInt64, revision:UInt64) -> UInt64 where {const owner F} {
     if (row >= used || used > intrinsic (len)(selections)) return no_node();
     return case selections[row] of {
         SelectedResource { val origin <- revision; val directive <- site; } ->
@@ -884,8 +884,8 @@ export func checked_selection_site(selections:const CheckedSelections in F, used
     }
 }
 
-export func project_public_import(selections:const CheckedSelections in F, used:u64,
-    row:u64, revision:u64, site:u64, graph_used:u64, facade:u64,
+export func project_public_import(selections:const CheckedSelections in F, used:UInt64,
+    row:UInt64, revision:UInt64, site:UInt64, graph_used:UInt64, facade:UInt64,
     output:ModuleExport in R) -> bool
     where {const owner F, owner R} {
     if (row >= used || used > intrinsic (len)(selections) || facade == 0u64) return false;
@@ -922,8 +922,8 @@ export func project_public_import(selections:const CheckedSelections in F, used:
     }
 }
 
-export func permits_module_family_extension(selections:const CheckedSelections in F, used:u64,
-    row:u64, revision:u64) -> bool where {const owner F} {
+export func permits_module_family_extension(selections:const CheckedSelections in F, used:UInt64,
+    row:UInt64, revision:UInt64) -> bool where {const owner F} {
     if (row >= used || used > intrinsic (len)(selections)) return false;
     return case selections[row] of {
         SelectedResource {
@@ -938,7 +938,7 @@ export func permits_module_family_extension(selections:const CheckedSelections i
 # Written sites still supply member-list and publication readers.
 export func project_written_selections(
     nodes:const ExprNodes in N, tree:const ParseResult in T, selections:const CheckedSelections in F,
-    used:u64, sites:SelectedExports in D, report:ExportResolutionResult in R)
+    used:UInt64, sites:SelectedExports in D, report:ExportResolutionResult in R)
     -> bool where {const owner N, const owner T, const owner F, owner D, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_export_tree();
@@ -982,7 +982,7 @@ export func project_written_selections(
 export func resolve_module_exports(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                    builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
                                    graph_spellings:const SourceBytes in G, graph_exports:const ModuleExports in H,
-                                   spelling_size:u64, export_count:u64,
+                                   spelling_size:UInt64, export_count:UInt64,
                                    selected:SelectedExports in X, declarations_only:bool, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner T, const owner B, const owner E,
            const owner G, const owner H, owner X, owner R} {
@@ -991,7 +991,7 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
     if (spelling_size > intrinsic (len)(graph_spellings) || export_count > intrinsic (len)(graph_exports)) return false;
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64) return false;
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!first_module_item(nodes, tree.revision, tree.used, tree.root, first)) return false;
     if (intrinsic (len)(selected) < tree.used) {
         report.diagnostic <- export_storage_exhausted();
@@ -1029,9 +1029,9 @@ export func resolve_module_exports(source:const SourceBytes in S, nodes:const Ex
     return true;
 }
 
-export func enum_spelling(source:const SourceBytes in S, first:u64, past:u64,
+export func enum_spelling(source:const SourceBytes in S, first:UInt64, past:UInt64,
                            spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I,
-                           head:u64) -> u64 where {const owner S, const owner B, const owner I} {
+                           head:UInt64) -> UInt64 where {const owner S, const owner B, const owner I} {
     for (row in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
         if (same_bytes(source, first, past, spellings, interfaces[row].name_first, interfaces[row].name_past))
             return row;
@@ -1039,10 +1039,10 @@ export func enum_spelling(source:const SourceBytes in S, first:u64, past:u64,
     return no_node();
 }
 
-func exposes_written_members(source:const SourceBytes in S, nodes:const ExprNodes in N, selector:u64,
-    spellings:const SourceBytes in B, first:u64, past:u64, used:u64, revision:u64) -> bool
+func exposes_written_members(source:const SourceBytes in S, nodes:const ExprNodes in N, selector:UInt64,
+    spellings:const SourceBytes in B, first:UInt64, past:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner S, const owner N, const owner B} {
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     val shape <- inspect_member_selector(nodes, revision, used, selector, item);
     if (shape == InvalidMemberSelector) return false;
     if (shape == AllSelectedMembers) return true;
@@ -1056,8 +1056,8 @@ func exposes_written_members(source:const SourceBytes in S, nodes:const ExprNode
     return false;
 }
 
-func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N, site:u64,
-                      spellings:const SourceBytes in B, first:u64, past:u64, used:u64, revision:u64) -> bool
+func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N, site:UInt64,
+                      spellings:const SourceBytes in B, first:UInt64, past:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner S, const owner N, const owner B} {
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -1070,15 +1070,15 @@ func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N,
 }
 
 data EnumSelection {
-    head:u64;
-    selector:u64;
-    first_ordinal:u64;
-    past_ordinal:u64;
+    head:UInt64;
+    selector:UInt64;
+    first_ordinal:UInt64;
+    past_ordinal:UInt64;
 }
-array EnumSelections[u64]:EnumSelection;
+array EnumSelections[UInt64]:EnumSelection;
 
-func exposes_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-    spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, member:u64,
+func exposes_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+    spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, member:UInt64,
     selection:const EnumSelection in E) -> bool
     where {const owner S, const owner N, const owner B, const owner I, const owner E} {
     if (selection.selector != no_node())
@@ -1088,9 +1088,9 @@ func exposes_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in
     return ordinal >= selection.first_ordinal && ordinal < selection.past_ordinal
 }
 
-func first_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-    names:const SourceBytes in P, first:u64, past:u64, spellings:const SourceBytes in B,
-    interfaces:const ModuleInterfaces in I, selections:const EnumSelections in E, count:u64, head:u64 in O) -> u64
+func first_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+    names:const SourceBytes in P, first:UInt64, past:UInt64, spellings:const SourceBytes in B,
+    interfaces:const ModuleInterfaces in I, selections:const EnumSelections in E, count:UInt64, head:UInt64 in O) -> UInt64
     where {const owner S, const owner N, const owner P, const owner B, const owner I, const owner E, owner O} {
     val member <- no_node();
     for (at in 0u64 .. count) {
@@ -1104,9 +1104,9 @@ func first_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N
     return no_node()
 }
 
-func absent_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, tail:u64,
-                           spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, head:u64,
-                           used:u64, revision:u64) -> u64 where {const owner S, const owner N, const owner B, const owner I} {
+func absent_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, tail:UInt64,
+                           spellings:const SourceBytes in B, interfaces:const ModuleInterfaces in I, head:UInt64,
+                           used:UInt64, revision:UInt64) -> UInt64 where {const owner S, const owner N, const owner B, const owner I} {
     val item <- tail;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     for (unused in 0u64 .. used) {
@@ -1119,10 +1119,10 @@ func absent_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes 
     return no_node();
 }
 
-func append_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-    spellings:const SourceBytes in B, spelling_used:u64, interfaces:const ModuleInterfaces in I, interface_count:u64,
-    defining_module:u64, identity:u64, site:u64, selector:u64, first:u64, past:u64,
-    selections:EnumSelections in E, count:u64 in C, report:ExportResolutionResult in R) -> bool
+func append_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+    spellings:const SourceBytes in B, spelling_used:UInt64, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+    defining_module:UInt64, identity:UInt64, site:UInt64, selector:UInt64, first:UInt64, past:UInt64,
+    selections:EnumSelections in E, count:UInt64 in C, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner I, owner E, owner C, owner R} {
     if (selector == no_node() && first == 0u64 && past == 0u64) return true;
     report.node <- if (selector == no_node()) { (site) } else { (selector) };
@@ -1139,7 +1139,7 @@ func append_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes 
             interfaces[row].name_first >= interfaces[row].name_past ||
             interfaces[row].name_past > spelling_used) return false
     };
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (selector != no_node()) {
         if (inspect_member_selector(nodes, revision, used, selector, tail) == InvalidMemberSelector) return false;
         val absent <- absent_enum_selection(source, nodes, tail, spellings, interfaces, head, used, revision);
@@ -1152,7 +1152,7 @@ func append_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes 
     ref candidate = make EnumSelection {
         head <- head; selector <- selector; first_ordinal <- first; past_ordinal <- past
     };
-    ref previous = make u64 { no_node() };
+    ref previous = make UInt64 { no_node() };
     val first_byte <- 0u64;
     val past_byte <- 0u64;
     for (row in head + 1u64 .. head + 1u64 + width) {
@@ -1171,7 +1171,7 @@ func append_enum_selection(source:const SourceBytes in S, nodes:const ExprNodes 
     return true
 }
 
-export func bind_enum_member(interfaces:const ModuleInterfaces in I, head:u64, member:u64,
+export func bind_enum_member(interfaces:const ModuleInterfaces in I, head:UInt64, member:UInt64,
                              result:SelectedExport in R) -> void where {const owner I, owner R} {
     result.kind <- enum_member_export();
     result.origin_module <- interfaces[head].defining_module;
@@ -1182,9 +1182,9 @@ export func bind_enum_member(interfaces:const ModuleInterfaces in I, head:u64, m
 }
 
 # Written selectors and published default ranges use the same member lookup and binding.
-export func resolve_enum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-    spellings:const SourceBytes in B, spelling_used:u64, interfaces:const ModuleInterfaces in I, interface_count:u64,
-    checked:const CheckedSelections in C, checked_used:u64, selected:SelectedExports in E,
+export func resolve_enum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+    spellings:const SourceBytes in B, spelling_used:UInt64, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+    checked:const CheckedSelections in C, checked_used:UInt64, selected:SelectedExports in E,
     report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner I, const owner C, owner E, owner R} {
     report.diagnostic <- invalid_member_selection();
@@ -1198,7 +1198,7 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
     ref selections = make EnumSelections(checked_used, make EnumSelection {
         head <- no_node(); selector <- no_node(); first_ordinal <- 0u64; past_ordinal <- 0u64
     });
-    ref count = make u64 { 0u64 };
+    ref count = make UInt64 { 0u64 };
     for (at in 0u64 .. checked_used) {
         case checked[at] of {
             (SelectedResource {
@@ -1216,7 +1216,7 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
         }
     };
     if (count != 0u64) {
-        ref head = make u64 { no_node() };
+        ref head = make UInt64 { no_node() };
         val first <- 0u64;
         val past <- 0u64;
         val member <- no_node();
@@ -1237,9 +1237,9 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
     return true
 }
 
-func constructor_spelling(names:const SourceBytes in N, first:u64, past:u64, spellings:const SourceBytes in B,
-                          limit:u64, interfaces:const ModuleInterfaces in I, published:u64, head:u64)
-    -> u64 where {const owner N, const owner B, const owner I} {
+func constructor_spelling(names:const SourceBytes in N, first:UInt64, past:UInt64, spellings:const SourceBytes in B,
+                          limit:UInt64, interfaces:const ModuleInterfaces in I, published:UInt64, head:UInt64)
+    -> UInt64 where {const owner N, const owner B, const owner I} {
     if (first >= past || past > intrinsic (len)(names)) return no_node();
     val constructor <- no_node();
     for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
@@ -1252,10 +1252,10 @@ func constructor_spelling(names:const SourceBytes in N, first:u64, past:u64, spe
     return no_node();
 }
 
-func exposed_constructor(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-                         spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
-                         selected:const SelectedExports in E, site:u64,
-                         names:const SourceBytes in Q, first:u64, past:u64) -> u64
+func exposed_constructor(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+                         spellings:const SourceBytes in B, limit:UInt64, interfaces:const ModuleInterfaces in I, published:UInt64,
+                         selected:const SelectedExports in E, site:UInt64,
+                         names:const SourceBytes in Q, first:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner N, const owner B, const owner I, const owner E, const owner Q} {
     val constructor <- constructor_spelling(names, first, past, spellings, limit, interfaces, published, selected[site].sum_head);
     if (constructor == no_node()) return no_node();
@@ -1265,11 +1265,11 @@ func exposed_constructor(source:const SourceBytes in S, nodes:const ExprNodes in
     return no_node();
 }
 
-func first_constructor_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-                                  spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
-                                  selected:const SelectedExports in E, last:u64,
-                                  names:const SourceBytes in Q, first:u64, past:u64, constructor:u64 in C)
-    -> u64 where {const owner S, const owner N, const owner B, const owner I, const owner E, const owner Q, owner C} {
+func first_constructor_selection(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+                                  spellings:const SourceBytes in B, limit:UInt64, interfaces:const ModuleInterfaces in I, published:UInt64,
+                                  selected:const SelectedExports in E, last:UInt64,
+                                  names:const SourceBytes in Q, first:UInt64, past:UInt64, constructor:UInt64 in C)
+    -> UInt64 where {const owner S, const owner N, const owner B, const owner I, const owner E, const owner Q, owner C} {
     val site <- last;
     for (offset in 0u64 .. used) {
         if (site == no_node()) return no_node();
@@ -1281,13 +1281,13 @@ func first_constructor_selection(source:const SourceBytes in S, nodes:const Expr
     return no_node();
 }
 
-func validate_sum_members(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-                          spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
-                          selected:const SelectedExports in E, site:u64, selector:u64, prior:u64,
+func validate_sum_members(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+                          spellings:const SourceBytes in B, limit:UInt64, interfaces:const ModuleInterfaces in I, published:UInt64,
+                          selected:const SelectedExports in E, site:UInt64, selector:UInt64, prior:UInt64,
                           report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner I, const owner E, owner R} {
     val head <- selected[site].sum_head;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (selector != no_node() && inspect_member_selector(nodes, revision, used, selector, tail) == InvalidMemberSelector) {
         report.node <- selector;
         report.diagnostic <- invalid_member_selection();
@@ -1342,8 +1342,8 @@ func validate_sum_members(source:const SourceBytes in S, nodes:const ExprNodes i
     return true;
 }
 
-export func resolve_sum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64, revision:u64,
-                                   spellings:const SourceBytes in B, limit:u64, interfaces:const ModuleInterfaces in I, published:u64,
+export func resolve_sum_selections(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+                                   spellings:const SourceBytes in B, limit:UInt64, interfaces:const ModuleInterfaces in I, published:UInt64,
                                    selected:SelectedExports in E, report:ExportResolutionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner I, owner E, owner R} {
     val last <- no_node();
@@ -1376,7 +1376,7 @@ export func resolve_sum_selections(source:const SourceBytes in S, nodes:const Ex
     val site <- no_node();
     val first <- 0u64;
     val past <- 0u64;
-    ref constructor = make u64 { no_node() };
+    ref constructor = make UInt64 { no_node() };
     for (at in 0u64 .. used) {
         if ((name_syntax(nodes, used, at) != NotAName && name_syntax(nodes, used, at) != SymbolicName) ||
             case_pattern(nodes, used, at) == NamedCaseMember) {
@@ -1393,9 +1393,9 @@ export func resolve_sum_selections(source:const SourceBytes in S, nodes:const Ex
     return true;
 }
 
-export func verify_aggregate_selections(nodes:const ExprNodes in N, used:u64, revision:u64,
-                                        interfaces:const ModuleInterfaces in I, published:u64,
-                                        selected:const SelectedExports in E, record_interface_kind:u8,
+export func verify_aggregate_selections(nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
+                                        interfaces:const ModuleInterfaces in I, published:UInt64,
+                                        selected:const SelectedExports in E, record_interface_kind:UInt8,
                                         report:ExportResolutionResult in R)
     -> bool where {const owner N, const owner I, const owner E, owner R} {
     if (used > intrinsic (len)(selected)) return false;

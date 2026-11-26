@@ -138,183 +138,183 @@ using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
 export data OperandFact {
-    kind:u8;
-    reception:u8;
-    checked_exception:u8;
-    identity_module:u64;
+    kind:UInt8;
+    reception:UInt8;
+    checked_exception:UInt8;
+    identity_module:UInt64;
     reaches_constructed_throw:bool;
     loans_owning_handle:bool;
     loans_case_receipt:bool;
-    case_receipt:u64;
+    case_receipt:UInt64;
     checks_array_bounds:bool;
     byte_array:bool;
-    array_sum:u64;
+    array_sum:UInt64;
     loans_array_slot:bool;
-    array_slot:u64;
-    target_readonly:u8;
-    needs_target:u8;
-    target_presence:u8;
+    array_slot:UInt64;
+    target_readonly:UInt8;
+    needs_target:UInt8;
+    target_presence:UInt8;
     # Only admitted stable pointer holders and their copied selections get an identity.
-    selection:u64;
-    discarded_result:u8;
-    arm_result:u8;
-    case_item:u8;
-    case_match:u8;
-    case_body:u8;
-    case_guard:u8;
-    case_resume:u8;
-    case_end:u8;
-    case_presence:u8;
-    case_selection:u64;
-    case_context:u64;
-    case_after_subject:u64;
-    case_discriminator:u8;
-    case_may_be_absent:u8;
-    enum_constant:u8;
-    enum_backing:u8;
-    discriminator_code:u64;
-    case_excluded_at:u64;
-    case_exclusion_member:u64;
-    case_exclusion_previous:u64;
-    case_exclusion_next:u64;
-    case_exit_link:u64;
-    case_exit_tail:u64;
-    owner:u64;
-    identity:u64;
-    reservation:u64;
-    product_words:u64;
+    selection:UInt64;
+    discarded_result:UInt8;
+    arm_result:UInt8;
+    case_item:UInt8;
+    case_match:UInt8;
+    case_body:UInt8;
+    case_guard:UInt8;
+    case_resume:UInt8;
+    case_end:UInt8;
+    case_presence:UInt8;
+    case_selection:UInt64;
+    case_context:UInt64;
+    case_after_subject:UInt64;
+    case_discriminator:UInt8;
+    case_may_be_absent:UInt8;
+    enum_constant:UInt8;
+    enum_backing:UInt8;
+    discriminator_code:UInt64;
+    case_excluded_at:UInt64;
+    case_exclusion_member:UInt64;
+    case_exclusion_previous:UInt64;
+    case_exclusion_next:UInt64;
+    case_exit_link:UInt64;
+    case_exit_tail:UInt64;
+    owner:UInt64;
+    identity:UInt64;
+    reservation:UInt64;
+    product_words:UInt64;
     bits_product:bool;
-    word_offset:u64;
-    last_initializer:u64;
-    writable_text_place:u8;
-    call_definition:u64;
-    text_nul:u8;
-    allocation_owner:u64;
-    owner_chain:u64;
-    owner_use_next:u64;
-    passes_owner:u8;
-    text_assertion:u8;
+    word_offset:UInt64;
+    last_initializer:UInt64;
+    writable_text_place:UInt8;
+    call_definition:UInt64;
+    text_nul:UInt8;
+    allocation_owner:UInt64;
+    owner_chain:UInt64;
+    owner_use_next:UInt64;
+    passes_owner:UInt8;
+    text_assertion:UInt8;
     enum_assertion_check:bool;
     predicate_assertion_check:bool;
-    text_intrinsic:u8;
+    text_intrinsic:UInt8;
 }
-export array OperandFacts[u64]:OperandFact;
+export array OperandFacts[UInt64]:OperandFact;
 
 export data OwnerEvidence {
-    call_site:u64;
-    actual_owner:u64;
-    uses:u64;
+    call_site:UInt64;
+    actual_owner:UInt64;
+    uses:UInt64;
 }
-export array CallOwners[u64]:OwnerEvidence;
+export array CallOwners[UInt64]:OwnerEvidence;
 
 export data OperandCheckResult {
-    diagnostic:u8;
-    node:u64;
+    diagnostic:UInt8;
+    node:UInt64;
 }
 
-export func void_result() -> u8 { return 1u8; }
-export func scalar_u64() -> u8 { return 2u8; }
-export func exception_type() -> u8 { return 3u8; }
-export func null_literal() -> u8 { return 4u8; }
-export func never_result() -> u8 { return 5u8; }
-func scalar_bool() -> u8 { return 6u8; }
-func scalar_enum() -> u8 { return 7u8; }
-export func product_kind() -> u8 { return 8u8; }
-func string_kind() -> u8 { return 9u8; }
-func c_string_kind() -> u8 { return 10u8; }
-func scalar_u8() -> u8 { return 11u8; }
-func source_array_loan() -> u8 { return 12u8 }
-func source_handle_loan() -> u8 { return 13u8 }
-func source_u32() -> u8 { return 14u8 }
-func source_sum_target() -> u8 { return 15u8 }
-func received_product() -> u8 { return 16u8 }
-func received_sum() -> u8 { return 17u8 }
-func source_product_loan() -> u8 { return 18u8 }
-func independent_sum_bits() -> u8 { return 20u8 }
+export func void_result() -> UInt8 { return 1u8; }
+export func scalar_u64() -> UInt8 { return 2u8; }
+export func exception_type() -> UInt8 { return 3u8; }
+export func null_literal() -> UInt8 { return 4u8; }
+export func never_result() -> UInt8 { return 5u8; }
+func scalar_bool() -> UInt8 { return 6u8; }
+func scalar_enum() -> UInt8 { return 7u8; }
+export func product_kind() -> UInt8 { return 8u8; }
+func string_kind() -> UInt8 { return 9u8; }
+func c_string_kind() -> UInt8 { return 10u8; }
+func scalar_u8() -> UInt8 { return 11u8; }
+func source_array_loan() -> UInt8 { return 12u8 }
+func source_handle_loan() -> UInt8 { return 13u8 }
+func source_u32() -> UInt8 { return 14u8 }
+func source_sum_target() -> UInt8 { return 15u8 }
+func received_product() -> UInt8 { return 16u8 }
+func received_sum() -> UInt8 { return 17u8 }
+func source_product_loan() -> UInt8 { return 18u8 }
+func independent_sum_bits() -> UInt8 { return 20u8 }
 
-export func immutable_text_kind(kind:u8) -> bool {
+export func immutable_text_kind(kind:UInt8) -> bool {
     return kind == string_kind() || kind == c_string_kind();
 }
-func nul_absent() -> u8 { return 1u8; }
-func nul_present() -> u8 { return 2u8; }
-func static_text_owner() -> u64 { return no_node() - 1u64; }
-export func scalar_kind(kind:u8) -> bool {
+func nul_absent() -> UInt8 { return 1u8; }
+func nul_present() -> UInt8 { return 2u8; }
+func static_text_owner() -> UInt64 { return no_node() - 1u64; }
+export func scalar_kind(kind:UInt8) -> bool {
     return kind == scalar_u64() || kind == scalar_bool() || kind == scalar_enum() || kind == scalar_u8();
 }
 
-export func independent_value() -> u8 { return 1u8; }
-export func local_place() -> u8 { return 2u8; }
-export func borrowed_ref() -> u8 { return 3u8; }
-export func nullable_ptr() -> u8 { return 4u8; }
-export func readonly_exception() -> u8 { return 6u8; }
+export func independent_value() -> UInt8 { return 1u8; }
+export func local_place() -> UInt8 { return 2u8; }
+export func borrowed_ref() -> UInt8 { return 3u8; }
+export func nullable_ptr() -> UInt8 { return 4u8; }
+export func readonly_exception() -> UInt8 { return 6u8; }
 
-export func present_target() -> u8 { return 1u8; }
-export func absent_target() -> u8 { return 2u8; }
-export func unknown_target() -> u8 { return 3u8; }
+export func present_target() -> UInt8 { return 1u8; }
+export func absent_target() -> UInt8 { return 2u8; }
+export func unknown_target() -> UInt8 { return 3u8; }
 
-export func unproved_operand() -> u8 { return 1u8; }
-export func wrong_operand_type() -> u8 { return 2u8; }
-export func expected_exception_type() -> u8 { return 3u8; }
-export func unproved_result_contract() -> u8 { return 4u8; }
-export func unproved_owner() -> u8 { return 5u8; }
-export func incompatible_owner() -> u8 { return 6u8; }
-export func expected_writable_place() -> u8 { return 7u8; }
-export func unproved_nonnull_borrow() -> u8 { return 8u8; }
-export func wrong_argument_count() -> u8 { return 9u8; }
-export func wrong_return_type() -> u8 { return 10u8; }
-export func unproved_call_target() -> u8 { return 11u8; }
-export func operand_storage_exhausted() -> u8 { return 12u8; }
-export func invalid_operand_tree() -> u8 { return 13u8; }
-func wrong_finally_result() -> u8 { return 14u8; }
-func duplicate_catch_category() -> u8 { return 15u8; }
-func procedure_call_in_function() -> u8 { return 16u8; }
-func value_tail_in_void_function() -> u8 { return 17u8; }
-func expected_boolean_condition() -> u8 { return 18u8; }
-func false_predicate_assertion() -> u8 { return 147u8 }
-func unproved_reservation_selection() -> u8 { return 19u8; }
-func unsupported_narrow_execution() -> u8 { return 20u8; }
-func readonly_owner_argument() -> u8 { return 21u8; }
-func checked_selection_requires_ref() -> u8 { return 22u8; }
-export func unsupported_case_subject() -> u8 { return 23u8; }
-export func unsupported_case_pattern() -> u8 { return 24u8; }
-func incomplete_value_case() -> u8 { return 25u8; }
-func unsupported_scalar_assertion() -> u8 { return 27u8; }
-func missing_enum_member() -> u8 { return 28u8; }
-func incompatible_enum_type() -> u8 { return 29u8; }
-export func unsupported_product_layout() -> u8 { return 30u8; }
-func unknown_product_field() -> u8 { return 31u8; }
-func repeated_readonly_initializer() -> u8 { return 32u8; }
-func missing_product_initializer() -> u8 { return 33u8; }
-func string_operand_required() -> u8 { return 34u8; }
-func c_string_operand_required() -> u8 { return 35u8; }
-func interior_literal_nul() -> u8 { return 36u8; }
-export func unsupported_text_operation() -> u8 { return 37u8; }
-func wrong_text_result_owner() -> u8 { return 38u8; }
-func unproved_text_policy() -> u8 { return 39u8; }
-func text_place_needs_initializer() -> u8 { return 40u8; }
-func ambiguous_transfer() -> u8 { return 41u8; }
-func duplicate_transfer_signature() -> u8 { return 42u8; }
-export func unsupported_transfer_signature() -> u8 { return 43u8; }
-export func unproved_transfer_owner() -> u8 { return 44u8; }
-export func unsupported_imported_call() -> u8 { return 45u8; }
-func unsupported_imported_slot_call() -> u8 { return 49u8; }
+export func unproved_operand() -> UInt8 { return 1u8; }
+export func wrong_operand_type() -> UInt8 { return 2u8; }
+export func expected_exception_type() -> UInt8 { return 3u8; }
+export func unproved_result_contract() -> UInt8 { return 4u8; }
+export func unproved_owner() -> UInt8 { return 5u8; }
+export func incompatible_owner() -> UInt8 { return 6u8; }
+export func expected_writable_place() -> UInt8 { return 7u8; }
+export func unproved_nonnull_borrow() -> UInt8 { return 8u8; }
+export func wrong_argument_count() -> UInt8 { return 9u8; }
+export func wrong_return_type() -> UInt8 { return 10u8; }
+export func unproved_call_target() -> UInt8 { return 11u8; }
+export func operand_storage_exhausted() -> UInt8 { return 12u8; }
+export func invalid_operand_tree() -> UInt8 { return 13u8; }
+func wrong_finally_result() -> UInt8 { return 14u8; }
+func duplicate_catch_category() -> UInt8 { return 15u8; }
+func procedure_call_in_function() -> UInt8 { return 16u8; }
+func value_tail_in_void_function() -> UInt8 { return 17u8; }
+func expected_boolean_condition() -> UInt8 { return 18u8; }
+func false_predicate_assertion() -> UInt8 { return 147u8 }
+func unproved_reservation_selection() -> UInt8 { return 19u8; }
+func unsupported_narrow_execution() -> UInt8 { return 20u8; }
+func readonly_owner_argument() -> UInt8 { return 21u8; }
+func checked_selection_requires_ref() -> UInt8 { return 22u8; }
+export func unsupported_case_subject() -> UInt8 { return 23u8; }
+export func unsupported_case_pattern() -> UInt8 { return 24u8; }
+func incomplete_value_case() -> UInt8 { return 25u8; }
+func unsupported_scalar_assertion() -> UInt8 { return 27u8; }
+func missing_enum_member() -> UInt8 { return 28u8; }
+func incompatible_enum_type() -> UInt8 { return 29u8; }
+export func unsupported_product_layout() -> UInt8 { return 30u8; }
+func unknown_product_field() -> UInt8 { return 31u8; }
+func repeated_readonly_initializer() -> UInt8 { return 32u8; }
+func missing_product_initializer() -> UInt8 { return 33u8; }
+func string_operand_required() -> UInt8 { return 34u8; }
+func c_string_operand_required() -> UInt8 { return 35u8; }
+func interior_literal_nul() -> UInt8 { return 36u8; }
+export func unsupported_text_operation() -> UInt8 { return 37u8; }
+func wrong_text_result_owner() -> UInt8 { return 38u8; }
+func unproved_text_policy() -> UInt8 { return 39u8; }
+func text_place_needs_initializer() -> UInt8 { return 40u8; }
+func ambiguous_transfer() -> UInt8 { return 41u8; }
+func duplicate_transfer_signature() -> UInt8 { return 42u8; }
+export func unsupported_transfer_signature() -> UInt8 { return 43u8; }
+export func unproved_transfer_owner() -> UInt8 { return 44u8; }
+export func unsupported_imported_call() -> UInt8 { return 45u8; }
+func unsupported_imported_slot_call() -> UInt8 { return 49u8; }
 
-func ambiguous_value_call() -> u8 { return 46u8; }
-func duplicate_value_signature() -> u8 { return 47u8; }
-func unsupported_value_family() -> u8 { return 48u8; }
+func ambiguous_value_call() -> UInt8 { return 46u8; }
+func duplicate_value_signature() -> UInt8 { return 47u8; }
+func unsupported_value_family() -> UInt8 { return 48u8; }
 
-export func unreachable_case_item() -> u8 { return 1u8; }
-export func misses_case_arm() -> u8 { return 0u8; }
-export func tests_case_arm() -> u8 { return 1u8; }
-export func matches_case_arm() -> u8 { return 2u8; }
+export func unreachable_case_item() -> UInt8 { return 1u8; }
+export func misses_case_arm() -> UInt8 { return 0u8; }
+export func tests_case_arm() -> UInt8 { return 1u8; }
+export func matches_case_arm() -> UInt8 { return 2u8; }
 
-export func case_guard_passes() -> u8 { return 1u8; }
-export func case_guard_declines() -> u8 { return 2u8; }
-export func case_guard_tests() -> u8 { return 3u8; }
-func case_guard_exits() -> u8 { return 4u8; }
+export func case_guard_passes() -> UInt8 { return 1u8; }
+export func case_guard_declines() -> UInt8 { return 2u8; }
+export func case_guard_tests() -> UInt8 { return 3u8; }
+func case_guard_exits() -> UInt8 { return 4u8; }
 
-func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
-              owner_site:u64, identity:u64, checked_exception:u8) -> void where {owner F} {
+func set_fact(facts:OperandFacts in F, at:UInt64, kind:UInt8, reception:UInt8,
+              owner_site:UInt64, identity:UInt64, checked_exception:UInt8) -> void where {owner F} {
     facts[at].kind <- kind;
     facts[at].reception <- reception;
     facts[at].owner <- owner_site;
@@ -342,7 +342,7 @@ func set_fact(facts:OperandFacts in F, at:u64, kind:u8, reception:u8,
     return;
 }
 
-export func remember_constructed_throw(facts:OperandFacts in F, at:u64,
+export func remember_constructed_throw(facts:OperandFacts in F, at:UInt64,
     type:const ExceptionType in T, reaches_throw:bool)
     -> void where {owner F, const owner T} {
     set_fact(facts, at, never_result(), 0u8, no_node(), type.declaration,
@@ -352,11 +352,11 @@ export func remember_constructed_throw(facts:OperandFacts in F, at:u64,
     return;
 }
 
-func scalar_fact(facts:OperandFacts in F, at:u64, reception:u8, owner_site:u64) -> void where {owner F} {
+func scalar_fact(facts:OperandFacts in F, at:UInt64, reception:UInt8, owner_site:UInt64) -> void where {owner F} {
     set_fact(facts, at, scalar_u64(), reception, owner_site, 0u64, 0u8);
 }
 
-func copy_fact(facts:OperandFacts in F, destination:u64, source:u64) -> void where {owner F} {
+func copy_fact(facts:OperandFacts in F, destination:UInt64, source:UInt64) -> void where {owner F} {
     set_fact(facts, destination, facts[source].kind, facts[source].reception, facts[source].owner,
              facts[source].identity, facts[source].checked_exception);
     facts[destination].identity_module <- facts[source].identity_module;
@@ -371,12 +371,12 @@ func copy_fact(facts:OperandFacts in F, destination:u64, source:u64) -> void whe
     return;
 }
 
-func only_void(facts:OperandFacts in F, at:u64) -> void where {owner F} {
+func only_void(facts:OperandFacts in F, at:UInt64) -> void where {owner F} {
     set_fact(facts, at, void_result(), 0u8, no_node(), 0u64, 0u8);
 }
 
-export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64,
-    kind:u8) -> u8
+export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64,
+    kind:UInt8) -> UInt8
     where {const owner N, owner F} {
     if (binds_local_storage(nodes, operand))
         return unproved_operand();
@@ -389,20 +389,20 @@ export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in
     return 0u8;
 }
 
-func compatible_operand_nominal(facts:const OperandFacts in F, operand:u64, kind:u8, identity:u64,
-    module:u64) -> bool
+func compatible_operand_nominal(facts:const OperandFacts in F, operand:UInt64, kind:UInt8, identity:UInt64,
+    module:UInt64) -> bool
     where {const owner F} {
     return facts[operand].kind != kind || (kind != scalar_enum() && kind != product_kind()) ||
         (facts[operand].identity == identity && facts[operand].identity_module == module);
 }
 
-func same_operand_type(facts:const OperandFacts in F, left:u64, right:u64) -> bool where {const owner F} {
+func same_operand_type(facts:const OperandFacts in F, left:UInt64, right:UInt64) -> bool where {const owner F} {
     return facts[left].kind == facts[right].kind &&
         compatible_operand_nominal(facts, left, facts[right].kind, facts[right].identity,
             facts[right].identity_module);
 }
 
-func supplies_enum_backing(facts:const OperandFacts in F, operand:u64, expected:u8) -> bool
+func supplies_enum_backing(facts:const OperandFacts in F, operand:UInt64, expected:UInt8) -> bool
     where {const owner F} {
     return expected != 0u8 && facts[operand].kind == scalar_enum() &&
         source_scalar_kind(facts[operand].enum_backing) == expected
@@ -410,25 +410,25 @@ func supplies_enum_backing(facts:const OperandFacts in F, operand:u64, expected:
 
 # Consume an independent copy of the code. The original nominal type and
 # the access contract of its storage remain attached to the source operand.
-func require_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u8) -> u8
+func require_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64, expected:UInt8) -> UInt8
     where {const owner N, owner F} {
     val read_kind <- if (supplies_enum_backing(facts, operand, expected)) { scalar_enum() } else { expected };
     return require_typed_bits(nodes, facts, operand, read_kind)
 }
 
-func require_matching_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64, expected:u64) -> u8
+func require_matching_value_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64, expected:UInt64) -> UInt8
     where {const owner N, owner F} {
     if (!compatible_operand_nominal(facts, operand, facts[expected].kind, facts[expected].identity,
         facts[expected].identity_module)) return wrong_operand_type();
     return require_value_bits(nodes, facts, operand, facts[expected].kind)
 }
 
-func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64) -> u8
+func require_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
     return require_typed_bits(nodes, facts, operand, scalar_u64());
 }
 
-export func declared_scalar(binding:u8) -> u8 {
+export func declared_scalar(binding:UInt8) -> UInt8 {
     if (binding == builtin_u64()) return scalar_u64();
     if (binding == builtin_u8()) return scalar_u8();
     if (binding == builtin_bool()) return scalar_bool();
@@ -436,13 +436,13 @@ export func declared_scalar(binding:u8) -> u8 {
     return 0u8;
 }
 
-func source_scalar_kind(binding:u8) -> u8 {
+func source_scalar_kind(binding:UInt8) -> UInt8 {
     if (binding == builtin_u32()) return source_u32();
     return declared_scalar(binding)
 }
 
-func require_source_u32(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64,
-    widen:bool) -> u8
+func require_source_u32(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64,
+    widen:bool) -> UInt8
     where {const owner N, owner F} {
     if (binds_local_storage(nodes, operand) || facts[operand].kind == 0u8)
         return unproved_operand();
@@ -455,13 +455,13 @@ func require_source_u32(nodes:const ExprNodes in N, facts:OperandFacts in F, ope
     return 0u8
 }
 
-func nominal_identity(names:const NameBindings in B, annotation:u64) -> u64 where {const owner B} {
+func nominal_identity(names:const NameBindings in B, annotation:UInt64) -> UInt64 where {const owner B} {
     val kind <- names[annotation].kind;
     if (kind == enum_type() || kind == record_type()) return names[annotation].declaration;
     return 0u64;
 }
 
-func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in F, annotation:u64) -> u8
+func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in F, annotation:UInt64) -> UInt8
     where {const owner B, const owner F} {
     if (names[annotation].kind == record_type() && facts[names[annotation].declaration].product_words != 0u64)
         return product_kind();
@@ -472,10 +472,10 @@ func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in 
 }
 
 func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                            facts:OperandFacts in F, record:u64, revision:u64, used:u64, tail:u64) -> void
+                            facts:OperandFacts in F, record:UInt64, revision:UInt64, used:UInt64, tail:UInt64) -> void
     where {const owner N, const owner B, const owner L, owner F} {
     if (has_exception_parent(nodes, names, record, revision, used)) return;
-    ref field = make u64 { no_node() };
+    ref field = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, FormalSequence, field)) return;
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
@@ -502,15 +502,15 @@ func prepare_product_layout(nodes:const ExprNodes in N, names:const NameBindings
     };
 }
 
-func owner_conflict(nodes:const ExprNodes in N, first:u64, second:u64) -> u8 where {const owner N} {
+func owner_conflict(nodes:const ExprNodes in N, first:UInt64, second:UInt64) -> UInt8 where {const owner N} {
     if (owner_parameter(nodes, first) || owner_parameter(nodes, second)) return unproved_owner();
     return incompatible_owner();
 }
 
 func exception_annotation(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E,
-                          facts:OperandFacts in F, annotation:u64, at:u64, module:u64, used:u64,
-                              revision:u64) -> u8
+                          facts:OperandFacts in F, annotation:UInt64, at:UInt64, module:UInt64, used:UInt64,
+                              revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, owner F} {
     if (annotation == no_node()) {
         set_fact(facts, at, exception_type(), readonly_exception(), no_node(), no_node(), 0u8);
@@ -529,7 +529,7 @@ func exception_annotation(nodes:const ExprNodes in N, names:const NameBindings i
 func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
                   views:const SuppliedViews in H, selected:const SelectedExports in E,
                   cases:const ConstructorCaseFacts in C, source_only:bool,
-                  formal:u64, definition:u64, revision:u64, used:u64) -> u8
+                  formal:UInt64, definition:UInt64, revision:UInt64, used:UInt64) -> UInt8
     where {const owner N, const owner B, owner F, const owner H, const owner E, const owner C} {
     ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
@@ -677,10 +677,10 @@ func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, li
                    facts:OperandFacts in F, views:const SuppliedViews in H,
                    selected:const SelectedExports in E, cases:const ConstructorCaseFacts in C,
                    source_only:bool, report:OperandCheckResult in R,
-                   definition:u64, tail:u64, used:u64, revision:u64) -> void
+                   definition:UInt64, tail:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
         const owner C, owner R} {
-    ref formal = make u64 { no_node() };
+    ref formal = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, FormalSequence, formal)) {
         report.node <- definition;
         (report.diagnostic <- invalid_operand_tree()):void;
@@ -696,8 +696,8 @@ func check_formals(nodes:const ExprNodes in N, names:const NameBindings in B, li
 }
 
 func check_borrowed_result(nodes:const ExprNodes in N, names:const NameBindings in B,
-                           facts:OperandFacts in F, definition:u64, clause:u64, signature:const SignatureSites in S,
-                           revision:u64, used:u64) -> u8
+                           facts:OperandFacts in F, definition:UInt64, clause:UInt64, signature:const SignatureSites in S,
+                           revision:UInt64, used:UInt64) -> UInt8
     where {const owner N, const owner B, owner F, const owner S} {
     val annotation <- signature.annotation;
     ref type = make BindingSites {
@@ -721,8 +721,8 @@ func check_borrowed_result(nodes:const ExprNodes in N, names:const NameBindings 
 
 func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                              facts:OperandFacts in F, selected:const SelectedExports in E,
-                             report:OperandCheckResult in R, source_only:bool, definition:u64,
-                                 first:u64, used:u64, revision:u64) -> void
+                             report:OperandCheckResult in R, source_only:bool, definition:UInt64,
+                                 first:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner E, owner R} {
     val clause <- first;
     val annotation <- no_node();
@@ -783,11 +783,11 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
 func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                      facts:OperandFacts in F, views:const SuppliedViews in H,
                      selected:const SelectedExports in E, cases:const ConstructorCaseFacts in P,
-                     source_only:bool, report:OperandCheckResult in R, definition:u64, used:u64,
-                         revision:u64, callable:const CallableSites in C) -> void
+                     source_only:bool, report:OperandCheckResult in R, definition:UInt64, used:UInt64,
+                         revision:UInt64, callable:const CallableSites in C) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
         const owner P, owner R, const owner C} {
-    ref head = make u64 { no_node() };
+    ref head = make UInt64 { no_node() };
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
     };
@@ -803,8 +803,8 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     check_signature_clauses(nodes, names, links, facts, selected, report, source_only, definition,
         links[head].next, used, revision);
     if (report.diagnostic != 0u8 || facts[definition].kind != 0u8) return;
-    ref value = make u64 { no_node() };
-    ref borrowed = make u64 { no_node() };
+    ref value = make UInt64 { no_node() };
+    ref borrowed = make UInt64 { no_node() };
     if (source_only && !callable.function_form &&
         find_signature_clause(nodes, revision, used, callable.signature, ValueResultClause,
             value) &&
@@ -818,19 +818,19 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     (report.diagnostic <- unproved_result_contract()):void
 }
 
-export func has_slot_array(facts:const OperandFacts in F, at:u64) -> bool
+export func has_slot_array(facts:const OperandFacts in F, at:UInt64) -> bool
     where {const owner F} {
     return facts[at].kind == source_array_loan() &&
         (facts[at].byte_array || facts[at].array_sum != no_node())
 }
 
-func valid_array_slot_element(element:ArraySlotElement, sum:u64, module:u64, used:u64) -> bool {
+func valid_array_slot_element(element:ArraySlotElement, sum:UInt64, module:UInt64, used:UInt64) -> bool {
     return if (element == (ByteArrayElement:ArraySlotElement)) { sum == no_node() }
         else { element == (SumArrayElement:ArraySlotElement) && sum < used && module == 0u64 }
 }
 
 func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-    facts:OperandFacts in F, at:u64, used:u64, revision:u64, local:const LocalBindingSites in L) -> u8
+    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, local:const LocalBindingSites in L) -> UInt8
     where {const owner N, const owner B, const owner E, owner F, const owner L} {
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -959,7 +959,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     return 0u8;
 }
 
-func require_array_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:u64) -> u8
+func require_array_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
     val kind <- facts[operand].kind;
     if (kind == source_u32()) return require_source_u32(nodes, facts, operand, false);
@@ -967,9 +967,9 @@ func require_array_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, oper
 }
 
 func check_prepared_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, facts:OperandFacts in F, at:u64, used:u64, revision:u64,
-    requested:u64, placement:u64, length:u64, fill:u64, owner_site:u64,
-    type_module_id:u64, type_identity_id:u64, sum:u64) -> u8
+    selected:const SelectedExports in E, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64,
+    requested:UInt64, placement:UInt64, length:UInt64, fill:UInt64, owner_site:UInt64,
+    type_module_id:UInt64, type_identity_id:UInt64, sum:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, owner F} {
     ref syntax = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -1020,8 +1020,8 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
 }
 
 func check_text_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
-                             facts:OperandFacts in F, at:u64, used:u64, revision:u64,
-                             construction:const ConstructionSites in L) -> u8
+                             facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64,
+                             construction:const ConstructionSites in L) -> UInt8
     where {const owner N, const owner B, owner F, const owner L} {
     val tail <- construction.contents;
     ref argument = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -1044,7 +1044,7 @@ func check_text_construction(nodes:const ExprNodes in N, names:const NameBinding
     return 0u8;
 }
 
-func check_text_assertion(facts:OperandFacts in F, at:u64, operand:u64) -> u8
+func check_text_assertion(facts:OperandFacts in F, at:UInt64, operand:UInt64) -> UInt8
     where {owner F} {
     if (facts[operand].kind == never_result()) { copy_fact(facts, at, operand); return 0u8; };
     if (!immutable_text_kind(facts[operand].kind)) return string_operand_required();
@@ -1057,7 +1057,7 @@ func check_text_assertion(facts:OperandFacts in F, at:u64, operand:u64) -> u8
 }
 
 func check_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
-                        facts:OperandFacts in F, at:u64, construction:const ConstructionSites in L) -> u8
+                        facts:OperandFacts in F, at:UInt64, construction:const ConstructionSites in L) -> UInt8
     where {const owner N, const owner B, owner F, const owner L} {
     val requested <- construction.requested;
     val queried <- construction.queried_operand;
@@ -1083,11 +1083,11 @@ func check_construction(nodes:const ExprNodes in N, names:const NameBindings in 
 }
 
 data ProductInitialization {
-    count:u64;
+    count:UInt64;
     abrupt:bool;
 }
 
-func check_owner_access(nodes:const ExprNodes in N, actual_owner:u64, requires_allocation:bool) -> u8
+func check_owner_access(nodes:const ExprNodes in N, actual_owner:UInt64, requires_allocation:bool) -> UInt8
     where {const owner N} {
     if (actual_owner == no_node()) return unproved_owner();
     val readonly_owner <- actual_owner == static_text_owner() ||
@@ -1097,7 +1097,7 @@ func check_owner_access(nodes:const ExprNodes in N, actual_owner:u64, requires_a
 }
 
 func record_owner_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, owners:CallOwners in O,
-                           formal:u64, actual_owner:u64, argument:u64, invocation:u64) -> u8
+                           formal:UInt64, actual_owner:UInt64, argument:UInt64, invocation:UInt64) -> UInt8
     where {const owner N, owner F, owner O} {
     val formal_owner <- facts[formal].owner;
     val diagnostic <- check_owner_access(nodes, actual_owner, owner_constraint_syntax(nodes, formal_owner) != ReadonlyOwnerConstraint);
@@ -1114,32 +1114,32 @@ func record_owner_argument(nodes:const ExprNodes in N, facts:OperandFacts in F, 
 }
 
 func binary_formals(nodes:const ExprNodes in N, links:const NameWork in L,
-                     definition:u64, revision:u64, used:u64) -> u64 where {const owner N, const owner L} {
-    ref first = make u64 { no_node() };
+                     definition:UInt64, revision:UInt64, used:UInt64) -> UInt64 where {const owner N, const owner L} {
+    ref first = make UInt64 { no_node() };
     if (!callable_formals(nodes, revision, used, definition, false, first) || first == no_node()) return no_node();
     val second <- links[first].next;
     if (second == no_node() || links[second].next != no_node()) return no_node();
     return first;
 }
 
-func owner_parameter(nodes:const ExprNodes in N, owner_site:u64) -> bool where {const owner N} {
+func owner_parameter(nodes:const ExprNodes in N, owner_site:UInt64) -> bool where {const owner N} {
     return owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint;
 }
 
-func shares_owner(nodes:const ExprNodes in N, facts:const OperandFacts in F, first:u64, second:u64) -> bool
+func shares_owner(nodes:const ExprNodes in N, facts:const OperandFacts in F, first:UInt64, second:UInt64) -> bool
     where {const owner N, const owner F} {
     return facts[first].owner == facts[second].owner && owner_parameter(nodes, facts[first].owner);
 }
 
-func text_conforms(actual:u8, formal:u8) -> bool {
+func text_conforms(actual:UInt8, formal:UInt8) -> bool {
     return actual == formal || (actual == c_string_kind() && formal == string_kind());
 }
 
-func matching_transfer() -> u8 { return 1u8; }
-func possible_transfer() -> u8 { return 2u8; }
+func matching_transfer() -> UInt8 { return 1u8; }
+func possible_transfer() -> UInt8 { return 2u8; }
 
 func transfer_match(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                    left:u64, right:u64, method:u64, used:u64, revision:u64) -> u8 where {const owner N, const owner L, const owner F} {
+                    left:UInt64, right:UInt64, method:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner L, const owner F} {
     val first <- binary_formals(nodes, links, method, revision, used);
     val second <- links[first].next;
     if (!same_operand_type(facts, left, first) || !text_conforms(facts[right].kind, facts[second].kind))
@@ -1154,7 +1154,7 @@ func transfer_match(nodes:const ExprNodes in N, links:const NameWork in L, facts
 # All admitted policies have a writable destination and readonly text input.
 # Text conformance and owner equality constrain independent parts of the domain.
 func transfer_dominates(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        narrow:u64, wide:u64, match_kind:u8, used:u64, revision:u64) -> bool
+                        narrow:UInt64, wide:UInt64, match_kind:UInt8, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     val first <- binary_formals(nodes, links, narrow, revision, used);
     val other <- binary_formals(nodes, links, wide, revision, used);
@@ -1169,7 +1169,7 @@ func transfer_dominates(nodes:const ExprNodes in N, links:const NameWork in L, f
 }
 
 func dominated_transfer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        left:u64, right:u64, family:u64, method:u64, used:u64, revision:u64) -> bool
+                        left:UInt64, right:UInt64, family:UInt64, method:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     val other <- family;
     val relation <- 0u8;
@@ -1186,7 +1186,7 @@ func dominated_transfer(nodes:const ExprNodes in N, links:const NameWork in L, f
 }
 
 func select_transfer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                     left:u64, right:u64, family:u64, selected:u64 in D, used:u64, revision:u64) -> u8
+                     left:UInt64, right:UInt64, family:UInt64, selected:UInt64 in D, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner L, const owner F, owner D} {
     val method <- family;
     val relation <- 0u8;
@@ -1208,7 +1208,7 @@ func select_transfer(nodes:const ExprNodes in N, links:const NameWork in L, fact
 }
 
 func supported_transfer_signature(nodes:const ExprNodes in N, links:const NameWork in L,
-                                  facts:const OperandFacts in F, definition:u64, used:u64, revision:u64) -> bool
+                                  facts:const OperandFacts in F, definition:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     val first <- binary_formals(nodes, links, definition, revision, used);
     if (first == no_node() || facts[definition].kind != void_result()) return false;
@@ -1221,7 +1221,7 @@ func supported_transfer_signature(nodes:const ExprNodes in N, links:const NameWo
 }
 
 func check_transfer_signatures(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                               definition:u64, used:u64, revision:u64) -> u8 where {const owner N, const owner L, const owner F} {
+                               definition:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner L, const owner F} {
     val first <- binary_formals(nodes, links, definition, revision, used);
     val second <- links[first].next;
     val member <- links[definition].next_method;
@@ -1242,7 +1242,7 @@ func check_transfer_signatures(nodes:const ExprNodes in N, links:const NameWork 
 }
 
 func check_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                         facts:OperandFacts in F, owners:CallOwners in O, at:u64, destination:u64, input:u64, initializing:bool, used:u64, revision:u64) -> u8
+                         facts:OperandFacts in F, owners:CallOwners in O, at:UInt64, destination:UInt64, input:UInt64, initializing:bool, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, owner O} {
     if (names[at].kind != callable_binding()) return unproved_text_policy();
     if (facts[destination].kind == product_kind() &&
@@ -1270,8 +1270,8 @@ func check_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8;
 }
 
-func record_field_binding(nodes:const ExprNodes in N, revision:u64, used:u64,
-                          field:u64, binding:BindingSites in R) -> bool where {const owner N, owner R} {
+func record_field_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+                          field:UInt64, binding:BindingSites in R) -> bool where {const owner N, owner R} {
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     return inspect_formal(nodes, revision, used, field, formal) == OrdinaryFormal &&
         inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding;
@@ -1279,8 +1279,8 @@ func record_field_binding(nodes:const ExprNodes in N, revision:u64, used:u64,
 
 func check_product_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
-                               owners:CallOwners in O, state:ProductInitialization in P, at:u64, record:u64, assignment:u64,
-                               used:u64, revision:u64) -> u8
+                               owners:CallOwners in O, state:ProductInitialization in P, at:UInt64, record:UInt64, assignment:UInt64,
+                               used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, owner F, owner O, owner P} {
     ref sites = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     if (inspect_assignment(nodes, revision, used, assignment, sites) != FieldTransfer ||
@@ -1322,8 +1322,8 @@ func check_product_initializer(source:const SourceBytes in S, nodes:const ExprNo
 
 func check_product_construction(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                 names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
-                                owners:CallOwners in O, at:u64, record:u64, used:u64, revision:u64,
-                                construction:const ConstructionSites in K) -> u8
+                                owners:CallOwners in O, at:UInt64, record:UInt64, used:UInt64, revision:UInt64,
+                                construction:const ConstructionSites in K) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, owner F, owner O, const owner K} {
     val words <- facts[record].product_words;
     val body <- construction.contents;
@@ -1332,8 +1332,8 @@ func check_product_construction(source:const SourceBytes in S, nodes:const ExprN
     val placement <- construction.placement;
     if (placement != no_node() && names[placement].declaration != owner_site) return unproved_owner();
     ref state = make ProductInitialization { count <- 0u64; abrupt <- false; };
-    ref tail = make u64 { no_node() };
-    ref item = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!block_tail(nodes, revision, used, body, tail) ||
         !first_sequence_entry(nodes, revision, used, tail, BlockSequence, item)) return invalid_operand_tree();
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -1357,8 +1357,8 @@ func check_product_construction(source:const SourceBytes in S, nodes:const ExprN
 
 func check_caught_field(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:OperandFacts in F,
-                         fields:const CaughtFieldUses in X, at:u64, receiver:u64, used:u64,
-                             revision:u64, source_only:bool) -> u8
+                         fields:const CaughtFieldUses in X, at:UInt64, receiver:UInt64, used:UInt64,
+                             revision:UInt64, source_only:bool) -> UInt8
     where {const owner N, const owner B, owner F, const owner X} {
     if (at >= intrinsic (len)(fields)) return unknown_exception_field();
     val name <- ungrouped(nodes, revision, used, receiver);
@@ -1382,8 +1382,8 @@ func check_caught_field(nodes:const ExprNodes in N, names:const NameBindings in 
 func check_field_access(source:const SourceBytes in S, nodes:const ExprNodes in N,
                         names:const NameBindings in B, links:const NameWork in L,
                             facts:OperandFacts in F,
-                        fields:const CaughtFieldUses in X, at:u64, used:u64, revision:u64,
-                        selection:const FieldSelectionSites in Q, source_only:bool) -> u8
+                        fields:const CaughtFieldUses in X, at:UInt64, used:UInt64, revision:UInt64,
+                        selection:const FieldSelectionSites in Q, source_only:bool) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, owner F, const owner X,
         const owner Q} {
     val receiver <- selection.receiver;
@@ -1413,7 +1413,7 @@ func check_field_access(source:const SourceBytes in S, nodes:const ExprNodes in 
 }
 
 func check_text_installation(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                             at:u64, destination:u64, input:u64) -> u8 where {const owner N, owner F} {
+                             at:UInt64, destination:UInt64, input:UInt64) -> UInt8 where {const owner N, owner F} {
     if (facts[destination].writable_text_place == 0u8) return expected_writable_place();
     if (!immutable_text_kind(facts[input].kind)) return string_operand_required();
     if (facts[destination].owner != facts[input].owner)
@@ -1424,7 +1424,7 @@ func check_text_installation(nodes:const ExprNodes in N, facts:OperandFacts in F
 }
 
 func check_local_rebind(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-    at:u64, destination:u64, input:u64, used:u64, revision:u64) -> u8
+    at:UInt64, destination:UInt64, input:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, owner F} {
     if (name_syntax(nodes, used, destination) != OrdinaryName || names[destination].kind != local_binding())
         return expected_writable_place();
@@ -1454,8 +1454,8 @@ func check_local_rebind(nodes:const ExprNodes in N, names:const NameBindings in 
 }
 
 func bound_array_slot(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, facts:const OperandFacts in F, operand:u64, use:u64,
-    used:u64, revision:u64) -> u64 where {const owner N, const owner B, const owner L, const owner F} {
+    links:const NameWork in L, facts:const OperandFacts in F, operand:UInt64, use:UInt64,
+    used:UInt64, revision:UInt64) -> UInt64 where {const owner N, const owner B, const owner L, const owner F} {
     val slot <- facts[operand].array_slot;
     if (slot >= operand || names[operand].declaration != slot || facts[slot].array_slot != slot)
         return no_node();
@@ -1477,7 +1477,7 @@ func bound_array_slot(nodes:const ExprNodes in N, names:const NameBindings in B,
         return no_node()
     };
     if (names[operand].kind != formal_binding()) return no_node();
-    ref formal = make u64 { no_node() };
+    ref formal = make UInt64 { no_node() };
     if (!callable_formals(nodes, revision, used, activation, true, formal)) return no_node();
     for (unused in 0u64 .. used) {
         if (formal > slot) return no_node();
@@ -1490,8 +1490,8 @@ func bound_array_slot(nodes:const ExprNodes in N, names:const NameBindings in B,
 }
 
 func check_array_rebind(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, facts:OperandFacts in F, at:u64, destination:u64, input:u64,
-    used:u64, revision:u64) -> u8 where {const owner N, const owner B, const owner L, owner F} {
+    links:const NameWork in L, facts:OperandFacts in F, at:UInt64, destination:UInt64, input:UInt64,
+    used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B, const owner L, owner F} {
     if (bound_array_slot(nodes, names, links, facts, destination, at, used, revision) == no_node())
         return expected_writable_place();
     if (facts[input].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
@@ -1510,8 +1510,8 @@ func check_array_rebind(nodes:const ExprNodes in N, names:const NameBindings in 
 }
 
 func check_transfer_destination(
-    nodes:const ExprNodes in N, facts:OperandFacts in F, destination:u64)
-    -> u8 where {const owner N, owner F} {
+    nodes:const ExprNodes in N, facts:OperandFacts in F, destination:UInt64)
+    -> UInt8 where {const owner N, owner F} {
     val reception <- facts[destination].reception;
     val kind <- facts[destination].kind;
     if (!scalar_kind(kind)) return unproved_operand();
@@ -1521,7 +1521,7 @@ func check_transfer_destination(
     return require_typed_bits(nodes, facts, destination, kind)
 }
 
-func remember_transfer(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
+func remember_transfer(facts:OperandFacts in F, at:UInt64, destination:UInt64) -> void where {owner F} {
     set_fact(facts, at, facts[destination].kind, borrowed_ref(),
              facts[destination].owner, facts[destination].identity, 0u8);
     facts[at].identity_module <- facts[destination].identity_module;
@@ -1531,7 +1531,7 @@ func remember_transfer(facts:OperandFacts in F, at:u64, destination:u64) -> void
 }
 
 func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                    at:u64, destination:u64, supplied:u64) -> u8 where {const owner N, owner F} {
+                    at:UInt64, destination:UInt64, supplied:UInt64) -> UInt8 where {const owner N, owner F} {
     val diagnostic <- check_transfer_destination(nodes, facts, destination);
     if (diagnostic != 0u8) return diagnostic;
     diagnostic <- require_matching_value_bits(nodes, facts, supplied, destination);
@@ -1541,8 +1541,8 @@ func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
 }
 
 func check_augmented_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                              at:u64, destination:u64, input:u64, used:u64, revision:u64)
-    -> u8 where {const owner N, owner F} {
+                              at:UInt64, destination:UInt64, input:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, owner F} {
     val selected <- ungrouped(nodes, revision, used, destination);
     if (name_syntax(nodes, used, selected) != OrdinaryName) return unsupported_transfer_signature();
     val diagnostic <- check_transfer_destination(nodes, facts, destination);
@@ -1559,7 +1559,7 @@ func check_augmented_transfer(nodes:const ExprNodes in N, facts:OperandFacts in 
     return 0u8
 }
 
-func ordinary_argument_value(nodes:const ExprNodes in N, used:u64, revision:u64, argument:u64) -> u64
+func ordinary_argument_value(nodes:const ExprNodes in N, used:UInt64, revision:UInt64, argument:UInt64) -> UInt64
     where {const owner N} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return if (inspect_sequence_entry(nodes, revision, used, argument, entry) == ArgumentSequence) {
@@ -1567,10 +1567,10 @@ func ordinary_argument_value(nodes:const ExprNodes in N, used:u64, revision:u64,
     } else { no_node() };
 }
 
-func callable_formals(nodes:const ExprNodes in N, revision:u64, used:u64,
-                      definition:u64, source_only:bool, first:u64 in R) -> bool where {const owner N, owner R} {
+func callable_formals(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+                      definition:UInt64, source_only:bool, first:UInt64 in R) -> bool where {const owner N, owner R} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
-    ref head = make u64 { no_node() };
+    ref head = make UInt64 { no_node() };
     ref signature = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
     };
@@ -1581,8 +1581,8 @@ func callable_formals(nodes:const ExprNodes in N, revision:u64, used:u64,
         first_sequence_entry(nodes, revision, used, signature.parameter_tail, FormalSequence, first);
 }
 
-func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F, argument:u64,
-                            kind:u8, wanted:u8, identity:u64, module:u64, readonly:u8, used:u64, revision:u64) -> u8
+func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F, argument:UInt64,
+                            kind:UInt8, wanted:UInt8, identity:UInt64, module:UInt64, readonly:UInt8, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, owner F} {
     val actual <- ordinary_argument_value(nodes, used, revision, argument);
     if (actual == no_node()) return invalid_operand_tree();
@@ -1617,7 +1617,7 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
 }
 
 func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in L,
-    facts:const OperandFacts in F, definition:u64, first:u64, used:u64, revision:u64) -> bool
+    facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
@@ -1654,8 +1654,8 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
 }
 
 func check_receipt_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:OperandFacts in F, owners:CallOwners in O, argument:u64, actual:u64, formal:u64,
-    invocation:u64) -> u8 where {const owner N, const owner B, owner F, owner O} {
+    facts:OperandFacts in F, owners:CallOwners in O, argument:UInt64, actual:UInt64, formal:UInt64,
+    invocation:UInt64) -> UInt8 where {const owner N, const owner B, owner F, owner O} {
     val receipt <- facts[actual].case_receipt;
     val kind <- facts[formal].kind;
     if (receipt >= actual || names[actual].kind != local_binding() ||
@@ -1678,9 +1678,9 @@ func check_receipt_argument(nodes:const ExprNodes in N, names:const NameBindings
 
 func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L,
-    facts:OperandFacts in F, owners:CallOwners in O, argument:u64, formal:u64,
-    invocation:u64, used:u64, revision:u64, allow_owned_loan:bool,
-    definition:u64, first:u64, source_only:bool) -> u8
+    facts:OperandFacts in F, owners:CallOwners in O, argument:UInt64, formal:UInt64,
+    invocation:UInt64, used:UInt64, revision:UInt64, allow_owned_loan:bool,
+    definition:UInt64, first:UInt64, source_only:bool) -> UInt8
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
@@ -1761,10 +1761,10 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
 }
 
 func check_text_intrinsic(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
-                          at:u64, arguments:u64, intrinsic_kind:u8, used:u64, revision:u64) -> u8
+                          at:UInt64, arguments:UInt64, intrinsic_kind:UInt8, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner L, owner F} {
     if (intrinsic_kind != text_size_export() && intrinsic_kind != text_byte_export()) return unproved_call_target();
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, first)) return invalid_operand_tree();
     if (first == no_node()) return wrong_argument_count();
     val next <- links[first].next;
@@ -1787,8 +1787,8 @@ func check_text_intrinsic(nodes:const ExprNodes in N, links:const NameWork in L,
     return 0u8;
 }
 
-func remember_native_result(facts:OperandFacts in F, at:u64, native_kind:u8, module:u64,
-    identity:u64) -> u8
+func remember_native_result(facts:OperandFacts in F, at:UInt64, native_kind:UInt8, module:UInt64,
+    identity:UInt64) -> UInt8
     where {owner F} {
     val kind <- declared_scalar(native_kind);
     if (kind == 0u8) return unproved_result_contract();
@@ -1798,7 +1798,7 @@ func remember_native_result(facts:OperandFacts in F, at:u64, native_kind:u8, mod
 }
 
 func check_prepared_here_call(nodes:const ExprNodes in N, links:const NameWork in L,
-                              facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+                              facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner L, owner F} {
     ref supplied = make HereSites {
         call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node();
@@ -1811,7 +1811,7 @@ func check_prepared_here_call(nodes:const ExprNodes in N, links:const NameWork i
 }
 
 func check_prepared_native_text(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    input:u64, used:u64, revision:u64) -> u8 where {const owner N, const owner F} {
+    input:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner F} {
     val literal <- text_literal_syntax(nodes, used, ungrouped(nodes, revision, used, input));
     if (literal == InteriorNulLiteral) return interior_literal_nul();
     if (facts[input].kind != c_string_kind() && literal != NulFreeLiteral)
@@ -1822,8 +1822,8 @@ func check_prepared_native_text(nodes:const ExprNodes in N, facts:const OperandF
 }
 
 func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:const OperandFacts in F, views:const SuppliedViews in H, call:u64,
-    input:u64, module:u64, identity:u64, readonly:bool, used:u64, revision:u64) -> u8
+    facts:const OperandFacts in F, views:const SuppliedViews in H, call:UInt64,
+    input:UInt64, module:UInt64, identity:UInt64, readonly:bool, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner F, const owner H} {
     val value <- ungrouped(nodes, revision, used, input);
     if (value >= used || facts[value].kind != source_array_loan() ||
@@ -1849,7 +1849,7 @@ func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBind
 }
 
 func first_native_role(links:const NameWork in L, views:const SuppliedViews in H,
-    first:u64, argument:u64, position:u64, role:u64) -> u64
+    first:UInt64, argument:UInt64, position:UInt64, role:UInt64) -> UInt64
     where {const owner L, const owner H} {
     val previous <- first;
     for (unused in 0u64 .. position) {
@@ -1865,7 +1865,7 @@ func first_native_role(links:const NameWork in L, views:const SuppliedViews in H
 
 func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:OperandFacts in F, views:const SuppliedViews in H,
-    at:u64, argument:u64, first:u64, position:u64, used:u64, revision:u64) -> u8
+    at:UInt64, argument:UInt64, first:UInt64, position:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner H} {
     val input <- ordinary_argument_value(nodes, used, revision, argument);
     if (input >= argument) return invalid_operand_tree();
@@ -1935,9 +1935,9 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
 
 func check_prepared_native_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:OperandFacts in F, views:const SuppliedViews in H,
-    at:u64, arguments:u64, arity:u64, used:u64, revision:u64) -> u8
+    at:UInt64, arguments:UInt64, arity:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner H} {
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (arity > at || !first_sequence_entry(nodes, revision, at, arguments, ArgumentSequence,
         first)) return invalid_operand_tree();
     val argument <- first;
@@ -1960,7 +1960,7 @@ func check_prepared_native_arguments(nodes:const ExprNodes in N, names:const Nam
 
 func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:OperandFacts in F, views:const SuppliedViews in H,
-    selected_module:u64, selected_definition:u64, at:u64, arguments:u64, used:u64, revision:u64) -> u8
+    selected_module:UInt64, selected_definition:UInt64, at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner H} {
     return case views[at] of {
         PreparedImportedNativeOperation {
@@ -1979,7 +1979,7 @@ func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBin
 
 # The family signature check uses the already completed parameter rows.
 # An unsupported method leaves the entire family outside this profile.
-func fixed_value_clauses(nodes:const ExprNodes in N, signature:u64, used:u64, revision:u64) -> bool
+func fixed_value_clauses(nodes:const ExprNodes in N, signature:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N} {
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
@@ -1996,7 +1996,7 @@ func fixed_value_clauses(nodes:const ExprNodes in N, signature:u64, used:u64, re
 }
 
 func supported_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                            definition:u64, first:u64, used:u64, revision:u64) -> bool
+                            definition:UInt64, first:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     if (facts[definition].kind != void_result() &&
         (!scalar_kind(facts[definition].kind) || facts[definition].reception != independent_value())) return false;
@@ -2018,7 +2018,7 @@ func supported_value_method(nodes:const ExprNodes in N, links:const NameWork in 
 }
 
 func same_value_signature(links:const NameWork in L, facts:const OperandFacts in F,
-                          left:u64, right:u64, used:u64) -> bool
+                          left:UInt64, right:UInt64, used:UInt64) -> bool
     where {const owner L, const owner F} {
     val a <- left;
     val b <- right;
@@ -2032,10 +2032,10 @@ func same_value_signature(links:const NameWork in L, facts:const OperandFacts in
 }
 
 func prior_value_signature(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                           family:u64, current:u64, formals:u64, used:u64, revision:u64) -> u8
+                           family:UInt64, current:UInt64, formals:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner L, const owner F} {
     val earlier <- family;
-    ref parameters = make u64 { no_node() };
+    ref parameters = make UInt64 { no_node() };
     for (unused in 0u64 .. used) {
         if (earlier == current) return 0u8;
         if (earlier == no_node() || !callable_formals(nodes, revision, used, earlier, false, parameters))
@@ -2047,11 +2047,11 @@ func prior_value_signature(nodes:const ExprNodes in N, links:const NameWork in L
 }
 
 func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        family:u64, used:u64, revision:u64, report:OperandCheckResult in R) -> bool
+                        family:UInt64, used:UInt64, revision:UInt64, report:OperandCheckResult in R) -> bool
     where {const owner N, const owner L, const owner F, owner R} {
     val function_form <- is_function(nodes, family);
     val method <- family;
-    ref formals = make u64 { no_node() };
+    ref formals = make UInt64 { no_node() };
     val issue <- 0u8;
     for (unused in 0u64 .. used) {
         if (method == no_node()) return true;
@@ -2066,10 +2066,10 @@ func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, f
     return operand_problem(report, family, invalid_operand_tree())
 }
 
-enum ValueApplicability:u8 { InapplicableValue; ApplicableValue; UnrepresentedValue; }
+enum ValueApplicability:UInt8 { InapplicableValue; ApplicableValue; UnrepresentedValue; }
 
 func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                         first:u64, arguments:u64, used:u64, revision:u64) -> ValueApplicability
+                         first:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> ValueApplicability
     where {const owner N, const owner L, const owner F} {
     val formal <- first;
     val argument <- arguments;
@@ -2100,7 +2100,7 @@ func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, 
 }
 
 func better_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                         left:u64, right:u64, arguments:u64, used:u64, revision:u64) -> bool
+                         left:UInt64, right:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
     val a <- left;
     val b <- right;
@@ -2123,13 +2123,13 @@ func better_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
     return false
 }
 
-data ValueMethodChoice { method:u64; formals:u64; }
+data ValueMethodChoice { method:UInt64; formals:UInt64; }
 
 func find_value_candidate(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                           family:u64, arguments:u64, used:u64, revision:u64, result:ValueMethodChoice in R) -> u8
+                           family:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, result:ValueMethodChoice in R) -> UInt8
     where {const owner N, const owner L, const owner F, owner R} {
     val method <- family;
-    ref formals = make u64 { no_node() };
+    ref formals = make UInt64 { no_node() };
     val match <- (InapplicableValue:ValueApplicability);
     val unrepresented <- false;
     for (unused in 0u64 .. used) {
@@ -2155,12 +2155,12 @@ func find_value_candidate(nodes:const ExprNodes in N, links:const NameWork in L,
 # it. A second pass requires the remaining candidate to dominate every other
 # applicable method, including any incomparable candidate seen earlier.
 func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                         family:u64, arguments:u64, used:u64, revision:u64, selected:u64 in R) -> u8
+                         family:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, selected:UInt64 in R) -> UInt8
     where {const owner N, const owner L, const owner F, owner R} {
     ref best = make ValueMethodChoice { method <- no_node(); formals <- no_node(); };
     val issue <- find_value_candidate(nodes, links, facts, family, arguments, used, revision, best);
     if (issue != 0u8) return issue;
-    ref formals = make u64 { no_node() };
+    ref formals = make UInt64 { no_node() };
     val method <- family;
     val applicability <- (InapplicableValue:ValueApplicability);
     val ambiguous <- false;
@@ -2192,8 +2192,8 @@ func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
 
 func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        selected:const SelectedExports in E, facts:OperandFacts in F,
-                       owners:CallOwners in O, views:const SuppliedViews in H, at:u64, callee:u64,
-                           arguments:u64, used:u64, revision:u64, source_only:bool) -> u8
+                       owners:CallOwners in O, views:const SuppliedViews in H, at:UInt64, callee:UInt64,
+                           arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O,
         const owner H} {
     if (names[callee].kind == ordinary_selection()) {
@@ -2231,8 +2231,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     };
     if (names[callee].kind != callable_binding()) return unproved_call_target();
     val definition <- names[callee].declaration;
-    ref formal = make u64 { no_node() };
-    ref argument = make u64 { no_node() };
+    ref formal = make UInt64 { no_node() };
+    ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument))
         return invalid_operand_tree();
     if (links[definition].next_method != no_node()) {
@@ -2298,7 +2298,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
 }
 
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                         facts:OperandFacts in F, at:u64, arguments:u64, used:u64, revision:u64, source_only:bool) -> u8
+                         facts:OperandFacts in F, at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
     where {const owner N, const owner B, const owner L, owner F} {
     if (links[at].imported_interface == no_node() || links[at].imported_callable_kind ==
         NoCallableKind)
@@ -2308,7 +2308,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
         return procedure_call_in_function();
     val result_owner <- links[at].imported_owner_argument;
     val returned_kind <- links[at].imported_kind;
-    ref argument = make u64 { no_node() };
+    ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
     val diagnostic <- 0u8;
     val witness <- no_node();
@@ -2373,7 +2373,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     return invalid_operand_tree();
 }
 
-func argument_at_position(links:const NameWork in L, first:u64, position:u64) -> u64 where {const owner L} {
+func argument_at_position(links:const NameWork in L, first:UInt64, position:UInt64) -> UInt64 where {const owner L} {
     if (position == no_node()) return no_node();
     val argument <- first;
     for (index in 0u64 .. position) {
@@ -2383,8 +2383,8 @@ func argument_at_position(links:const NameWork in L, first:u64, position:u64) ->
     return argument;
 }
 
-func first_handle_formal(contracts:const ModuleInterfaces in I, header:u64, role:u64)
-    -> u64 where {const owner I} {
+func first_handle_formal(contracts:const ModuleInterfaces in I, header:UInt64, role:UInt64)
+    -> UInt64 where {const owner I} {
     val row <- 0u64;
     for (position in 0u64 .. contracts[header].entry_count) {
         row <- header + 1u64 + position;
@@ -2395,10 +2395,10 @@ func first_handle_formal(contracts:const ModuleInterfaces in I, header:u64, role
 }
 
 func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contracts:const ModuleInterfaces in I,
-                        at:u64, header:u64, arguments:u64, used:u64, revision:u64,
+                        at:UInt64, header:UInt64, arguments:UInt64, used:UInt64, revision:UInt64,
                             source_handles:bool, source_byte:bool)
     -> bool where {const owner N, owner L, const owner I} {
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, first)) return false;
     val argument <- first;
     val row <- header + 1u64;
@@ -2441,7 +2441,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
 }
 
 func remember_imported_call(links:NameWork in L, contracts:const ModuleInterfaces in I,
-                            at:u64, header:u64, declared_result:bool) -> void where {owner L,
+                            at:UInt64, header:UInt64, declared_result:bool) -> void where {owner L,
                                 const owner I} {
     links[at].imported_interface <- header;
     links[at].imported_function <- contracts[header].native_function;
@@ -2461,9 +2461,9 @@ func remember_imported_call(links:NameWork in L, contracts:const ModuleInterface
     return
 }
 
-func valid_imported_failure(contracts:const ModuleInterfaces in I, published:u64,
-                            catalog:const ModuleExports in B, module:u64, declaration:u64,
-                                checked:u8) -> bool
+func valid_imported_failure(contracts:const ModuleInterfaces in I, published:UInt64,
+                            catalog:const ModuleExports in B, module:UInt64, declaration:UInt64,
+                                checked:UInt8) -> bool
     where {const owner I, const owner B} {
     if (declaration == no_node() || checked > 1u8) return false;
     if (module == 0u64) {
@@ -2485,8 +2485,8 @@ func names_enum_domain(row:const ModuleInterfaceRow in R) -> bool where {const o
     return row.type_module != 0u64 && row.type_module != no_node() && row.type_identity != no_node()
 }
 
-func published_enum_domain(contracts:const ModuleInterfaces in I, published:u64,
-                           row:u64) -> bool where {const owner I} {
+func published_enum_domain(contracts:const ModuleInterfaces in I, published:UInt64,
+                           row:UInt64) -> bool where {const owner I} {
     if (!names_enum_domain(contracts[row])) return false;
     val header <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
     return header != no_node() && contracts[header].interface_kind == enum_type()
@@ -2494,8 +2494,8 @@ func published_enum_domain(contracts:const ModuleInterfaces in I, published:u64,
 
 # The ordinary call ABI copies one scalar word. A published enum word also
 # carries a canonical domain. A ref/ptr word has a different contract.
-func valid_ordinary_enum_rows(contracts:const ModuleInterfaces in I, published:u64,
-                              header:u64) -> bool where {const owner I} {
+func valid_ordinary_enum_rows(contracts:const ModuleInterfaces in I, published:UInt64,
+                              header:UInt64) -> bool where {const owner I} {
     if (contracts[header].result_kind == scalar_enum() &&
         (contracts[header].owner_role != no_node() || !published_enum_domain(contracts, published, header)))
         return false;
@@ -2509,8 +2509,8 @@ func valid_ordinary_enum_rows(contracts:const ModuleInterfaces in I, published:u
     return true
 }
 
-func scalar_source_parameter(contracts:const ModuleInterfaces in I, first:u64,
-    position:u64) -> bool where {const owner I} {
+func scalar_source_parameter(contracts:const ModuleInterfaces in I, first:UInt64,
+    position:UInt64) -> bool where {const owner I} {
     val row <- first + position;
     val role <- contracts[row].owner_role;
     val reception <- contracts[row].native_reception;
@@ -2529,8 +2529,8 @@ func scalar_source_parameter(contracts:const ModuleInterfaces in I, first:u64,
     return contracts[anchor].owner_role == role && contracts[anchor].owner_readonly == constraint
 }
 
-func scalar_source_call(contracts:const ModuleInterfaces in I, published:u64,
-    header:u64) -> bool where {const owner I} {
+func scalar_source_call(contracts:const ModuleInterfaces in I, published:UInt64,
+    header:UInt64) -> bool where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return false;
     val arity <- contracts[header].entry_count;
     val result <- if (contracts[header].literal_source_body) {
@@ -2552,7 +2552,7 @@ func scalar_source_call(contracts:const ModuleInterfaces in I, published:u64,
     return true
 }
 
-func source_handle_call(contracts:const ModuleInterfaces in I, published:u64, header:u64)
+func source_handle_call(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> bool where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return false;
     val arity <- contracts[header].entry_count;
@@ -2582,7 +2582,7 @@ func source_handle_call(contracts:const ModuleInterfaces in I, published:u64, he
     return has_handle
 }
 
-func checked_byte_header(contracts:const ModuleInterfaces in I, published:u64, header:u64) -> bool
+func checked_byte_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64) -> bool
     where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts) ||
         published - header <= 3u64 || contracts[header].entry_count != 3u64 ||
@@ -2621,7 +2621,7 @@ func checked_byte_header(contracts:const ModuleInterfaces in I, published:u64, h
     return true
 }
 
-func direct_source_using(nodes:const ExprNodes in N, selection:u64, used:u64, revision:u64)
+func direct_source_using(nodes:const ExprNodes in N, selection:UInt64, used:UInt64, revision:UInt64)
     -> bool where {const owner N} {
     ref named = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -2635,8 +2635,8 @@ func direct_source_using(nodes:const ExprNodes in N, selection:u64, used:u64, re
 }
 
 func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, definition:u64, used:u64, revision:u64)
-    -> u8 where {const owner N, const owner B, const owner L} {
+    links:const NameWork in L, definition:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, const owner B, const owner L} {
     if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
         links[definition].next_method != no_node() || links[definition].active != no_node()) return 0u8;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -2651,13 +2651,13 @@ func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings 
     val head <- signature.previous;
     if (inspect_signature(nodes, revision, used, head, signature) != SignatureHead ||
         signature.parameter_tail != no_node()) return 0u8;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     if (!block_tail(nodes, revision, used, callable.body, tail) ||
         inspect_sequence_entry(nodes, revision, used, tail, entry) != BlockSequence ||
         entry.previous != no_node() || completion_syntax(nodes, entry.item) != ReturnCompletion)
         return 0u8;
-    ref operand = make u64 { no_node() };
+    ref operand = make UInt64 { no_node() };
     if (!completion_operand(nodes, revision, used, entry.item, operand) || operand >= used) return 0u8;
     return case nodes[operand] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -2671,8 +2671,8 @@ func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings 
 }
 
 export func mark_literal_source_bodies(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, exports:const ModuleExports in E, export_count:u64,
-    contracts:ModuleInterfaces in I, count:u64, module:u64, used:u64, revision:u64)
+    links:const NameWork in L, exports:const ModuleExports in E, export_count:UInt64,
+    contracts:ModuleInterfaces in I, count:UInt64, module:UInt64, used:UInt64, revision:UInt64)
     -> bool where {const owner N, const owner B, const owner L, const owner E, owner I} {
     if (count > intrinsic (len)(contracts) || export_count > intrinsic (len)(exports) ||
         used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
@@ -2714,11 +2714,11 @@ export func mark_literal_source_bodies(nodes:const ExprNodes in N, names:const N
 
 func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, links:NameWork in L,
-                            contracts:const ModuleInterfaces in I, interface_count:u64,
+                            contracts:const ModuleInterfaces in I, interface_count:UInt64,
                             catalog:const ModuleExports in C, views:const CallableUseProofs in U,
-                            visits:const Visits in G, visit_count:u64,
-                            used:u64, revision:u64, source_only:bool, required:u64 in D,
-                            at:u64, call:const DirectCallSites in V,
+                            visits:const Visits in G, visit_count:UInt64,
+                            used:UInt64, revision:UInt64, source_only:bool, required:UInt64 in D,
+                            at:UInt64, call:const DirectCallSites in V,
                                 report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C,
            const owner U, const owner G, owner D, const owner V, owner R} {
@@ -2796,10 +2796,10 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
 
 export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
                                   selected:const SelectedExports in E, links:NameWork in L,
-                                  contracts:const ModuleInterfaces in I, interface_count:u64,
+                                  contracts:const ModuleInterfaces in I, interface_count:UInt64,
                                   catalog:const ModuleExports in C, views:const CallableUseProofs in V,
-                                  visits:const Visits in G, visit_count:u64,
-                                  used:u64, revision:u64, source_only:bool, required:u64 in D,
+                                  visits:const Visits in G, visit_count:UInt64,
+                                  used:UInt64, revision:UInt64, source_only:bool, required:UInt64 in D,
                                   report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C, const owner V,
         const owner G, owner D, owner R} {
@@ -2813,10 +2813,10 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
     return true
 }
 
-func native_scalar(kind:u8) -> bool { return scalar_kind(kind) && kind != scalar_enum(); }
+func native_scalar(kind:UInt8) -> bool { return scalar_kind(kind) && kind != scalar_enum(); }
 
 func first_owner_parameter(links:const NameWork in L, facts:const OperandFacts in F,
-                           first:u64, owner_site:u64, limit:u64) -> u64
+                           first:UInt64, owner_site:UInt64, limit:UInt64) -> UInt64
     where {const owner L, const owner F} {
     val formal <- first;
     for (position in 0u64 .. limit) {
@@ -2828,7 +2828,7 @@ func first_owner_parameter(links:const NameWork in L, facts:const OperandFacts i
 }
 
 func native_callable_arity(nodes:const ExprNodes in N, links:const NameWork in L,
-                           facts:const OperandFacts in F, definition:u64, first:u64, used:u64, revision:u64) -> u64
+                           facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner L, const owner F} {
     val kind <- facts[definition].kind;
     if (immutable_text_kind(kind)) {
@@ -2842,7 +2842,7 @@ func native_callable_arity(nodes:const ExprNodes in N, links:const NameWork in L
 }
 
 func native_parameter_count(nodes:const ExprNodes in N, links:const NameWork in L,
-                            facts:const OperandFacts in F, first:u64, used:u64, revision:u64) -> u64
+                            facts:const OperandFacts in F, first:UInt64, used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner L, const owner F} {
     val formal <- first;
     val count <- 0u64;
@@ -2855,7 +2855,7 @@ func native_parameter_count(nodes:const ExprNodes in N, links:const NameWork in 
     return no_node();
 }
 
-func native_parameter(nodes:const ExprNodes in N, facts:const OperandFacts in F, formal:u64, used:u64, revision:u64) -> bool
+func native_parameter(nodes:const ExprNodes in N, facts:const OperandFacts in F, formal:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner F} {
     val kind <- facts[formal].kind;
     val mode <- facts[formal].reception;
@@ -2868,11 +2868,11 @@ func native_parameter(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     return mode == nullable_ptr() && native_scalar(kind);
 }
 
-export func first_declared_failure(nodes:const ExprNodes in N, used:u64,
-    revision:u64) -> u64 where {const owner N} {
+export func first_declared_failure(nodes:const ExprNodes in N, used:UInt64,
+    revision:UInt64) -> UInt64 where {const owner N} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <-
         false; };
-    ref failure = make u64 { no_node() };
+    ref failure = make UInt64 { no_node() };
     for (at in 0u64 .. used) {
         if (inspect_callable(nodes, revision, used, at, callable) == ModuleCallable) {
             if (!find_signature_clause(nodes, revision, used, callable.signature,
@@ -2883,8 +2883,8 @@ export func first_declared_failure(nodes:const ExprNodes in N, used:u64,
     return no_node()
 }
 
-func publishes_checked_call(exports:const ModuleExports in E, count:u64, module_id:u64,
-    definition:u64) -> bool where {const owner E} {
+func publishes_checked_call(exports:const ModuleExports in E, count:UInt64, module_id:UInt64,
+    definition:UInt64) -> bool where {const owner E} {
     for (row in 0u64 .. count) {
         if (exports[row].origin_module == module_id && exports[row].identity == definition &&
             exports[row].kind == callable_export() &&
@@ -2894,14 +2894,14 @@ func publishes_checked_call(exports:const ModuleExports in E, count:u64, module_
     return false
 }
 
-func publish_enum_domain(facts:const OperandFacts in F, value:u64, module_id:u64, row:ModuleInterfaceRow in I)
+func publish_enum_domain(facts:const OperandFacts in F, value:UInt64, module_id:UInt64, row:ModuleInterfaceRow in I)
     -> void where {const owner F, owner I} {
     row.type_module <- if (facts[value].identity_module == 0u64) { module_id } else { (facts[value].identity_module) };
     row.type_identity <- facts[value].identity;
     return
 }
 
-func interface_scalar(kind:u8) -> u8 {
+func interface_scalar(kind:UInt8) -> UInt8 {
     if (kind == scalar_u8()) return builtin_u8();
     if (kind == source_u32()) return builtin_u32();
     if (kind == scalar_u64()) return builtin_u64();
@@ -2910,8 +2910,8 @@ func interface_scalar(kind:u8) -> u8 {
 }
 
 func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWork in L,
-    facts:const OperandFacts in F, contracts:ModuleInterfaces in I, header:u64, module:u64,
-    definition:u64, first:u64, used:u64, revision:u64, owner_count:u64 in R) -> u64
+    facts:const OperandFacts in F, contracts:ModuleInterfaces in I, header:UInt64, module:UInt64,
+    definition:UInt64, first:UInt64, used:UInt64, revision:UInt64, owner_count:UInt64 in R) -> UInt64
     where {const owner N, const owner L, const owner F, owner I, owner R} {
     owner_count <- 0u64;
     ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
@@ -2972,15 +2972,15 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
 
 export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
-    exports:ModuleExports in E, export_count:u64, contracts:ModuleInterfaces in I,
-    module:u64, start:u64, used:u64, revision:u64, report:OperandCheckResult in R) -> u64
+    exports:ModuleExports in E, export_count:UInt64, contracts:ModuleInterfaces in I,
+    module:UInt64, start:UInt64, used:UInt64, revision:UInt64, report:OperandCheckResult in R) -> UInt64
     where {const owner N, const owner B, const owner L, const owner F, const owner V, owner E, owner I, owner R} {
     if (used > intrinsic (len)(views) || export_count > intrinsic (len)(exports) ||
         start > intrinsic (len)(contracts) || module == 0u64 || module == no_node()) return no_node();
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
-    ref first = make u64 { no_node() };
-    ref failure = make u64 { no_node() };
-    ref owner_count = make u64 { 0u64 };
+    ref first = make UInt64 { no_node() };
+    ref failure = make UInt64 { no_node() };
+    ref owner_count = make UInt64 { 0u64 };
     val count <- start;
     val result <- 0u8;
     val past <- no_node();
@@ -3045,11 +3045,11 @@ export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const
 
 export func append_callable_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                    links:const NameWork in L, facts:const OperandFacts in F,
-                                       exports:const ModuleExports in E, export_count:u64,
-                                       used:u64, revision:u64,
-                                   module_id:u64, base:u64, start:u64,
+                                       exports:const ModuleExports in E, export_count:UInt64,
+                                       used:UInt64, revision:UInt64,
+                                   module_id:UInt64, base:UInt64, start:UInt64,
                                        contracts:ModuleInterfaces in I,
-                                   report:OperandCheckResult in R) -> u64
+                                   report:OperandCheckResult in R) -> UInt64
     where {const owner N, const owner B, const owner L, const owner F, const owner E,
            owner I, owner R} {
     if (start > intrinsic (len)(contracts) || export_count > intrinsic (len)(exports)) return no_node();
@@ -3060,8 +3060,8 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
     val header <- no_node();
     val past <- no_node();
     val staged_source_call <- false;
-    ref first = make u64 { no_node() };
-    ref failure = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
+    ref failure = make UInt64 { no_node() };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     for (at in 0u64 .. used) {
         if (inspect_callable(nodes, revision, used, at,
@@ -3131,7 +3131,7 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
 }
 
 func publish_native_parameter(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                              first:u64, formal:u64, arity:u64, module_id:u64, row:ModuleInterfaceRow in I) -> void
+                              first:UInt64, formal:UInt64, arity:UInt64, module_id:UInt64, row:ModuleInterfaceRow in I) -> void
     where {const owner N, const owner L, const owner F, owner I} {
     write_interface_header(row, 0u64, 0u64, 0u8, 0u8, 0u64);
     row.value_kind <- facts[formal].kind;
@@ -3153,7 +3153,7 @@ func publish_native_parameter(nodes:const ExprNodes in N, links:const NameWork i
 
 func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                          selected:const SelectedExports in E, facts:OperandFacts in F,
-                         at:u64, callee:u64, argument:u64, used:u64, revision:u64) -> u8
+                         at:UInt64, callee:UInt64, argument:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, owner F} {
     if (names[callee].kind != symbolic_selection()) return unproved_call_target();
     val site <- names[callee].declaration;
@@ -3169,7 +3169,7 @@ func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8;
 }
 
-func result_kind(nodes:const ExprNodes in N, facts:OperandFacts in F, value:u64, read:bool) -> u8
+func result_kind(nodes:const ExprNodes in N, facts:OperandFacts in F, value:UInt64, read:bool) -> UInt8
     where {const owner N, owner F} {
     if (value == no_node()) return void_result();
     val kind <- facts[value].kind;
@@ -3183,7 +3183,7 @@ func result_kind(nodes:const ExprNodes in N, facts:OperandFacts in F, value:u64,
     return 0u8;
 }
 
-func set_result(facts:OperandFacts in F, at:u64, kind:u8) -> void where {owner F} {
+func set_result(facts:OperandFacts in F, at:UInt64, kind:UInt8) -> void where {owner F} {
     if (scalar_kind(kind) || kind == source_u32()) {
         set_fact(facts, at, kind, independent_value(), no_node(), 0u64, 0u8)
     } else {
@@ -3191,18 +3191,18 @@ func set_result(facts:OperandFacts in F, at:u64, kind:u8) -> void where {owner F
     };
 }
 
-func set_bits_result(facts:OperandFacts in F, at:u64, value:u64) -> void where {owner F} {
+func set_bits_result(facts:OperandFacts in F, at:UInt64, value:UInt64) -> void where {owner F} {
     set_fact(facts, at, facts[value].kind, independent_value(), no_node(), facts[value].identity, 0u8);
     facts[at].identity_module <- facts[value].identity_module;
     return
 }
 
-func explicit_discard() -> u8 { return 1u8; }
-func loop_discard() -> u8 { return 2u8; }
+func explicit_discard() -> UInt8 { return 1u8; }
+func loop_discard() -> UInt8 { return 2u8; }
 
 # List entries carry the reached normal tail type. Explicit discard still
 # checks that type, without imposing a read of the tail's target.
-func check_sequence_item(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, entry:const SequenceEntry in E) -> void
+func check_sequence_item(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, entry:const SequenceEntry in E) -> void
     where {const owner N, owner F, const owner E} {
     val previous <- entry.previous;
     if (previous != no_node() && facts[previous].kind == never_result()) {
@@ -3223,13 +3223,13 @@ func check_sequence_item(nodes:const ExprNodes in N, facts:OperandFacts in F, at
     else { set_result(facts, at, kind); };
 }
 
-func sequence_result(facts:const OperandFacts in F, tail:u64) -> u8 where {const owner F} {
+func sequence_result(facts:const OperandFacts in F, tail:UInt64) -> UInt8 where {const owner F} {
     if (tail == no_node()) return void_result();
     return facts[tail].kind;
 }
 
 # Abrupt paths add no normal result to a full scope or try expression.
-func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64, module:u64) -> u8 where {owner F} {
+func merge_result(facts:OperandFacts in F, at:UInt64, kind:UInt8, identity:UInt64, module:UInt64) -> UInt8 where {owner F} {
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
     if (immutable_text_kind(kind)) return unsupported_text_operation();
@@ -3244,7 +3244,7 @@ func merge_result(facts:OperandFacts in F, at:u64, kind:u8, identity:u64, module
     return 0u8;
 }
 
-func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8
+func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, arm:UInt64, discard:bool) -> UInt8
     where {const owner N, owner F} {
     val kind <- facts[arm].kind;
     if (kind == 0u8) return unproved_result_contract();
@@ -3285,7 +3285,7 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     return 0u8;
 }
 
-func check_conditional(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, branch:const ConditionalSites in C) -> u8
+func check_conditional(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, branch:const ConditionalSites in C) -> UInt8
     where {const owner N, owner F, const owner C} {
     val condition <- branch.test;
     if (facts[condition].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; } else {};
@@ -3297,8 +3297,8 @@ func check_conditional(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u
     return diagnostic;
 }
 
-func check_predicate_assertion(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64,
-    predicate:u64, used:u64, revision:u64) -> u8 where {const owner N, owner F} {
+func check_predicate_assertion(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64,
+    predicate:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, owner F} {
     if (facts[predicate].kind == never_result()) {
         set_result(facts, at, never_result());
         return 0u8
@@ -3315,17 +3315,17 @@ func check_predicate_assertion(nodes:const ExprNodes in N, facts:OperandFacts in
 # Remaining canonical members are tracked by count and exclusion markers.
 # A possible write through another view starts a fresh scan generation.
 data CaseCoverage {
-    total:u64;
-    remaining:u64;
+    total:UInt64;
+    remaining:UInt64;
     absent:bool;
-    only:u64;
-    generation:u64;
-    exclusions:u64;
+    only:UInt64;
+    generation:UInt64;
+    exclusions:UInt64;
 }
 
 # A case proof belongs to a saved address. An enclosing proof for another
 # pointer, including one with the same declared owner, cannot supply it.
-export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u8 where {const owner F} {
+export func selected_target_presence(facts:const OperandFacts in F, at:UInt64) -> UInt8 where {const owner F} {
     val presence <- facts[at].target_presence;
     val selection <- facts[at].selection;
     if (presence != unknown_target() || selection == no_node()) return presence;
@@ -3339,7 +3339,7 @@ export func selected_target_presence(facts:const OperandFacts in F, at:u64) -> u
     return presence;
 }
 
-func receipt_in_context(facts:const OperandFacts in F, use:u64, receipt:u64) -> bool
+func receipt_in_context(facts:const OperandFacts in F, use:UInt64, receipt:UInt64) -> bool
     where {const owner F} {
     val extent <- intrinsic (len)(facts);
     if (receipt >= use || use >= extent) return false;
@@ -3357,7 +3357,7 @@ func receipt_in_context(facts:const OperandFacts in F, use:u64, receipt:u64) -> 
     return false
 }
 
-func enter_case_context(facts:OperandFacts in F, outer:u64, header:u64) -> u64 where {owner F} {
+func enter_case_context(facts:OperandFacts in F, outer:UInt64, header:UInt64) -> UInt64 where {owner F} {
     facts[header].case_context <- outer;
     return header;
 }
@@ -3366,15 +3366,15 @@ func case_has_paths(coverage:const CaseCoverage in V) -> bool where {const owner
     return coverage.absent || coverage.remaining != 0u64;
 }
 
-func case_presence(present:bool, absent:bool) -> u8 {
+func case_presence(present:bool, absent:bool) -> UInt8 {
     if (present && !absent) return present_target();
     if (absent && !present) return absent_target();
     return unknown_target();
 }
 
 func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindings in B,
-                              links:const NameWork in L, facts:OperandFacts in F, at:u64, subject:u64,
-                              coverage:CaseCoverage in V, used:u64, revision:u64) -> bool
+                              links:const NameWork in L, facts:OperandFacts in F, at:UInt64, subject:UInt64,
+                              coverage:CaseCoverage in V, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, const owner L, owner F, owner V} {
     val kind <- facts[subject].kind;
     if (kind == never_result()) return true;
@@ -3398,7 +3398,7 @@ func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindin
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
-    ref member = make u64 { no_node() };
+    ref member = make UInt64 { no_node() };
     if (inspect_declaration(nodes, revision, used, domain, enumeration) != EnumTypeDeclaration ||
         !first_sequence_entry(nodes, revision, used, enumeration.entries, EnumSequence, member)) return false;
     for (unused in 0u64 .. used) {
@@ -3409,14 +3409,14 @@ func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindin
     return false;
 }
 
-func reopen_case_domain(coverage:CaseCoverage in V, generation:u64) -> void where {owner V} {
+func reopen_case_domain(coverage:CaseCoverage in V, generation:UInt64) -> void where {owner V} {
     coverage.only <- no_node();
     coverage.generation <- generation;
     (coverage.remaining <- coverage.total):void;
 }
 
 func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
-                    at:u64, used:u64, revision:u64) -> bool where {const owner N, const owner L} {
+                    at:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner L} {
     if (at == no_node()) return false;
     if (at >= used || at >= syntax_len(nodes)) return true;
     case nodes[at] of {
@@ -3436,7 +3436,7 @@ func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
             };
         };
     };
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression)
         return case_may_write(nodes, links, inner, used, revision);
     ref logical = make LogicalSites {
@@ -3446,7 +3446,7 @@ func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
     if (operation == LogicalNot || operation == LogicalAnd || operation == LogicalOr)
         return case_may_write(nodes, links, logical.left_operand, used, revision) ||
             case_may_write(nodes, links, logical.right_operand, used, revision);
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (block_tail(nodes, revision, used, at, tail) && !is_scope_block(nodes, at))
         return case_block_may_write(nodes, links, tail, used, revision);
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
@@ -3468,8 +3468,8 @@ func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
 }
 
 func case_block_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
-                          tail:u64, used:u64, revision:u64) -> bool where {const owner N, const owner L} {
-    ref item = make u64 { no_node() };
+                          tail:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner L} {
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, BlockSequence, item)) return true;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     for (unused in 0u64 .. used) {
@@ -3482,7 +3482,7 @@ func case_block_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
 }
 
 func case_condition(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                    at:u64, used:u64, revision:u64) -> u8 where {const owner N, owner F} {
+                    at:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, owner F} {
     if (at == no_node()) return case_guard_passes();
     if (facts[at].kind == never_result()) return case_guard_exits();
     if (require_typed_bits(nodes, facts, at, scalar_bool()) != 0u8) return 0u8;
@@ -3497,9 +3497,9 @@ func case_condition(nodes:const ExprNodes in N, facts:OperandFacts in F,
 # abrupt completion prevents the transfer itself. If the action cannot
 # finish normally, its completion replaces the pending scan request.
 export func has_terminal_defer_before(nodes:const ExprNodes in N, links:const NameWork in L,
-                                      facts:const OperandFacts in F, tail:u64, before:u64, revision:u64, used:u64) -> bool
+                                      facts:const OperandFacts in F, tail:UInt64, before:UInt64, revision:UInt64, used:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, BlockSequence, item)) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref deferred = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
@@ -3513,13 +3513,13 @@ export func has_terminal_defer_before(nodes:const ExprNodes in N, links:const Na
     return false;
 }
 
-export func case_resumes_after_cleanup() -> u8 { return 1u8; }
-func replaced_case_resume() -> u8 { return 2u8; }
+export func case_resumes_after_cleanup() -> UInt8 { return 1u8; }
+func replaced_case_resume() -> UInt8 { return 2u8; }
 
 # The destination identifies where this particular transfer stops. A
 # finalizer that always exits discards the suspended transfer.
 func case_transfer_survives(nodes:const ExprNodes in N, names:const NameBindings in B,
-                            facts:const OperandFacts in F, at:u64, used:u64, revision:u64) -> bool
+                            facts:const OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, const owner F} {
     val stop <- names[names[at].declaration].finalizer;
     val cleanup <- names[at].finalizer;
@@ -3536,11 +3536,11 @@ func case_transfer_survives(nodes:const ExprNodes in N, names:const NameBindings
 }
 
 func case_resume_kind(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                      facts:const OperandFacts in F, arm:u64, body:u64, used:u64, revision:u64) -> u8
+                      facts:const OperandFacts in F, arm:UInt64, body:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F} {
     val scan <- facts[arm].case_exit_link;
     if (scan == no_node()) return 0u8;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     val full <- is_scope_block(nodes, body) && block_tail(nodes, revision, used, body, tail);
     for (unused in 0u64 .. used) {
         if (scan == no_node()) return replaced_case_resume();
@@ -3553,8 +3553,8 @@ func case_resume_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
 }
 
 func prepare_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
-                      links:const NameWork in L, facts:OperandFacts in F, arm:u64, used:u64, revision:u64,
-                      sites:const CaseArmSites in A) -> u8
+                      links:const NameWork in L, facts:OperandFacts in F, arm:UInt64, used:UInt64, revision:UInt64,
+                      sites:const CaseArmSites in A) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner A} {
     facts[arm].case_resume <- case_resume_kind(nodes, names, links, facts, arm, sites.body, used, revision);
     val behavior <- case_condition(nodes, facts, sites.guard, used, revision);
@@ -3566,8 +3566,8 @@ func prepare_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
 func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N,
                           names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
                           cases:const ConstructorCaseFacts in C,
-                          at:u64, subject:u64, pattern:u64, mode:CasePatternSyntax, member:u64 in M,
-                          used:u64, revision:u64) -> u8
+                          at:UInt64, subject:UInt64, pattern:UInt64, mode:CasePatternSyntax, member:UInt64 in M,
+                          used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, owner F, const owner C, owner M} {
     member <- no_node();
     if (mode == AnyCaseTarget || mode == NullCaseTarget) return 0u8;
@@ -3607,7 +3607,7 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
 }
 
 func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
-                    subject:u64, arm:u64, member:u64, pattern:CasePatternSyntax) -> void
+                    subject:UInt64, arm:UInt64, member:UInt64, pattern:CasePatternSyntax) -> void
     where {owner F, const owner V} {
     val null_pattern <- pattern == NullCaseTarget;
     val all_pattern <- pattern == AnyCaseTarget;
@@ -3630,7 +3630,7 @@ func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
 
 # Share the indexed member table across cases. A nested case restores the
 # enclosing scan's marks after consuming its own arms.
-func exclude_case_member(facts:OperandFacts in F, coverage:CaseCoverage in V, member:u64, arm:u64) -> void
+func exclude_case_member(facts:OperandFacts in F, coverage:CaseCoverage in V, member:UInt64, arm:UInt64) -> void
     where {owner F, owner V} {
     facts[arm].case_exclusion_member <- member;
     facts[arm].case_exclusion_previous <- facts[member].case_excluded_at;
@@ -3651,8 +3651,8 @@ func restore_case_exclusions(facts:OperandFacts in F, coverage:const CaseCoverag
 }
 
 func finish_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
-                     coverage:CaseCoverage in V, at:u64, arm:u64, member:u64, borrowed:bool, used:u64, revision:u64,
-                     sites:const CaseArmSites in A, pattern:CasePatternSyntax) -> u8
+                     coverage:CaseCoverage in V, at:UInt64, arm:UInt64, member:UInt64, borrowed:bool, used:UInt64, revision:UInt64,
+                     sites:const CaseArmSites in A, pattern:CasePatternSyntax) -> UInt8
     where {const owner N, const owner L, owner F, owner V, const owner A} {
     if (facts[arm].case_match == misses_case_arm()) return 0u8;
     val matches_present <- coverage.remaining != 0u64 && pattern != NullCaseTarget;
@@ -3685,10 +3685,10 @@ func finish_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, fact
 # Each case owns its exits in syntax postorder. Consume them at the direct
 # guard, body or intervening statement they leave, after its reach is known.
 func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-                       last:u64 in P, at:u64, through:u64, reached:bool, used:u64, revision:u64) -> u8
+                       last:UInt64 in P, at:UInt64, through:UInt64, reached:bool, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, owner F, owner P} {
     if (through == no_node()) return 0u8;
-    ref value = make u64 { no_node() };
+    ref value = make UInt64 { no_node() };
     val diagnostic <- 0u8;
     val pending <- if (last == no_node()) { facts[at].case_exit_link } else { facts[last].case_exit_link };
     for (unused in 0u64 .. used) {
@@ -3705,7 +3705,7 @@ func merge_case_breaks(nodes:const ExprNodes in N, names:const NameBindings in B
     return invalid_operand_tree();
 }
 
-func operand_problem(report:OperandCheckResult in R, at:u64, diagnostic:u8) -> bool where {owner R} {
+func operand_problem(report:OperandCheckResult in R, at:UInt64, diagnostic:UInt8) -> bool where {owner R} {
     report.node <- at;
     report.diagnostic <- diagnostic;
     return false;
@@ -3713,11 +3713,11 @@ func operand_problem(report:OperandCheckResult in R, at:u64, diagnostic:u8) -> b
 
 func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                 links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
-                interfaces:const ModuleInterfaces in I, published:u64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
+                interfaces:const ModuleInterfaces in I, published:UInt64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
                     views:const SuppliedViews in H,
                 cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
-                report:OperandCheckResult in R, at:u64, used:u64, revision:u64, outer:u64) -> bool
+                report:OperandCheckResult in R, at:UInt64, used:UInt64, revision:UInt64, outer:UInt64) -> bool
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, const owner I,
            owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
@@ -3772,7 +3772,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         if (!initialize_case_coverage(nodes, names, links, facts, at, subject, coverage, used, revision))
             return operand_problem(report, at, invalid_operand_tree())
     };
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, selection.items, BlockSequence, item))
         return operand_problem(report, at, invalid_operand_tree());
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -3849,7 +3849,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     return operand_problem(report, at, invalid_operand_tree());
 }
 
-func record_case_exit(facts:OperandFacts in F, at:u64, destination:u64) -> void where {owner F} {
+func record_case_exit(facts:OperandFacts in F, at:UInt64, destination:UInt64) -> void where {owner F} {
     val prior <- facts[destination].case_exit_tail;
     if (prior == no_node()) { (facts[destination].case_exit_link <- at):void; }
     else { (facts[prior].case_exit_link <- at):void; };
@@ -3858,7 +3858,7 @@ func record_case_exit(facts:OperandFacts in F, at:u64, destination:u64) -> void 
     return;
 }
 
-func check_logical(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, logical:const LogicalSites in L) -> u8
+func check_logical(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, logical:const LogicalSites in L) -> UInt8
     where {const owner N, owner F, const owner L} {
     val left <- logical.left_operand;
     val abrupt <- facts[left].kind == never_result();
@@ -3880,7 +3880,7 @@ func check_logical(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, 
     return 0u8;
 }
 
-func merge_guard_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, arm:u64, discard:bool) -> u8
+func merge_guard_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, arm:UInt64, discard:bool) -> UInt8
     where {const owner N, owner F} {
     val kind <- facts[arm].kind;
     if (discard && (scalar_kind(kind) || immutable_text_kind(kind)))
@@ -3896,13 +3896,13 @@ func merge_guard_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     return merge_arm_result(nodes, facts, at, arm, true);
 }
 
-func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F, at:u64,
-                      used:u64, revision:u64, protected:const ProtectedSites in P) -> u8
+func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F, at:UInt64,
+                      used:UInt64, revision:UInt64, protected:const ProtectedSites in P) -> UInt8
     where {const owner N, const owner L, owner F, const owner P} {
     val discard <- protected.discarded || facts[at].discarded_result == loop_discard();
     val diagnostic <- merge_guard_result(nodes, facts, at, protected.body, discard);
     if (diagnostic != 0u8) return diagnostic;
-    ref clause = make u64 { no_node() };
+    ref clause = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, protected.clauses, ClauseSequence, clause)) return invalid_operand_tree();
     ref sites = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
     ref handler = make HandlerSites { binding <- no_node(); body <- no_node(); };
@@ -3930,8 +3930,8 @@ func check_try_result(nodes:const ExprNodes in N, links:const NameWork in L, fac
     return unproved_result_contract();
 }
 
-func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in F, at:u64,
-                        used:u64, revision:u64, clause:GuardClauseSites in C) -> u8
+func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in F, at:UInt64,
+                        used:UInt64, revision:UInt64, clause:GuardClauseSites in C) -> UInt8
     where {const owner N, const owner F, owner C} {
     ref handler = make HandlerSites { binding <- no_node(); body <- no_node(); };
     if (!inspect_handler(nodes, revision, used, clause.target, handler)) return invalid_operand_tree();
@@ -3953,7 +3953,7 @@ func check_catch_clause(nodes:const ExprNodes in N, facts:const OperandFacts in 
     return 0u8;
 }
 
-func check_scope_tail(facts:OperandFacts in F, scope:u64, tail:u64) -> u8 where {owner F} {
+func check_scope_tail(facts:OperandFacts in F, scope:UInt64, tail:UInt64) -> UInt8 where {owner F} {
     val identity <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity) };
     val module <- if (tail == no_node()) { 0u64 } else { (facts[tail].identity_module) };
     val diagnostic <- merge_result(facts, scope, sequence_result(facts, tail), identity, module);
@@ -3964,11 +3964,11 @@ func check_scope_tail(facts:OperandFacts in F, scope:u64, tail:u64) -> u8 where 
     return diagnostic;
 }
 
-export func has_value_tail(facts:const OperandFacts in F, body:u64, function_form:bool) -> bool where {const owner F} {
+export func has_value_tail(facts:const OperandFacts in F, body:UInt64, function_form:bool) -> bool where {const owner F} {
     return function_form && body != no_node() && scalar_kind(facts[body].kind);
 }
 
-func check_callable_tail(facts:const OperandFacts in F, definition:u64, callable:const CallableSites in C) -> u8
+func check_callable_tail(facts:const OperandFacts in F, definition:UInt64, callable:const CallableSites in C) -> UInt8
     where {const owner F, const owner C} {
     if (!callable.function_form) return 0u8;
     val kind <- facts[callable.body].kind;
@@ -3981,9 +3981,9 @@ func check_callable_tail(facts:const OperandFacts in F, definition:u64, callable
 }
 
 func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-                   at:u64, value:u64, used:u64, revision:u64) -> u8 where {const owner N, const owner B, owner F} {
+                   at:UInt64, value:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B, owner F} {
     val scope <- names[at].scope;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (module_tail(nodes, revision, used, scope, tail)) return wrong_return_type();
     if (is_scope_block(nodes, scope) && block_tail(nodes, revision, used, scope, tail)) {
         val identity <- if (value == no_node()) { 0u64 } else { (facts[value].identity) };
@@ -4033,13 +4033,13 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
 }
 
 func check_return(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-                   at:u64, value:u64, used:u64, revision:u64) -> u8 where {const owner N, const owner B, owner F} {
+                   at:UInt64, value:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B, owner F} {
     val diagnostic <- validate_return(nodes, names, facts, at, value, used, revision);
     if (diagnostic == 0u8) { set_result(facts, at, never_result()); };
     return diagnostic;
 }
 
-func check_group(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, inner:u64) -> u8
+func check_group(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, inner:UInt64) -> UInt8
     where {const owner N, owner F} {
     val kind <- facts[inner].kind;
     if (kind == product_kind()) return unsupported_product_layout();
@@ -4059,7 +4059,7 @@ func check_group(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, in
     return 0u8;
 }
 
-func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, binary:const BinarySites in B) -> u8
+func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, binary:const BinarySites in B) -> UInt8
     where {const owner N, owner F, const owner B} {
     val left <- binary.left_operand;
     val right <- binary.right_operand;
@@ -4074,7 +4074,7 @@ func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in 
     return 0u8;
 }
 
-func check_comparison(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, binary:const BinarySites in B) -> u8
+func check_comparison(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, binary:const BinarySites in B) -> UInt8
     where {const owner N, owner F, const owner B} {
     val left <- binary.left_operand;
     val right <- binary.right_operand;
@@ -4096,7 +4096,7 @@ func check_comparison(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u6
     return 0u8;
 }
 
-func check_range_header(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+func check_range_header(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, owner F} {
     ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
     if (!inspect_range_header(nodes, revision, used, at, bounds)) return invalid_operand_tree();
@@ -4113,7 +4113,7 @@ func check_range_header(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     return 0u8;
 }
 
-func check_range_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+func check_range_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, owner F} {
     ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
     ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
@@ -4134,7 +4134,7 @@ func check_range_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     return 0u8;
 }
 
-func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, operand:u64) -> u8
+func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
     val kind <- result_kind(nodes, facts, operand, false);
     if (kind == 0u8) return unproved_operand();
@@ -4143,7 +4143,7 @@ func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F,
 }
 
 func check_enum_assertion(nodes:const ExprNodes in N, links:const NameWork in L, facts:OperandFacts in F,
-                          at:u64, operand:u64, source_only:bool) -> u8
+                          at:UInt64, operand:UInt64, source_only:bool) -> UInt8
     where {const owner N, const owner L, owner F} {
     val mode <- links[at].enum_assertion;
     if (mode == ConstantEnumAssertion) {
@@ -4173,8 +4173,8 @@ func check_enum_assertion(nodes:const ExprNodes in N, links:const NameWork in L,
 }
 
 func check_bound_name(names:const NameBindings in B, links:const NameWork in L,
-                     facts:OperandFacts in F, views:const SuppliedViews in H, at:u64)
-    -> u8 where {const owner B, const owner L, owner F, const owner H} {
+                     facts:OperandFacts in F, views:const SuppliedViews in H, at:UInt64)
+    -> UInt8 where {const owner B, const owner L, owner F, const owner H} {
     val binding <- names[at].kind;
     if (binding == enum_value() && links[at].value_kind == enum_type() &&
         links[at].value_module != 0u64 && links[at].value_identity != no_node()) {
@@ -4212,7 +4212,7 @@ func check_bound_name(names:const NameBindings in B, links:const NameWork in L,
 }
 
 func record_case_fallthrough(nodes:const ExprNodes in N, names:const NameBindings in B,
-                             facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+                             facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, owner F} {
     val arm <- names[at].declaration;
     val scope <- names[at].scope;
@@ -4226,7 +4226,7 @@ func record_case_fallthrough(nodes:const ExprNodes in N, names:const NameBinding
 }
 
 func record_case_break(nodes:const ExprNodes in N, names:const NameBindings in B,
-                       facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+                       facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, owner F} {
     val target <- names[at].declaration;
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
@@ -4237,7 +4237,7 @@ func record_case_break(nodes:const ExprNodes in N, names:const NameBindings in B
 
 func check_native_here_value(nodes:const ExprNodes in N, links:const NameWork in L,
     facts:OperandFacts in F,
-                             at:u64, call:const NodeId in C, used:u64, revision:u64) -> u8
+                             at:UInt64, call:const NodeId in C, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner L, owner F, const owner C} {
     if (!published_syntax_id(nodes, revision, used, call) ||
         links[call.index].expects_here == 0u8 || facts[call.index].kind == 0u8)
@@ -4254,7 +4254,7 @@ func check_native_here_value(nodes:const ExprNodes in N, links:const NameWork in
 
 func check_here_continue(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L,
-                         facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> u8
+                         facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F} {
     val target <- names[at].declaration;
     if (target >= used) return unproved_call_target();
@@ -4279,8 +4279,8 @@ func check_here_continue(nodes:const ExprNodes in N, names:const NameBindings in
     return 0u8
 }
 
-func receive_case_bits(facts:OperandFacts in F, at:u64, type:const DeclaredType in T,
-    reception:u8, owner_site:u64) -> u8 where {owner F, const owner T} {
+func receive_case_bits(facts:OperandFacts in F, at:UInt64, type:const DeclaredType in T,
+    reception:UInt8, owner_site:UInt64) -> UInt8 where {owner F, const owner T} {
     val kind <- if (type.kind == record_type()) { received_product() }
                 else { source_scalar_kind(type.kind) };
     if (kind == 0u8) return unsupported_case_pattern();
@@ -4290,8 +4290,8 @@ func receive_case_bits(facts:OperandFacts in F, at:u64, type:const DeclaredType 
 }
 
 func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts in F,
-    at:u64, expression:u64, array_site:u64, index:u64, owner_site:u64, declared_array:u64,
-    schema:const DeclaredType in T) -> u8 where {const owner N, owner F, const owner T} {
+    at:UInt64, expression:UInt64, array_site:UInt64, index:UInt64, owner_site:UInt64, declared_array:UInt64,
+    schema:const DeclaredType in T) -> UInt8 where {const owner N, owner F, const owner T} {
     if (expression != at || array_site >= at || index >= at) return invalid_operand_tree();
     if (facts[array_site].kind == never_result() || facts[index].kind == never_result()) {
         set_result(facts, at, never_result());
@@ -4311,7 +4311,7 @@ func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts i
 }
 
 func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
-    at:u64, target:u64, index:u64, destination:bool) -> u8 where {const owner N, owner F} {
+    at:UInt64, target:UInt64, index:UInt64, destination:bool) -> UInt8 where {const owner N, owner F} {
     if (facts[target].kind == never_result() || facts[index].kind == never_result()) {
         set_result(facts, at, never_result());
         facts[at].checks_array_bounds <- true;
@@ -4341,7 +4341,7 @@ func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
 }
 
 func check_slot_sum_transfer(cases:const ConstructorCaseFacts in C, facts:OperandFacts in F,
-    at:u64, destination:u64, input:u64, sum:u64) -> u8 where {const owner C, owner F} {
+    at:UInt64, destination:UInt64, input:UInt64, sum:UInt64) -> UInt8 where {const owner C, owner F} {
     if (facts[destination].kind != source_sum_target() || facts[destination].selection != destination ||
         facts[destination].target_readonly != 0u8 || facts[destination].identity != sum ||
         facts[destination].identity_module != 0u64 || facts[input].kind != independent_sum_bits() ||
@@ -4358,8 +4358,8 @@ func check_slot_sum_transfer(cases:const ConstructorCaseFacts in C, facts:Operan
 }
 
 func check_byte_read(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:OperandFacts in F, at:u64, used:u64, revision:u64, array_site:u64, index:u64,
-    formal:u64, owner_site:u64, expected_module:u64, expected_identity:u64) -> u8
+    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, array_site:UInt64, index:UInt64,
+    formal:UInt64, owner_site:UInt64, expected_module:UInt64, expected_identity:UInt64) -> UInt8
     where {const owner N, const owner B, owner F} {
     ref syntax = make IndexSites { target <- no_node(); index <- no_node() };
     if (!inspect_index_selection(nodes, revision, used, at, syntax) ||
@@ -4383,7 +4383,7 @@ func check_byte_read(nodes:const ExprNodes in N, names:const NameBindings in B,
 }
 
 func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
-    at:u64, used:u64, revision:u64, header:u64, pattern:u64, schema:const DeclaredType in T) -> u8
+    at:UInt64, used:UInt64, revision:UInt64, header:UInt64, pattern:UInt64, schema:const DeclaredType in T) -> UInt8
     where {const owner N, const owner B, owner F, const owner T} {
     ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
     if (facts[at].case_context != header || !inspect_case_arm(nodes, revision, used, header, arm) ||
@@ -4400,7 +4400,7 @@ func check_case_receipt(nodes:const ExprNodes in N, names:const NameBindings in 
 }
 
 func select_received_case_subject(names:const NameBindings in B, facts:OperandFacts in F,
-    at:u64, receipt:u64, arm:u64, schema:const DeclaredType in T) -> u8
+    at:UInt64, receipt:UInt64, arm:UInt64, schema:const DeclaredType in T) -> UInt8
     where {const owner B, owner F, const owner T} {
     if (receipt >= at || names[at].kind != local_binding() || names[at].declaration != receipt ||
         facts[receipt].case_context != arm || !receipt_in_context(facts, at, receipt) ||
@@ -4418,8 +4418,8 @@ func select_received_case_subject(names:const NameBindings in B, facts:OperandFa
 }
 
 func check_case_projection(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:OperandFacts in F, at:u64, used:u64, revision:u64, receiver:u64, field:u64,
-    receipt:u64, arm:u64, record:const DeclaredType in R, sum:const DeclaredType in S) -> u8
+    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, receiver:UInt64, field:UInt64,
+    receipt:UInt64, arm:UInt64, record:const DeclaredType in R, sum:const DeclaredType in S) -> UInt8
     where {const owner N, const owner B, owner F, const owner R, const owner S} {
     ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     if (!inspect_field_selection(nodes, revision, used, at, projection) ||
@@ -4439,8 +4439,8 @@ func check_case_projection(nodes:const ExprNodes in N, names:const NameBindings 
 }
 
 func check_inline_product_field(nodes:const ExprNodes in N, facts:OperandFacts in F,
-    at:u64, used:u64, revision:u64, receiver:u64, field:u64, ordinal:u64,
-    record:const DeclaredType in R, result:const DeclaredType in T) -> u8
+    at:UInt64, used:UInt64, revision:UInt64, receiver:UInt64, field:UInt64, ordinal:UInt64,
+    record:const DeclaredType in R, result:const DeclaredType in T) -> UInt8
     where {const owner N, owner F, const owner R, const owner T} {
     ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     if (!inspect_field_selection(nodes, revision, used, at, projection) ||
@@ -4466,8 +4466,8 @@ func check_inline_product_field(nodes:const ExprNodes in N, facts:OperandFacts i
 }
 
 func check_case_product_field(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:OperandFacts in F, at:u64, used:u64, revision:u64, receiver:u64, field:u64, ordinal:u64,
-    record:const DeclaredType in R, result:const DeclaredType in T, source_only:bool) -> u8
+    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, receiver:UInt64, field:UInt64, ordinal:UInt64,
+    record:const DeclaredType in R, result:const DeclaredType in T, source_only:bool) -> UInt8
     where {const owner N, const owner B, owner F, const owner R, const owner T} {
     ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     if (!inspect_field_selection(nodes, revision, used, at, projection) ||
@@ -4500,7 +4500,7 @@ func check_case_product_field(nodes:const ExprNodes in N, names:const NameBindin
 
 func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:OperandFacts in F, views:const SuppliedViews in H,
-    at:u64, used:u64, revision:u64, parent:u64, sum:u64, arm:u64) -> u8
+    at:UInt64, used:UInt64, revision:UInt64, parent:UInt64, sum:UInt64, arm:UInt64) -> UInt8
     where {const owner N, const owner B, owner F, const owner H} {
     if (parent <= at || parent >= used || parent >= intrinsic (len)(views) ||
         arm >= used) return invalid_operand_tree();
@@ -4515,7 +4515,7 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
         initializer <- no_node(); contents <- no_node()
     };
     ref alternative = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node() };
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (inspect_construction(nodes, revision, used, at, syntax) != BracedConstruction ||
         syntax.requested >= at || syntax.placement != no_node() || syntax.queried_operand != no_node() ||
         names[syntax.requested].kind != constructor_type() || names[syntax.requested].declaration != arm ||
@@ -4526,7 +4526,7 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
 }
 
 func check_sum_field_value(nodes:const ExprNodes in N, facts:OperandFacts in F,
-    input:u64, type:const DeclaredType in T) -> u8 where {const owner N, owner F, const owner T} {
+    input:UInt64, type:const DeclaredType in T) -> UInt8 where {const owner N, owner F, const owner T} {
     val kind <- facts[input].kind;
     if (type.kind == record_type() || type.kind == sum_type()) {
         val matches <- if (type.kind == record_type()) {
@@ -4548,8 +4548,8 @@ func check_sum_field_value(nodes:const ExprNodes in N, facts:OperandFacts in F,
 
 func check_sum_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, links:const NameWork in L, selected:const SelectedExports in E,
-    facts:OperandFacts in F, abrupt:bool in P, at:u64, fields:u64,
-    initializer:u64, used:u64, revision:u64) -> u8
+    facts:OperandFacts in F, abrupt:bool in P, at:UInt64, fields:UInt64,
+    initializer:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner P} {
     ref write = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
     if (inspect_assignment(nodes, revision, at, initializer, write) != FieldTransfer ||
@@ -4579,8 +4579,8 @@ func check_sum_initializer(source:const SourceBytes in S, nodes:const ExprNodes 
 
 func check_local_sum_construction(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, links:const NameWork in L, selected:const SelectedExports in E,
-    facts:OperandFacts in F, at:u64, transfer:u64, sum:u64, arm:u64, fields:u64, used:u64, revision:u64)
-    -> u8 where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F} {
+    facts:OperandFacts in F, at:UInt64, transfer:UInt64, sum:UInt64, arm:UInt64, fields:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F} {
     ref syntax = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
@@ -4591,13 +4591,13 @@ func check_local_sum_construction(source:const SourceBytes in S, nodes:const Exp
         names[syntax.requested].kind != constructor_type() ||
         names[syntax.requested].declaration != arm || links[arm].declaring_sum != sum) return invalid_operand_tree();
     ref abrupt = make bool { false };
-    ref tail = make u64 { no_node() };
-    ref item = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!block_tail(nodes, revision, at, syntax.contents, tail) ||
         !first_sequence_entry(nodes, revision, at, tail, BlockSequence, item)) return invalid_operand_tree();
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     val diagnostic <- 0u8;
-    ref field = make u64 { no_node() };
+    ref field = make UInt64 { no_node() };
     for (unused in 0u64 .. used) {
         if (item == no_node()) {
             if (abrupt) {
@@ -4638,7 +4638,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
                    cases:const ConstructorCaseFacts in C,
                        source_only:bool,
-                   at:u64, used:u64, revision:u64) -> u8
+                   at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
         owner O, const owner X, const owner H, const owner C} {
     if (at >= used) return invalid_operand_tree();
@@ -4735,7 +4735,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             return unsupported_transfer_signature()
         }
     };
-    ref installed_expression = make u64 { no_node() };
+    ref installed_expression = make UInt64 { no_node() };
     if (source_only && native_installation_input(nodes, revision, used, at, installed_expression)) {
         val selected_acquisition <- ungrouped(nodes, revision, used, installed_expression);
         if (selected_acquisition >= used || links[selected_acquisition].active != at)
@@ -4978,7 +4978,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (invocation == InvalidCallSyntax) return invalid_operand_tree();
     if (invocation == EffectfulInvocation)
         return check_symbolic_call(nodes, names, selected, facts, at, call.callee, call.arguments, used, revision);
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (block_tail(nodes, revision, used, at, tail)) {
         if (is_scope_block(nodes, at)) return check_scope_tail(facts, at, tail);
         if (tail != no_node() && facts[at].arm_result != 0u8) { copy_fact(facts, at, tail); } else {
@@ -5004,7 +5004,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
 }
 
 func complete_enum_backing(links:const NameWork in L, interfaces:const ModuleInterfaces in I,
-                           published:u64, facts:OperandFacts in F, at:u64, used:u64) -> void
+                           published:UInt64, facts:OperandFacts in F, at:UInt64, used:UInt64) -> void
     where {const owner L, const owner I, owner F} {
     if (facts[at].kind != scalar_enum()) return;
     val identity <- facts[at].identity;
@@ -5023,12 +5023,12 @@ func complete_enum_backing(links:const NameWork in L, interfaces:const ModuleInt
 # its ordered scan checks each direct item in the context that reaches it.
 func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                          links:const NameWork in L, selected:const SelectedExports in E, facts:OperandFacts in F,
-                         interfaces:const ModuleInterfaces in I, published:u64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
+                         interfaces:const ModuleInterfaces in I, published:UInt64, owners:CallOwners in O, fields:const CaughtFieldUses in X,
                              views:const SuppliedViews in H,
                          cases:const ConstructorCaseFacts in C,
                 demand:const DeclarationDemands in D,
-                         report:OperandCheckResult in R, first:u64, past:u64, used:u64,
-                             revision:u64, context:u64) -> bool
+                         report:OperandCheckResult in R, first:UInt64, past:UInt64, used:UInt64,
+                             revision:UInt64, context:UInt64) -> bool
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, const owner I,
         owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     val at <- first;
@@ -5055,13 +5055,13 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
     return at == past;
 }
 
-func discard_result(facts:OperandFacts in F, at:u64, mode:u8) -> void where {owner F} {
+func discard_result(facts:OperandFacts in F, at:UInt64, mode:UInt8) -> void where {owner F} {
     if (at == no_node()) return;
     facts[at].discarded_result <- mode;
     return;
 }
 
-func inherit_result_use(facts:OperandFacts in F, parent:u64, child:u64) -> void where {owner F} {
+func inherit_result_use(facts:OperandFacts in F, parent:UInt64, child:UInt64) -> void where {owner F} {
     if (child == no_node()) return;
     facts[child].arm_result <- facts[parent].arm_result;
     facts[child].discarded_result <- facts[parent].discarded_result;
@@ -5069,7 +5069,7 @@ func inherit_result_use(facts:OperandFacts in F, parent:u64, child:u64) -> void 
 }
 
 func discard_sum_statement(nodes:const ExprNodes in N, cases:const ConstructorCaseFacts in C,
-    facts:OperandFacts in F, written:u64, used:u64, revision:u64) -> void
+    facts:OperandFacts in F, written:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner C, owner F} {
     val at <- ungrouped(nodes, revision, used, written);
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
@@ -5086,7 +5086,7 @@ func discard_sum_statement(nodes:const ExprNodes in N, cases:const ConstructorCa
 # Carry discard through parentheses, a grouping block's tail and the
 # normal arms of a guard. Argument and arithmetic operands and independent
 # invocations still establish results required by their own operations.
-func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> void
+func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, owner F} {
     ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
     if (inspect_range_loop(nodes, revision, used, at, loop)) {
@@ -5122,7 +5122,7 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
         };
     };
     if (facts[at].discarded_result == 0u8 && facts[at].arm_result == 0u8) return;
-    ref child = make u64 { no_node() };
+    ref child = make UInt64 { no_node() };
     if (inspect_group(nodes, revision, used, at, child) == ParenthesizedExpression ||
         (!is_scope_block(nodes, at) && block_tail(nodes, revision, used, at, child))) {
         inherit_result_use(facts, at, child);
@@ -5154,7 +5154,7 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
 # A declared receiving reference supplies placement for a directly
 # contained text construction. Explicit placement is checked separately.
 func prepare_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
-                           facts:OperandFacts in F, at:u64, used:u64, revision:u64) -> void
+                           facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, owner F} {
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     if (!inspect_local_binding(nodes, revision, used, at, local) || local.mode != ReferenceLocal) return;
@@ -5176,7 +5176,7 @@ func prepare_text_receiver(nodes:const ExprNodes in N, names:const NameBindings 
 
 # Revisit a writable formal only when it reaches an allocation. Its
 # incoming argument edges retain the actual owner from each checked call.
-func demand_owner_inputs(facts:OperandFacts in F, owners:CallOwners in O, owner_site:u64, pending:u64 in P)
+func demand_owner_inputs(facts:OperandFacts in F, owners:CallOwners in O, owner_site:UInt64, pending:UInt64 in P)
     -> void where {owner F, owner O, owner P} {
     val argument <- owners[owner_site].uses;
     val actual <- no_node();
@@ -5193,7 +5193,7 @@ func demand_owner_inputs(facts:OperandFacts in F, owners:CallOwners in O, owner_
     };
 }
 
-func close_allocation_owners(facts:OperandFacts in F, owners:CallOwners in O, used:u64) -> void
+func close_allocation_owners(facts:OperandFacts in F, owners:CallOwners in O, used:UInt64) -> void
     where {owner F, owner O} {
     # Invocation substitutions are complete. Reuse their call-site words as work links.
     val pending <- no_node();
@@ -5217,9 +5217,9 @@ func close_allocation_owners(facts:OperandFacts in F, owners:CallOwners in O, us
 # prove a target present or propagate a possible checked failure.
 export func check_module_operands(source:const SourceBytes in S, nodes:const ExprNodes in N, tree:const ParseResult in T,
                                   names:const NameBindings in B, links:const NameWork in L,
-                                  selected:const SelectedExports in E, module:u64,
+                                  selected:const SelectedExports in E, module:UInt64,
                                       facts:OperandFacts in F, interfaces:const ModuleInterfaces in I,
-                                      published:u64,
+                                      published:UInt64,
                                   owners:CallOwners in O, fields:const CaughtFieldUses in X,
                                       views:const SuppliedViews in H,
                                   cases:const ConstructorCaseFacts in C,
@@ -5230,7 +5230,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
            owner O, const owner X, const owner H, const owner C, const owner D, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_operand_tree();
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64 || !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
     if (published > intrinsic (len)(interfaces) ||
@@ -5347,7 +5347,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     val at <- no_node();
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
-    ref void_result_clause = make u64 { no_node() };
+    ref void_result_clause = make UInt64 { no_node() };
     for (offset in 0u64 .. tree.used) {
         at <- tree.used - 1u64 - offset;
         if (source_only && intrinsic (len)(cases) != 0u64) {

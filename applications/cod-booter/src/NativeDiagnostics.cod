@@ -8,53 +8,53 @@ using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed, Diagnosti
 handle type LauncherDiagnostics;
 export handle type DiagnosticDestination in LauncherDiagnostics;
 export func "C" diagnostic_limit(handle destination:const DiagnosticDestination in D)
-    -> u64 where {const owner D};
+    -> UInt64 where {const owner D};
 
 export data DiagnosticRun {
-    limit:u64;
-    retained:u64;
-    package_input_failure:u64;
+    limit:UInt64;
+    retained:UInt64;
+    package_input_failure:UInt64;
 }
-export array DiagnosticRuns[u64]:DiagnosticRun;
+export array DiagnosticRuns[UInt64]:DiagnosticRun;
 
 export func diagnostic_budget_full(run:const DiagnosticRuns in G) -> bool where {const owner G} {
     return run[0u64].limit != 0u64 and run[0u64].retained >= run[0u64].limit
 }
 
-func "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:u8, code:u32,
-                          first_line:u64, first_column:u64, past_line:u64, past_column:u64,
-                          related_line:u64, related_column:u64, os_error:u64) -> u8 where {owner D};
+func "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:UInt8, code:UInt32,
+                          first_line:UInt64, first_column:UInt64, past_line:UInt64, past_column:UInt64,
+                          related_line:UInt64, related_column:UInt64, os_error:UInt64) -> UInt8 where {owner D};
 
 data "C" SourceDiagnosticRow {
-    code:u8;
-    first_line:u64;
-    first_column:u64;
-    past_line:u64;
-    past_column:u64;
-    related_line:u64;
-    related_column:u64;
+    code:UInt8;
+    first_line:UInt64;
+    first_column:UInt64;
+    past_line:UInt64;
+    past_column:UInt64;
+    related_line:UInt64;
+    related_column:UInt64;
 }
-array SourceDiagnosticRows[u64]:SourceDiagnosticRow;
-array ReportIndices[u64]:u64;
+array SourceDiagnosticRows[UInt64]:SourceDiagnosticRow;
+array ReportIndices[UInt64]:UInt64;
 
-func "C" write_source_reports(handle diagnostic:DiagnosticDestination in D, rows:const SourceDiagnosticRows in R, used:u64,
-                             keys:const SourceBytes in K, first:u64, past:u64, stage:u8,
-                             first_finding:u64) -> u8
+func "C" write_source_reports(handle diagnostic:DiagnosticDestination in D, rows:const SourceDiagnosticRows in R, used:UInt64,
+                             keys:const SourceBytes in K, first:UInt64, past:UInt64, stage:UInt8,
+                             first_finding:UInt64) -> UInt8
     where {owner D, const owner R, const owner K};
 
-func "C" append_symbol_diagnostic(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8,
-    first_line:u64, first_column:u64, past_line:u64, past_column:u64,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64,
-    spelling:const SourceBytes in S, name_first:u64, name_past:u64,
-    module_key:const SourceBytes in M, module_first:u64, module_past:u64,
-    definition:const SourceBytes in N, definition_first:u64, definition_past:u64, finding:u64)
-    -> u8 where {owner D, const owner K, const owner S, const owner M, const owner N};
+func "C" append_symbol_diagnostic(handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt8,
+    first_line:UInt64, first_column:UInt64, past_line:UInt64, past_column:UInt64,
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64,
+    spelling:const SourceBytes in S, name_first:UInt64, name_past:UInt64,
+    module_key:const SourceBytes in M, module_first:UInt64, module_past:UInt64,
+    definition:const SourceBytes in N, definition_first:UInt64, definition_past:UInt64, finding:UInt64)
+    -> UInt8 where {owner D, const owner K, const owner S, const owner M, const owner N};
 
 export proc report_symbol_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
-    handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8, first:u64, past:u64,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64,
-    module_key:const SourceBytes in M, module_first:u64, module_past:u64,
-    definition:const SourceBytes in N, definition_first:u64, definition_past:u64,
+    handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt8, first:UInt64, past:UInt64,
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64,
+    module_key:const SourceBytes in M, module_first:UInt64, module_past:UInt64,
+    definition:const SourceBytes in N, definition_first:UInt64, definition_past:UInt64,
     run:DiagnosticRuns in Q) -> CompilerStatus
     where {const owner S, owner D, const owner K, const owner M, const owner N, owner Q} {
     if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
@@ -78,13 +78,13 @@ export proc report_symbol_rejection(source:const SourceBytes in S, lines:const S
     return Complete
 }
 
-func "C" append_dependency_note(handle diagnostic:DiagnosticDestination in D, finding:u64,
-    keys:const SourceBytes in K, first:u64, past:u64, first_line:u64, first_column:u64,
-    past_line:u64, past_column:u64) -> u8 where {owner D, const owner K};
+func "C" append_dependency_note(handle diagnostic:DiagnosticDestination in D, finding:UInt64,
+    keys:const SourceBytes in K, first:UInt64, past:UInt64, first_line:UInt64, first_column:UInt64,
+    past_line:UInt64, past_column:UInt64) -> UInt8 where {owner D, const owner K};
 
 export proc report_dependency_note(source:const SourceBytes in S, lines:const SourceLines in S,
-    handle diagnostic:DiagnosticDestination in D, finding:u64, first:u64, past:u64,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64) -> bool
+    handle diagnostic:DiagnosticDestination in D, finding:UInt64, first:UInt64, past:UInt64,
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64) -> bool
     where {const owner S, owner D, const owner K} {
     ref start = make SourcePosition { line <- 0u64; column <- 0u64; };
     ref end = make SourcePosition { line <- 0u64; column <- 0u64; };
@@ -94,7 +94,7 @@ export proc report_dependency_note(source:const SourceBytes in S, lines:const So
         start.line, start.column, end.line, end.column) == 0u8
 }
 
-export enum PackageDiagnosticKind:u8 {
+export enum PackageDiagnosticKind:UInt8 {
     PackageShadow = 1u8;
     PackageAmbiguity = 2u8;
     PackageMissing = 3u8;
@@ -104,20 +104,20 @@ export enum PackageDiagnosticKind:u8 {
 }
 
 export func "C" append_package_diagnostic(
-    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:u64,
-    first_line:u64, first_column:u64, past_line:u64, past_column:u64,
-    importer:const SourceBytes in I, import_first:u64, import_past:u64,
-    spelling:const SourceBytes in M, first:u64, past:u64,
-    candidate:const SourceBytes in A, other:const SourceBytes in B, finding:u64)
-    -> u8 where {owner D, const owner I, const owner M, const owner A, const owner B};
+    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:UInt64,
+    first_line:UInt64, first_column:UInt64, past_line:UInt64, past_column:UInt64,
+    importer:const SourceBytes in I, import_first:UInt64, import_past:UInt64,
+    spelling:const SourceBytes in M, first:UInt64, past:UInt64,
+    candidate:const SourceBytes in A, other:const SourceBytes in B, finding:UInt64)
+    -> UInt8 where {owner D, const owner I, const owner M, const owner A, const owner B};
 
-func report_after(nodes:const ExprNodes in N, used:u64, left:u64, right:u64) -> bool where {const owner N} {
+func report_after(nodes:const ExprNodes in N, used:UInt64, left:UInt64, right:UInt64) -> bool where {const owner N} {
     val left_at <- syntax_first(nodes, used, left);
     val right_at <- syntax_first(nodes, used, right);
     return left_at > right_at || (left_at == right_at && left > right)
 }
 
-func restore_report_heap(nodes:const ExprNodes in N, used:u64, order:ReportIndices in O, start:u64, size:u64) -> void
+func restore_report_heap(nodes:const ExprNodes in N, used:UInt64, order:ReportIndices in O, start:UInt64, size:UInt64) -> void
     where {const owner N, owner O} {
     val parent <- start;
     val selected <- 0u64;
@@ -136,7 +136,7 @@ func restore_report_heap(nodes:const ExprNodes in N, used:u64, order:ReportIndic
     }
 }
 
-func sort_report_indices(nodes:const ExprNodes in N, used:u64, order:ReportIndices in O, count:u64) -> void
+func sort_report_indices(nodes:const ExprNodes in N, used:UInt64, order:ReportIndices in O, count:UInt64) -> void
     where {const owner N, owner O} {
     val root <- count / 2u64;
     for (step in 0u64 .. root) {
@@ -156,8 +156,8 @@ func sort_report_indices(nodes:const ExprNodes in N, used:u64, order:ReportIndic
 
 proc write_ordered_reports(source:const SourceBytes in S, lines:const SourceLines in S,
                            handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in N,
-                           keys:const SourceBytes in K, key_first:u64, key_past:u64, stage:u8,
-                           used:u64, count:u64, retained:u64, first_finding:u64) -> bool
+                           keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64, stage:UInt8,
+                           used:UInt64, count:UInt64, retained:UInt64, first_finding:UInt64) -> bool
     where {const owner S, owner D, const owner N, const owner K} {
     try {
         ref order = make ReportIndices(count, 0u64);
@@ -196,7 +196,7 @@ proc write_ordered_reports(source:const SourceBytes in S, lines:const SourceLine
 export proc report_parse_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
                                    handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in N,
                                    result:const FrontendResult in F, keys:const SourceBytes in K,
-                                   key_first:u64, key_past:u64, stage:u8, run:DiagnosticRuns in Q)
+                                   key_first:UInt64, key_past:UInt64, stage:UInt8, run:DiagnosticRuns in Q)
     -> CompilerStatus where {const owner S, owner D, const owner N, const owner F, const owner K, owner Q} {
     if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
     val count <- result.tree.reports;
@@ -217,7 +217,7 @@ export proc report_parse_rejection(source:const SourceBytes in S, lines:const So
 
 proc write_located_diagnostic(source:const SourceBytes in S, lines:const SourceLines in S,
                                handle diagnostic:DiagnosticDestination in D,
-                               stage:u8, code:u8, first:u64, past:u64, related:u64) -> bool
+                               stage:UInt8, code:UInt8, first:UInt64, past:UInt64, related:UInt64) -> bool
     where {const owner S, owner D} {
     ref start = make SourcePosition { line <- 0u64; column <- 0u64; };
     ref end = make SourcePosition { line <- 0u64; column <- 0u64; };
@@ -231,15 +231,15 @@ proc write_located_diagnostic(source:const SourceBytes in S, lines:const SourceL
 
 export proc report_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
                              handle diagnostic:DiagnosticDestination in D,
-                             stage:u8, code:u8, first:u64, past:u64, related:u64) -> void
+                             stage:UInt8, code:UInt8, first:UInt64, past:UInt64, related:UInt64) -> void
     where {const owner S, owner D} {
     (write_located_diagnostic(source, lines, diagnostic, stage, code, first, past, related)):void;
     return
 }
 
-proc write_single_report(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8,
+proc write_single_report(handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt8,
     first:const SourcePosition in F, past:const SourcePosition in P, related:const SourcePosition in A,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64, first_finding:u64) -> bool
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64, first_finding:UInt64) -> bool
     where {owner D, const owner F, const owner P, const owner A, const owner K} {
     try {
         ref rows = make SourceDiagnosticRows(1u64, make SourceDiagnosticRow {
@@ -253,9 +253,9 @@ proc write_single_report(handle diagnostic:DiagnosticDestination in D, stage:u8,
     }
 }
 
-export proc report_stored_rejection(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8,
+export proc report_stored_rejection(handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt8,
     first:const SourcePosition in F, past:const SourcePosition in P, related:const SourcePosition in A,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64, run:DiagnosticRuns in Q)
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in Q)
     -> CompilerStatus where {owner D, const owner F, const owner P, const owner A, const owner K, owner Q} {
     if (diagnostic_budget_full(run)) return DiagnosticsIncomplete;
     const val finding <- run[0u64].retained;
@@ -270,8 +270,8 @@ export proc report_stored_rejection(handle diagnostic:DiagnosticDestination in D
 }
 
 export proc report_graph_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
-    handle diagnostic:DiagnosticDestination in D, stage:u8, code:u8, first:u64, past:u64, related:u64,
-    keys:const SourceBytes in K, key_first:u64, key_past:u64, run:DiagnosticRuns in Q)
+    handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt8, first:UInt64, past:UInt64, related:UInt64,
+    keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in Q)
     -> CompilerStatus where {const owner S, owner D, const owner K, owner Q} {
     ref start = make SourcePosition { line <- 0u64; column <- 0u64; };
     ref end = make SourcePosition { line <- 0u64; column <- 0u64; };
@@ -282,27 +282,27 @@ export proc report_graph_rejection(source:const SourceBytes in S, lines:const So
     return report_stored_rejection(diagnostic, stage, code, start, end, previous, keys, key_first, key_past, run)
 }
 
-export proc report_source_open_error(handle diagnostic:DiagnosticDestination in D, os_error:u64) -> void where {owner D} {
+export proc report_source_open_error(handle diagnostic:DiagnosticDestination in D, os_error:UInt64) -> void where {owner D} {
     (write_diagnostic(diagnostic, 0u8, 0u32, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, os_error)):void;
     return;
 }
 
-proc report_native_error(handle diagnostic:DiagnosticDestination in D, stage:u8, code:u32) -> void where {owner D} {
+proc report_native_error(handle diagnostic:DiagnosticDestination in D, stage:UInt8, code:UInt32) -> void where {owner D} {
     (write_diagnostic(diagnostic, stage, code, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64, 0u64)):void;
     return;
 }
 
-export proc report_backend_error(handle diagnostic:DiagnosticDestination in D, code:u8) -> void where {owner D} {
+export proc report_backend_error(handle diagnostic:DiagnosticDestination in D, code:UInt8) -> void where {owner D} {
     report_native_error(diagnostic, 6u8, code);
     return;
 }
 
-export proc report_scratch_error(handle diagnostic:DiagnosticDestination in D, code:u32) -> void where {owner D} {
+export proc report_scratch_error(handle diagnostic:DiagnosticDestination in D, code:UInt32) -> void where {owner D} {
     report_native_error(diagnostic, 7u8, code);
     return;
 }
 
-export proc report_provider_error(handle diagnostic:DiagnosticDestination in D, code:u32) -> void where {owner D} {
+export proc report_provider_error(handle diagnostic:DiagnosticDestination in D, code:UInt32) -> void where {owner D} {
     report_native_error(diagnostic, 8u8, code);
     return;
 }

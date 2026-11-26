@@ -55,10 +55,10 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
 
 export func compile_bound_commands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
-                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:u64,
+                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
                                    facts:OperandFacts in F, owners:CallOwners in O,
                                    sites:CompletionSites in K, commands:NativeCommands in C,
-                                   plan:NativePlan in P, report:ModuleBindingResult in R, base:u64, entry:bool) -> bool
+                                   plan:NativePlan in P, report:ModuleBindingResult in R, base:UInt64, entry:bool) -> bool
     where {const owner S, const owner N, const owner X, const owner Y, const owner W,
            const owner I, owner F, owner O, owner K, owner C, owner P, owner R} {
     plan.used <- 0u64;

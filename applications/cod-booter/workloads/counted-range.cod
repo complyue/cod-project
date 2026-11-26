@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 
-proc report_offsets(val first:u64, val past:u64) -> void {
+proc report_offsets(val first:UInt64, val past:UInt64) -> void {
     val total <- 0u64;
-    val last <- make u64;
+    val last <- make UInt64;
     for (offset in first .. past) {
         (total <- total + offset):void;
         (last <- offset):void;

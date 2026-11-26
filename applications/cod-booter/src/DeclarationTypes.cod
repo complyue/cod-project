@@ -60,46 +60,46 @@ using "./AggregateSchemas.cod" AggregateFacts;
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type, exception_schema };
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
-                        marker:u64, current_module:u64) -> u64 where {const owner B, const owner E} {
+                        marker:UInt64, current_module:UInt64) -> UInt64 where {const owner B, const owner E} {
     if (names[marker].kind == ordinary_selection()) return selected[names[marker].declaration].origin_module;
     return current_module;
 }
 
 export func type_identity(names:const NameBindings in B, selected:const SelectedExports in E,
-                          marker:u64) -> u64 where {const owner B, const owner E} {
+                          marker:UInt64) -> UInt64 where {const owner B, const owner E} {
     val declaration <- names[marker].declaration;
     if (names[marker].kind == ordinary_selection()) return selected[declaration].identity;
     return declaration;
 }
 
 export data DeclaredType {
-    kind:u8;
-    defining_module:u64;
-    identity:u64;
+    kind:UInt8;
+    defining_module:UInt64;
+    identity:UInt64;
 }
 
 export data DeclaredExpressionResult {
-    diagnostic:u8;
-    node:u64;
+    diagnostic:UInt8;
+    node:UInt64;
 }
 
-export func unproved_type_assertion() -> u8 { return 84u8; }
-func missing_enum_member() -> u8 { return 85u8; }
-func incompatible_enum_assertion() -> u8 { return 86u8; }
-func invalid_signed_enum_operand() -> u8 { return 145u8 }
-func unproved_enum_operand() -> u8 { return 87u8; }
-func unproved_case_subject() -> u8 { return 93u8; }
-func invalid_case_pattern_type() -> u8 { return 94u8; }
-func missing_case_member() -> u8 { return 95u8; }
-func invalid_case_guard_type() -> u8 { return 96u8; }
-func invalid_c_string_operand() -> u8 { return 97u8; }
-export func interior_nul_in_c_string() -> u8 { return 98u8; }
-func invalid_string_operand() -> u8 { return 102u8; }
-func readonly_string_owner() -> u8 { return 103u8; }
-func invalid_string_installation() -> u8 { return 110u8; }
+export func unproved_type_assertion() -> UInt8 { return 84u8; }
+func missing_enum_member() -> UInt8 { return 85u8; }
+func incompatible_enum_assertion() -> UInt8 { return 86u8; }
+func invalid_signed_enum_operand() -> UInt8 { return 145u8 }
+func unproved_enum_operand() -> UInt8 { return 87u8; }
+func unproved_case_subject() -> UInt8 { return 93u8; }
+func invalid_case_pattern_type() -> UInt8 { return 94u8; }
+func missing_case_member() -> UInt8 { return 95u8; }
+func invalid_case_guard_type() -> UInt8 { return 96u8; }
+func invalid_c_string_operand() -> UInt8 { return 97u8; }
+export func interior_nul_in_c_string() -> UInt8 { return 98u8; }
+func invalid_string_operand() -> UInt8 { return 102u8; }
+func readonly_string_owner() -> UInt8 { return 103u8; }
+func invalid_string_installation() -> UInt8 { return 110u8; }
 
 export func describe_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-                   annotation:u64, current_module:u64, revision:u64, used:u64, result:DeclaredType in R) -> bool
+                   annotation:UInt64, current_module:UInt64, revision:UInt64, used:UInt64, result:DeclaredType in R) -> bool
     where {const owner N, const owner B, const owner E, owner R} {
     ref parsed = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -136,8 +136,8 @@ export func describe_type(nodes:const ExprNodes in N, names:const NameBindings i
 
 func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                        selected:const SelectedExports in E, work:const NameWork in W,
-                       name:u64, revision:u64, used:u64, inline_only:bool,
-                       result:DeclaredType in T, ordinal:u64 in R) -> bool
+                       name:UInt64, revision:UInt64, used:UInt64, inline_only:bool,
+                       result:DeclaredType in T, ordinal:UInt64 in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, owner T, owner R} {
     val field <- locate_record_field(source, nodes, work, result.identity, name, revision, used, ordinal);
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
@@ -151,10 +151,10 @@ func local_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N
 }
 
 func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                          spellings:const SourceBytes in P, spelling_used:u64,
-                          interfaces:const ModuleInterfaces in I, interface_count:u64,
-                          name:u64, used:u64, inline_only:bool, result:DeclaredType in T,
-                          ordinal:u64 in R) -> bool
+                          spellings:const SourceBytes in P, spelling_used:UInt64,
+                          interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                          name:UInt64, used:UInt64, inline_only:bool, result:DeclaredType in T,
+                          ordinal:UInt64 in R) -> bool
     where {const owner S, const owner N, const owner P, const owner I, owner T, owner R} {
     val head <- find_interface(interfaces, interface_count, result.defining_module, result.identity);
     if (head == no_node() || interfaces[head].interface_kind != record_type() ||
@@ -179,19 +179,19 @@ func imported_member_type(source:const SourceBytes in S, nodes:const ExprNodes i
 
 export func describe_record_field(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
-    spellings:const SourceBytes in P, spelling_used:u64,
-    interfaces:const ModuleInterfaces in I, interface_count:u64,
-    name:u64, used:u64, revision:u64, result:DeclaredType in R) -> bool
+    spellings:const SourceBytes in P, spelling_used:UInt64,
+    interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+    name:UInt64, used:UInt64, revision:UInt64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
            const owner P, const owner I, owner R} {
-    ref ordinal = make u64 { no_node() };
+    ref ordinal = make UInt64 { no_node() };
     return describe_record_member(source, nodes, names, selected, work, spellings, spelling_used, interfaces,
         interface_count, name, used, revision, false, result, ordinal)
 }
 
 export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, sum:u64, spelling:u64, used:u64, revision:u64,
-    count:u64 in C, ordinal:u64 in C) -> u64 where {const owner N, const owner B, const owner W, owner C} {
+    work:const NameWork in W, sum:UInt64, spelling:UInt64, used:UInt64, revision:UInt64,
+    count:UInt64 in C, ordinal:UInt64 in C) -> UInt64 where {const owner N, const owner B, const owner W, owner C} {
     ref shape = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
@@ -199,7 +199,7 @@ export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBi
     if (inspect_declaration(nodes, revision, used, sum, shape) != NominalSum ||
         spelling >= used || names[spelling].kind != constructor_type()) return no_node();
     val chosen <- names[spelling].declaration;
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, shape.entries, SumSequence, first)) return no_node();
     ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
     val arm <- first;
@@ -221,9 +221,9 @@ export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBi
 
 export func describe_record_member(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
-    spellings:const SourceBytes in P, spelling_used:u64,
-    interfaces:const ModuleInterfaces in I, interface_count:u64,
-    name:u64, used:u64, revision:u64, inline_only:bool, result:DeclaredType in T, ordinal:u64 in R) -> bool
+    spellings:const SourceBytes in P, spelling_used:UInt64,
+    interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+    name:UInt64, used:UInt64, revision:UInt64, inline_only:bool, result:DeclaredType in T, ordinal:UInt64 in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
            const owner P, const owner I, owner T, owner R} {
     if (result.kind != record_type()) return false;
@@ -238,10 +238,10 @@ export func describe_record_member(source:const SourceBytes in S, nodes:const Ex
 # nominal type, with no claim about target readiness or a readable loan.
 func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                 selected:const SelectedExports in E, work:const NameWork in W,
-                spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                at:u64, used:u64, revision:u64, result:DeclaredType in R) -> bool
+                spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                at:UInt64, used:UInt64, revision:UInt64, result:DeclaredType in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
-    ref inside = make u64 { no_node() };
+    ref inside = make UInt64 { no_node() };
     val grouping <- inspect_group(nodes, revision, used, at, inside);
     if (grouping == InvalidGroup) return false;
     if (grouping == ParenthesizedExpression)
@@ -283,7 +283,7 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     val shape <- inspect_construction(nodes, revision, used, at, construction);
     if (shape == PositionalConstruction || shape == BracedConstruction || shape == StorageReservation)
         return describe_type(nodes, names, selected, construction.requested, 0u64, revision, used, result);
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (!is_scope_block(nodes, at) && block_tail(nodes, revision, used, at, tail)) {
         ref item = make SequenceEntry { previous <- no_node(); item <- no_node(); };
         return inspect_sequence_entry(nodes, revision, used, tail, item) == BlockSequence &&
@@ -370,7 +370,7 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     return trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, initializer, used, revision, result);
 }
 
-func declared_expression_failure(report:DeclaredExpressionResult in R, code:u8, at:u64) -> bool where {owner R} {
+func declared_expression_failure(report:DeclaredExpressionResult in R, code:UInt8, at:UInt64) -> bool where {owner R} {
     report.diagnostic <- code;
     report.node <- at;
     return false;
@@ -379,8 +379,8 @@ func declared_expression_failure(report:DeclaredExpressionResult in R, code:u8, 
 # Bind the spelling against the already selected domain. The name binding
 # and backing code refer to its canonical member regardless of spelling.
 func bind_enum_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
-                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                        spelling:u64, destination:u64, type:const DeclaredType in T, revision:u64, used:u64) -> u8
+                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                        spelling:UInt64, destination:UInt64, type:const DeclaredType in T, revision:UInt64, used:UInt64) -> UInt8
     where {const owner S, const owner N, owner B, owner W, const owner P, const owner I, const owner T} {
     if (type.defining_module == 0u64) {
         ref domain = make DeclarationSites {
@@ -404,7 +404,7 @@ func bind_enum_spelling(source:const SourceBytes in S, nodes:const ExprNodes in 
     return 0u8;
 }
 
-func read_enum_operand(nodes:const ExprNodes in N, used:u64, revision:u64, at:u64,
+func read_enum_operand(nodes:const ExprNodes in N, used:UInt64, revision:UInt64, at:UInt64,
     literal:EnumIntegerSyntax in C) -> bool where {const owner N, owner C} {
     val atom <- ungrouped(nodes, revision, used, at);
     if (atom >= used || atom >= intrinsic (len)(nodes)) return false;
@@ -425,7 +425,7 @@ func read_enum_operand(nodes:const ExprNodes in N, used:u64, revision:u64, at:u6
     }
 }
 
-func enum_code_bits(literal:const EnumIntegerSyntax in L, backing:u8, code:u64 in C) -> u8
+func enum_code_bits(literal:const EnumIntegerSyntax in L, backing:UInt8, code:UInt64 in C) -> UInt8
     where {const owner L, owner C} {
     val magnitude <- literal.magnitude;
     val signed <- backing == builtin_i64();
@@ -442,8 +442,8 @@ func enum_code_bits(literal:const EnumIntegerSyntax in L, backing:u8, code:u64 i
 }
 
 func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
-                    interfaces:const ModuleInterfaces in I, interface_count:u64, code:u64,
-                    destination:u64, type:const DeclaredType in T, revision:u64, used:u64) -> u8
+                    interfaces:const ModuleInterfaces in I, interface_count:UInt64, code:UInt64,
+                    destination:UInt64, type:const DeclaredType in T, revision:UInt64, used:UInt64) -> UInt8
     where {const owner N, owner B, owner W, const owner I, const owner T} {
     if (type.defining_module == 0u64) {
         ref domain = make DeclarationSites {
@@ -474,14 +474,14 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
     return missing_enum_member()
 }
 
-func remember_type(work:NameWork in W, at:u64, type:const DeclaredType in T) -> void
+func remember_type(work:NameWork in W, at:UInt64, type:const DeclaredType in T) -> void
     where {owner W, const owner T} {
     work[at].value_kind <- type.kind;
     work[at].value_module <- type.defining_module;
     (work[at].value_identity <- type.identity):void;
 }
 
-func readonly_owner_name(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64, used:u64, revision:u64) -> bool
+func readonly_owner_name(nodes:const ExprNodes in N, names:const NameBindings in B, at:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B} {
     if (at == no_node() || names[at].kind != owner_binding()) return false;
     ref signature = make SignatureSites {
@@ -491,7 +491,7 @@ func readonly_owner_name(nodes:const ExprNodes in N, names:const NameBindings in
 }
 
 func check_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
-                         receiver:const LocalBindingSites in L, used:u64, revision:u64, report:DeclaredExpressionResult in R)
+                         receiver:const LocalBindingSites in L, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
     -> bool where {const owner N, const owner B, const owner L, owner R} {
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -511,12 +511,12 @@ func check_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in
 
 func check_text_construction(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                               selected:const SelectedExports in E, work:const NameWork in W,
-                              spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                              tail:u64, owner_name:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+                              spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                              tail:UInt64, owner_name:UInt64, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     if (readonly_owner_name(nodes, names, owner_name, used, revision))
         return declared_expression_failure(report, readonly_string_owner(), owner_name);
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, ArgumentSequence, item))
         return declared_expression_failure(report, invalid_string_operand(), tail);
     ref argument = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -537,8 +537,8 @@ func check_text_construction(source:const SourceBytes in S, nodes:const ExprNode
 }
 
 func prepare_enum_domain(nodes:const ExprNodes in N, names:const NameBindings in B, work:NameWork in W,
-                         interfaces:const ModuleInterfaces in I, interface_count:u64,
-                         wanted:const DeclaredType in T, at:u64, used:u64, revision:u64) -> bool
+                         interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                         wanted:const DeclaredType in T, at:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, owner W, const owner I, const owner T} {
     if (wanted.defining_module != 0u64) {
         val head <- find_interface(interfaces, interface_count, wanted.defining_module, wanted.identity);
@@ -555,7 +555,7 @@ func prepare_enum_domain(nodes:const ExprNodes in N, names:const NameBindings in
             name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
             index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
         };
-        ref first = make u64 { no_node() };
+        ref first = make UInt64 { no_node() };
         if (inspect_declaration(nodes, revision, used, wanted.identity, domain) != EnumTypeDeclaration ||
             !first_sequence_entry(nodes, revision, used, domain.entries, EnumSequence, first)) return false;
         work[at].enum_members <- first;
@@ -564,9 +564,9 @@ func prepare_enum_domain(nodes:const ExprNodes in N, names:const NameBindings in
     return work[at].enum_backing != 0u8
 }
 
-func mark_folded_operand(nodes:const ExprNodes in N, work:NameWork in W, operand:u64, used:u64, revision:u64)
+func mark_folded_operand(nodes:const ExprNodes in N, work:NameWork in W, operand:UInt64, used:UInt64, revision:UInt64)
     -> void where {const owner N, owner W} {
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     val current <- operand;
     for (unused in 0u64 .. used) {
         work[current].enum_assertion <- FoldedEnumOperand;
@@ -577,7 +577,7 @@ func mark_folded_operand(nodes:const ExprNodes in N, work:NameWork in W, operand
 
 func prepare_selected_enum_value(names:const NameBindings in B, selected:const SelectedExports in E,
                                  work:NameWork in W, interfaces:const ModuleInterfaces in I,
-                                 interface_count:u64, at:u64) -> bool
+                                 interface_count:UInt64, at:UInt64) -> bool
     where {const owner B, const owner E, owner W, const owner I} {
     val selected_value <- names[at].declaration;
     if (selected_value >= intrinsic (len)(selected)) return false;
@@ -596,11 +596,11 @@ func prepare_selected_enum_value(names:const NameBindings in B, selected:const S
 export func prepare_enum_assertions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                                    selected:const SelectedExports in E, work:NameWork in W,
                                    spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I,
-                                   interface_count:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+                                   interface_count:UInt64, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
     ref wanted = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
-    ref code = make u64 { 0u64 };
+    ref code = make UInt64 { 0u64 };
     ref literal = make EnumIntegerSyntax { magnitude <- 0u64; negative <- false; width <- 0u64; };
     val operand <- no_node();
     val problem <- 0u8;
@@ -641,8 +641,8 @@ export func prepare_enum_assertions(source:const SourceBytes in S, nodes:const E
 
 func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                           selected:const SelectedExports in E, work:NameWork in W,
-                          spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                          at:u64, used:u64, revision:u64, assertion:const AssertionSites in Q, report:DeclaredExpressionResult in R) -> bool
+                          spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                          at:UInt64, used:UInt64, revision:UInt64, assertion:const AssertionSites in Q, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I, const owner Q, owner R} {
     val operand <- assertion.operand;
     ref actual = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
@@ -674,8 +674,8 @@ func check_type_assertion(source:const SourceBytes in S, nodes:const ExprNodes i
 }
 
 func check_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
-                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                        pattern:u64, subject:const DeclaredType in T, used:u64, revision:u64) -> u8
+                        work:NameWork in W, spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                        pattern:UInt64, subject:const DeclaredType in T, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, owner B, owner W, const owner P, const owner I, const owner T} {
     val mode <- case_pattern(nodes, used, pattern);
     if (subject.kind == builtin_bool()) {
@@ -694,8 +694,8 @@ func check_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in 
 
 func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                             selected:const SelectedExports in E, work:NameWork in W,
-                            spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                            at:u64, used:u64, revision:u64, choice:const CaseSites in C, report:DeclaredExpressionResult in R) -> bool
+                            spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                            at:UInt64, used:UInt64, revision:UInt64, choice:const CaseSites in C, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, const owner C, owner R} {
     ref subject = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     ref predicate = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
@@ -703,7 +703,7 @@ func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes
     # Null patterns retain their syntax. The flow checker will prove
     # presence and readability for the execution of the other patterns.
     val known <- trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, operand, used, revision, subject);
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, choice.items, BlockSequence, item))
         return declared_expression_failure(report, unproved_case_subject(), at);
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -735,8 +735,8 @@ func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes
 
 func check_place_installation(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                              selected:const SelectedExports in E, work:const NameWork in W,
-                             spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                             destination:u64, input:u64, used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+                             spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                             destination:UInt64, input:UInt64, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner P, const owner I, owner R} {
     if (name_syntax(nodes, used, destination) != OrdinaryName || names[destination].kind != formal_binding()) return true;
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
@@ -750,8 +750,8 @@ func check_place_installation(source:const SourceBytes in S, nodes:const ExprNod
 
 export func check_declared_expressions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                                        selected:const SelectedExports in E, work:NameWork in W,
-                                       spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64,
-                                       used:u64, revision:u64, report:DeclaredExpressionResult in R) -> bool
+                                       spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
+                                       used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
@@ -784,13 +784,13 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
 
 export func prepare_native_operand_types(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
                                      selected:const SelectedExports in E, work:NameWork in W,
-                                     spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:u64, used:u64, revision:u64)
+                                     spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64, used:UInt64, revision:UInt64)
     where {const owner S, const owner N, const owner B, const owner E, owner W, const owner P, const owner I} {
     ref result = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
     val composite <- false;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     for (at in 0u64 .. used) {
         composite <- inspect_field_selection(nodes, revision, used, at, selection) ||
             (!is_scope_block(nodes, at) && block_tail(nodes, revision, used, at, tail)) ||
@@ -807,13 +807,13 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
 }
 
 func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-                  work:const NameWork in W, record:u64, defining_module:u64, count:u64, revision:u64, used:u64,
+                  work:const NameWork in W, record:UInt64, defining_module:UInt64, count:UInt64, revision:UInt64, used:UInt64,
                   storage:AggregateStorage, declaration:const DeclarationSites in D, interfaces:ModuleInterfaces in I)
-    -> u64 where {const owner N, const owner B, const owner E, const owner W, const owner D, owner I} {
+    -> UInt64 where {const owner N, const owner B, const owner E, const owner W, const owner D, owner I} {
     if (lexical_builder_record(nodes, names, record, revision, used)) return count;
     val limit <- intrinsic (len)(interfaces);
     if (count >= limit || storage == UnprovedAggregate) return no_node();
-    ref field = make u64 { no_node() };
+    ref field = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, declaration.entries, FormalSequence, field)) return no_node();
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
@@ -855,11 +855,11 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
 }
 
 func stage_enum(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
-                declaration:u64, module:u64, start:u64, revision:u64, used:u64, domain:const DeclarationSites in D, interfaces:ModuleInterfaces in I) -> u64
+                declaration:UInt64, module:UInt64, start:UInt64, revision:UInt64, used:UInt64, domain:const DeclarationSites in D, interfaces:ModuleInterfaces in I) -> UInt64
     where {const owner N, const owner B, const owner W, const owner D, owner I} {
     val limit <- intrinsic (len)(interfaces);
     if (start >= limit) return no_node();
-    ref member = make u64 { no_node() };
+    ref member = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, domain.entries, EnumSequence, member)) return no_node();
     ref entry = make EnumMemberSites { name <- no_node(); previous <- no_node(); initializer <- no_node(); };
     val row <- start + 1u64;
@@ -884,7 +884,7 @@ func stage_enum(nodes:const ExprNodes in N, names:const NameBindings in B, work:
     return no_node();
 }
 
-func stage_constructor_field(interfaces:ModuleInterfaces in I, row:u64, first:u64, past:u64,
+func stage_constructor_field(interfaces:ModuleInterfaces in I, row:UInt64, first:UInt64, past:UInt64,
                              type:const DeclaredType in T, mode:FormalMode, readonly:bool) -> void
     where {owner I, const owner T} {
     write_sum_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, first, past, make ConstructorField {
@@ -893,19 +893,19 @@ func stage_constructor_field(interfaces:ModuleInterfaces in I, row:u64, first:u6
     });
 }
 
-func stage_constructor_header(interfaces:ModuleInterfaces in I, start:u64, module:u64, arm:u64,
-                              sum:u64, entries:u64, first:u64, past:u64) -> void where {owner I} {
+func stage_constructor_header(interfaces:ModuleInterfaces in I, start:UInt64, module:UInt64, arm:UInt64,
+                              sum:UInt64, entries:UInt64, first:UInt64, past:UInt64) -> void where {owner I} {
     write_sum_row(interfaces, start, module, arm, constructor_type(), entries, first, past,
                   make ConstructorInterface { sum_module <- module; sum_declaration <- sum; });
 }
 
 func stage_constructor(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-                       work:const NameWork in W, defining_module:u64, sum:u64, arm:u64, start:u64, revision:u64, used:u64,
-                       sites:const SumArmSites in A, interfaces:ModuleInterfaces in I) -> u64
+                       work:const NameWork in W, defining_module:UInt64, sum:UInt64, arm:UInt64, start:UInt64, revision:UInt64, used:UInt64,
+                       sites:const SumArmSites in A, interfaces:ModuleInterfaces in I) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, const owner A, owner I} {
     val limit <- intrinsic (len)(interfaces);
     if (start >= limit) return no_node();
-    ref field = make u64 { no_node() };
+    ref field = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, sites.fields, FormalSequence, field)) return no_node();
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     ref binding = make BindingSites {
@@ -931,14 +931,14 @@ func stage_constructor(nodes:const ExprNodes in N, names:const NameBindings in B
     return no_node();
 }
 
-func stage_constructor_reference(interfaces:ModuleInterfaces in I, row:u64, defining_module:u64, arm:u64)
+func stage_constructor_reference(interfaces:ModuleInterfaces in I, row:UInt64, defining_module:UInt64, arm:UInt64)
     -> void where {owner I} {
     write_sum_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, 0u64, 0u64,
                   make ConstructorReference { defining_module <- defining_module; declaration <- arm; });
 }
 
-func stage_sum_members(nodes:const ExprNodes in N, work:const NameWork in W, defining_module:u64,
-                       first:u64, last:u64, start:u64, revision:u64, used:u64, interfaces:ModuleInterfaces in I) -> u64
+func stage_sum_members(nodes:const ExprNodes in N, work:const NameWork in W, defining_module:UInt64,
+                       first:UInt64, last:UInt64, start:UInt64, revision:UInt64, used:UInt64, interfaces:ModuleInterfaces in I) -> UInt64
     where {const owner N, const owner W, owner I} {
     val limit <- intrinsic (len)(interfaces);
     ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node(); };
@@ -955,12 +955,12 @@ func stage_sum_members(nodes:const ExprNodes in N, work:const NameWork in W, def
 }
 
 func stage_sum(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-               work:const NameWork in W, defining_module:u64, sum:u64, start:u64, revision:u64, used:u64,
-               storage:AggregateStorage, domain:const DeclarationSites in D, interfaces:ModuleInterfaces in I) -> u64
+               work:const NameWork in W, defining_module:UInt64, sum:UInt64, start:UInt64, revision:UInt64, used:UInt64,
+               storage:AggregateStorage, domain:const DeclarationSites in D, interfaces:ModuleInterfaces in I) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, const owner D, owner I} {
     val limit <- intrinsic (len)(interfaces);
     if (start >= limit || (storage != CoDBitsAggregate && storage != NonBitsAggregate)) return no_node();
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, domain.entries, SumSequence, first) || first == no_node())
         return no_node();
     val member_past <- stage_sum_members(nodes, work, defining_module, first, domain.entries, start + 1u64, revision, used, interfaces);
@@ -984,8 +984,8 @@ func stage_sum(nodes:const ExprNodes in N, names:const NameBindings in B, select
 # Complete member shape is available by an already resolved defining identity.
 export func publish_type_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                                       work:const NameWork in W, facts:const AggregateFacts in F,
-                                      used:u64, revision:u64, defining_module:u64, start:u64,
-                                      interfaces:ModuleInterfaces in I) -> u64
+                                      used:UInt64, revision:UInt64, defining_module:UInt64, start:UInt64,
+                                      interfaces:ModuleInterfaces in I) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, const owner F, owner I} {
     if (used > intrinsic (len)(facts)) return no_node();
     val count <- start;

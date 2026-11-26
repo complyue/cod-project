@@ -2,8 +2,8 @@ handle type Session;
 handle type Report in Session;
 handle type Receipt;
 
-proc "C" Session(val serial:u64);
-proc "C" Report(val tag:u64);
+proc "C" Session(val serial:UInt64);
+proc "C" Report(val tag:UInt64);
 proc "C" Receipt(handle first:Report in O, handle second:Report in O) where {const owner O};
 proc "C" inspect(handle report:Report in O) where {const owner O};
 

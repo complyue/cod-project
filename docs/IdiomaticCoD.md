@@ -144,7 +144,7 @@ from a package-root `ASCII.cod` includes the scanner's proposed defaults and two
 frequently used members. The module chooses the defaults. Every member belongs to `ASCII`.
 
 ```cod
-export enum ASCII:u8 {
+export enum ASCII:UInt8 {
     HT = 9;
     LF = 10;
     CR = 13;
@@ -158,7 +158,7 @@ default { ASCII { HT, LF, CR, SPACE, HASH } }
 
 The [booter's trivia scanner](../applications/cod-booter/src/Lexer.cod) reads raw bytes.
 In a consumer, `using "ASCII.cod";` selects the type and the five named defaults. Where
-the scanner already has `byte:u8` and the current `comment:bool`, its update reads:
+the scanner already has `byte:UInt8` and the current `comment:bool`, its update reads:
 
 ```cod
 comment <- byte != LF && (comment || byte == HASH)
@@ -170,7 +170,7 @@ supplies the member table. A local binding with that spelling takes precedence i
 expression. Code that needs an enum value for an integer uses `10:ASCII`.
 
 The same vocabulary works in a [method group](../design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch).
-A `u8` slot can match `(=LF)` through its selected constant. An `ASCII` slot can match
+A `UInt8` slot can match `(=LF)` through its selected constant. An `ASCII` slot can match
 `(ESC)` through the enum's member table even when `ESC` is outside the defaults.
 See [default module selections](../design/ModuleWorlds.md#default-and-complete-public-selections).
 

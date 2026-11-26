@@ -1,11 +1,11 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 
-func prepare(selected:bool) -> u64 throws NullPointerException {
+func prepare(selected:bool) -> UInt64 throws NullPointerException {
     if (selected) {
         return 12u64;
     } else {};
-    ptr absent:u64 = null in here;
+    ptr absent:UInt64 = null in here;
     return absent;
 }
 

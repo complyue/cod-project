@@ -15,7 +15,7 @@ val frames <- samples / frame_size
 val remainder <- samples % frame_size
 val paused <- false
 val ready <- not paused and frames > 0u64
-val pixel_offset <- Int64(-2.75)
+val pixel_offset <- (-2.0 : Int64)
 func (+)(i:Int64(Position), step:Int64) -> Int64(Position) { Position(scalar(i) + step) }
 val shifted <- (+)(Position(10), 5)
 

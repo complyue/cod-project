@@ -1,11 +1,11 @@
 using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 
-export func len(source:const SourceBytes in S) -> u64 where {const owner S} {
+export func len(source:const SourceBytes in S) -> UInt64 where {const owner S} {
     return intrinsic (len)(source);
 }
 
-export func same_bytes(left:const SourceBytes in L, first:u64, past:u64,
-                       right:const SourceBytes in R, other_first:u64, other_past:u64) -> bool
+export func same_bytes(left:const SourceBytes in L, first:UInt64, past:UInt64,
+                       right:const SourceBytes in R, other_first:UInt64, other_past:UInt64) -> bool
     where {const owner L, const owner R} {
     val length <- past - first;
     if (length != other_past - other_first) return false;
@@ -17,7 +17,7 @@ export func same_bytes(left:const SourceBytes in L, first:u64, past:u64,
 
 # The indexed revision supplies one row per line, including an empty
 # final line after LF. The preceding row covers the byte position of LF.
-func line_at(lines:const SourceLines in S, offset:u64, lower:u64, upper:u64) -> u64
+func line_at(lines:const SourceLines in S, offset:UInt64, lower:UInt64, upper:UInt64) -> UInt64
     where {const owner S} {
     if (upper - lower == 1u64) return lower;
     val middle <- lower + (upper - lower) / 2u64;
@@ -26,7 +26,7 @@ func line_at(lines:const SourceLines in S, offset:u64, lower:u64, upper:u64) -> 
 }
 
 export func locate_source_position(source:const SourceBytes in S, lines:const SourceLines in S,
-                                   offset:u64, position:SourcePosition in P) -> void
+                                   offset:UInt64, position:SourcePosition in P) -> void
     where {const owner S, owner P} {
     position.line <- 0u64;
     position.column <- 0u64;

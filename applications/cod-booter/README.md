@@ -183,11 +183,11 @@ Acceptance checks each frontend at its own parse boundary. A valid form carries 
 
 ### Fixed references
 
-An initialized `const ref` local selects a supported scalar target once. The fixed slot cannot be rebound. A writable target can still receive a bits transfer or an ordinary mutable loan through that reference. An omitted target annotation inherits access from the initializer. In `const ref saved:const u64 = source`, both the slot and the access through it are restricted.
+An initialized `const ref` local selects a supported scalar target once. The fixed slot cannot be rebound. A writable target can still receive a bits transfer or an ordinary mutable loan through that reference. An omitted target annotation inherits access from the initializer. In `const ref saved:const UInt64 = source`, both the slot and the access through it are restricted.
 
 An ordinary scalar reference local can rebind to an existing initialized target with the same type and owner and compatible access. A failed right operand leaves the old target selected. The assignment result exposes the destination target with its declared access. A fixed reference taken before the rebind keeps the earlier target. The source commands check the body containing a fixed reference, including an unused binding.
 
-The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `u64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
+The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `UInt64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
 
 ### Array growth and reference-slot calls
 
@@ -195,7 +195,7 @@ The declaration and C provider commands check `reserve_keys` with its original `
 
 The checker records the possible escaping bounds and allocation failures of a completed slot body. A failed argument prevents callee entry. The staged interface records the formal modes, owner roles and allocation requirements. Imported reference-slot calls still require a cross-module rebind contract before they can be checked. [Key-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-key-array)
 
-Both source commands also check `reserve_visits`. The visit-array profile requires a locally declared `u64`-indexed array whose exact sum element has a completed finite bits schema. The fieldless fill must belong to that sum. The checker prepares the indexed destination before the source, including both bounds checks, and admits the whole-value transfer in discarded position. The final rebind follows the copy loop. Mixed-slot signatures and object emission remain separate profiles. [Visit-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-visit-array)
+Both source commands also check `reserve_visits`. The visit-array profile requires a locally declared `UInt64`-indexed array whose exact sum element has a completed finite bits schema. The fieldless fill must belong to that sum. The checker prepares the indexed destination before the source, including both bounds checks, and admits the whole-value transfer in discarded position. The final rebind follows the copy loop. Mixed-slot signatures and object emission remain separate profiles. [Visit-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-visit-array)
 
 The source commands also check a local braced constructor written directly into a writable element of a finite-bits sum array. They verify each initializer and the exact nominal element type, including nested inline bits fields. The isolated `mark_failed_visit` body passes both commands with its original schema. Object lowering and uses that consume the transfer's result remain outside this profile. [Indexed sum transfers](docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer)
 
@@ -215,11 +215,13 @@ The booter’s three commands check `assert predicate;` in an ordinary body. The
 
 Quoted assertion messages and reference-identity predicates such as `p is not null` still receive located profile diagnostics. [Predicate assertion contract](../../design/SymbolicDynamicScope.md#predicate-assertions-and-flow-refinement)
 
-### Transparent type synonyms
+### Fixed-width scalars and transparent type synonyms
 
-The current booter accepts first-order declarations such as `export type Sample = double`. The [builtin naming decision](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms) calls for migrating this example to `export type Sample = Float64` and migrating the booter’s own type references. The binder resolves the target in the defining module before checking signatures or layouts. Chains can refer forward to local declarations and through selected exports, including renamed and default selections. Cycles containing only synonyms fail at the target that closes the cycle.
+The seed and booter recognize `Int64`, `UInt8`, `UInt32`, `UInt64`, `Float32` and `Float64` as builtin type names. Compact literal suffixes still work, as in `255u8`, `1u64` and `1.5f32` in the profiles that support those literals. Numbered names such as `i64` are ordinary identifiers. Select `Int` and `UInt` with `using "julia.cod" { Int, UInt };` for the bundled 64-bit bootstrap targets. Short type names require a declared synonym in scope.
 
-A synonym retains the target’s identity through overload selection, enum backing declarations and C provider signatures. For example, two synonyms of the same unsigned type give identical signatures, and a synonym of the corresponding signed type retains its distinct identity. The spellings `float` and `double` use the existing `f32` and `f64` kinds. Object emission checks duplicate signatures for the supported ordinary fixed value families. Each command retains its existing profile for the underlying type and module graph. [Type synonym contract](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
+A first-order synonym such as `export type Sample = Float64` resolves its target in the defining module before signatures or layouts use it. Chains can refer forward to local declarations and through selected exports. A chain containing only synonyms and no defining type is rejected.
+
+A synonym carries the target’s identity into overload selection, enum backing declarations and C provider signatures. Two synonyms of the same target give identical signatures. Signed and unsigned targets remain distinct even when they have the same storage width. The booter object command checks duplicate signatures for the supported ordinary fixed value families. Each command retains its existing profiles for the underlying type and module graph. [Scalar naming and synonym contract](../../design/JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
 ### Contextual names in both frontends
 
@@ -227,7 +229,7 @@ Apply the [name rules](../../design/SymbolicDynamicScope.md#clause-words-and-lex
 
 ## Build and run on Linux
 
-The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. A prepared prefix has `bin/cod-seed` and the sources `string.cod` and `ASCII.cod` from [the language library](../../cod/library) in `lib/cod`. Stage the same library beside a distributed `bin/cod-booter` so it can resolve logical imports from any working directory. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
+The standalone build uses GNU Make 4.3 or newer, a prepared CoD seed and its language library, and a compatible LLVM SDK with shared libraries. A prepared prefix has `bin/cod-seed` and the sources `string.cod` and `ASCII.cod` from [the language library](../../cod/library) in `lib/cod`. Stage the same library beside a distributed `bin/cod-booter` so it can resolve logical imports from any working directory. Include `julia.cod` for explicit selection of `Int` and `UInt`. Use the following commands from the repository root with your ready seed prefix and the existing LLVM SDK in `build`.
 
 ```sh
 make -C cod/runtime
@@ -314,7 +316,7 @@ The AST admits an explicit error-report node wherever syntax was expected, inclu
 Recover at a boundary justified by the current grammar and delimiter nesting. Each recovery consumes bad input, returns a synchronizing token to an enclosing production that will consume it, or ends at EOF. This also applies to lexical errors and delimiter prepasses. A new line between tokens is ordinary whitespace. A malformed token gets one primary report for the same fault; an independent later error gets its own report. An unterminated triple-quoted token may legitimately cover the remaining bytes through EOF. Preserve that span and any earlier reports. An exhausted physical resource can end the parse with an explicit incomplete outcome.
 
 ```cod
-proc sample() -> u64 {
+proc sample() -> UInt64 {
     val first <- ;
     val second <- ;
     return 7u64

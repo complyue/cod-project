@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 
-enum Delivery:i64 {
+enum Delivery:Int64 {
     Pending = -17;
     Ready = 921;
     LegacyReady = Ready;
@@ -11,7 +11,7 @@ proc defer_delivery(state:Delivery in O) -> bool where {owner O} {
     return false;
 }
 
-proc live_priority(state:Delivery in O) -> u64 where {owner O} {
+proc live_priority(state:Delivery in O) -> UInt64 where {owner O} {
     return case state of {
         (LegacyReady) | defer_delivery(state) -> { 99u64 };
         (Pending) -> { 11u64 };
@@ -19,7 +19,7 @@ proc live_priority(state:Delivery in O) -> u64 where {owner O} {
     };
 }
 
-func snapshot_priority(state:Delivery) -> u64 {
+func snapshot_priority(state:Delivery) -> UInt64 {
     return case state of {
         (Pending) -> { 11u64 };
         (LegacyReady) -> { 22u64 };

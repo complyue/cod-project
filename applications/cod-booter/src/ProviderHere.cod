@@ -32,7 +32,7 @@ proc emit_call_signature(name:const String in N, handle_type:const String in H, 
     return;
 }
 
-proc emit_here_declarations(name:const String in N, handle_type:const String in H, feedback:const String in V, count:u64)
+proc emit_here_declarations(name:const String in N, handle_type:const String in H, feedback:const String in V, count:UInt64)
     -> void where {const owner N, const owner H, const owner V} {
     emit("typedef struct ");
     emit_here_name(name, "_arrays {\n");
@@ -66,7 +66,7 @@ proc emit_here_declarations(name:const String in N, handle_type:const String in 
 }
 
 proc emit_here_runner(name:const String in N, handle_type:const String in H, feedback:const String in V,
-                      rows:const ModuleInterfaces in G, used:u64, head:u64, checked_feedback:bool)
+                      rows:const ModuleInterfaces in G, used:UInt64, head:UInt64, checked_feedback:bool)
     -> bool where {const owner N, const owner H, const owner V, const owner G} {
     val count <- rows[head].entry_count - 1u64;
     for (index in 0u64 .. count) {
@@ -136,10 +136,10 @@ proc emit_here_call(name:const String in N, handle_type:const String in H, feedb
 }
 
 export proc write_provider_here(header:StringBuilder in H, stubs:StringBuilder in S,
-                                primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
+                                primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64,
                                 name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                                 spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                prefix:const ProviderPrefixes in R, head:u64)
+                                prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner L, const owner N, const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
         rows[head].interface_kind != c_operation() || rows[head].has_here == 0u8 ||

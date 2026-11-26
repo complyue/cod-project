@@ -1,11 +1,11 @@
 using "./ParserStorage.cod" no_node;
 
 export data ABIRecordLayout {
-    size:u64;
-    alignment:u64;
+    size:UInt64;
+    alignment:UInt64;
 }
 
-func aligned_offset(value:u64, alignment:u64) -> u64 {
+func aligned_offset(value:UInt64, alignment:UInt64) -> UInt64 {
     if (alignment == 0u64 || value == no_node()) return no_node();
     val used <- value % alignment;
     val padding <- if (used == 0u64) { 0u64 } else { alignment - used };
@@ -13,7 +13,7 @@ func aligned_offset(value:u64, alignment:u64) -> u64 {
     return value + padding;
 }
 
-export func append_layout_field(layout:ABIRecordLayout in L, width:u64, alignment:u64) -> u64
+export func append_layout_field(layout:ABIRecordLayout in L, width:UInt64, alignment:UInt64) -> UInt64
     where {owner L} {
     val offset <- aligned_offset(layout.size, alignment);
     if (offset == no_node() || width >= no_node() - offset) return no_node();
@@ -22,6 +22,6 @@ export func append_layout_field(layout:ABIRecordLayout in L, width:u64, alignmen
     return offset;
 }
 
-export func finish_layout(layout:const ABIRecordLayout in L) -> u64 where {const owner L} {
+export func finish_layout(layout:const ABIRecordLayout in L) -> UInt64 where {const owner L} {
     return aligned_offset(layout.size, layout.alignment);
 }

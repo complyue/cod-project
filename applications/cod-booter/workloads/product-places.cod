@@ -1,20 +1,20 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 
-enum Route:u64 { Primary = 17; Secondary = 24; }
+enum Route:UInt64 { Primary = 17; Secondary = 24; }
 
 data Packet {
-    quantity:u64;
+    quantity:UInt64;
     ready:bool;
     route:const Route;
 }
 
-proc observe(value:u64) -> u64 {
+proc observe(value:UInt64) -> UInt64 {
     behave @print(value);
     return value;
 }
 
-proc add(value:u64 in D) -> void where {owner D} {
+proc add(value:UInt64 in D) -> void where {owner D} {
     value <- value + 4u64;
     return;
 }
@@ -25,13 +25,13 @@ proc update(packet:Packet in D) -> void where {owner D} {
     return;
 }
 
-func read(packet:const Packet in D) -> u64 where {const owner D} {
+func read(packet:const Packet in D) -> UInt64 where {const owner D} {
     if (!packet.ready || packet.route != (Primary:Route)) return 0u64;
     return packet.quantity;
 }
 
-proc fail() -> u64 throws NullPointerException {
-    ptr absent:u64 = null in here;
+proc fail() -> UInt64 throws NullPointerException {
+    ptr absent:UInt64 = null in here;
     return absent;
 }
 

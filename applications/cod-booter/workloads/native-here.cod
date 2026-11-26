@@ -1,15 +1,15 @@
 handle type Revision;
-array SourceBytes[u64]:u8;
-array LineStarts[u64]:u64;
+array SourceBytes[UInt64]:UInt8;
+array LineStarts[UInt64]:UInt64;
 
 proc "C" Revision();
 proc "C" source_use(here work(ref bytes:const SourceBytes in S,
-                             ref starts:const LineStarts in S) -> u8,
-                    handle revision:Revision in S) -> u8 where {const owner S};
+                             ref starts:const LineStarts in S) -> UInt8,
+                    handle revision:Revision in S) -> UInt8 where {const owner S};
 proc "C" inspect(ref bytes:const SourceBytes in S, ref starts:const LineStarts in S)
-    -> u8 where {const owner S};
-proc "C" observe(val feedback:u8);
-proc "C" observe_return(val value:u64);
+    -> UInt8 where {const owner S};
+proc "C" observe(val feedback:UInt8);
+proc "C" observe_return(val value:UInt64);
 
 proc scan() -> void {
     own handle revision:Revision <- make own handle Revision();
@@ -25,7 +25,7 @@ proc scan() -> void {
     return;
 }
 
-proc early_exit() -> u64 {
+proc early_exit() -> UInt64 {
     own handle revision:Revision <- make own handle Revision();
     source_use(revision) (bytes, starts) => {
         return 41u64;

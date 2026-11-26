@@ -12,19 +12,19 @@ using "./CompilerStatus.cod" CompilerStatus {
 export from "./CompilerStatus.cod" CompilerStatus;
 
 export data ExpressionScratchPlan {
-    token_count:u64;
-    node_capacity:u64;
-    syntax_capacity:u64;
+    token_count:UInt64;
+    node_capacity:UInt64;
+    syntax_capacity:UInt64;
 }
 
 export data NativeExpressionResult {
     frontend:FrontendResult;
-    rejected_node:u64;
-    rejected_at:u64;
-    backend_status:u8;
+    rejected_node:UInt64;
+    rejected_at:UInt64;
+    backend_status:UInt8;
 }
 
-func count_tokens(source:const SourceBytes in S, token:Token in T) -> u64
+func count_tokens(source:const SourceBytes in S, token:Token in T) -> UInt64
     where {const owner S, owner T} {
     val next <- 0u64;
     val bytes <- len(source);
@@ -78,8 +78,8 @@ func prepare_native_expression(source:const SourceBytes in S, tokens:Tokens in T
 
 # The caller keeps the source and scratch buffers live. A syntax error or
 # unsupported expression leaves its span in result before any backend call.
-export proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
-                                        operation_at:u64) -> bool,
+export proc compile_expression(here emit(ordinal:UInt64, kind:UInt8, number:UInt64, left:UInt64, right:UInt64,
+                                        operation_at:UInt64) -> bool,
                                source:const SourceBytes in S, tokens:Tokens in T,
                                nodes:ExprNodes in N, result:FrontendResult in R) -> bool
     where {const owner S, owner T, owner N, owner R} {
@@ -92,9 +92,9 @@ export proc compile_expression(here emit(ordinal:u64, kind:u8, number:u64, left:
 # partially opened session. Finish returns zero on success and a backend
 # diagnostic code on failure. Interpret the report after a normal completion.
 export proc compile_native_expression(here begin() -> bool,
-                                      here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
-                                                operation_at:u64) -> bool,
-                                      here finish() -> u8,
+                                      here emit(ordinal:UInt64, kind:UInt8, number:UInt64, left:UInt64, right:UInt64,
+                                                operation_at:UInt64) -> bool,
+                                      here finish() -> UInt8,
                                       here release() -> void,
                                       source:const SourceBytes in S, tokens:Tokens in T,
                                       nodes:ExprNodes in N, result:NativeExpressionResult in R) -> CompilerStatus
@@ -126,7 +126,7 @@ export proc compile_native_expression(here begin() -> bool,
 # The callbacks share one scratch allocation. Work keeps its buffer borrows
 # within the call and supplies the pipeline status. Release accepts an empty
 # allocation if acquisition fails.
-export proc compile_with_scratch(here work(token_count:u64, node_capacity:u64) -> CompilerStatus,
+export proc compile_with_scratch(here work(token_count:UInt64, node_capacity:UInt64) -> CompilerStatus,
                                  here release() -> void,
                                  source:const SourceBytes in S, plan:ExpressionScratchPlan in P) -> CompilerStatus
     where {const owner S, owner P} {

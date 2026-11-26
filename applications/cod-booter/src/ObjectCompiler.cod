@@ -47,29 +47,29 @@ using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs, Default
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 
 region GraphRoot {
-    used:u64;
-    key_used:u64;
-    next_revision:u64;
-    export_used:u64;
-    default_used:u64;
-    interface_used:u64;
-    spelling_used:u64;
-    command_used:u64;
-    unit_used:u64;
-    literal_used:u64;
-    function_used:u64;
+    used:UInt64;
+    key_used:UInt64;
+    next_revision:UInt64;
+    export_used:UInt64;
+    default_used:UInt64;
+    interface_used:UInt64;
+    spelling_used:UInt64;
+    command_used:UInt64;
+    unit_used:UInt64;
+    literal_used:UInt64;
+    function_used:UInt64;
     package_ready:bool;
-    package_rows:u64;
-    package_bytes:u64;
+    package_rows:UInt64;
+    package_bytes:UInt64;
 }
 
 proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows in G,
                   literals:const NativeLiteralRanges in G, spellings:const SourceBytes in G,
-                  names:const SourceBytes in G, command_count:u64, unit_count:u64, literal_count:u64,
-                  spelling_size:u64, name_size:u64, functions:u64, output:const String in A,
+                  names:const SourceBytes in G, command_count:UInt64, unit_count:UInt64, literal_count:UInt64,
+                  spelling_size:UInt64, name_size:UInt64, functions:UInt64, output:const String in A,
                   handle diagnostic:DiagnosticDestination in D) -> CompilerStatus
     where {const owner G, const owner A, owner D} {
-    proc report_failure(code:u8, status:CompilerStatus) -> CompilerStatus {
+    proc report_failure(code:UInt8, status:CompilerStatus) -> CompilerStatus {
         report_backend_error(diagnostic, code);
         return status;
     };
@@ -89,14 +89,14 @@ proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows
     }
 }
 
-proc measure_primitives(primitives:ABIPrimitiveLayouts in L) -> u64 throws ProviderLayoutException where {owner L} {
+proc measure_primitives(primitives:ABIPrimitiveLayouts in L) -> UInt64 throws ProviderLayoutException where {owner L} {
     own handle target:ProviderLayout <- make own handle ProviderLayout();
     return measure_provider_primitives(target, primitives);
 }
 
 proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
-                     interfaces:const ModuleInterfaces in G, visits_used:u64, keys_used:u64,
-                     spellings_used:u64, interfaces_used:u64, handle directory:Path in P,
+                     interfaces:const ModuleInterfaces in G, visits_used:UInt64, keys_used:UInt64,
+                     spellings_used:UInt64, interfaces_used:UInt64, handle directory:Path in P,
                      handle diagnostic:DiagnosticDestination in D)
     -> CompilerStatus where {const owner G, const owner P, owner D} {
     try {
@@ -141,15 +141,15 @@ func fresh_graph() -> own region :GraphRoot {
 proc traverse_graph(here finish(commands:const NativeCommands in G, units:const NativeUnitRows in G,
                                 literals:const NativeLiteralRanges in G, spellings:const SourceBytes in G,
                                 names:const SourceBytes in G, visits:const Visits in G, interfaces:const ModuleInterfaces in G,
-                                command_count:u64, unit_count:u64, literal_count:u64, spelling_size:u64, name_size:u64,
-                                functions:u64, visit_count:u64, interface_count:u64) -> CompilerStatus,
+                                command_count:UInt64, unit_count:UInt64, literal_count:UInt64, spelling_size:UInt64, name_size:UInt64,
+                                functions:UInt64, visit_count:UInt64, interface_count:UInt64) -> CompilerStatus,
                     handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                     builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
-                    initial_keys:SourceBytes in G, used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
-                    export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
-                    command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
-                        function_used:u64 in G,
-                    package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G)
+                    initial_keys:SourceBytes in G, used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
+                    export_used:UInt64 in G, default_used:UInt64 in G, interface_used:UInt64 in G, spelling_used:UInt64 in G,
+                    command_used:UInt64 in G, unit_used:UInt64 in G, literal_used:UInt64 in G,
+                        function_used:UInt64 in G,
+                    package_ready:bool in G, package_rows:UInt64 in G, package_bytes:UInt64 in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     ref visits = make Visits(0u64, make Vacant {}) in G;
     ref keys = initial_keys;

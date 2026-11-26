@@ -27,7 +27,7 @@ export data ProviderPreamble {
     c_string_output:bool;
 }
 
-export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, used:u64,
+export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, used:UInt64,
                                       features:ProviderPreamble in F) -> bool where {const owner G, owner F} {
     features.boolean_results <- false;
     features.here_steps <- false;

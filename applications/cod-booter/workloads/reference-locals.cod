@@ -1,6 +1,6 @@
 using symbol "std:io" @print;
 
-func increment(value:u64) -> u64 {
+func increment(value:UInt64) -> UInt64 {
     return value + 1u64;
 }
 
@@ -10,7 +10,7 @@ proc update(pick_first:bool) -> void {
     ref selected = if (pick_first) { first } else { second };
     ref snapshot = (selected);
     ref fresh = increment(selected);
-    ref readonly_view:const u64 = selected;
+    ref readonly_view:const UInt64 = selected;
 
     selected <- 30u64;
     behave @print(first);

@@ -4,22 +4,22 @@ using "./SourceStorage.cod" SourceBytes;
 using "std:exceptions" Exception;
 
 export handle type DirectorySnapshot;
-export data DirectoryStorageException <: Exception { os_error:u64; }
+export data DirectoryStorageException <: Exception { os_error:UInt64; }
 
 func "C" DirectorySnapshot() throws DirectoryStorageException;
 
-export func "C" probe_directory(path:const SourceBytes in B, used:u64)
-    -> u64 where {const owner B};
+export func "C" probe_directory(path:const SourceBytes in B, used:UInt64)
+    -> UInt64 where {const owner B};
 
-export func "C" read_directory(handle snapshot:DirectorySnapshot in D, path:const SourceBytes in B, used:u64)
-    -> u64 where {owner D, const owner B};
+export func "C" read_directory(handle snapshot:DirectorySnapshot in D, path:const SourceBytes in B, used:UInt64)
+    -> UInt64 where {owner D, const owner B};
 
 export func "C" directory_name_count(handle snapshot:DirectorySnapshot in D)
-    -> u64 where {const owner D};
-export func "C" directory_name_size(handle snapshot:DirectorySnapshot in D, index:u64)
-    -> u64 where {const owner D};
-export func "C" select_directory_name(handle snapshot:DirectorySnapshot in D, index:u64)
-    -> u64 where {owner D};
+    -> UInt64 where {const owner D};
+export func "C" directory_name_size(handle snapshot:DirectorySnapshot in D, index:UInt64)
+    -> UInt64 where {const owner D};
+export func "C" select_directory_name(handle snapshot:DirectorySnapshot in D, index:UInt64)
+    -> UInt64 where {owner D};
 func "C" use_directory_name_loan(
     here work(name:const SourceBytes in D) -> CompilerStatus,
     handle snapshot:DirectorySnapshot in D) -> CompilerStatus where {const owner D};
@@ -31,7 +31,7 @@ export proc use_directory_name(
 }
 
 export handle type BundledDirectory;
-export data BundledDirectoryException <: Exception { os_error:u64; }
+export data BundledDirectoryException <: Exception { os_error:UInt64; }
 
 func "C" BundledDirectory() throws BundledDirectoryException;
 
@@ -48,11 +48,11 @@ export proc bundled_directory_use(
 # The probe reports max u64 for an absent entry, zero for a directory entry,
 # and an OS error otherwise. Canonicalization happens after selection.
 export func "C" probe_package_module(
-    root:const SourceBytes in R, root_first:u64, root_past:u64,
-    module:const SourceBytes in M, first:u64, past:u64)
-    -> u64 where {const owner R, const owner M};
+    root:const SourceBytes in R, root_first:UInt64, root_past:UInt64,
+    module:const SourceBytes in M, first:UInt64, past:UInt64)
+    -> UInt64 where {const owner R, const owner M};
 
 export func "C" prepare_package_module(
     handle destination:PathOwner in D, root:const SourceBytes in R,
-    root_first:u64, root_past:u64, module:const SourceBytes in M, first:u64, past:u64)
-    -> u64 where {owner D, const owner R, const owner M};
+    root_first:UInt64, root_past:UInt64, module:const SourceBytes in M, first:UInt64, past:UInt64)
+    -> UInt64 where {owner D, const owner R, const owner M};

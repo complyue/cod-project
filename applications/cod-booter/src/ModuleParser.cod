@@ -47,14 +47,14 @@ using "./ParserStorage.cod" { PublicView, PublicView { DefaultPublic, CompletePu
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" { len as source_len, same_bytes };
 
-func expected_module_path() -> u8 { return 22u8; }
-func expected_module_separator() -> u8 { return 25u8; }
-func expected_record_fields() -> u8 { return 30u8; }
-func expected_array_shape() -> u8 { return 31u8; }
-func expected_group_delimiter() -> u8 { return 44u8; }
-func expected_enum_member() -> u8 { return 45u8; }
+func expected_module_path() -> UInt8 { return 22u8; }
+func expected_module_separator() -> UInt8 { return 25u8; }
+func expected_record_fields() -> UInt8 { return 30u8; }
+func expected_array_shape() -> UInt8 { return 31u8; }
+func expected_group_delimiter() -> UInt8 { return 44u8; }
+func expected_enum_member() -> UInt8 { return 45u8; }
 
-func append_selected_member(nodes:ExprNodes in A, result:ParseResult in R, preceding:u64, item:u64) -> void
+func append_selected_member(nodes:ExprNodes in A, result:ParseResult in R, preceding:UInt64, item:UInt64) -> void
     where {owner A, owner R} {
     ref previous = make NoLink {};
     if (preceding != no_node()) {
@@ -68,8 +68,8 @@ func append_selected_member(nodes:ExprNodes in A, result:ParseResult in R, prece
                        });
 }
 
-func append_chosen_members(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                           tail:u64, opening:u64) -> void where {owner A, owner R} {
+func append_chosen_members(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                           tail:UInt64, opening:UInt64) -> void where {owner A, owner R} {
     append_syntax_node(nodes, result, first, past, make ChosenMembers {
         items <- make NodeId { revision <- result.revision; index <- tail; };
         opening <- opening;
@@ -77,7 +77,7 @@ func append_chosen_members(nodes:ExprNodes in A, result:ParseResult in R, first:
 }
 
 func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, past:u64, name:u64) -> void
+                           nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, name:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -113,8 +113,8 @@ func parse_member_selector(source:const SourceBytes in S, tokens:const Tokens in
     (result.diagnostic <- expected_group_delimiter()):void;
 }
 
-func selector_nature(source:const SourceBytes in S, tokens:const Tokens in T, at:u64,
-    past:u64) -> ResourceNature
+func selector_nature(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64,
+    past:UInt64) -> ResourceNature
     where {const owner S, const owner T} {
     if (at + 1u64 >= past || tokens[at + 1u64].kind != symbol_name()) return OrdinaryResource;
     if (var_word(source, tokens[at])) return VariableResource;
@@ -124,7 +124,7 @@ func selector_nature(source:const SourceBytes in S, tokens:const Tokens in T, at
 
 func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
                      nodes:ExprNodes in A, result:ParseResult in R,
-                     past:u64, first:u64, path:u64, mode:ModuleSelectionMode, symbolic:bool) -> void
+                     past:UInt64, first:UInt64, path:UInt64, mode:ModuleSelectionMode, symbolic:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val nature <- if (symbolic) { OrdinaryResource } else { selector_nature(source, tokens,
         result.next, past) };
@@ -164,8 +164,8 @@ func parse_selection(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func finish_selection_item(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64,
-                           preceding:u64, form:u64, published:bool,
+                           nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, first:UInt64,
+                           preceding:UInt64, form:UInt64, published:bool,
                                closed_group:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val separator <- punct_at(source, tokens, result.next, past) == SEMICOLON;
@@ -181,9 +181,9 @@ func finish_selection_item(source:const SourceBytes in S, tokens:const Tokens in
 }
 
 func emit_bulk_selection(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64,
-                             end:u64,
-                         previous:u64, path:u64, mode:ModuleSelectionMode, view:PublicView,
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, first:UInt64,
+                             end:UInt64,
+                         previous:UInt64, path:UInt64, mode:ModuleSelectionMode, view:PublicView,
                              exported:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     append_syntax_node(nodes, result, first, end, make BulkModuleSelection {
@@ -200,8 +200,8 @@ func emit_bulk_selection(source:const SourceBytes in S, tokens:const Tokens in T
     return result.diagnostic == 0u8
 }
 
-func selection_boundary(source:const SourceBytes in S, tokens:const Tokens in T, at:u64,
-    past:u64) -> bool
+func selection_boundary(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64,
+    past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (at >= past || punct_at(source, tokens, at, past) == SEMICOLON) return true;
     if (selector_nature(source, tokens, at, past) == ProcedureResource &&
@@ -215,7 +215,7 @@ func selection_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in T,
                            nodes:ExprNodes in A, result:ParseResult in R,
-                           past:u64, previous:u64, mode:ModuleSelectionMode, exported:bool) -> bool
+                           past:UInt64, previous:UInt64, mode:ModuleSelectionMode, exported:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     val first <- tokens[start].first;
@@ -301,7 +301,7 @@ func parse_selection_items(source:const SourceBytes in S, tokens:const Tokens in
     return false;
 }
 
-func skip_member_doclet(tokens:const Tokens in T, result:ParseResult in R, past:u64) -> void
+func skip_member_doclet(tokens:const Tokens in T, result:ParseResult in R, past:UInt64) -> void
     where {const owner T, owner R} {
     if (result.next < past && tokens[result.next].kind == multiline_text()) {
         (result.next <- result.next + 1u64):void
@@ -311,7 +311,7 @@ func skip_member_doclet(tokens:const Tokens in T, result:ParseResult in R, past:
 # A record links its fields in source order through the preceding field.
 func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
-                         past:u64, native:bool) -> u64
+                         past:UInt64, native:bool) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     if (punct_at(source, tokens, result.next, past) != LEFT_BRACE) {
         result.diagnostic <- expected_record_fields();
@@ -352,7 +352,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_sum_arm(source:const SourceBytes in S, tokens:const Tokens in T,
-                   nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> bool
+                   nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     skip_member_doclet(tokens, result, past);
     if (!parse_module_name(source, tokens, nodes, result, past)) return false;
@@ -378,7 +378,7 @@ func parse_sum_arm(source:const SourceBytes in S, tokens:const Tokens in T,
     return result.diagnostic == 0u8;
 }
 
-func append_sum_declaration(nodes:ExprNodes in A, result:ParseResult in R, first:u64, heading:u64, last:u64) -> void
+func append_sum_declaration(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, heading:UInt64, last:UInt64) -> void
     where {owner A, owner R} {
     append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, last), make SumDefinition {
         heading <- make NodeId { revision <- result.revision; index <- heading; };
@@ -387,7 +387,7 @@ func append_sum_declaration(nodes:ExprNodes in A, result:ParseResult in R, first
 }
 
 func parse_sum_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64, heading:u64) -> void
+                           nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64, heading:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     val last <- no_node();
@@ -410,13 +410,13 @@ func parse_sum_declaration(source:const SourceBytes in S, tokens:const Tokens in
     return;
 }
 
-func handle_type_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+func handle_type_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     return at + 1u64 < past && handle_word(source, tokens[at]) && type_word(source, tokens[at + 1u64]);
 }
 
 func parse_handle_type(source:const SourceBytes in S, tokens:const Tokens in T,
-                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 2u64;
@@ -442,7 +442,7 @@ func parse_handle_type(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_region_definition(source:const SourceBytes in S, tokens:const Tokens in T,
-                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                             nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -462,7 +462,7 @@ func parse_region_definition(source:const SourceBytes in S, tokens:const Tokens 
 }
 
 func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val abstract <- type_word(source, tokens[result.next]);
@@ -530,13 +530,13 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
-func value_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64)
+func value_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64)
     -> bool where {const owner S, const owner T} {
     return at + 1u64 < past && val_word(source, tokens[at]) && symbol_word(source, tokens[at + 1u64])
 }
 
 func parse_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens in T,
-                              nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                              nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val explicit_value <- value_symbol_head(source, tokens, result.next, past);
@@ -577,14 +577,14 @@ func parse_symbol_declaration(source:const SourceBytes in S, tokens:const Tokens
     return
 }
 
-func reference_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+func reference_symbol_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     return at + 1u64 < past && (ref_word(source, tokens[at]) || ptr_word(source, tokens[at])) &&
         symbol_word(source, tokens[at + 1u64]);
 }
 
 func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                            result:ParseResult in R, past:u64) -> void
+                            result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val first <- tokens[at].first;
@@ -630,7 +630,7 @@ func parse_reference_symbol(source:const SourceBytes in S, tokens:const Tokens i
 }
 
 func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
-                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -648,7 +648,7 @@ func parse_publication(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
-                 nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                 nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -679,7 +679,7 @@ func parse_array(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens in T,
-                            nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+                            nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     if (parse_enum_integer_literal(source, tokens, nodes, result, past)) return true;
     if (result.diagnostic != 0u8) return false;
@@ -690,7 +690,7 @@ func parse_enum_initializer(source:const SourceBytes in S, tokens:const Tokens i
 }
 
 func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                       result:ParseResult in R, past:u64, previous:u64) -> bool
+                       result:ParseResult in R, past:UInt64, previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     skip_member_doclet(tokens, result, past);
     if (!parse_module_name(source, tokens, nodes, result, past)) return false;
@@ -725,8 +725,8 @@ func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, 
     return result.diagnostic == 0u8;
 }
 
-func append_enum(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                  name:u64, backing:u64, member:u64) -> void where {owner A, owner R} {
+func append_enum(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                  name:UInt64, backing:UInt64, member:UInt64) -> void where {owner A, owner R} {
     append_syntax_node(nodes, result, first, past, make EnumDefinition {
         name <- make NodeId { revision <- result.revision; index <- name; };
         backing <- make NodeId { revision <- result.revision; index <- backing; };
@@ -735,7 +735,7 @@ func append_enum(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:
 }
 
 func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
-                nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -768,7 +768,7 @@ func parse_enum(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
-                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val function_form <- func_word(source, tokens[at]);
@@ -814,7 +814,7 @@ func parse_module_form(source:const SourceBytes in S, tokens:const Tokens in T,
     parse_next_expression(source, tokens, nodes, result, past);
 }
 
-func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (at + 1u64 >= past) return false;
     val next_kind <- tokens[at + 1u64].kind;
@@ -828,7 +828,7 @@ func named_definition_head(source:const SourceBytes in S, tokens:const Tokens in
         ((type_word(source, tokens[at]) || array_word(source, tokens[at]) || enum_word(source, tokens[at])) && next_kind == identifier());
 }
 
-func module_doclet_target(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+func module_doclet_target(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (at >= past) return false;
     if (at + 1u64 < past && default_word(source, tokens[at]) && export_word(source,
@@ -840,7 +840,7 @@ func module_doclet_target(source:const SourceBytes in S, tokens:const Tokens in 
          punct_at(source, tokens, at + 2u64, past) == LEFT_BRACE)
 }
 
-func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
+func braced_callable_definition(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> bool where {const owner N} {
     if (at >= used) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -854,8 +854,8 @@ func braced_callable_definition(nodes:const ExprNodes in N, used:u64, at:u64) ->
     };
 }
 
-func append_default_mark(nodes:ExprNodes in A, result:ParseResult in R, preceding:u64, name:u64,
-                         first:u64, end:u64, nature:ResourceNature, members:const NodeLink in M) -> void
+func append_default_mark(nodes:ExprNodes in A, result:ParseResult in R, preceding:UInt64, name:UInt64,
+                         first:UInt64, end:UInt64, nature:ResourceNature, members:const NodeLink in M) -> void
     where {owner A, owner R, const owner M} {
     ref previous = make NoLink {};
     if (preceding != no_node()) {
@@ -871,8 +871,8 @@ func append_default_mark(nodes:ExprNodes in A, result:ParseResult in R, precedin
 }
 
 func finish_default_mark(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64,
-                         preceding:u64, first:u64, nature:ResourceNature) -> void
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64,
+                         preceding:UInt64, first:UInt64, nature:ResourceNature) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val name <- result.root;
     ref members = make NoLink {};
@@ -887,8 +887,8 @@ func finish_default_mark(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func finish_default_marks(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64,
-                          first:u64, previous:u64, tail:u64) -> bool
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64,
+                          first:UInt64, previous:UInt64, tail:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     ref marks = make NoLink {};
     if (tail != no_node()) {
@@ -909,8 +909,8 @@ func finish_default_marks(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func parse_default_marks(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64,
-                             previous:u64) -> bool
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64,
+                             previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 2u64;
@@ -949,7 +949,7 @@ func parse_default_marks(source:const SourceBytes in S, tokens:const Tokens in T
 
 func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R,
-                       past:u64, previous:u64) -> bool
+                       past:UInt64, previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     if (tokens[result.next].kind == multiline_text() && module_doclet_target(source, tokens, result.next + 1u64, past)) {
         (result.next <- result.next + 1u64):void
@@ -1023,7 +1023,7 @@ func parse_module_item(source:const SourceBytes in S, tokens:const Tokens in T,
 # Only this grammar owns module item starts. End a damaged declaration
 # before a following definition or selection at the same delimiter depth.
 func module_recovery_boundary(source:const SourceBytes in S, tokens:const Tokens in T,
-                              first:u64, past:u64) -> u64 where {const owner S, const owner T} {
+                              first:UInt64, past:UInt64) -> UInt64 where {const owner S, const owner T} {
     val head <- first;
     if (head + 1u64 < past && default_word(source, tokens[head]) && export_word(source, tokens[head + 1u64]))
         { (head <- head + 1u64):void };
@@ -1047,7 +1047,7 @@ func module_recovery_boundary(source:const SourceBytes in S, tokens:const Tokens
 }
 
 export func parse_module(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, past:u64, result:ParseResult in R) -> void
+                         nodes:ExprNodes in A, past:UInt64, result:ParseResult in R) -> void
     where {const owner S, const owner T, owner A, owner R} {
     reset_parse_result(0u64, result);
     if (past >= token_len(tokens)) { result.diagnostic <- expected_module_separator(); return; };

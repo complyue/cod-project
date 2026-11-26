@@ -14,7 +14,7 @@ using "./ProviderTypeNames.cod" {
 using "./ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view, emit_provider_scalar_type };
 using "./ParserStorage.cod" no_node;
 
-enum ArgumentABI:u8 { CallInput; ImplementationInput; EntryInput; }
+enum ArgumentABI:UInt8 { CallInput; ImplementationInput; EntryInput; }
 
 proc emit_call_name(name:const String in N, ending:const String in E) -> void
     where {const owner N, const owner E} {
@@ -24,14 +24,14 @@ proc emit_call_name(name:const String in N, ending:const String in E) -> void
     return;
 }
 
-export proc emit_indexed_name(name:const String in N, ending:const String in E, index:u64)
+export proc emit_indexed_name(name:const String in N, ending:const String in E, index:UInt64)
     -> void where {const owner N, const owner E} {
     emit_call_name(name, ending);
     emitStr(index);
     return;
 }
 
-export func native_argument_array(rows:const ModuleInterfaces in G, used:u64, input:u64) -> u64 where {const owner G} {
+export func native_argument_array(rows:const ModuleInterfaces in G, used:UInt64, input:UInt64) -> UInt64 where {const owner G} {
     val head <- find_interface(rows, used, rows[input].type_module, rows[input].type_identity);
     if (head == no_node() || rows[head].interface_kind != array_type() || rows[head].entry_count != 0u64) return no_node();
     return head;
@@ -39,7 +39,7 @@ export func native_argument_array(rows:const ModuleInterfaces in G, used:u64, in
 
 proc emit_argument(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                    spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-                   input:u64, index:u64, abi:ArgumentABI) -> bool where {const owner N, const owner G, const owner R} {
+                   input:UInt64, index:UInt64, abi:ArgumentABI) -> bool where {const owner N, const owner G, const owner R} {
     val kind <- rows[input].value_kind;
     if (kind == c_handle_type() || kind == array_type()) {
         if (abi != (ImplementationInput:ArgumentABI)) { emit("const "); };
@@ -71,7 +71,7 @@ proc emit_argument(name:const String in N, visits:const Visits in G, keys:const 
 }
 
 export proc emit_provider_result_type(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
-                 rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, head:u64)
+                 rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {const owner G, const owner R} {
     if (rows[head].result_kind == builtin_bool()) {
         emit("COD_BOOL");
@@ -83,7 +83,7 @@ export proc emit_provider_result_type(visits:const Visits in G, keys:const Sourc
 
 proc emit_signature(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                     spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-                    head:u64, implementation:bool) -> bool where {const owner N, const owner G, const owner R} {
+                    head:UInt64, implementation:bool) -> bool where {const owner N, const owner G, const owner R} {
     val entry <- rows[head].interface_kind == c_entry();
     val count <- rows[head].entry_count;
     val owners <- if (entry) { (rows[head].owner_count) } else { 0u64 };
@@ -120,7 +120,7 @@ proc emit_signature(name:const String in N, visits:const Visits in G, keys:const
     return true;
 }
 
-proc emit_arg_site(index:u64, callback:bool, accessor:bool) -> void {
+proc emit_arg_site(index:UInt64, callback:bool, accessor:bool) -> void {
     if (callback) { emit("views->array"); } else { emit("arg"); };
     emitStr(index);
     if (accessor) {
@@ -129,7 +129,7 @@ proc emit_arg_site(index:u64, callback:bool, accessor:bool) -> void {
     return;
 }
 
-export proc emit_invalid_view(name:const String in N, index:u64, kind:u8, callback:bool)
+export proc emit_invalid_view(name:const String in N, index:UInt64, kind:UInt8, callback:bool)
     -> bool where {const owner N} {
     emit_arg_site(index, callback, true);
     emit("count > (uint64_t)PTRDIFF_MAX / sizeof(*");
@@ -149,7 +149,7 @@ export proc emit_invalid_view(name:const String in N, index:u64, kind:u8, callba
 
 proc emit_call_input_checks(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                             spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-                            head:u64) -> bool where {const owner N, const owner G, const owner R} {
+                            head:UInt64) -> bool where {const owner N, const owner G, const owner R} {
     val entry <- rows[head].interface_kind == c_entry();
     val input <- 0u64;
     val kind <- 0u8;
@@ -208,12 +208,12 @@ proc emit_call_input_checks(name:const String in N, visits:const Visits in G, ke
     return true;
 }
 
-func prepared_text(kind:u8, entry:bool) -> bool {
+func prepared_text(kind:UInt8, entry:bool) -> bool {
     if (entry) return text_type(kind);
     return kind == builtin_c_string();
 }
 
-proc emit_text_release(index:u64, entry:bool, indentation:const String in I) -> void where {const owner I} {
+proc emit_text_release(index:UInt64, entry:bool, indentation:const String in I) -> void where {const owner I} {
     emit(indentation);
     if (entry) { emit("free((void *)text"); } else { emit("free(text_backing"); };
     emitStr(index);
@@ -221,7 +221,7 @@ proc emit_text_release(index:u64, entry:bool, indentation:const String in I) -> 
     return;
 }
 
-proc emit_text_inputs(rows:const ModuleInterfaces in G, head:u64, entry:bool) -> void where {const owner G} {
+proc emit_text_inputs(rows:const ModuleInterfaces in G, head:UInt64, entry:bool) -> void where {const owner G} {
     val kind <- 0u8;
     for (index in 0u64 .. rows[head].entry_count) {
         kind <- rows[head + 1u64 + index].value_kind;
@@ -258,7 +258,7 @@ proc emit_text_inputs(rows:const ModuleInterfaces in G, head:u64, entry:bool) ->
     return;
 }
 
-proc emit_implementation_call(name:const String in N, rows:const ModuleInterfaces in G, head:u64,
+proc emit_implementation_call(name:const String in N, rows:const ModuleInterfaces in G, head:UInt64,
                               entry:bool, stores_result:bool, enum_result:bool)
     -> void where {const owner N, const owner G} {
     val count <- rows[head].entry_count;
@@ -304,7 +304,7 @@ proc emit_implementation_call(name:const String in N, rows:const ModuleInterface
 
 proc emit_stub(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-               head:u64) -> bool where {const owner N, const owner G, const owner R} {
+               head:UInt64) -> bool where {const owner N, const owner G, const owner R} {
     val entry <- rows[head].interface_kind == c_entry();
     val result <- rows[head].result_kind;
     val has_result <- result != builtin_void();
@@ -350,7 +350,7 @@ proc emit_stub(name:const String in N, visits:const Visits in G, keys:const Sour
 
 proc emit_callable_header(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                           spellings:const SourceBytes in G, rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-                          head:u64) -> bool where {const owner N, const owner G, const owner R} {
+                          head:UInt64) -> bool where {const owner N, const owner G, const owner R} {
     if (!emit_signature(name, visits, keys, spellings, rows, prefix, head, false)) return false;
     emit(";\n");
     if (rows[head].interface_kind != c_entry()) {
@@ -362,9 +362,9 @@ proc emit_callable_header(name:const String in N, visits:const Visits in G, keys
 }
 
 export proc write_provider_call_views(header:StringBuilder in H, stubs:StringBuilder in S,
-                                      primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
+                                      primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64,
                                       name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                      prefix:const ProviderPrefixes in R, head:u64)
+                                      prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner L, const owner N, const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
         rows[head].interface_kind != c_operation() || rows[head].has_here != 0u8 ||
@@ -386,7 +386,7 @@ export proc write_provider_call_views(header:StringBuilder in H, stubs:StringBui
 export proc write_provider_callable(header:StringBuilder in H, stubs:StringBuilder in S, name:const String in N,
                                     visits:const Visits in G, keys:const SourceBytes in G,
                                     spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                    prefix:const ProviderPrefixes in R, head:u64)
+                                    prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner N, const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
         (rows[head].interface_kind != c_entry() && rows[head].interface_kind != c_operation()) ||

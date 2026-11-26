@@ -75,61 +75,61 @@ using "./ModuleExportStorage.cod" ByteFunctionCompletion {
 using "./NativeDeclarations.cod" prepared_byte_function;
 
 export data CompletionSite {
-    event:u8;
-    presence:u8;
-    can_continue:u8;
-    local_return:u8;
-    retains_caught:u8;
-    forwarded_operand:u8;
-    in_delayed_body:u8;
+    event:UInt8;
+    presence:UInt8;
+    can_continue:UInt8;
+    local_return:UInt8;
+    retains_caught:UInt8;
+    forwarded_operand:UInt8;
+    in_delayed_body:UInt8;
     in_supplied_body:bool;
     byte_completion:ByteFunctionCompletion;
     slot_summary:bool;
     array_failures:ByteArrayFailures;
-    case_break:u8;
-    case_scan:u8;
-    guarded_by:u64;
-    incoming_handler:u64;
-    throws_clause:u64;
-    category:u64;
-    category_module:u64;
-    destination:u64;
-    cleanup_first:u64;
-    cleanup_stop:u64;
-    registration:u64;
-    previous_defer:u64;
-    last_defer:u64;
-    replacing_try:u64;
+    case_break:UInt8;
+    case_scan:UInt8;
+    guarded_by:UInt64;
+    incoming_handler:UInt64;
+    throws_clause:UInt64;
+    category:UInt64;
+    category_module:UInt64;
+    destination:UInt64;
+    cleanup_first:UInt64;
+    cleanup_stop:UInt64;
+    registration:UInt64;
+    previous_defer:UInt64;
+    last_defer:UInt64;
+    replacing_try:UInt64;
 }
-export array CompletionSites[u64]:CompletionSite;
+export array CompletionSites[UInt64]:CompletionSite;
 
 export data CompletionCheckResult {
-    diagnostic:u8;
-    node:u64;
+    diagnostic:UInt8;
+    node:UInt64;
 }
 
-export func possible_failure() -> u8 { return 1u8; }
-export func definite_failure() -> u8 { return 2u8; }
-export func callable_return() -> u8 { return 3u8; }
-export func skipped_operand() -> u8 { return 4u8; }
-func case_scan_resume() -> u8 { return 5u8; }
+export func possible_failure() -> UInt8 { return 1u8; }
+export func definite_failure() -> UInt8 { return 2u8; }
+export func callable_return() -> UInt8 { return 3u8; }
+export func skipped_operand() -> UInt8 { return 4u8; }
+func case_scan_resume() -> UInt8 { return 5u8; }
 
-export func uncovered_checked_failure() -> u8 { return 1u8; }
-export func uncovered_deferred_failure() -> u8 { return 2u8; }
-export func unproved_deferred_error() -> u8 { return 3u8; }
-export func missing_rethrow_context() -> u8 { return 4u8; }
-export func unproved_rethrow_capture() -> u8 { return 5u8; }
-export func completion_storage_exhausted() -> u8 { return 7u8; }
-export func invalid_completion_tree() -> u8 { return 8u8; }
-export func unproved_incoming_exception() -> u8 { return 9u8; }
-export func unproved_throw_operand() -> u8 { return 10u8; }
-export func unproved_caught_handoff() -> u8 { return 11u8; }
-func unproved_nonnull_argument() -> u8 { return 12u8; }
-func unproved_nonnull_binding() -> u8 { return 16u8; }
-export func unsupported_case_transfer() -> u8 { return 18u8; }
-func unproved_byte_completion() -> u8 { return 20u8; }
+export func uncovered_checked_failure() -> UInt8 { return 1u8; }
+export func uncovered_deferred_failure() -> UInt8 { return 2u8; }
+export func unproved_deferred_error() -> UInt8 { return 3u8; }
+export func missing_rethrow_context() -> UInt8 { return 4u8; }
+export func unproved_rethrow_capture() -> UInt8 { return 5u8; }
+export func completion_storage_exhausted() -> UInt8 { return 7u8; }
+export func invalid_completion_tree() -> UInt8 { return 8u8; }
+export func unproved_incoming_exception() -> UInt8 { return 9u8; }
+export func unproved_throw_operand() -> UInt8 { return 10u8; }
+export func unproved_caught_handoff() -> UInt8 { return 11u8; }
+func unproved_nonnull_argument() -> UInt8 { return 12u8; }
+func unproved_nonnull_binding() -> UInt8 { return 16u8; }
+export func unsupported_case_transfer() -> UInt8 { return 18u8; }
+func unproved_byte_completion() -> UInt8 { return 20u8; }
 
-func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X} {
+func initialize_site(sites:CompletionSites in X, at:UInt64) -> void where {owner X} {
     sites[at].event <- 0u8;
     sites[at].presence <- 0u8;
     sites[at].can_continue <- 1u8;
@@ -162,8 +162,8 @@ func initialize_site(sites:CompletionSites in X, at:u64) -> void where {owner X}
     return;
 }
 
-func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_by:u64, incoming_handler:u64,
-                     replacing_try:u64) -> void
+func inherit_context(sites:CompletionSites in X, parent:UInt64, child:UInt64, guarded_by:UInt64, incoming_handler:UInt64,
+                     replacing_try:UInt64) -> void
     where {owner X} {
     if (child == no_node()) return;
     sites[child].guarded_by <- guarded_by;
@@ -176,7 +176,7 @@ func inherit_context(sites:CompletionSites in X, parent:u64, child:u64, guarded_
 }
 
 func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-                     sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> void
+                     sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner F, owner X} {
     val guard <- sites[at].guarded_by;
     val incoming <- sites[at].incoming_handler;
@@ -226,7 +226,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
             return
         }
     };
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) {
         inherit_context(sites, at, inner, guard, incoming, replacing);
         return;
@@ -382,7 +382,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         inherit_context(sites, at, acquisition.arguments, guard, incoming, replacing);
         return
     };
-    ref child = make u64 { no_node() };
+    ref child = make UInt64 { no_node() };
     if (module_tail(nodes, revision, used, at, child) || block_tail(nodes, revision, used, at, child) ||
         completion_operand(nodes, revision, used, at, child) ||
         direct_operand(nodes, revision, used, at, facts[at].enum_constant == 0u8, child)) {
@@ -390,8 +390,8 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     };
 }
 
-func direct_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, runtime_assertion:bool,
-                    child:u64 in R) -> bool where {const owner N, owner R} {
+func direct_operand(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, runtime_assertion:bool,
+                    child:UInt64 in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= syntax_len(nodes)) return false;
     if (native_installation_input(nodes, revision, used, at, child)) return true;
     ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
@@ -430,26 +430,26 @@ func direct_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, 
     };
 }
 
-func covers(facts:const OperandFacts in F, expected:u64, module:u64, category:u64,
-    checked:u8) -> bool where {const owner F} {
+func covers(facts:const OperandFacts in F, expected:UInt64, module:UInt64, category:UInt64,
+    checked:UInt8) -> bool where {const owner F} {
     return exception_type_covers(facts[expected].identity_module, facts[expected].identity, module,
         category, checked != 0u8);
 }
 
-func first_guard_clause(nodes:const ExprNodes in N, revision:u64, used:u64,
-                         guard:u64, clause:u64 in R) -> bool where {const owner N, owner R} {
+func first_guard_clause(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+                         guard:UInt64, clause:UInt64 in R) -> bool where {const owner N, owner R} {
     ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
     return inspect_protected(nodes, revision, used, guard, protected) &&
         first_sequence_entry(nodes, revision, used, protected.clauses, ClauseSequence, clause);
 }
 
 func matching_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                      sites:const CompletionSites in X, at:u64, module:u64, category:u64,
-                          checked:u8, used:u64, revision:u64) -> u64
+                      sites:const CompletionSites in X, at:UInt64, module:UInt64, category:UInt64,
+                          checked:UInt8, used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner L, const owner F, const owner X} {
     val guard <- sites[at].guarded_by;
     val replacing <- sites[at].replacing_try;
-    ref clause = make u64 { no_node() };
+    ref clause = make UInt64 { no_node() };
     ref selected = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
     ref handler = make HandlerSites { binding <- no_node(); body <- no_node(); };
     for (unused in 0u64 .. used) {
@@ -466,8 +466,8 @@ func matching_handler(nodes:const ExprNodes in N, links:const NameWork in L, fac
     return no_node();
 }
 
-func record_exit(sites:CompletionSites in X, at:u64, event:u8, category:u64, destination:u64,
-                 scope:u64, stop:u64) -> void where {owner X} {
+func record_exit(sites:CompletionSites in X, at:UInt64, event:UInt8, category:UInt64, destination:UInt64,
+                 scope:UInt64, stop:UInt64) -> void where {owner X} {
     sites[at].event <- event;
     sites[at].category <- category;
     sites[at].destination <- destination;
@@ -480,9 +480,9 @@ func record_exit(sites:CompletionSites in X, at:u64, event:u8, category:u64, des
 # still dispatches by runtime type from guarded_by, preserving catch order.
 func route_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L,
-                     facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64,
-                         revision:u64,
-                     module:u64, category:u64, checked:u8, event:u8) -> u8
+                     facts:const OperandFacts in F, sites:CompletionSites in X, at:UInt64, used:UInt64,
+                         revision:UInt64,
+                     module:UInt64, category:UInt64, checked:UInt8, event:UInt8) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     val scope <- names[at].scope;
     sites[at].category_module <- module;
@@ -517,15 +517,15 @@ func route_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func route_failure(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L,
-                   facts:const OperandFacts in F, sites:CompletionSites in X, at:u64, used:u64,
-                       revision:u64,
-                   category:u64, checked:u8, event:u8) -> u8
+                   facts:const OperandFacts in F, sites:CompletionSites in X, at:UInt64, used:UInt64,
+                       revision:UInt64,
+                   category:UInt64, checked:UInt8, event:UInt8) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     return route_exception(nodes, names, links, facts, sites, at, used, revision, 0u64, category,
         checked, event);
 }
 
-func record_registration(names:const NameBindings in B, sites:CompletionSites in X, at:u64) -> void
+func record_registration(names:const NameBindings in B, sites:CompletionSites in X, at:UInt64) -> void
     where {const owner B, owner X} {
     val scope <- names[at].scope;
     sites[at].previous_defer <- sites[scope].last_defer;
@@ -533,12 +533,12 @@ func record_registration(names:const NameBindings in B, sites:CompletionSites in
     return;
 }
 
-export func can_continue(sites:const CompletionSites in X, child:u64) -> bool where {const owner X} {
+export func can_continue(sites:const CompletionSites in X, child:UInt64) -> bool where {const owner X} {
     return child == no_node() || sites[child].can_continue != 0u8;
 }
 
 export func can_miss_return(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-                            sites:const CompletionSites in X, definition:u64, revision:u64, used:u64) -> bool
+                            sites:const CompletionSites in X, definition:UInt64, revision:UInt64, used:UInt64) -> bool
     where {const owner N, const owner F, const owner X} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- inspect_callable(nodes, revision, used, definition, callable);
@@ -546,14 +546,14 @@ export func can_miss_return(nodes:const ExprNodes in N, facts:const OperandFacts
         return false;
     if (!callable.function_form) {
         if (facts[definition].kind != void_result()) return true;
-        ref result_clause = make u64 { no_node() };
+        ref result_clause = make UInt64 { no_node() };
         return !find_signature_clause(nodes, revision, used, callable.signature, ValueResultClause, result_clause) ||
             result_clause == no_node()
     };
     return facts[definition].kind != void_result() && !has_value_tail(facts, callable.body, callable.function_form);
 }
 
-func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:u64, used:u64, revision:u64) -> bool
+func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner X} {
     ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
     if (inspect_range_loop(nodes, revision, used, at, loop)) {
@@ -576,7 +576,7 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
     ref index = make IndexSites { target <- no_node(); index <- no_node() };
     if (inspect_index_selection(nodes, revision, used, at, index))
         return can_continue(sites, index.target) && can_continue(sites, index.index);
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) return can_continue(sites, inner);
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -626,7 +626,7 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
             (can_continue(sites, branch.consequent) || can_continue(sites, branch.alternative));
     ref defer_sites = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
     if (inspect_defer(nodes, revision, used, at, defer_sites) == DeferCall) return can_continue(sites, defer_sites.operand);
-    ref child = make u64 { no_node() };
+    ref child = make UInt64 { no_node() };
     if (block_tail(nodes, revision, used, at, child))
         return (is_scope_block(nodes, at) && sites[at].local_return != 0u8) || can_continue(sites, child);
     if (completion_operand(nodes, revision, used, at, child) || direct_operand(nodes, revision, used, at, true, child))
@@ -639,8 +639,8 @@ func operands_can_complete(nodes:const ExprNodes in N, sites:const CompletionSit
 
 func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                            links:const NameWork in L, facts:const OperandFacts in F,
-                           sites:CompletionSites in X, at:u64, module:u64, category:u64, checked:u8,
-                               used:u64, revision:u64) -> u8
+                           sites:CompletionSites in X, at:UInt64, module:UInt64, category:UInt64, checked:UInt8,
+                               used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
     if (category == no_node()) return 0u8;
     if (sites[at].registration != no_node()) {
@@ -654,7 +654,7 @@ func check_call_completion(nodes:const ExprNodes in N, names:const NameBindings 
 }
 
 func caught_operand(nodes:const ExprNodes in N, names:const NameBindings in B,
-                    at:u64, binding:u64, revision:u64, used:u64) -> u64 where {const owner N, const owner B} {
+                    at:UInt64, binding:UInt64, revision:UInt64, used:UInt64) -> UInt64 where {const owner N, const owner B} {
     val operand <- ungrouped(nodes, revision, used, at);
     if (name_syntax(nodes, used, operand) == OrdinaryName && names[operand].kind == exception_binding() &&
         names[operand].declaration == binding) return operand;
@@ -662,11 +662,11 @@ func caught_operand(nodes:const ExprNodes in N, names:const NameBindings in B,
 }
 
 func handoff_leaves_handler(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                            sites:const CompletionSites in X, at:u64, handler:u64, binding:u64,
-                                used:u64, revision:u64) -> bool
+                            sites:const CompletionSites in X, at:UInt64, handler:UInt64, binding:UInt64,
+                                used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner L, const owner F, const owner X} {
     val guard <- sites[at].guarded_by;
-    ref clause = make u64 { no_node() };
+    ref clause = make UInt64 { no_node() };
     ref selected = make GuardClauseSites { target <- no_node(); previous <- no_node(); };
     ref nested = make HandlerSites { binding <- no_node(); body <- no_node(); };
     val category <- facts[binding].identity;
@@ -690,9 +690,9 @@ func handoff_leaves_handler(nodes:const ExprNodes in N, links:const NameWork in 
 
 func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
                             links:const NameWork in L, facts:const OperandFacts in F,
-                            sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
+                            sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, owner X} {
-    ref operand = make u64 { no_node() };
+    ref operand = make UInt64 { no_node() };
     if (!direct_operand(nodes, revision, used, at, false, operand)) return invalid_completion_tree();
     val incoming <- sites[at].incoming_handler;
     if (incoming == no_node())
@@ -722,12 +722,12 @@ func check_throw_completion(nodes:const ExprNodes in N, names:const NameBindings
 }
 
 func case_can_complete(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                       sites:const CompletionSites in X, at:u64, used:u64, revision:u64,
+                       sites:const CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64,
                        choice:const CaseSites in I) -> bool
     where {const owner N, const owner L, const owner F, const owner X, const owner I} {
     if (!can_continue(sites, choice.subject)) return false;
     if (facts[at].case_end != 0u8 || sites[at].case_break != 0u8) return true;
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, choice.items, BlockSequence, item)) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64; };
@@ -742,7 +742,7 @@ func case_can_complete(nodes:const ExprNodes in N, links:const NameWork in L, fa
 }
 
 func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in B, facts:const OperandFacts in F,
-                         sites:CompletionSites in X, at:u64, used:u64, revision:u64, breaking:bool) -> u8
+                         sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64, breaking:bool) -> UInt8
     where {const owner N, const owner B, const owner F, owner X} {
     val target <- names[at].declaration;
     val scope <- names[at].scope;
@@ -777,7 +777,7 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
 
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
-                 sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
+                 sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, const owner H, owner X} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
@@ -930,7 +930,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
 
 func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
-    sites:CompletionSites in X, at:u64, used:u64, revision:u64) -> u8
+    sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, const owner V, owner X} {
     if (prepared_byte_function(views, at, false)) {
         if (can_miss_return(nodes, facts, sites, at, revision, used)) return unproved_byte_completion();
@@ -969,14 +969,14 @@ func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings
 # replaces fallthrough. Any escaping language failure from it is checked
 # separately against the drain's own coverage.
 func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        body:u64, revision:u64, used:u64) -> bool
+                        body:UInt64, revision:UInt64, used:UInt64) -> bool
     where {const owner N, const owner L, const owner F} {
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     return !is_scope_block(nodes, body) && block_tail(nodes, revision, used, body, tail) &&
         has_terminal_defer_before(nodes, links, facts, tail, no_node(), revision, used);
 }
 
-func is_failure_statement(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func is_failure_statement(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
         (Occupied { val syntax <- node; }) -> {
@@ -991,27 +991,27 @@ func is_failure_statement(nodes:const ExprNodes in N, at:u64) -> bool where {con
 }
 
 data EscapingFailureEdge {
-    first_use:u64;
-    next_use:u64;
-    caller:u64;
-    delayed_use:u64;
+    first_use:UInt64;
+    next_use:UInt64;
+    caller:UInt64;
+    delayed_use:UInt64;
 }
-array EscapingFailureEdges[u64]:EscapingFailureEdge;
+array EscapingFailureEdges[UInt64]:EscapingFailureEdge;
 
 data ReachedFailure {
     seen:bool;
-    order:u64;
+    order:UInt64;
 }
-array ReachedFailures[u64]:ReachedFailure;
+array ReachedFailures[UInt64]:ReachedFailure;
 
-func enqueue_failure(reached:ReachedFailures in W, definition:u64, count:u64) -> u64 where {owner W} {
+func enqueue_failure(reached:ReachedFailures in W, definition:UInt64, count:UInt64) -> UInt64 where {owner W} {
     if (reached[definition].seen) return count;
     reached[definition].seen <- true;
     reached[count].order <- definition;
     return count + 1u64
 }
 
-func record_array_failure(failures:ByteArrayFailures in F, category:u64) -> bool where {owner F} {
+func record_array_failure(failures:ByteArrayFailures in F, category:UInt64) -> bool where {owner F} {
     if (category == index_out_of_bounds_identity()) { failures.bounds <- true; return true };
     if (category == out_of_memory_identity()) { failures.out_of_memory <- true; return true };
     if (category == region_capacity_identity()) { failures.region_capacity <- true; return true };
@@ -1020,13 +1020,13 @@ func record_array_failure(failures:ByteArrayFailures in F, category:u64) -> bool
 }
 
 func invocation_reached(nodes:const ExprNodes in N, sites:const CompletionSites in X,
-    at:u64, used:u64, revision:u64) -> bool where {const owner N, const owner X} {
+    at:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner X} {
     return sites[at].event != skipped_operand() && operands_can_complete(nodes, sites, at, used, revision)
 }
 
 func enqueue_slot_callees(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    demand:const DeclarationDemands in D, sites:CompletionSites in X, reached:ReachedFailures in W, definition:u64, used:u64, revision:u64,
-    pending:u64 in Q, report:CompletionCheckResult in R) -> bool
+    demand:const DeclarationDemands in D, sites:CompletionSites in X, reached:ReachedFailures in W, definition:UInt64, used:UInt64, revision:UInt64,
+    pending:UInt64 in Q, report:CompletionCheckResult in R) -> bool
     where {const owner N, const owner F, const owner D, owner X, owner W, owner Q, owner R} {
     val call <- demand[definition].first_call;
     val callee <- no_node();
@@ -1064,7 +1064,7 @@ func enqueue_slot_callees(nodes:const ExprNodes in N, facts:const OperandFacts i
 # Mark the reached, checked dependencies of slot bodies. The failure
 # collector reads this membership after the traversal has finished.
 func mark_slot_summary_dependencies(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    demand:const DeclarationDemands in D, sites:CompletionSites in X, used:u64, revision:u64,
+    demand:const DeclarationDemands in D, sites:CompletionSites in X, used:UInt64, revision:UInt64,
     report:CompletionCheckResult in R) -> bool
     where {const owner N, const owner F, const owner D, owner X, owner R} {
     ref reached = make ReachedFailures(used, make ReachedFailure { seen <- false; order <- no_node() });
@@ -1084,7 +1084,7 @@ func mark_slot_summary_dependencies(nodes:const ExprNodes in N, facts:const Oper
 }
 
 func in_slot_summary(demand:const DeclarationDemands in D, sites:const CompletionSites in X,
-    at:u64, used:u64) -> bool where {const owner D, const owner X} {
+    at:UInt64, used:UInt64) -> bool where {const owner D, const owner X} {
     val definition <- demand[at].scope;
     return definition < used && sites[definition].slot_summary
 }
@@ -1092,7 +1092,7 @@ func in_slot_summary(demand:const DeclarationDemands in D, sites:const Completio
 func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                            facts:const OperandFacts in F, sites:const CompletionSites in X,
                            demand:const DeclarationDemands in D, reached:ReachedFailures in W,
-                           used:u64, revision:u64, category:u64, array_summary:bool) -> u64
+                           used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> UInt64
     where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner D, owner W} {
     val count <- 0u64;
     val definition <- no_node();
@@ -1150,7 +1150,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
 
 func collect_failure_edges(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                            facts:const OperandFacts in F, sites:const CompletionSites in X,
-                           demand:const DeclarationDemands in D, edges:EscapingFailureEdges in E, used:u64, revision:u64, category:u64, array_summary:bool) -> void
+                           demand:const DeclarationDemands in D, edges:EscapingFailureEdges in E, used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> void
     where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner D, owner E} {
     val definition <- no_node();
     val caller <- no_node();
@@ -1183,7 +1183,7 @@ func collect_failure_edges(nodes:const ExprNodes in N, names:const NameBindings 
 }
 
 func add_failure_callers(edges:const EscapingFailureEdges in E, reached:ReachedFailures in W,
-                         definition:u64, pending:u64) -> u64 where {const owner E, owner W} {
+                         definition:UInt64, pending:UInt64) -> UInt64 where {const owner E, owner W} {
     val count <- pending;
     val use <- edges[definition].first_use;
     for (unused in 0u64 .. intrinsic (len)(edges)) {
@@ -1196,7 +1196,7 @@ func add_failure_callers(edges:const EscapingFailureEdges in E, reached:ReachedF
 
 # This completion only schedules a newly reached recorded callable.
 func complete_escaping_failures(edges:const EscapingFailureEdges in E, reached:ReachedFailures in W,
-                                initial:u64) -> u64 where {const owner E, owner W} {
+                                initial:UInt64) -> UInt64 where {const owner E, owner W} {
     val count <- initial;
     for (item in 0u64 .. intrinsic (len)(reached)) {
         if (item == count) return count;
@@ -1207,7 +1207,7 @@ func complete_escaping_failures(edges:const EscapingFailureEdges in E, reached:R
 
 # Report in definition discovery order, using each definition’s first delayed use.
 func check_delayed_failures(edges:const EscapingFailureEdges in E, reached:const ReachedFailures in W,
-                            count:u64, report:CompletionCheckResult in R) -> bool
+                            count:UInt64, report:CompletionCheckResult in R) -> bool
     where {const owner E, const owner W, owner R} {
     val use <- no_node();
     for (item in 0u64 .. count) {
@@ -1224,7 +1224,7 @@ func check_delayed_failures(edges:const EscapingFailureEdges in E, reached:const
 func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                                  facts:const OperandFacts in F, sites:CompletionSites in X,
                                  demand:const DeclarationDemands in D, report:CompletionCheckResult in R,
-                                 used:u64, revision:u64, category:u64, array_summary:bool) -> bool
+                                 used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner F, owner X, const owner D, owner R} {
     ref reached = make ReachedFailures(used, make ReachedFailure { seen <- false; order <- no_node() });
     val roots <- collect_failure_roots(nodes, names, links, facts, sites, demand, reached, used, revision, category, array_summary);
@@ -1262,7 +1262,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
            const owner D, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_completion_tree();
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) || tree.root != tree.used - 1u64 ||
         !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
     if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
@@ -1271,7 +1271,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         return false;
     } else {};
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
-    ref failure = make u64 { no_node() };
+    ref failure = make UInt64 { no_node() };
     val form <- InvalidCallable;
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);

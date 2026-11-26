@@ -8,7 +8,7 @@ using "./NativeModuleInputs.cod" {
 using "./PackageInputs.cod" { PackageSourceRoot, PackageSourceRoots };
 using "std:text-storage" utf8_byte;
 
-func parent_path_end(path:const SourceBytes in P, past:u64) -> u64 where {const owner P} {
+func parent_path_end(path:const SourceBytes in P, past:UInt64) -> UInt64 where {const owner P} {
     if (past <= 1u64) return 0u64;
     val separator <- 0u64;
     for (at in 0u64 .. past) {
@@ -17,16 +17,16 @@ func parent_path_end(path:const SourceBytes in P, past:u64) -> u64 where {const 
     return if (separator == 0u64) { 1u64 } else { (separator) }
 }
 
-func copy_path(input:const SourceBytes in S, count:u64, output:SourceBytes in D,
-    start:u64) -> bool where {const owner S, owner D} {
+func copy_path(input:const SourceBytes in S, count:UInt64, output:SourceBytes in D,
+    start:UInt64) -> bool where {const owner S, owner D} {
     val capacity <- intrinsic (len)(output);
     if (start > capacity || count > capacity - start || count > intrinsic (len)(input)) return false;
     for (at in 0u64 .. count) { output[start + at] <- input[at] };
     return true
 }
 
-func prepare_marker(entry:const SourceBytes in P, project_past:u64,
-    marker:SourceBytes in M) -> u64 where {const owner P, owner M} {
+func prepare_marker(entry:const SourceBytes in P, project_past:UInt64,
+    marker:SourceBytes in M) -> UInt64 where {const owner P, owner M} {
     if (!copy_path(entry, project_past, marker, 0u64)) return 0u64;
     val first <- project_past;
     if (marker[first - 1u64] != 47u8) {
@@ -37,8 +37,8 @@ func prepare_marker(entry:const SourceBytes in P, project_past:u64,
     return first + 13u64
 }
 
-func copy_directory_name(name:const SourceBytes in N, count:u64, output:SourceBytes in B,
-    first:u64) -> CompilerStatus where {const owner N, owner B} {
+func copy_directory_name(name:const SourceBytes in N, count:UInt64, output:SourceBytes in B,
+    first:UInt64) -> CompilerStatus where {const owner N, owner B} {
     if (count == 0u64 || count != intrinsic (len)(name)) return Rejected;
     for (at in 0u64 .. count) {
         if (name[at] == 0u8 || name[at] == 47u8) return Rejected;
@@ -46,9 +46,9 @@ func copy_directory_name(name:const SourceBytes in N, count:u64, output:SourceBy
     return if (copy_path(name, count, output, first)) { Complete } else { Rejected }
 }
 
-proc load_directory_roots(marker:const SourceBytes in M, marker_past:u64, project_past:u64,
+proc load_directory_roots(marker:const SourceBytes in M, marker_past:UInt64, project_past:UInt64,
     ref var roots:PackageSourceRoots in G, ref var bytes:SourceBytes in G,
-    published_rows:u64 in G, published_bytes:u64 in G, os_error:u64 in E)
+    published_rows:UInt64 in G, published_bytes:UInt64 in G, os_error:UInt64 in E)
     -> CompilerStatus throws DirectoryStorageException where {const owner M, owner G, owner E} {
     own handle snapshot:DirectorySnapshot <- make own handle DirectorySnapshot();
     os_error <- read_directory(snapshot, marker, marker_past);
@@ -100,8 +100,8 @@ proc load_directory_roots(marker:const SourceBytes in M, marker_past:u64, projec
 
 export proc load_package_inputs(
     handle entry:PathOwner in A, ref var roots:PackageSourceRoots in G,
-    ref var bytes:SourceBytes in G, published_rows:u64 in G, published_bytes:u64 in G,
-    os_error:u64 in E) -> CompilerStatus throws DirectoryStorageException
+    ref var bytes:SourceBytes in G, published_rows:UInt64 in G, published_bytes:UInt64 in G,
+    os_error:UInt64 in E) -> CompilerStatus throws DirectoryStorageException
     where {const owner A, owner G, owner E} {
     val size <- 0u64;
     try {

@@ -7,34 +7,34 @@ using "./NativeCommands.cod" {
     copy_completion, pending_category,
 };
 
-export enum InitializationAccess:u8 { NoAccess; ResetAccess; EstablishAccess; ReadPayload; ReadBinding; PromiseWrite; }
-export enum FlowFlagWrite:u8 { KeepFlags; SetFlag; CopyFlag; UnknownFailure; }
+export enum InitializationAccess:UInt8 { NoAccess; ResetAccess; EstablishAccess; ReadPayload; ReadBinding; PromiseWrite; }
+export enum FlowFlagWrite:UInt8 { KeepFlags; SetFlag; CopyFlag; UnknownFailure; }
 
 export data InitializationOperation {
-    activation:u64;
-    first:u64;
-    second:u64;
+    activation:UInt64;
+    first:UInt64;
+    second:UInt64;
     labels:bool;
     pending_guard:bool;
     access:InitializationAccess;
-    tag:u64;
-    site:u64;
+    tag:UInt64;
+    site:UInt64;
     writes:FlowFlagWrite;
-    write_slot:u64;
-    write_input:u64;
-    guard_slot:u64;
-    guard_expected:u64;
-    known_guard:u64;
+    write_slot:UInt64;
+    write_input:UInt64;
+    guard_slot:UInt64;
+    guard_expected:UInt64;
+    known_guard:UInt64;
 }
-export array InitializationOperations[u64]:InitializationOperation;
-export array InitializationIndices[u64]:u64;
-export array InitializationTags[u64]:bool;
+export array InitializationOperations[UInt64]:InitializationOperation;
+export array InitializationIndices[UInt64]:UInt64;
+export array InitializationTags[UInt64]:bool;
 
 export func initialization_obligation(access:InitializationAccess) -> bool {
     return access == (ReadPayload:InitializationAccess) || access == (ReadBinding:InitializationAccess) || access == (PromiseWrite:InitializationAccess)
 }
 
-func access_kind(opcode:u8) -> InitializationAccess {
+func access_kind(opcode:UInt8) -> InitializationAccess {
     if (opcode == place_address() || opcode == unbind_local()) return (ResetAccess:InitializationAccess);
     if (opcode == store_target() || opcode == bind_local()) return (EstablishAccess:InitializationAccess);
     if (opcode == load_target() || opcode == copy_word()) return (ReadPayload:InitializationAccess);
@@ -43,7 +43,7 @@ func access_kind(opcode:u8) -> InitializationAccess {
     return (NoAccess:InitializationAccess)
 }
 
-func read_edges(opcode:u8, a:u64, b:u64, c:u64, d:u64, previous_slot:u64, previous_value:u64,
+func read_edges(opcode:UInt8, a:UInt64, b:UInt64, c:UInt64, d:UInt64, previous_slot:UInt64, previous_value:UInt64,
                 op:InitializationOperation in O) -> void where {owner O} {
     if (opcode == jump()) {
         op.labels <- true;
@@ -68,7 +68,7 @@ func read_edges(opcode:u8, a:u64, b:u64, c:u64, d:u64, previous_slot:u64, previo
     }
 }
 
-func read_flag_write(opcode:u8, a:u64, b:u64, c:u64, op:InitializationOperation in O) -> void
+func read_flag_write(opcode:UInt8, a:UInt64, b:UInt64, c:UInt64, op:InitializationOperation in O) -> void
     where {owner O} {
     if (opcode == write_flow_flag() || (opcode == word_constant() && a == pending_category())) {
         op.writes <- (SetFlag:FlowFlagWrite);
@@ -84,7 +84,7 @@ func read_flag_write(opcode:u8, a:u64, b:u64, c:u64, op:InitializationOperation 
 }
 
 func resolve_edge(labels:const InitializationIndices in L, operations:const InitializationOperations in O,
-                  reference:u64, from_label:bool, activation:u64) -> u64 where {const owner L, const owner O} {
+                  reference:UInt64, from_label:bool, activation:UInt64) -> UInt64 where {const owner L, const owner O} {
     if (reference == no_node()) return no_node();
     if (from_label && reference >= intrinsic (len)(labels)) return no_node();
     val target <- if (from_label) { (labels[reference]) } else { reference };

@@ -1,10 +1,10 @@
 using symbol "std:io" @print;
 
-func classify_present(subject:const bool in O) -> u64 where {const owner O} {
+func classify_present(subject:const bool in O) -> UInt64 where {const owner O} {
     return if (subject) { 11u64 } else { 12u64 };
 }
 
-func classify_bool(ptr subject:const bool in O) -> u64 where {const owner O} {
+func classify_bool(ptr subject:const bool in O) -> UInt64 where {const owner O} {
     return case subject of {
         (null) -> { 13u64 };
         () -> {{
@@ -16,9 +16,9 @@ func classify_bool(ptr subject:const bool in O) -> u64 where {const owner O} {
     };
 }
 
-enum Status:u64 { Start = 0; Done = 18446744073709551615; Finished = Done; }
+enum Status:UInt64 { Start = 0; Done = 18446744073709551615; Finished = Done; }
 
-func classify_status(ptr subject:const Status in O) -> u64 where {const owner O} {
+func classify_status(ptr subject:const Status in O) -> UInt64 where {const owner O} {
     return case subject of {
         (Finished) -> { 21u64 };
         (Start) -> { 22u64 };

@@ -768,8 +768,7 @@ class ModuleBinder {
     module_names().defaults = std::move(defaults);
   }
 
-  Type register_enum(const Form &form) {
-    const auto backing = *form.result_type;
+  Type register_enum(const Form &form, const Type &backing) {
     if (!integral(backing)) fail(form.at, "enum backing type must be a fixed-width integer");
     auto type = Type{Type::enumeration, form.name, program_.enums.size()};
     type.enum_backing = backing.kind;
@@ -817,7 +816,51 @@ class ModuleBinder {
     return type;
   }
 
-  void register_abstract_types(const SourceModule &source) {
+  using TypeSynonymTargets = std::map<std::string_view, const Form *>;
+
+  static TypeSynonymTargets complete_type_synonym_targets(const SourceModule &source) {
+    TypeSynonymTargets definitions;
+    for (const auto &form : source.forms()) if (form->kind == Form::Kind::type_synonym) {
+      const auto &target = *form->result_type;
+      if (target.target || target.kind == Type::procedure || target.kind == Type::region)
+        implementation_gap(form->at, "type synonym target other than an ordinary type name");
+      if (!definitions.emplace(form->name, form.get()).second)
+        fail(form->at, "duplicate type binding '" + form->name + "'");
+    }
+    TypeSynonymTargets completed;
+    if (definitions.empty()) return completed;
+    for (const auto &form : source.forms()) if (form->kind == Form::Kind::type_synonym &&
+                                               !completed.contains(form->name)) {
+      std::vector<const Form *> path;
+      std::set<const Form *> active;
+      const Form *terminal = form.get();
+      while (true) {
+        if (const auto cached = completed.find(terminal->name); cached != completed.end()) {
+          terminal = cached->second;
+          break;
+        }
+        if (!active.insert(terminal).second)
+          fail(terminal->at, "type synonym cycle has no defining type");
+        path.push_back(terminal);
+        const auto &target = *terminal->result_type;
+        if (target.kind != Type::named) break;
+        const auto next = definitions.find(target.name);
+        if (next == definitions.end()) break;
+        terminal = next->second;
+      }
+      for (const auto *synonym : path) completed.emplace(synonym->name, terminal);
+    }
+    return completed;
+  }
+
+  Type resolve_declaration_head(Type type, const TypeSynonymTargets &synonyms) const {
+    if (type.kind == Type::named && !type.target)
+      if (const auto synonym = synonyms.find(type.name); synonym != synonyms.end())
+        return resolve_type(*synonym->second->result_type);
+    return resolve_type(std::move(type));
+  }
+
+  void register_abstract_types(const SourceModule &source, const TypeSynonymTargets &synonyms) {
     const auto first = program_.abstract_types.size();
     for (const auto &form : source.forms()) if (form->kind == Form::Kind::abstract_type) {
       const Type type{Type::abstract_type, form->name, program_.abstract_types.size()};
@@ -826,7 +869,7 @@ class ModuleBinder {
       program_.abstract_types.push_back({form.get()});
     }
     for (auto &type : std::span(program_.abstract_types).subspan(first)) if (type.source->parent_type) {
-      const auto parent = resolve_type(*type.source->parent_type);
+      const auto parent = resolve_declaration_head(*type.source->parent_type, synonyms);
       if (parent.kind != Type::abstract_type)
         fail(type.source->at, "an abstract parent must name an abstract type");
       type.parent = parent.identity;
@@ -962,7 +1005,8 @@ class ModuleBinder {
   using UnavailableLayouts = std::set<std::pair<Type::Kind, size_t>>;
 
   bool register_nominal_types(const SourceModule &source, CompilationDiagnostics *diagnostics) {
-    register_abstract_types(source);
+    const auto synonyms = complete_type_synonym_targets(source);
+    register_abstract_types(source, synonyms);
     const auto first = program_.schemas.size();
     const auto first_array = program_.arrays.size();
     const auto first_sum = program_.sums.size();
@@ -974,7 +1018,7 @@ class ModuleBinder {
       const bool product = form->kind == Form::Kind::data;
       const bool array = form->kind == Form::Kind::array;
       if (form->kind == Form::Kind::enumeration) {
-        const auto type = register_enum(*form);
+        const auto type = register_enum(*form, resolve_declaration_head(*form->result_type, synonyms));
         if (!module_names().types.emplace(form->name, type).second)
           fail(form->at, "duplicate type binding '" + form->name + "'");
         continue;
@@ -987,7 +1031,7 @@ class ModuleBinder {
       std::optional<size_t> abstract_parent;
       bool exception = false, checked = false;
       if (form->parent_type) {
-        const auto parent = resolve_type(*form->parent_type);
+        const auto parent = resolve_declaration_head(*form->parent_type, synonyms);
         checked = parent == exception_type(0);
         exception = checked || parent == exception_type(error_root_id);
         if (parent.kind == Type::abstract_type) abstract_parent = parent.identity;
@@ -1006,6 +1050,16 @@ class ModuleBinder {
         program_.schemas.push_back({form.get(), {}, kind == Type::product});
         program_.schemas.back().abstract_parent = abstract_parent;
       }
+    }
+    // Nominal declarations and imported types supply identities to every
+    // completed synonym before any field layout or callable signature uses it.
+    for (const auto &form : source.forms()) if (form->kind == Form::Kind::type_synonym) {
+      const auto &target = *synonyms.at(form->name);
+      const auto canonical = resolve_type(*target.result_type);
+      if (canonical.kind == Type::named)
+        fail(target.at, "unknown type synonym target '" + canonical.name + "'");
+      if (!module_names().types.emplace(form->name, canonical).second)
+        fail(form->at, "duplicate type binding '" + form->name + "'");
     }
     UnavailableLayouts unavailable;
     for (size_t id = first_sum; id < program_.sums.size(); ++id) {
@@ -1267,7 +1321,7 @@ class ModuleBinder {
         (!indexed_product(array.element, at) || program_.schemas.at(array.element.identity).fields.empty() ||
          !std::ranges::all_of(program_.schemas.at(array.element.identity).fields, [](const auto &field) {
            return cod_provider_member_name(field.source->name.c_str());
-         })))) implementation_gap(at, "C array loans outside the u64-indexed scalar and numeric record profile");
+         })))) implementation_gap(at, "C array loans outside the UInt64-indexed scalar and numeric record profile");
   }
   void constrain_native_owner(std::map<std::string, size_t> &roles, const Parameter &parameter, const Type &type) const {
     const auto owner = program_.schemas.at(type.identity).native_owner.value_or(type.identity);
@@ -1377,7 +1431,7 @@ class ModuleBinder {
         !form.result_owner.empty() || !form.throws_types.empty() ||
         (result != Type::boolean && result != Type::uint8 && result != Type::uint64 &&
          result != Type::void_type && result.kind != Type::enumeration))
-      implementation_gap(form.at, "C operations outside the nonthrowing bool, u8, u64, enum or void result profile");
+      implementation_gap(form.at, "C operations outside the nonthrowing bool, UInt8, UInt64, enum or void result profile");
     CheckedNativeOperation native;
     native.contract.source = &form;
     native.contract.module = module_;
@@ -1521,7 +1575,7 @@ class ModuleBinder {
       }
       if (form->kind == Form::Kind::expression || form->kind == Form::Kind::export_resource ||
           form->kind == Form::Kind::default_exports || form->kind == Form::Kind::data || form->kind == Form::Kind::sum_data || form->kind == Form::Kind::abstract_type ||
-          form->kind == Form::Kind::native_handle_type ||
+          form->kind == Form::Kind::type_synonym || form->kind == Form::Kind::native_handle_type ||
           form->kind == Form::Kind::region_definition || form->kind == Form::Kind::array ||
           form->kind == Form::Kind::enumeration)
         continue;

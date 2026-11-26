@@ -300,10 +300,10 @@ inline std::string type_name(const Type &type) {
   case Type::c_string: return "CString";
   case Type::exception_holder: return "exception :" + type_name(*type.target);
   case Type::native_handle: return (type.owned ? "own handle " : "handle ") + type.name;
-  case Type::integer: return "i64";
-  case Type::uint8: return "u8";
-  case Type::uint32: return "u32";
-  case Type::uint64: return "u64";
+  case Type::integer: return "Int64";
+  case Type::uint8: return "UInt8";
+  case Type::uint32: return "UInt32";
+  case Type::uint64: return "UInt64";
   case Type::boolean: return "bool";
   case Type::void_type: return "void";
   case Type::procedure: {
@@ -324,8 +324,8 @@ inline std::string type_name(const Type &type) {
     }
     return result;
   }
-  case Type::float32: return "f32";
-  case Type::float64: return "f64";
+  case Type::float32: return "Float32";
+  case Type::float64: return "Float64";
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
   case Type::named: case Type::product: case Type::sum: case Type::region_schema: case Type::regional: case Type::array:
@@ -506,7 +506,7 @@ struct SumAlternative {
 struct Form {
   enum class Kind { symbol, symbol_from, function, procedure, data, sum_data, region_definition, array, unit, using_units, global,
                     using_resource, import_resource, mixin_resource, export_resource, export_from_resource, default_exports,
-                    expression, abstract_type, conformance, enumeration, native_handle_type, syntax_error };
+                    expression, abstract_type, type_synonym, conformance, enumeration, native_handle_type, syntax_error };
   enum class Selection { named, defaults, all_public };
   enum class ResourceNature { variable, procedure };
   struct DefaultMark {
@@ -564,7 +564,7 @@ struct Form {
 
   bool publishes_definition() const {
     return exporting && (kind == Kind::symbol || kind == Kind::data || kind == Kind::sum_data || kind == Kind::abstract_type || kind == Kind::native_handle_type || kind == Kind::array || kind == Kind::enumeration ||
-                         kind == Kind::function || kind == Kind::procedure);
+                         kind == Kind::type_synonym || kind == Kind::function || kind == Kind::procedure);
   }
   bool ordinary_procedure() const { return kind == Kind::procedure && !implicit_scope && !supplied_scope && !supplied_group; }
   bool returns_tail_value() const { return !supplied_group && (kind == Kind::function || implicit_scope || supplied_scope); }
@@ -609,9 +609,19 @@ inline std::string_view infix_spelling(const Token &token) {
   return {};
 }
 
+inline std::optional<Type::Kind> builtin_numeric_type(std::string_view name) {
+  if (name == "Int64") return Type::integer;
+  if (name == "UInt8") return Type::uint8;
+  if (name == "UInt32") return Type::uint32;
+  if (name == "UInt64") return Type::uint64;
+  if (name == "Float32") return Type::float32;
+  if (name == "Float64") return Type::float64;
+  return std::nullopt;
+}
+
 inline bool intrinsic_name(std::string_view name) {
-  return name == "region" || name == "deref" || name == "scalar" || name == "i64" || name == "u8" ||
-         name == "u32" || name == "u64" || name == "f32" || name == "f64";
+  return name == "region" || name == "deref" || name == "scalar" ||
+         builtin_numeric_type(name).has_value();
 }
 
 inline bool explicit_query_intrinsic_name(std::string_view name) {
@@ -1170,18 +1180,12 @@ class Parser {
     return type;
   }
   static Type simple_type(const Token &token) {
-    Type type{Type::named, token.text};
-    if (token.text == "i64") type = Type::integer;
-    else if (token.text == "u8") type = Type::uint8;
-    else if (token.text == "u32") type = Type::uint32;
-    else if (token.text == "u64") type = Type::uint64;
-    else if (token.text == "bool") type = Type::boolean;
-    else if (token.text == "void") type = Type::void_type;
-    else if (token.text == "f32") type = Type::float32;
-    else if (token.text == "f64") type = Type::float64;
-    else if (token.text == "String") type = Type::string;
-    else if (token.text == "CString") type = Type::c_string;
-    return type;
+    if (const auto kind = builtin_numeric_type(token.text)) return *kind;
+    if (token.text == "bool") return Type::boolean;
+    if (token.text == "void") return Type::void_type;
+    if (token.text == "String") return Type::string;
+    if (token.text == "CString") return Type::c_string;
+    return {Type::named, token.text};
   }
   void type_separator() { expect(":"); }
   Expr make(Expression::Kind kind, const Token &token) {
@@ -3045,6 +3049,13 @@ public:
           form->c_data = true;
         }
         form->name = ordinary_name().text;
+        if (!data && take("=")) {
+          form->kind = Form::Kind::type_synonym;
+          form->result_type = parse_type();
+          take(";");
+          append(std::move(form));
+          return;
+        }
         if (take("<:")) form->parent_type = parse_type();
         if (data && !region && take("=")) {
           if (form->c_data) fail(start.at, "a data \"C\" declaration requires a record");

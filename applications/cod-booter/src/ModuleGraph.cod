@@ -132,25 +132,25 @@ using "./CompilerStatus.cod" CompilerStatus {
     Complete, Rejected, FormUnsupported, LoweringFailed, ScratchFailed, SourceOpenFailed, DiagnosticsIncomplete
 };
 
-export enum GraphPurpose:u8 { Declarations; NativeObject; }
+export enum GraphPurpose:UInt8 { Declarations; NativeObject; }
 
 export data DependencyEdge {
-    finding:u64;
+    finding:UInt64;
     owns_finding:bool;
-    site:u64;
-    path:u64;
+    site:UInt64;
+    path:UInt64;
     mode:ModuleSelectionMode;
-    first:u64;
-    past:u64;
-    decoded_first:u64;
-    decoded_past:u64;
+    first:UInt64;
+    past:UInt64;
+    decoded_first:UInt64;
+    decoded_past:UInt64;
 }
-export array DependencyEdges [u64]:DependencyEdge;
+export array DependencyEdges [UInt64]:DependencyEdge;
 
 export func collect_dependency_edges(source:const SourceBytes in S, nodes:const ExprNodes in F,
-                                     used:u64, revision:u64, edges:DependencyEdges in E)
-    -> u64 where {const owner S, const owner F, owner E} {
-    ref item = make u64 { no_node() };
+                                     used:UInt64, revision:UInt64, edges:DependencyEdges in E)
+    -> UInt64 where {const owner S, const owner F, owner E} {
+    ref item = make UInt64 { no_node() };
     if (used == 0u64 || !module_tail(nodes, revision, used, used - 1u64, item)) return no_node();
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val count <- 0u64;
@@ -206,16 +206,16 @@ export func collect_dependency_edges(source:const SourceBytes in S, nodes:const 
     return count
 }
 
-func same_dependency_occurrence(edges:const DependencyEdges in E, edge:u64) -> bool
+func same_dependency_occurrence(edges:const DependencyEdges in E, edge:UInt64) -> bool
     where {const owner E} {
     if (edge == 0u64 || edges[edge].path == no_node()) return false;
     return edges[edge].path == edges[edge - 1u64].path &&
         edges[edge].mode == edges[edge - 1u64].mode
 }
 
-export func decode_dependency_path(source:const SourceBytes in S, first:u64, past:u64,
-                                   decoded:SourceBytes in F, start:u64)
-    -> u64 where {const owner S, owner F} {
+export func decode_dependency_path(source:const SourceBytes in S, first:UInt64, past:UInt64,
+                                   decoded:SourceBytes in F, start:UInt64)
+    -> UInt64 where {const owner S, owner F} {
     if (first >= past || past > intrinsic (len)(source) || past - first < 3u64) return no_node();
     if (source[first] != 34u8 || source[past - 1u64] != 34u8) return no_node();
     if (start > intrinsic (len)(decoded) || past - first - 2u64 > intrinsic (len)(decoded) - start)
@@ -243,14 +243,14 @@ export func decode_dependency_path(source:const SourceBytes in S, first:u64, pas
 }
 
 data PublicationSize {
-    source_bytes:u64;
-    spelling_bytes:u64;
-    literal_bytes:u64;
-    literals:u64;
+    source_bytes:UInt64;
+    spelling_bytes:UInt64;
+    literal_bytes:UInt64;
+    literals:UInt64;
 }
-array PublicationSizes[u64]:PublicationSize;
+array PublicationSizes[UInt64]:PublicationSize;
 
-proc reserve_exports(ref var rows:ModuleExports in G, used:u64, required:u64) -> void where {owner G} {
+proc reserve_exports(ref var rows:ModuleExports in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val capacity <- intrinsic (len)(rows);
     if (required <= capacity) return;
     ref next = make ModuleExports(growth_capacity(capacity, required), make ModuleExport {
@@ -263,7 +263,7 @@ proc reserve_exports(ref var rows:ModuleExports in G, used:u64, required:u64) ->
     return;
 }
 
-proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u64) -> void where {owner G} {
+proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val capacity <- intrinsic (len)(rows);
     if (required <= capacity) return;
     ref next = make ModuleInterfaces(growth_capacity(capacity, required), make ModuleInterfaceRow {
@@ -289,7 +289,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:u64, required:u
     return;
 }
 
-proc reserve_commands(ref var rows:NativeCommands in G, used:u64, required:u64) -> void where {owner G} {
+proc reserve_commands(ref var rows:NativeCommands in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val capacity <- intrinsic (len)(rows);
     if (required <= capacity) return;
     ref next = make NativeCommands(growth_capacity(capacity, required),
@@ -299,7 +299,7 @@ proc reserve_commands(ref var rows:NativeCommands in G, used:u64, required:u64) 
     return;
 }
 
-proc reserve_units(ref var rows:NativeUnitRows in G, used:u64, required:u64) -> void where {owner G} {
+proc reserve_units(ref var rows:NativeUnitRows in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val capacity <- intrinsic (len)(rows);
     if (required <= capacity) return;
     ref next = make NativeUnitRows(growth_capacity(capacity, required), make NativeUnitRow {
@@ -311,7 +311,7 @@ proc reserve_units(ref var rows:NativeUnitRows in G, used:u64, required:u64) -> 
     return;
 }
 
-proc reserve_literals(ref var rows:NativeLiteralRanges in G, used:u64, required:u64) -> void where {owner G} {
+proc reserve_literals(ref var rows:NativeLiteralRanges in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val capacity <- intrinsic (len)(rows);
     if (required <= capacity) return;
     ref next = make NativeLiteralRanges(growth_capacity(capacity, required),
@@ -321,12 +321,12 @@ proc reserve_literals(ref var rows:NativeLiteralRanges in G, used:u64, required:
     return;
 }
 
-func add_span(size:u64, first:u64, past:u64, limit:u64) -> u64 {
+func add_span(size:UInt64, first:UInt64, past:UInt64, limit:UInt64) -> UInt64 {
     if (first > past || past > limit || past - first >= no_node() - size) return no_node();
     return size + (past - first);
 }
 
-func measure_written_publications(nodes:const ExprNodes in N, revision:u64, used:u64) -> u64
+func measure_written_publications(nodes:const ExprNodes in N, revision:UInt64, used:UInt64) -> UInt64
     where {const owner N} {
     ref resource = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -357,9 +357,9 @@ func measure_written_publications(nodes:const ExprNodes in N, revision:u64, used
 }
 
 func measure_publication(source:const SourceBytes in S, exports:const ModuleExports in F,
-                         names:const StagedExportNames in F, graph_used:u64,
+                         names:const StagedExportNames in F, graph_used:UInt64,
                          interfaces:const ModuleInterfaces in F, commands:const NativeCommands in F,
-                         module:u64, export_count:u64, interface_count:u64, command_count:u64,
+                         module:UInt64, export_count:UInt64, interface_count:UInt64, command_count:UInt64,
                          size:PublicationSize in M)
     -> bool where {const owner S, const owner F, owner M} {
     if (export_count > intrinsic (len)(exports) || export_count > intrinsic (len)(names) ||
@@ -411,8 +411,8 @@ func measure_publication(source:const SourceBytes in S, exports:const ModuleExpo
     return true;
 }
 
-func copy_span(source:const SourceBytes in S, first:u64, past:u64,
-               destination:SourceBytes in G, start:u64) -> u64 where {const owner S, owner G} {
+func copy_span(source:const SourceBytes in S, first:UInt64, past:UInt64,
+               destination:SourceBytes in G, start:UInt64) -> UInt64 where {const owner S, owner G} {
     for (i in 0u64 .. past - first) { destination[start + i] <- source[first + i]; };
     return start + (past - first);
 }
@@ -420,7 +420,7 @@ func copy_span(source:const SourceBytes in S, first:u64, past:u64,
 func copy_publication(source:const SourceBytes in S, exports:const ModuleExports in F,
                       names:const StagedExportNames in F, interfaces:const ModuleInterfaces in F,
                       published:ModuleExports in G, published_interfaces:ModuleInterfaces in G, spellings:SourceBytes in G,
-                      export_count:u64, interface_count:u64, export_first:u64, interface_first:u64, spelling_first:u64)
+                      export_count:UInt64, interface_count:UInt64, export_first:UInt64, interface_first:UInt64, spelling_first:UInt64)
     -> void where {const owner S, const owner F, owner G} {
     val start <- spelling_first;
     val past <- spelling_first;
@@ -447,7 +447,7 @@ func copy_publication(source:const SourceBytes in S, exports:const ModuleExports
 
 func copy_unit_material(source:const SourceBytes in S, staged:const NativeCommands in F,
                         commands:NativeCommands in G, literals:NativeLiteralRanges in G, spellings:SourceBytes in G,
-                        count:u64, command_first:u64, literal_first:u64, spelling_first:u64)
+                        count:UInt64, command_first:UInt64, literal_first:UInt64, spelling_first:UInt64)
     -> void where {const owner S, const owner F, owner G} {
     val literal_index <- literal_first;
     val start <- spelling_first;
@@ -466,32 +466,32 @@ func copy_unit_material(source:const SourceBytes in S, staged:const NativeComman
 }
 
 data ModuleProgress {
-    identity:u64;
-    used:u64;
-    root:u64;
-    revision:u64;
-    dependencies:u64;
+    identity:UInt64;
+    used:UInt64;
+    root:UInt64;
+    revision:UInt64;
+    dependencies:UInt64;
     read_rejected:bool;
-    count:u64;
-    default_count:u64;
-    interface_count:u64;
+    count:UInt64;
+    default_count:UInt64;
+    interface_count:UInt64;
     purpose:GraphPurpose;
-    entry:u8;
-    function_base:u64;
-    functions:u64;
-    command_count:u64;
+    entry:UInt8;
+    function_base:UInt64;
+    functions:UInt64;
+    command_count:UInt64;
     primitive_namespace:bool;
-    labels:u64;
-    slots:u64;
+    labels:UInt64;
+    slots:UInt64;
     variadic_stop:VariadicProfileStop;
     structural_dependency:bool;
 }
-array ModuleProgressRows[u64]:ModuleProgress;
+array ModuleProgressRows[UInt64]:ModuleProgress;
 
 proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in S,
                       handle diagnostic:DiagnosticDestination in D, tokens:Tokens in F, nodes:ExprNodes in F,
                       selected:SelectedExports in F, edges:DependencyEdges in F, decoded:SourceBytes in F,
-                      progress:ModuleProgressRows in F, keys:const SourceBytes in K, key_first:u64, key_past:u64,
+                      progress:ModuleProgressRows in F, keys:const SourceBytes in K, key_first:UInt64, key_past:UInt64,
                       run:DiagnosticRuns in Q)
     -> CompilerStatus where {const owner S, owner D, owner F, const owner K, owner Q} {
     ref result = make FrontendResult {
@@ -543,7 +543,7 @@ proc read_visit_frame(source:const SourceBytes in S, lines:const SourceLines in 
 proc read_opened_frame(handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
                        tokens:Tokens in F, nodes:ExprNodes in F, selected:SelectedExports in F,
                        edges:DependencyEdges in F, decoded:SourceBytes in F, progress:ModuleProgressRows in F,
-                       keys:const SourceBytes in K, const val key_first:u64, const val key_past:u64,
+                       keys:const SourceBytes in K, const val key_first:UInt64, const val key_past:UInt64,
                        run:DiagnosticRuns in Q) -> CompilerStatus
     where {const owner S, owner D, owner F, const owner K, owner Q} {
     return with_source(opened) (source, lines) => {
@@ -553,11 +553,11 @@ proc read_opened_frame(handle opened:SourceRevision in S, handle diagnostic:Diag
 }
 
 func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
-                      spellings:const SourceBytes in G, spelling_size:u64,
-                      checked_selections:const CheckedSelections in C, checked_used:u64,
-                      interfaces:const ModuleInterfaces in G, interface_count:u64, selected:SelectedExports in W,
+                      spellings:const SourceBytes in G, spelling_size:UInt64,
+                      checked_selections:const CheckedSelections in C, checked_used:UInt64,
+                      interfaces:const ModuleInterfaces in G, interface_count:UInt64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
-                      views:SuppliedViews in H, cases:ConstructorCaseFacts in R, first_case:u64 in R,
+                      views:SuppliedViews in H, cases:ConstructorCaseFacts in R, first_case:UInt64 in R,
                       result:ModuleBindingResult in R, native:bool, allow_structural:bool, recovery:ProductTypeRecovery in P) -> bool
     where {const owner S, owner W, const owner G, const owner C, owner F, owner H, owner R, owner P} {
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
@@ -607,9 +607,9 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
     return true;
 }
 
-func first_library_initialization(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T) -> u64
+func first_library_initialization(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T) -> UInt64
     where {const owner N, const owner W, const owner T} {
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_module_item(nodes, tree.revision, tree.used, tree.root, item)) return tree.root;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     for (unused in 0u64 .. tree.used) {
@@ -621,7 +621,7 @@ func first_library_initialization(nodes:const ExprNodes in N, work:const NameWor
     return no_node();
 }
 
-func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T, at:u64) -> bool
+func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T, at:UInt64) -> bool
     where {const owner N, const owner T} {
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -631,7 +631,7 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
     if (inspect_module_selection(nodes, tree.revision, tree.used, at, selection) == SelectionReady) return true;
     ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
     if (inspect_bulk_selection(nodes, tree.revision, tree.used, at, bulk) == SelectionReady) return true;
-    ref default_marks = make u64 { no_node() };
+    ref default_marks = make UInt64 { no_node() };
     if (inspect_default_set(nodes, tree.revision, tree.used, at, default_marks) == SelectionReady)
         return true;
     ref callable_site = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
@@ -649,12 +649,12 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
 proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines in S,
                         handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
                         selected:const SelectedExports in W, names:const NameBindings in W, work:NameWork in W,
-                        interfaces:const ModuleInterfaces in G, interface_count:u64,
+                        interfaces:const ModuleInterfaces in G, interface_count:UInt64,
                         progress:ModuleProgressRows in W, facts:OperandFacts in W,
                             owners:CallOwners in W,
                         sites:CompletionSites in W, commands:NativeCommands in W,
                             result:ModuleBindingResult in R, keys:const SourceBytes in G,
-                            key_first:u64, key_past:u64, run:DiagnosticRuns in G) -> CompilerStatus
+                            key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in G) -> CompilerStatus
     where {const owner S, owner D, owner W, owner R, owner G} {
     val delivered <- Complete;
     if (progress[0u64].entry == 0u8) {
@@ -694,7 +694,7 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
 }
 
 func locate_variadic_profile(source:const SourceBytes in S, lines:const SourceLines in S,
-                             stop:VariadicProfileStop in F, past:u64) -> void
+                             stop:VariadicProfileStop in F, past:UInt64) -> void
     where {const owner S, owner F} {
     stop.first_byte <- past - 3u64;
     stop.past_byte <- past;
@@ -705,11 +705,11 @@ func locate_variadic_profile(source:const SourceBytes in S, lines:const SourceLi
 proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprNodes in W,
                                 selected:const SelectedExports in W, names:const NameBindings in W,
                                     work:const NameWork in W,
-                                spellings:const SourceBytes in G, spelling_used:u64,
+                                spellings:const SourceBytes in G, spelling_used:UInt64,
                                     interfaces:const ModuleInterfaces in G,
-                                interface_count:u64, aggregate_facts:const AggregateFacts in A,
+                                interface_count:UInt64, aggregate_facts:const AggregateFacts in A,
                                 views:SuppliedViews in H, cases:const ConstructorCaseFacts in C,
-                                module:u64, first:u64, caught_field:u64, executable:bool,
+                                module:UInt64, first:UInt64, caught_field:UInt64, executable:bool,
                                 facts:OperandFacts in W, owners:CallOwners in W,
                                     sites:CompletionSites in W, result:ModuleBindingResult in R)
     -> bool where {const owner S, owner W, const owner G, const owner A, owner H, const owner C, owner R} {
@@ -779,8 +779,8 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
 
 proc report_product_type_failures(source:const SourceBytes in S, lines:const SourceLines in S,
     handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W, work:const NameWork in W,
-    recovery:const ProductTypeRecovery in R, used:u64,
-    keys:const SourceBytes in G, key_first:u64, key_past:u64, run:DiagnosticRuns in G)
+    recovery:const ProductTypeRecovery in R, used:UInt64,
+    keys:const SourceBytes in G, key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in G)
     -> CompilerStatus where {const owner S, owner D, const owner W, const owner R, owner G} {
     val retained <- 0u64;
     val status <- Complete;
@@ -803,11 +803,11 @@ proc report_product_type_failures(source:const SourceBytes in S, lines:const Sou
 
 proc report_symbol_binder(source:const SourceBytes in S, lines:const SourceLines in S,
     handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W, work:const NameWork in W,
-    selections:const CheckedSelections in W, selected_used:u64, used:u64, revision:u64, binder:u64,
+    selections:const CheckedSelections in W, selected_used:UInt64, used:UInt64, revision:UInt64, binder:UInt64,
     catalog:const SourceBytes in B, builtins:const ModuleExports in B,
-    keys:const SourceBytes in G, key_used:u64, key_first:u64, key_past:u64,
-    visits:const Visits in G, visit_count:u64, spellings:const SourceBytes in G, spelling_size:u64,
-    published:const ModuleExports in G, export_count:u64, default_count:u64, run:DiagnosticRuns in G)
+    keys:const SourceBytes in G, key_used:UInt64, key_first:UInt64, key_past:UInt64,
+    visits:const Visits in G, visit_count:UInt64, spellings:const SourceBytes in G, spelling_size:UInt64,
+    published:const ModuleExports in G, export_count:UInt64, default_count:UInt64, run:DiagnosticRuns in G)
     -> CompilerStatus where {const owner S, owner D, const owner W, const owner B, owner G} {
     if (binder >= used || binder >= intrinsic (len)(work) || key_used > intrinsic (len)(keys) ||
         key_first >= key_past || key_past > key_used || spelling_size > intrinsic (len)(spellings))
@@ -871,13 +871,13 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
                        callable_uses:CallableUseProofs in W, object_prefixes:const ObjectPrefixes in W,
                        progress:ModuleProgressRows in W,
                        catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
-                       spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:u64, export_count:u64,
-                       visits:const Visits in G, visit_count:u64, units:const NativeUnitRows in G,
-                       published_defaults:const DefaultExportRefs in G, published_default_count:u64,
-                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in G, interface_count:u64,
+                       spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:UInt64, export_count:UInt64,
+                       visits:const Visits in G, visit_count:UInt64, units:const NativeUnitRows in G,
+                       published_defaults:const DefaultExportRefs in G, published_default_count:UInt64,
+                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in G, interface_count:UInt64,
                        facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
-                       commands:NativeCommands in W, keys:const SourceBytes in G, const val key_first:u64,
-                       const val key_past:u64, const val key_used:u64, run:DiagnosticRuns in G) -> CompilerStatus
+                       commands:NativeCommands in W, keys:const SourceBytes in G, const val key_first:UInt64,
+                       const val key_past:UInt64, const val key_used:UInt64, run:DiagnosticRuns in G) -> CompilerStatus
     where {const owner S, owner D, owner W, const owner B, owner G} {
     val delivered <- Complete;
     ref result = make ModuleBindingResult {
@@ -932,7 +932,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         used
     } else { 0u64 };
     ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
-    ref first_case = make u64 { no_node() };
+    ref first_case = make UInt64 { no_node() };
     val maximum <- if (run[0u64].limit == 0u64) { no_node() } else {
         run[0u64].limit - run[0u64].retained
     };
@@ -972,7 +972,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     if (native) {
         val primitive <- primitive_receiver_namespace(source, nodes, names, work, selected,
             visits, visit_count, used, revision);
-        ref problem = make u64 { no_node() };
+        ref problem = make UInt64 { no_node() };
         if (!prepare_object_callables(source, catalog_spellings, spellings, spelling_size,
             checked_selections, checked_used, used, revision,
             progress[0u64].identity, primitive, visits, published, published_interfaces, units,
@@ -992,7 +992,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     val byte_function <- if (native) { no_node() } else { first_byte_function(views, used) };
     val array_slot_work <- if (native) { no_node() } else { first_array_slot_work(views, used) };
-    ref required = make u64 { no_node() };
+    ref required = make UInt64 { no_node() };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_imported_calls(nodes, names, selected, work, published_interfaces, interface_count,
         catalog_exports, callable_uses, visits, visit_count, used, revision, !native, required, operands)) {
@@ -1145,9 +1145,9 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     return Complete;
 }
 
-func write_unit_row(units:NativeUnitRows in G, at:u64, command_first:u64, command_past:u64,
-                    literal_first:u64, literal_past:u64, key_first:u64, key_past:u64,
-                    source_size:u64, labels:u64, slots:u64) -> void where {owner G} {
+func write_unit_row(units:NativeUnitRows in G, at:UInt64, command_first:UInt64, command_past:UInt64,
+                    literal_first:UInt64, literal_past:UInt64, key_first:UInt64, key_past:UInt64,
+                    source_size:UInt64, labels:UInt64, slots:UInt64) -> void where {owner G} {
     units[at].command_first <- command_first;
     units[at].command_past <- command_past;
     units[at].literal_first <- literal_first;
@@ -1169,10 +1169,10 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
                    ref var interfaces:ModuleInterfaces in G,
                    ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                    ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                   export_used:u64 in G, default_used:u64 in G,
-                   interface_used:u64 in G, spelling_used:u64 in G,
-                   command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
-                   const val key_first:u64, const val key_past:u64)
+                   export_used:UInt64 in G, default_used:UInt64 in G,
+                   interface_used:UInt64 in G, spelling_used:UInt64 in G,
+                   command_used:UInt64 in G, unit_used:UInt64 in G, literal_used:UInt64 in G, function_used:UInt64 in G,
+                   const val key_first:UInt64, const val key_past:UInt64)
     -> CompilerStatus where {const owner S, const owner F, owner G} {
     const val module <- progress[0u64].identity;
     const val export_count <- progress[0u64].count;
@@ -1266,9 +1266,9 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
 
 data VisitWorkspacePlan {
     plan:ModuleWorkspacePlan;
-    source_size:u64;
+    source_size:UInt64;
 }
-array VisitWorkspacePlans[u64]:VisitWorkspacePlan;
+array VisitWorkspacePlans[UInt64]:VisitWorkspacePlan;
 
 proc plan_opened_workspace(source:const SourceBytes in S,
                            handle diagnostic:DiagnosticDestination in D, workspaces:VisitWorkspacePlans in F, purpose:GraphPurpose)
@@ -1280,11 +1280,11 @@ proc plan_opened_workspace(source:const SourceBytes in S,
     return result;
 }
 
-symbol @followDependency:proc(u64) -> u8;
+symbol @followDependency:proc(UInt64) -> UInt8;
 
 proc report_dependency_rejection(source:const SourceBytes in S, lines:const SourceLines in S,
-    handle diagnostic:DiagnosticDestination in D, code:u8, first:u64, past:u64, finding:u64,
-    keys:const SourceBytes in G, key_first:u64, key_past:u64, run:DiagnosticRuns in G)
+    handle diagnostic:DiagnosticDestination in D, code:UInt8, first:UInt64, past:UInt64, finding:UInt64,
+    keys:const SourceBytes in G, key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in G)
     -> CompilerStatus where {const owner S, owner D, owner G} {
     if (finding != no_node()) {
         if (!report_dependency_note(source, lines, diagnostic, finding, first, past,
@@ -1305,9 +1305,9 @@ proc report_dependency_rejection(source:const SourceBytes in S, lines:const Sour
 }
 
 proc reject_dependency(handle opened:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
-    const val code:u8, const val first:u64, const val past:u64, const val finding:u64,
-    const val owns_finding:bool, keys:const SourceBytes in G, const val key_first:u64,
-    const val key_past:u64, run:DiagnosticRuns in G)
+    const val code:UInt8, const val first:UInt64, const val past:UInt64, const val finding:UInt64,
+    const val owns_finding:bool, keys:const SourceBytes in G, const val key_first:UInt64,
+    const val key_past:UInt64, run:DiagnosticRuns in G)
     -> CompilerStatus where {const owner S, owner D, owner G} {
     if (code == package_delivery_failure()) return ScratchFailed;
     if (owns_finding) return if (code == package_issue() && finding != no_node()) { Rejected } else { ScratchFailed };
@@ -1323,22 +1323,22 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                          builtin_spellings:const SourceBytes in B,
                          builtins:const ModuleExports in B,
                          ref var visits:Visits in G, ref var keys:SourceBytes in G,
-                         const used:u64 in G, const key_used:u64 in G, const next_revision:u64 in G,
+                         const used:UInt64 in G, const key_used:UInt64 in G, const next_revision:UInt64 in G,
                          ref var exports:ModuleExports in G,
                              ref var defaults:DefaultExportRefs in G,
                          ref var interfaces:ModuleInterfaces in G,
                          ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                          ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                         const export_used:u64 in G, const default_used:u64 in G,
-                         const interface_used:u64 in G,
-                         const spelling_used:u64 in G, const command_used:u64 in G, const unit_used:u64 in G,
-                         const literal_used:u64 in G, const function_used:u64 in G,
-                         const package_ready:bool in G, const package_rows:u64 in G,
-                         const package_bytes:u64 in G,
+                         const export_used:UInt64 in G, const default_used:UInt64 in G,
+                         const interface_used:UInt64 in G,
+                         const spelling_used:UInt64 in G, const command_used:UInt64 in G, const unit_used:UInt64 in G,
+                         const literal_used:UInt64 in G, const function_used:UInt64 in G,
+                         const package_ready:bool in G, const package_rows:UInt64 in G,
+                         const package_bytes:UInt64 in G,
                          ref var package_roots:PackageSourceRoots in G,
                          ref var package_paths:SourceBytes in G,
-                         revision:u64, id:u64, const val key_first:u64, const val key_past:u64,
-                         depth:u64, failure:VisitFailure in R, run:DiagnosticRuns in G)
+                         revision:UInt64, id:UInt64, const val key_first:UInt64, const val key_past:UInt64,
+                         depth:UInt64, failure:VisitFailure in R, run:DiagnosticRuns in G)
     -> CompilerStatus
     where {const owner S, const owner P, const owner A, owner D, const owner B, owner G, owner R} {
     failure.rejection <- 0u8;
@@ -1458,7 +1458,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         if (run[0u64].retained > parse_finding) { (failure.finding <- parse_finding):void };
         if (parsed != Complete) return parsed;
         const val child_depth <- depth + 1u64;
-        effect @followDependency(edge:u64) -> u8 {
+        effect @followDependency(edge:UInt64) -> UInt8 {
             return visit_child(path, entry, opened, diagnostic, purpose, builtin_spellings,
                 builtins,
                 edges, decoded, selected, edge, child_depth, visits, keys, used, key_used,
@@ -1624,10 +1624,10 @@ func rejected_after(delivered:CompilerStatus) -> CompilerStatus {
 
 export proc complete_graph_profile(handle diagnostic:DiagnosticDestination in D,
     visits:const Visits in G,
-                                   keys:const SourceBytes in G, used:u64, key_used:u64,
-                                   interface_used:u64, run:DiagnosticRuns in G) -> CompilerStatus where {owner D,
+                                   keys:const SourceBytes in G, used:UInt64, key_used:UInt64,
+                                   interface_used:UInt64, run:DiagnosticRuns in G) -> CompilerStatus where {owner D,
                                        owner G} {
-    ref stopped = make u64 { no_node() };
+    ref stopped = make UInt64 { no_node() };
     if (!earliest_profile_stop(visits, used, key_used, interface_used,
         stopped)) return ScratchFailed;
     if (stopped == no_node()) return Complete;
@@ -1644,16 +1644,16 @@ export proc complete_graph_profile(handle diagnostic:DiagnosticDestination in D,
 export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                           builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                           ref var visits:Visits in G, ref var keys:SourceBytes in G,
-                          used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
+                          used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
                           ref var exports:ModuleExports in G,
                               ref var defaults:DefaultExportRefs in G,
                           ref var interfaces:ModuleInterfaces in G,
                           ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                           ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                          export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G,
-                          command_used:u64 in G, unit_used:u64 in G, literal_used:u64 in G,
-                          function_used:u64 in G, package_ready:bool in G,
-                          package_rows:u64 in G, package_bytes:u64 in G, run:DiagnosticRuns in G)
+                          export_used:UInt64 in G, default_used:UInt64 in G, interface_used:UInt64 in G, spelling_used:UInt64 in G,
+                          command_used:UInt64 in G, unit_used:UInt64 in G, literal_used:UInt64 in G,
+                          function_used:UInt64 in G, package_ready:bool in G,
+                          package_rows:UInt64 in G, package_bytes:UInt64 in G, run:DiagnosticRuns in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     try {
         own handle opened:SourceRevision <- make own handle SourceRevision(input);
@@ -1700,20 +1700,20 @@ proc visit_child(handle parent_path:Path in P, handle entry:PathOwner in A,
                  handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                  builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                  edges:DependencyEdges in F, decoded:const SourceBytes in F, selected:SelectedExports in F,
-                 edge:u64, depth:u64,
+                 edge:UInt64, depth:UInt64,
                  ref var visits:Visits in G, ref var keys:SourceBytes in G,
-                 used:u64 in G, key_used:u64 in G, next_revision:u64 in G,
+                 used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
                  ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
                  ref var interfaces:ModuleInterfaces in G,
                  ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
                  ref var units:NativeUnitRows in G, ref var literals:NativeLiteralRanges in G,
-                 export_used:u64 in G, default_used:u64 in G, interface_used:u64 in G, spelling_used:u64 in G, command_used:u64 in G,
-                 unit_used:u64 in G, literal_used:u64 in G, function_used:u64 in G,
-                 package_ready:bool in G, package_rows:u64 in G, package_bytes:u64 in G,
+                 export_used:UInt64 in G, default_used:UInt64 in G, interface_used:UInt64 in G, spelling_used:UInt64 in G, command_used:UInt64 in G,
+                 unit_used:UInt64 in G, literal_used:UInt64 in G, function_used:UInt64 in G,
+                 package_ready:bool in G, package_rows:UInt64 in G, package_bytes:UInt64 in G,
                  ref var package_roots:PackageSourceRoots in G,
-                 ref var package_paths:SourceBytes in G, import_first:u64, import_past:u64,
+                 ref var package_paths:SourceBytes in G, import_first:UInt64, import_past:UInt64,
                      run:DiagnosticRuns in G)
-    -> u8 where {const owner P, const owner A, const owner S, owner D, const owner B, owner F,
+    -> UInt8 where {const owner P, const owner A, const owner S, owner D, const owner B, owner F,
         owner G} {
     val first <- edges[edge].decoded_first;
     val past <- edges[edge].decoded_past;

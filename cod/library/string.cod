@@ -5,7 +5,7 @@ using "std:text-storage" {
 using "std:exceptions" Error;
 
 export type Utf8StreamOut;
-export data Utf8WriteError <: Error { code:u64; }
+export data Utf8WriteError <: Error { code:UInt64; }
 export ref symbol @sout:Utf8StreamOut in O where {owner O};
 
 export data StringBuilder <: Utf8StreamOut { storage:Utf8BuilderStorage; }
@@ -96,23 +96,23 @@ export proc emitStr(value:const String in S) -> void
     return;
 }
 
-proc emit_digit(digit:u64) -> void {
+proc emit_digit(digit:UInt64) -> void {
     emit(utf8_slice("0123456789ABCDEF", digit, digit + 1u64));
     return;
 }
 
-proc emitStr(number:u64) -> void {
+proc emitStr(number:UInt64) -> void {
     if (number >= 10u64) { emitStr(number / 10u64); };
     emit_digit(number % 10u64);
     return;
 }
 
-export proc emitRepr(number:u64) -> void {
+export proc emitRepr(number:UInt64) -> void {
     emitStr(number);
     return;
 }
 
-proc emit_escape(codepoint:u64) -> void {
+proc emit_escape(codepoint:UInt64) -> void {
     if (codepoint == 0u64) { emit("\\0"); return; };
     if (codepoint == 9u64) { emit("\\t"); return; };
     if (codepoint == 10u64) { emit("\\n"); return; };
@@ -126,7 +126,7 @@ proc emit_escape(codepoint:u64) -> void {
     return;
 }
 
-proc emit_text_span(value:const String in S, first:u64, past:u64) -> void
+proc emit_text_span(value:const String in S, first:UInt64, past:UInt64) -> void
     where {const owner S} {
     if (first != past) { emit(utf8_slice(value, first, past)); };
     return;
@@ -185,7 +185,7 @@ export proc str(value:const T in V) -> ref const String in D
     return result_in_scope(make String(scratch) in D);
 }
 
-proc str(number:u64) -> ref const String in D
+proc str(number:UInt64) -> ref const String in D
     where {owner D} {
     ref scratch = make StringBuilder();
     {{
@@ -205,7 +205,7 @@ export proc repr(value:const T in V) -> ref const String in D
     return result_in_scope(make String(scratch) in D);
 }
 
-proc repr(number:u64) -> ref const String in D
+proc repr(number:UInt64) -> ref const String in D
     where {owner D} {
     ref scratch = make StringBuilder();
     {{

@@ -10,25 +10,25 @@ using "./SourceStorage.cod" { SourceBytes, Token };
 using "./SourceAccess.cod" len;
 using "std:text-storage" { utf8_size, utf8_byte }
 
-export func end_of_source() -> u8 { return 0u8; }
-export func identifier() -> u8 { return 1u8; }
-export func symbol_name() -> u8 { return 2u8; }
-export func integer_literal() -> u8 { return 3u8; }
-export func real_literal() -> u8 { return 4u8; }
-export func quoted_text() -> u8 { return 5u8; }
-export func punctuation() -> u8 { return 6u8; }
+export func end_of_source() -> UInt8 { return 0u8; }
+export func identifier() -> UInt8 { return 1u8; }
+export func symbol_name() -> UInt8 { return 2u8; }
+export func integer_literal() -> UInt8 { return 3u8; }
+export func real_literal() -> UInt8 { return 4u8; }
+export func quoted_text() -> UInt8 { return 5u8; }
+export func punctuation() -> UInt8 { return 6u8; }
 
-export func unsupported_byte() -> u8 { return 7u8; }
-export func missing_symbol_name() -> u8 { return 8u8; }
-export func missing_exponent_digits() -> u8 { return 9u8; }
-export func unterminated_module_path() -> u8 { return 10u8; }
-export func newline_in_module_path() -> u8 { return 11u8; }
-export func invalid_module_path_escape() -> u8 { return 12u8; }
-export func reserved_fraction_operator() -> u8 { return 13u8; }
-export func legacy_type_separator() -> u8 { return 14u8; }
-export func multiline_text() -> u8 { return 15u8 }
+export func unsupported_byte() -> UInt8 { return 7u8; }
+export func missing_symbol_name() -> UInt8 { return 8u8; }
+export func missing_exponent_digits() -> UInt8 { return 9u8; }
+export func unterminated_module_path() -> UInt8 { return 10u8; }
+export func newline_in_module_path() -> UInt8 { return 11u8; }
+export func invalid_module_path_escape() -> UInt8 { return 12u8; }
+export func reserved_fraction_operator() -> UInt8 { return 13u8; }
+export func legacy_type_separator() -> UInt8 { return 14u8; }
+export func multiline_text() -> UInt8 { return 15u8 }
 
-export func lexical_error(kind:u8) -> bool {
+export func lexical_error(kind:UInt8) -> bool {
     return kind >= unsupported_byte() && kind != multiline_text()
 }
 
@@ -215,13 +215,19 @@ export func reserved_value_name(source:const SourceBytes in S, token:const Token
         behave_word(source, token);
 }
 
+func numeric_type_word(source:const SourceBytes in S, token:const Token in T) -> bool
+    where {const owner S, const owner T} {
+    return word_is(source, token, "Int64") || word_is(source, token, "UInt8") ||
+        word_is(source, token, "UInt32") || word_is(source, token, "UInt64") ||
+        word_is(source, token, "Float32") || word_is(source, token, "Float64")
+}
+
 export func reserved_lexical_binder(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     if (reserved_value_name(source, token) || void_word(source, token) || typeof_word(source, token) ||
         region_word(source, token) || symbol_word(source, token)) return true;
     return is_word(source, token) || var_word(source, token) || effect_word(source, token) ||
-        word_is(source, token, "u8") || word_is(source, token, "i64") || word_is(source, token, "u64") ||
-        word_is(source, token, "f64") || word_is(source, token, "u32") || word_is(source, token, "f32") ||
+        numeric_type_word(source, token) ||
         word_is(source, token, "bool") || word_is(source, token, "deref") || word_is(source, token, "global") ||
         word_is(source, token, "scalar") || word_is(source, token, "perform") ||
         word_is(source, token, "function") || word_is(source, token, "procedure")
@@ -230,7 +236,8 @@ export func reserved_lexical_binder(source:const SourceBytes in S, token:const T
 export func reserved_module_name(source:const SourceBytes in S, token:const Token in T) -> bool
     where {const owner S, const owner T} {
     return reserved_value_name(source, token) || data_word(source, token) || type_word(source, token) ||
-        unit_word(source, token) || array_word(source, token);
+        unit_word(source, token) || array_word(source, token) ||
+        numeric_type_word(source, token);
 }
 
 export func export_word(source:const SourceBytes in S, token:const Token in T) -> bool
@@ -420,22 +427,22 @@ export func assert_word(source:const SourceBytes in S, token:const Token in T) -
     return word_is(source, token, "assert")
 }
 
-func digit(byte:u8) -> bool {
+func digit(byte:UInt8) -> bool {
     # ASCII '0' to '9'.
     return byte >= DIGIT_0 && byte <= DIGIT_9;
 }
 
-func name_start(byte:u8) -> bool {
+func name_start(byte:UInt8) -> bool {
     # ASCII letters and underscore.
     return (byte >= UPPER_A && byte <= UPPER_Z) ||
         (byte >= LOWER_A && byte <= LOWER_Z) || byte == UNDERSCORE;
 }
 
-func whitespace(byte:u8) -> bool {
+func whitespace(byte:UInt8) -> bool {
     return byte == SPACE || (byte >= HT && byte <= CR);
 }
 
-func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+func skip_trivia(source:const SourceBytes in S, first:UInt64, past:UInt64) -> UInt64 where {const owner S} {
     val comment <- false;
     val byte <- 0u8;
     for (at in first .. past) {
@@ -447,7 +454,7 @@ func skip_trivia(source:const SourceBytes in S, first:u64, past:u64) -> u64 wher
     return past;
 }
 
-func name_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+func name_end(source:const SourceBytes in S, first:UInt64, past:UInt64) -> UInt64 where {const owner S} {
     val byte <- 0u8;
     for (at in first .. past) {
         byte <- source[at];
@@ -456,7 +463,7 @@ func name_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {
     return past;
 }
 
-func digits_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where {const owner S} {
+func digits_end(source:const SourceBytes in S, first:UInt64, past:UInt64) -> UInt64 where {const owner S} {
     for (at in first .. past) {
         if (!digit(source[at])) return at;
     };
@@ -465,12 +472,12 @@ func digits_end(source:const SourceBytes in S, first:u64, past:u64) -> u64 where
 
 # Zero is a sentinel for lookahead only. scan_token still diagnoses a zero
 # byte when it is present in the input itself.
-func lookahead(source:const SourceBytes in S, at:u64, past:u64) -> u8 where {const owner S} {
+func lookahead(source:const SourceBytes in S, at:UInt64, past:UInt64) -> UInt8 where {const owner S} {
     if (at >= past) return 0u8;
     return source[at];
 }
 
-func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
+func numeral_end(source:const SourceBytes in S, first:UInt64, past:UInt64,
                   token:Token in T) -> void where {const owner S, owner T} {
     val at <- digits_end(source, first + 1u64, past);
     val real <- false;
@@ -515,12 +522,12 @@ func numeral_end(source:const SourceBytes in S, first:u64, past:u64,
     return;
 }
 
-func triple_quote(source:const SourceBytes in S, at:u64, past:u64) -> bool where {const owner S} {
+func triple_quote(source:const SourceBytes in S, at:UInt64, past:UInt64) -> bool where {const owner S} {
     return at <= past && past - at >= 3u64 &&
         source[at] == DOUBLE_QUOTE && source[at + 1u64] == DOUBLE_QUOTE && source[at + 2u64] == DOUBLE_QUOTE
 }
 
-func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
+func quoted_text_end(source:const SourceBytes in S, first:UInt64, past:UInt64,
                       token:Token in T) -> void where {const owner S, owner T} {
     val multiline <- triple_quote(source, first, past);
     val width <- if (multiline) { 3u64 } else { 1u64 };
@@ -545,14 +552,14 @@ func quoted_text_end(source:const SourceBytes in S, first:u64, past:u64,
     return
 }
 
-func symbolic_source_byte(byte:u8) -> bool {
+func symbolic_source_byte(byte:UInt8) -> bool {
     # ! $ % & * + - . / : < = > |
     return byte == EXCLAMATION || (byte >= DOLLAR && byte <= AMPERSAND) || byte == ASTERISK ||
         byte == PLUS || (byte >= MINUS && byte <= SLASH) || byte == COLON ||
         (byte >= LESS_THAN && byte <= GREATER_THAN) || byte == PIPE
 }
 
-export func operator_past(source:const SourceBytes in S, first:u64, past:u64) -> u64
+export func operator_past(source:const SourceBytes in S, first:UInt64, past:UInt64) -> UInt64
     where {const owner S} {
     if (first >= past || past > intrinsic (len)(source) || !symbolic_source_byte(source[first]))
         return first;
@@ -564,7 +571,7 @@ export func operator_past(source:const SourceBytes in S, first:u64, past:u64) ->
 
 # The source is a stable bounded byte view. The caller owns its lifetime.
 # After a normal token, use token.past as the next first offset.
-export func scan_token(source:const SourceBytes in S, first:u64,
+export func scan_token(source:const SourceBytes in S, first:UInt64,
                        token:Token in T) -> void where {const owner S, owner T} {
     val past <- len(source);
     val start <- skip_trivia(source, first, past);

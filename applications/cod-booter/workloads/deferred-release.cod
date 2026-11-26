@@ -1,16 +1,16 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 
-proc release(ref releases:u64 in R) -> void where {owner R} {
+proc release(ref releases:UInt64 in R) -> void where {owner R} {
     releases <- releases + 1u64;
     behave @print(releases);
     return;
 }
 
-proc reject_after_acquisition(ref releases:u64 in R) -> void
+proc reject_after_acquisition(ref releases:UInt64 in R) -> void
     throws NullPointerException where {owner R} {
     defer release(releases);
-    ptr absent:u64 = null in here;
+    ptr absent:UInt64 = null in here;
     behave @print(absent);
     return;
 }

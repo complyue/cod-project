@@ -1,18 +1,18 @@
 using "./SourceStorage.cod" Token;
 
-export array Tokens[u64]:Token;
+export array Tokens[UInt64]:Token;
 
-export data SourceSpan { first:u64; past:u64; }
-export data NodeId { revision:u64; index:u64; }
-export data SyntaxRevisions { last:u64; }
+export data SourceSpan { first:UInt64; past:UInt64; }
+export data NodeId { revision:UInt64; index:UInt64; }
+export data SyntaxRevisions { last:UInt64; }
 export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
-export data AssignmentOperands { destination:NodeId; input:NodeId; operator_at:u64; }
-export enum ModuleSelectionMode:u8 { UseResource; ImportResource; ReexportResource; MixinResource;
+export data AssignmentOperands { destination:NodeId; input:NodeId; operator_at:UInt64; }
+export enum ModuleSelectionMode:UInt8 { UseResource; ImportResource; ReexportResource; MixinResource;
     IdentityResource; }
-export enum ResourceNature:u8 { OrdinaryResource; VariableResource; ProcedureResource; }
-export enum PublicView:u8 { DefaultPublic; CompletePublic; }
+export enum ResourceNature:UInt8 { OrdinaryResource; VariableResource; ProcedureResource; }
+export enum PublicView:UInt8 { DefaultPublic; CompletePublic; }
 
-export enum FormalMode:u8 {
+export enum FormalMode:UInt8 {
     ValueFormal;
     ExplicitValueFormal;
     ReferenceFormal;
@@ -26,20 +26,20 @@ export enum FormalMode:u8 {
     IdentityOnlyRefFormal;
 }
 
-export enum SyntaxRole:u8 {
+export enum SyntaxRole:UInt8 {
     ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
     ReferenceGroupEntryRole; ArgumentOperandRole; ModuleSelectionItemRole; ConditionRole; CaseGuardRole;
 }
 
-export enum LocalMode:u8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
-export enum ArithmeticOperation:u8 { Addition; Subtraction; Multiplication; Division; Remainder; }
-export enum ComparisonRelation:u8 { Equal; Unequal; Less; AtMost; Greater; AtLeast; }
-export data BinaryOperands { left_operand:NodeId; right_operand:NodeId; operator_at:u64; }
+export enum LocalMode:UInt8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
+export enum ArithmeticOperation:UInt8 { Addition; Subtraction; Multiplication; Division; Remainder; }
+export enum ComparisonRelation:UInt8 { Equal; Unequal; Less; AtMost; Greater; AtLeast; }
+export data BinaryOperands { left_operand:NodeId; right_operand:NodeId; operator_at:UInt64; }
 
 export data ExprPayload =
-      IntegerLiteral { magnitude:u64; width:u64; }
+      IntegerLiteral { magnitude:UInt64; width:UInt64; }
     | NameReference {}
-    | ParseReport { diagnostic:u8; }
+    | ParseReport { diagnostic:UInt8; }
     | ErrorReport { role:SyntaxRole; report:NodeId; }
     | BooleanLiteral { truth:bool; }
     | Negation { operand:NodeId; }
@@ -56,22 +56,22 @@ export data ExprPayload =
     | CausePlacement { cause:NodeId; }
     | ConstructionTypeQuery { operand:NodeId; }
     | NamedThrow { requested:NodeId; fields:NodeLink; cause:NodeLink; }
-    | HandleType { name:NodeId; parent_type:NodeLink; parent_at:u64; }
-    | NominalParent { name:NodeId; parent_type:NodeId; anchor:u64; }
+    | HandleType { name:NodeId; parent_type:NodeLink; parent_at:UInt64; }
+    | NominalParent { name:NodeId; parent_type:NodeId; anchor:UInt64; }
     | RecordDefinition { heading:NodeId; fields:NodeLink; native:bool; }
     | SumDefinition { heading:NodeId; last_arm:NodeId; }
     | SumArm { name:NodeId; previous:NodeLink; fields:NodeLink; }
     | RegionDefinition { name:NodeId; fields:NodeLink; }
-    | OwningRegionBinding { name:NodeId; schema:NodeId; input:NodeId; readonly:bool; transfer_at:u64; }
-    | RegionConstruction { schema:NodeId; capacity:NodeId; initializers:NodeId; capacity_at:u64; }
+    | OwningRegionBinding { name:NodeId; schema:NodeId; input:NodeId; readonly:bool; transfer_at:UInt64; }
+    | RegionConstruction { schema:NodeId; capacity:NodeId; initializers:NodeId; capacity_at:UInt64; }
     | AbstractType { heading:NodeId; }
     | TypeSynonym { name:NodeId; target:NodeId; }
     | HandleSymbol { name:NodeId; marker:NodeId; }
     | ValueSymbol { name:NodeId; annotation:NodeId; explicit_value:bool; }
     | ReferenceSymbol { name:NodeId; target:NodeId; owner_name:NodeId; readonly:bool; nullable:bool; }
     | Publication { name:NodeId; nature:ResourceNature; }
-    | ArrayDefinition { name:NodeId; index_type:NodeId; element_type:NodeId; dimension_at:u64; }
-    | EnumInteger { magnitude:u64; negative:bool; width:u64; }
+    | ArrayDefinition { name:NodeId; index_type:NodeId; element_type:NodeId; dimension_at:UInt64; }
+    | EnumInteger { magnitude:UInt64; negative:bool; width:UInt64; }
     | EnumMember { previous:NodeLink; name:NodeId; initializer:NodeLink; }
     | EnumDefinition { name:NodeId; backing:NodeId; member_tail:NodeId; }
     | Transfer { operands:AssignmentOperands; }
@@ -79,8 +79,8 @@ export data ExprPayload =
     | Rebind { operands:AssignmentOperands; }
     | InitializerTransfer { operands:AssignmentOperands; }
     | InitializerRebind { operands:AssignmentOperands; }
-    | Call { callee:NodeId; argument_tail:NodeId; opening:u64; }
-    | EmptyCall { callee:NodeId; opening:u64; }
+    | Call { callee:NodeId; argument_tail:NodeId; opening:UInt64; }
+    | EmptyCall { callee:NodeId; opening:UInt64; }
     | ReturnValue { value:NodeId; }
     | ReturnVoid {}
     | ContinueValue { value:NodeId; }
@@ -99,33 +99,33 @@ export data ExprPayload =
     | DeferredBlock { body:NodeId; }
     | DeferredInvocation { operand:NodeId; invocation:NodeId; }
     | DeferredClauses { clause_tail:NodeId; }
-    | LocalBinding { binding:NodeId; initializer:NodeId; mode:LocalMode; operator_at:u64; declaration_const:bool; }
+    | LocalBinding { binding:NodeId; initializer:NodeId; mode:LocalMode; operator_at:UInt64; declaration_const:bool; }
     | BareReferenceBinding { binding:NodeId; }
     | ReferenceGroupItem { previous:NodeLink; binding_item:NodeId; }
     | ReferenceBindingGroup { last_binding:NodeId; body:NodeLink; }
-    | InitializeReservation { destination:NodeId; arguments:NodeLink; opening:u64; }
+    | InitializeReservation { destination:NodeId; arguments:NodeLink; opening:UInt64; }
     | PredicateAssertion { predicate:NodeId; message:NodeLink; }
-    | LocalCallableSlot { binding:NodeId; initializer:NodeId; function_form:bool; fixed:bool; operator_at:u64; }
-    | OwningHandleBinding { binding:NodeId; initializer:NodeId; readonly:bool; operator_at:u64; }
-    | BorrowedHandleBinding { binding:NodeId; initializer:NodeId; operator_at:u64; }
+    | LocalCallableSlot { binding:NodeId; initializer:NodeId; function_form:bool; fixed:bool; operator_at:UInt64; }
+    | OwningHandleBinding { binding:NodeId; initializer:NodeId; readonly:bool; operator_at:UInt64; }
+    | BorrowedHandleBinding { binding:NodeId; initializer:NodeId; operator_at:UInt64; }
     | OwnHandleConstruction { marker:NodeId; arguments:NodeLink; }
     | BorrowHandleConstruction { marker:NodeId; arguments:NodeLink; actual_owner:NodeId; }
     | NullLiteral { owner_name:NodeLink; }
     | Conditional { condition:NodeId; consequent:NodeId; alternative:NodeId; }
     | ReturningCondition { pattern:SourceSpan; }
-    | ArrayLength { target:NodeId; intrinsic_at:u64; }
-    | FieldSelection { target:NodeId; field:NodeId; dot_at:u64; }
-    | IndexSelection { target:NodeId; index:NodeId; opening:u64; }
-    | CheckedTypeAssertion { operand:NodeId; annotation:NodeId; colon:u64; }
-    | DiscardedExpression { operand:NodeId; colon:u64; }
+    | ArrayLength { target:NodeId; intrinsic_at:UInt64; }
+    | FieldSelection { target:NodeId; field:NodeId; dot_at:UInt64; }
+    | IndexSelection { target:NodeId; index:NodeId; opening:UInt64; }
+    | CheckedTypeAssertion { operand:NodeId; annotation:NodeId; colon:UInt64; }
+    | DiscardedExpression { operand:NodeId; colon:UInt64; }
     | TextLiteral { interior_zero:bool; }
     | ArithmeticExpression { operands:BinaryOperands; operation:ArithmeticOperation; }
     | ComparisonExpression { operands:BinaryOperands; relation:ComparisonRelation; }
-    | ReferenceIdentity { operands:BinaryOperands; operator_past:u64; negated:bool; }
+    | ReferenceIdentity { operands:BinaryOperands; operator_past:UInt64; negated:bool; }
     | Concatenation { operands:BinaryOperands; }
-    | BindSymbolEffect { name:NodeId; input:NodeId; operator_at:u64; }
-    | InstallSymbolEffect { name:NodeId; acquisition:NodeId; operator_at:u64; }
-    | ProcedureSymbol { name:NodeId; input_types:NodeLink; result_type:NodeId; arrow:u64; }
+    | BindSymbolEffect { name:NodeId; input:NodeId; operator_at:UInt64; }
+    | InstallSymbolEffect { name:NodeId; acquisition:NodeId; operator_at:UInt64; }
+    | ProcedureSymbol { name:NodeId; input_types:NodeLink; result_type:NodeId; arrow:UInt64; }
     | ProcedureTypeInput { previous:NodeLink; annotation:NodeId; }
     | ProcedureTypeAnnotation { type_name:NodeId; mode:FormalMode; readonly:bool; }
     | ScopedProcedureDefinition { header:NodeId; body:NodeId; }
@@ -134,8 +134,8 @@ export data ExprPayload =
     | NullCasePattern {}
     | MemberCasePattern {}
     | ConstructorCasePattern { constructor:NodeId; receivers:NodeLink; }
-    | CaseValueReceiver { previous:NodeLink; destination:NodeId; selected_field:NodeLink; transfer_at:u64; }
-    | CaseArm { pattern:NodeLink; guard:NodeLink; body:NodeId; arrow:u64; }
+    | CaseValueReceiver { previous:NodeLink; destination:NodeId; selected_field:NodeLink; transfer_at:UInt64; }
+    | CaseArm { pattern:NodeLink; guard:NodeLink; body:NodeId; arrow:UInt64; }
     | CaseExpression { subject:NodeId; items:NodeLink; }
     | CaseFailure {}
     | CaseFallthrough {}
@@ -144,12 +144,12 @@ export data ExprPayload =
     | BlockSyntax { items:NodeLink; }
     | ScopeSyntax { items:NodeLink; }
     | BlockItem { previous:NodeLink; expression:NodeId; }
-    | CallableHeader { name:NodeId; parameters:NodeLink; opening:u64; }
-    | ScopedProcedureHeader { name:NodeId; parameters:NodeLink; opening:u64; }
-    | AnnotatedBinding { name:NodeId; annotation:NodeId; readonly:bool; colon:u64; }
-    | OwnerQualifiedType { target:NodeId; declared_owner:NodeId; anchor:u64; }
+    | CallableHeader { name:NodeId; parameters:NodeLink; opening:UInt64; }
+    | ScopedProcedureHeader { name:NodeId; parameters:NodeLink; opening:UInt64; }
+    | AnnotatedBinding { name:NodeId; annotation:NodeId; readonly:bool; colon:UInt64; }
+    | OwnerQualifiedType { target:NodeId; declared_owner:NodeId; anchor:UInt64; }
     | Formal {
-        previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; variadic_at:u64;
+        previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; variadic_at:UInt64;
       }
     | HereFormal { previous:NodeLink; signature:NodeId; }
     | OwnerConstraint { previous:NodeLink; declared_owner:NodeId; readonly:bool; }
@@ -163,8 +163,8 @@ export data ExprPayload =
     | CallablePromise { header:NodeId; function_form:bool; }
     | CProviderDeclaration { header:NodeId; function_form:bool; }
     | CEntryDefinition { header:NodeId; body:NodeId; function_form:bool; }
-    | ArgumentItem { previous:NodeLink; operand:NodeId; checked_ref:bool; selection_at:u64; }
-    | NamedArgument { operand:NodeLink; label:NodeId; arrow:u64; }
+    | ArgumentItem { previous:NodeLink; operand:NodeId; checked_ref:bool; selection_at:UInt64; }
+    | NamedArgument { operand:NodeLink; label:NodeId; arrow:UInt64; }
     | SymbolReference {}
     | SymbolicInvocation { callee:NodeId; arguments:NodeLink; }
     | HereInvocation { call:NodeId; supplied:NodeId; }
@@ -176,17 +176,17 @@ export data ExprPayload =
     | BulkModuleSelection { path:NodeId; mode:ModuleSelectionMode; view:PublicView; }
     | DefaultPublicSet { marks:NodeLink; }
     | DefaultMark { previous:NodeLink; name:NodeId; nature:ResourceNature; members:NodeLink; }
-    | AllMembers { opening:u64; }
-    | ChosenMembers { items:NodeId; opening:u64; }
+    | AllMembers { opening:UInt64; }
+    | ChosenMembers { items:NodeId; opening:UInt64; }
     | ChosenMember { previous:NodeLink; member:NodeId; }
-    | RangeHeader { index_binding:NodeId; lower:NodeId; upper:NodeId; separator:u64; }
+    | RangeHeader { index_binding:NodeId; lower:NodeId; upper:NodeId; separator:UInt64; }
     | RangeLoop { header:NodeId; body:NodeId; empty:NodeLink; };
 
 export data ExprNode { span:SourceSpan; payload:ExprPayload; }
 export data AstSlot = Vacant {} | Occupied { node:ExprNode; };
-export array ExprNodes[u64]:AstSlot;
+export array ExprNodes[UInt64]:AstSlot;
 
-export func issue_syntax_revision(sequence:SyntaxRevisions in G, revision:u64 in F) -> bool
+export func issue_syntax_revision(sequence:SyntaxRevisions in G, revision:UInt64 in F) -> bool
     where {owner G, owner F} {
     if (sequence.last == 18446744073709551615u64) return false;
     sequence.last <- sequence.last + 1u64;
@@ -194,7 +194,7 @@ export func issue_syntax_revision(sequence:SyntaxRevisions in G, revision:u64 in
     return true;
 }
 
-export func published_syntax_id(nodes:const ExprNodes in N, revision:u64, used:u64,
+export func published_syntax_id(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
                                 id:const NodeId in I) -> bool where {const owner N, const owner I} {
     if (id.revision != revision or id.index >= used or id.index >= intrinsic (len)(nodes))
         return false;
@@ -204,7 +204,7 @@ export func published_syntax_id(nodes:const ExprNodes in N, revision:u64, used:u
     }
 }
 
-func syntax_boundary(nodes:const ExprNodes in N, used:u64, at:u64, begin:bool) -> u64
+func syntax_boundary(nodes:const ExprNodes in N, used:UInt64, at:UInt64, begin:bool) -> UInt64
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
@@ -215,25 +215,25 @@ func syntax_boundary(nodes:const ExprNodes in N, used:u64, at:u64, begin:bool) -
     };
 }
 
-export func syntax_first(nodes:const ExprNodes in N, used:u64, at:u64) -> u64 where {const owner N} {
+export func syntax_first(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> UInt64 where {const owner N} {
     return syntax_boundary(nodes, used, at, true);
 }
 
-export func syntax_past(nodes:const ExprNodes in N, used:u64, at:u64) -> u64 where {const owner N} {
+export func syntax_past(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> UInt64 where {const owner N} {
     return syntax_boundary(nodes, used, at, false);
 }
 
-export enum HereSyntax:u8 { OtherSyntax; InvalidHere; HereReady; }
+export enum HereSyntax:UInt8 { OtherSyntax; InvalidHere; HereReady; }
 
 export data HereSites {
-    call:u64;
-    supplied:u64;
-    receivers:u64;
-    body:u64;
+    call:UInt64;
+    supplied:UInt64;
+    receivers:UInt64;
+    body:UInt64;
     full_scope:bool;
 }
 
-func inspect_here_receivers(nodes:const ExprNodes in N, revision:u64, used:u64, receivers:const NodeLink in L,
+func inspect_here_receivers(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, receivers:const NodeLink in L,
                             sites:HereSites in R) -> bool where {const owner N, const owner L, owner R} {
     return case receivers of {
         (NoLink) -> { sites.receivers <- no_node(); true };
@@ -252,7 +252,7 @@ func inspect_here_receivers(nodes:const ExprNodes in N, revision:u64, used:u64, 
     };
 }
 
-func inspect_here_block(nodes:const ExprNodes in N, revision:u64, used:u64, body:const NodeId in B,
+func inspect_here_block(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, body:const NodeId in B,
                         sites:HereSites in R) -> bool where {const owner N, const owner B, owner R} {
     if (!published_syntax_id(nodes, revision, used, body)) return false;
     return case nodes[body.index] of {
@@ -267,7 +267,7 @@ func inspect_here_block(nodes:const ExprNodes in N, revision:u64, used:u64, body
     };
 }
 
-func inspect_here_supply(nodes:const ExprNodes in N, revision:u64, used:u64, supplied:const NodeId in H,
+func inspect_here_supply(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, supplied:const NodeId in H,
                          sites:HereSites in R) -> bool where {const owner N, const owner H, owner R} {
     if (!published_syntax_id(nodes, revision, used, supplied)) return false;
     return case nodes[supplied.index] of {
@@ -286,7 +286,7 @@ func inspect_here_supply(nodes:const ExprNodes in N, revision:u64, used:u64, sup
     };
 }
 
-func accepts_here_body(nodes:const ExprNodes in N, revision:u64, used:u64, call:const NodeId in C) -> bool
+func accepts_here_body(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, call:const NodeId in C) -> bool
     where {const owner N, const owner C} {
     if (!published_syntax_id(nodes, revision, used, call)) return false;
     return case nodes[call.index] of {
@@ -302,7 +302,7 @@ func accepts_here_body(nodes:const ExprNodes in N, revision:u64, used:u64, call:
     };
 }
 
-export func inspect_here_invocation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_here_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:HereSites in R) -> HereSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidHere:HereSyntax);
     return case nodes[at] of {
@@ -322,7 +322,7 @@ export func inspect_here_invocation(nodes:const ExprNodes in N, revision:u64, us
     };
 }
 
-export enum SequenceSyntax:u8 {
+export enum SequenceSyntax:UInt8 {
     OtherSequenceSyntax;
     InvalidSequence;
     ModuleSequence;
@@ -339,9 +339,9 @@ export enum SequenceSyntax:u8 {
     CaseReceiverSequence;
 }
 
-export data SequenceEntry { previous:u64; item:u64; }
+export data SequenceEntry { previous:UInt64; item:UInt64; }
 
-func read_sequence_links(nodes:const ExprNodes in N, revision:u64, at:u64,
+func read_sequence_links(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                          previous:const NodeLink in L, item:const NodeId in I,
                          entry:SequenceEntry in E) -> bool
     where {const owner N, const owner L, const owner I, owner E} {
@@ -357,7 +357,7 @@ func read_sequence_links(nodes:const ExprNodes in N, revision:u64, at:u64,
     };
 }
 
-export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    entry:SequenceEntry in E) -> SequenceSyntax where {const owner N, owner E} {
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidSequence:SequenceSyntax);
     return case nodes[at] of {
@@ -468,8 +468,8 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:u64, use
     };
 }
 
-export func first_sequence_entry(nodes:const ExprNodes in N, revision:u64, used:u64,
-                                tail:u64, expected:SequenceSyntax, first:u64 in R) -> bool
+export func first_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+                                tail:UInt64, expected:SequenceSyntax, first:UInt64 in R) -> bool
     where {const owner N, owner R} {
     first <- no_node();
     if (tail == no_node()) return true;
@@ -483,7 +483,7 @@ export func first_sequence_entry(nodes:const ExprNodes in N, revision:u64, used:
     return false;
 }
 
-func is_procedure_type_input(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func is_procedure_type_input(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of { (ProcedureTypeInput) -> { true }; (_) -> { false }; }
@@ -492,9 +492,9 @@ func is_procedure_type_input(nodes:const ExprNodes in N, at:u64) -> bool where {
     };
 }
 
-export data ProcedureTypeSites { name:u64; mode:FormalMode; readonly:bool; }
+export data ProcedureTypeSites { name:UInt64; mode:FormalMode; readonly:bool; }
 
-export func inspect_procedure_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_procedure_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:ProcedureTypeSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -517,7 +517,7 @@ export func inspect_procedure_type(nodes:const ExprNodes in N, revision:u64, use
     };
 }
 
-func read_procedure_input(nodes:const ExprNodes in N, revision:u64, at:u64,
+func read_procedure_input(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                           previous:const NodeLink in L, annotation:const NodeId in I, entry:SequenceEntry in E)
     -> SequenceSyntax where {const owner N, const owner L, const owner I, owner E} {
     if (!read_sequence_links(nodes, revision, at, previous, annotation, entry)) return InvalidSequence:SequenceSyntax;
@@ -528,10 +528,10 @@ func read_procedure_input(nodes:const ExprNodes in N, revision:u64, at:u64,
     } else { InvalidSequence:SequenceSyntax };
 }
 
-export data ProcedureSymbolSites { symbol:u64; input_tail:u64; result_type:u64; arrow:u64; }
+export data ProcedureSymbolSites { symbol:UInt64; input_tail:UInt64; result_type:UInt64; arrow:UInt64; }
 
-func read_procedure_symbol(nodes:const ExprNodes in N, revision:u64, at:u64, name:const NodeId in I,
-                           inputs:const NodeLink in L, output:const NodeId in O, arrow:u64, sites:ProcedureSymbolSites in R)
+func read_procedure_symbol(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, name:const NodeId in I,
+                           inputs:const NodeLink in L, output:const NodeId in O, arrow:UInt64, sites:ProcedureSymbolSites in R)
     -> bool where {const owner N, const owner I, const owner L, const owner O, owner R} {
     ref kind = make ProcedureTypeSites { name <- no_node(); mode <- (ValueFormal:FormalMode); readonly <- false; };
     val first <- no_node();
@@ -550,7 +550,7 @@ func read_procedure_symbol(nodes:const ExprNodes in N, revision:u64, at:u64, nam
     return true;
 }
 
-export func inspect_procedure_symbol(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_procedure_symbol(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                      sites:ProcedureSymbolSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -566,14 +566,14 @@ export func inspect_procedure_symbol(nodes:const ExprNodes in N, revision:u64, u
     };
 }
 
-export func first_module_item(nodes:const ExprNodes in N, revision:u64, used:u64, root:u64, first:u64 in R)
+export func first_module_item(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, root:UInt64, first:UInt64 in R)
     -> bool where {const owner N, owner R} {
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     return module_tail(nodes, revision, used, root, tail) &&
         first_sequence_entry(nodes, revision, used, tail, (ModuleSequence:SequenceSyntax), first);
 }
 
-export func module_tail(nodes:const ExprNodes in N, revision:u64, used:u64, root:u64, tail:u64 in R) -> bool
+export func module_tail(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, root:UInt64, tail:UInt64 in R) -> bool
     where {const owner N, owner R} {
     if (root >= used || root >= intrinsic (len)(nodes)) return false;
     return case nodes[root] of {
@@ -587,7 +587,7 @@ export func module_tail(nodes:const ExprNodes in N, revision:u64, used:u64, root
     };
 }
 
-export func block_tail(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, tail:u64 in R) -> bool
+export func block_tail(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, tail:UInt64 in R) -> bool
     where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -606,7 +606,7 @@ export func block_tail(nodes:const ExprNodes in N, revision:u64, used:u64, at:u6
     };
 }
 
-export func braced_reference_group(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
+export func braced_reference_group(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> bool
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -633,8 +633,8 @@ export func braced_reference_group(nodes:const ExprNodes in N, revision:u64, use
     }
 }
 
-func block_item_tail(nodes:const ExprNodes in N, revision:u64, at:u64,
-                     items:const NodeLink in I, tail:u64 in R) -> bool where {const owner N, const owner I, owner R} {
+func block_item_tail(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
+                     items:const NodeLink in I, tail:UInt64 in R) -> bool where {const owner N, const owner I, owner R} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return case items of {
         (NoLink) -> { tail <- no_node(); true };
@@ -647,7 +647,7 @@ func block_item_tail(nodes:const ExprNodes in N, revision:u64, at:u64,
     };
 }
 
-export func module_item_publication(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
+export func module_item_publication(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> bool where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -660,10 +660,10 @@ export func module_item_publication(nodes:const ExprNodes in N, used:u64, at:u64
     };
 }
 
-export enum DirectInvocationSyntax:u8 { OtherInvocation; InvalidInvocation; DirectInvocationReady; }
-export data DirectCallSites { callee:u64; arguments:u64; }
+export enum DirectInvocationSyntax:UInt8 { OtherInvocation; InvalidInvocation; DirectInvocationReady; }
+export data DirectCallSites { callee:UInt64; arguments:UInt64; }
 
-export func direct_invocation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func direct_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:DirectCallSites in C) -> DirectInvocationSyntax
     where {const owner N, owner C} {
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidInvocation:DirectInvocationSyntax);
@@ -693,11 +693,11 @@ export func direct_invocation(nodes:const ExprNodes in N, revision:u64, used:u64
     };
 }
 
-export func literal_node() -> u8 { return 1u8; }
-export func add_node() -> u8 { return 2u8; }
-export func multiply_node() -> u8 { return 3u8; }
-export func group_node() -> u8 { return 4u8; }
-export func checked_ref_argument(nodes:const ExprNodes in N, argument:u64) -> bool where {const owner N} {
+export func literal_node() -> UInt8 { return 1u8; }
+export func add_node() -> UInt8 { return 2u8; }
+export func multiply_node() -> UInt8 { return 3u8; }
+export func group_node() -> UInt8 { return 4u8; }
+export func checked_ref_argument(nodes:const ExprNodes in N, argument:UInt64) -> bool where {const owner N} {
     if (argument >= intrinsic (len)(nodes)) return false;
     return case nodes[argument] of {
         (Vacant) -> { false };
@@ -709,52 +709,52 @@ export func checked_ref_argument(nodes:const ExprNodes in N, argument:u64) -> bo
         };
     };
 }
-export func throw_node() -> u8 { return 19u8; }
-export func return_node() -> u8 { return 25u8; }
-export func result_clause_node() -> u8 { return 37u8; }
-export func throws_clause_node() -> u8 { return 38u8; }
-export func compare_node() -> u8 { return 43u8; }
-export func logical_and_node() -> u8 { return 46u8; }
-export func logical_or_node() -> u8 { return 47u8; }
-export func subtract_node() -> u8 { return 48u8; }
-export func divide_node() -> u8 { return 49u8; }
-export func remainder_node() -> u8 { return 50u8; }
+export func throw_node() -> UInt8 { return 19u8; }
+export func return_node() -> UInt8 { return 25u8; }
+export func result_clause_node() -> UInt8 { return 37u8; }
+export func throws_clause_node() -> UInt8 { return 38u8; }
+export func compare_node() -> UInt8 { return 43u8; }
+export func logical_and_node() -> UInt8 { return 46u8; }
+export func logical_or_node() -> UInt8 { return 47u8; }
+export func subtract_node() -> UInt8 { return 48u8; }
+export func divide_node() -> UInt8 { return 49u8; }
+export func remainder_node() -> UInt8 { return 50u8; }
 
-export func exception_result_node() -> u8 { return 63u8; }
-export func ref_result_node() -> u8 { return 65u8; }
+export func exception_result_node() -> UInt8 { return 63u8; }
+export func ref_result_node() -> UInt8 { return 65u8; }
 
-export func continue_node() -> u8 { return 91u8; }
-export func break_node() -> u8 { return 92u8; }
+export func continue_node() -> UInt8 { return 91u8; }
+export func break_node() -> UInt8 { return 92u8; }
 
-export func concat_node() -> u8 { return 114u8; }
+export func concat_node() -> UInt8 { return 114u8; }
 
-export enum SelectionSyntax:u8 { OtherSelectionSyntax; InvalidSelection; SelectionReady; }
-export enum NameSyntax:u8 { NotAName; OrdinaryName; SymbolicName; }
+export enum SelectionSyntax:UInt8 { OtherSelectionSyntax; InvalidSelection; SelectionReady; }
+export enum NameSyntax:UInt8 { NotAName; OrdinaryName; SymbolicName; }
 
 export data ModuleSelectionSites {
-    path:u64;
-    resource:u64;
-    local:u64;
-    members:u64;
+    path:UInt64;
+    resource:UInt64;
+    local:UInt64;
+    members:UInt64;
     symbolic:bool;
     mode:ModuleSelectionMode;
     nature:ResourceNature;
 }
 
 export data BulkSelectionSites {
-    path:u64;
+    path:UInt64;
     mode:ModuleSelectionMode;
     view:PublicView;
 }
 
 export data DefaultMarkSites {
-    previous:u64;
-    name:u64;
+    previous:UInt64;
+    name:UInt64;
     nature:ResourceNature;
-    members:u64;
+    members:UInt64;
 }
 
-export func name_syntax(nodes:const ExprNodes in N, used:u64, at:u64) -> NameSyntax where {const owner N} {
+export func name_syntax(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> NameSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return NotAName:NameSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotAName:NameSyntax };
@@ -768,7 +768,7 @@ export func name_syntax(nodes:const ExprNodes in N, used:u64, at:u64) -> NameSyn
     };
 }
 
-func module_path_syntax(nodes:const ExprNodes in N, revision:u64, at:u64, path:const NodeId in P) -> bool
+func module_path_syntax(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, path:const NodeId in P) -> bool
     where {const owner N, const owner P} {
     if (!published_syntax_id(nodes, revision, at, path)) return false;
     return case nodes[path.index] of {
@@ -782,7 +782,7 @@ func module_path_syntax(nodes:const ExprNodes in N, revision:u64, at:u64, path:c
     };
 }
 
-func selection_local_name(nodes:const ExprNodes in N, revision:u64, at:u64, rename:const NodeLink in L,
+func selection_local_name(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, rename:const NodeLink in L,
                           name:NameSyntax, sites:ModuleSelectionSites in R) -> bool
     where {const owner N, const owner L, owner R} {
     return case rename of {
@@ -796,8 +796,8 @@ func selection_local_name(nodes:const ExprNodes in N, revision:u64, at:u64, rena
     };
 }
 
-func selection_member_clause(nodes:const ExprNodes in N, revision:u64, at:u64, members:const NodeLink in L,
-                             symbolic:bool, selected:u64 in R) -> bool
+func selection_member_clause(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, members:const NodeLink in L,
+                             symbolic:bool, selected:UInt64 in R) -> bool
     where {const owner N, const owner L, owner R} {
     return case members of {
         (NoLink) -> { selected <- no_node(); true };
@@ -817,10 +817,10 @@ func selection_member_clause(nodes:const ExprNodes in N, revision:u64, at:u64, m
     };
 }
 
-export enum MemberSelectionSyntax:u8 { InvalidMemberSelector; AllSelectedMembers; NamedSelectedMembers; }
+export enum MemberSelectionSyntax:UInt8 { InvalidMemberSelector; AllSelectedMembers; NamedSelectedMembers; }
 
-export func inspect_member_selector(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-                                    tail:u64 in R) -> MemberSelectionSyntax where {const owner N, owner R} {
+export func inspect_member_selector(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+                                    tail:UInt64 in R) -> MemberSelectionSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidMemberSelector:MemberSelectionSyntax;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return case nodes[at] of {
@@ -841,7 +841,7 @@ export func inspect_member_selector(nodes:const ExprNodes in N, revision:u64, us
     };
 }
 
-func prepare_selection_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
+func prepare_selection_sites(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                              path:const NodeId in P, resource:const NodeId in C, renamed:const NodeLink in L,
                              members:const NodeLink in M, mode:ModuleSelectionMode, sites:ModuleSelectionSites in R) -> bool
     where {const owner N, const owner P, const owner C, const owner L, const owner M, owner R} {
@@ -857,7 +857,7 @@ func prepare_selection_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
         selection_member_clause(nodes, revision, at, members, sites.symbolic, sites.members);
 }
 
-export func inspect_module_selection(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_module_selection(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                      sites:ModuleSelectionSites in R) -> SelectionSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
@@ -883,7 +883,7 @@ export func inspect_module_selection(nodes:const ExprNodes in N, revision:u64, u
 }
 
 export func inspect_bulk_selection(
-    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:BulkSelectionSites in S)
+    nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, sites:BulkSelectionSites in S)
     -> SelectionSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
@@ -905,8 +905,8 @@ export func inspect_bulk_selection(
     }
 }
 
-func default_mark_link(nodes:const ExprNodes in N, revision:u64, at:u64, link:const NodeLink in L,
-                       selected:u64 in S) -> bool
+func default_mark_link(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, link:const NodeLink in L,
+                       selected:UInt64 in S) -> bool
     where {const owner N, const owner L, owner S} {
     return case link of {
         NoLink -> { selected <- no_node(); true };
@@ -926,7 +926,7 @@ func default_mark_link(nodes:const ExprNodes in N, revision:u64, at:u64, link:co
 }
 
 export func inspect_default_set(
-    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, tail:u64 in T) -> SelectionSyntax
+    nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, tail:UInt64 in T) -> SelectionSyntax
     where {const owner N, owner T} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
@@ -945,7 +945,7 @@ export func inspect_default_set(
 }
 
 export func inspect_default_mark(
-    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:DefaultMarkSites in S)
+    nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, sites:DefaultMarkSites in S)
     -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -973,7 +973,7 @@ export func inspect_default_mark(
     }
 }
 
-export func module_item_defaulted(nodes:const ExprNodes in N, used:u64, at:u64) -> bool
+export func module_item_defaulted(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> bool
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -987,7 +987,7 @@ export func module_item_defaulted(nodes:const ExprNodes in N, used:u64, at:u64) 
     }
 }
 
-export func selected_resource_name(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> u64
+export func selected_resource_name(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> UInt64
     where {const owner N} {
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -999,7 +999,7 @@ export func selected_resource_name(nodes:const ExprNodes in N, revision:u64, use
     return selection.resource;
 }
 
-export func local_resource_name(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> u64
+export func local_resource_name(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> UInt64
     where {const owner N} {
     ref selection = make ModuleSelectionSites {
         path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
@@ -1011,11 +1011,11 @@ export func local_resource_name(nodes:const ExprNodes in N, revision:u64, used:u
     return selection.local;
 }
 
-export data RangeBounds { index_binding:u64; lower:u64; upper:u64; separator:u64; }
-export data RangeSites { header:u64; body:u64; empty:u64; }
-export enum LiteralRange:u8 { InvalidRange; DynamicRange; EmptyLiteralRange; NonemptyLiteralRange; }
+export data RangeBounds { index_binding:UInt64; lower:UInt64; upper:UInt64; separator:UInt64; }
+export data RangeSites { header:UInt64; body:UInt64; empty:UInt64; }
+export enum LiteralRange:UInt8 { InvalidRange; DynamicRange; EmptyLiteralRange; NonemptyLiteralRange; }
 
-export func inspect_range_header(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_range_header(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  bounds:RangeBounds in B) -> bool where {const owner N, owner B} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1039,7 +1039,7 @@ export func inspect_range_header(nodes:const ExprNodes in N, revision:u64, used:
     };
 }
 
-func read_empty_range(nodes:const ExprNodes in N, revision:u64, at:u64, empty:const NodeLink in L,
+func read_empty_range(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, empty:const NodeLink in L,
                       range:RangeSites in R) -> bool where {const owner N, const owner L, owner R} {
     return case empty of {
         (NoLink) -> { range.empty <- no_node(); true };
@@ -1051,7 +1051,7 @@ func read_empty_range(nodes:const ExprNodes in N, revision:u64, at:u64, empty:co
     };
 }
 
-export func inspect_range_loop(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_range_loop(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                range:RangeSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1072,7 +1072,7 @@ export func inspect_range_loop(nodes:const ExprNodes in N, revision:u64, used:u6
     };
 }
 
-func range_integer_literal(nodes:const ExprNodes in N, at:u64, value:u64 in V) -> bool
+func range_integer_literal(nodes:const ExprNodes in N, at:UInt64, value:UInt64 in V) -> bool
     where {const owner N, owner V} {
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -1085,18 +1085,18 @@ func range_integer_literal(nodes:const ExprNodes in N, at:u64, value:u64 in V) -
     };
 }
 
-export func classify_literal_range(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> LiteralRange
+export func classify_literal_range(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> LiteralRange
     where {const owner N} {
     ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
     if (!inspect_range_header(nodes, revision, used, at, bounds)) return InvalidRange:LiteralRange;
-    ref lower = make u64 { 0u64 };
-    ref upper = make u64 { 0u64 };
+    ref lower = make UInt64 { 0u64 };
+    ref upper = make UInt64 { 0u64 };
     if (!range_integer_literal(nodes, bounds.lower, lower) || !range_integer_literal(nodes, bounds.upper, upper))
         return DynamicRange:LiteralRange;
     return if (lower < upper) { NonemptyLiteralRange:LiteralRange } else { EmptyLiteralRange:LiteralRange };
 }
 
-export enum AssignmentSyntax:u8 {
+export enum AssignmentSyntax:UInt8 {
     OtherAssignmentSyntax;
     InvalidAssignment;
     PlaceTransfer;
@@ -1105,17 +1105,17 @@ export enum AssignmentSyntax:u8 {
     FieldRebind;
     AugmentedPlaceTransfer;
 }
-export data AssignmentSites { destination:u64; input:u64; operator_at:u64; }
+export data AssignmentSites { destination:UInt64; input:UInt64; operator_at:UInt64; }
 
 export data AugmentedTransferSites {
-    destination:u64;
-    input:u64;
-    operator_at:u64;
+    destination:UInt64;
+    input:UInt64;
+    operator_at:UInt64;
     operation:ArithmeticOperation;
 }
 
 export func inspect_augmented_transfer(
-    nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:AugmentedTransferSites in R)
+    nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, sites:AugmentedTransferSites in R)
     -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1137,7 +1137,7 @@ export func inspect_augmented_transfer(
     }
 }
 
-func checked_assignment_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
+func checked_assignment_sites(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                               operands:const AssignmentOperands in A, sites:AssignmentSites in R,
                               mode:AssignmentSyntax) -> AssignmentSyntax where {const owner N, const owner A, owner R} {
     if (!published_syntax_id(nodes, revision, at, operands.destination) ||
@@ -1148,7 +1148,7 @@ func checked_assignment_sites(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-export func inspect_assignment(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_assignment(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                sites:AssignmentSites in R) -> AssignmentSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidAssignment:AssignmentSyntax;
     return case nodes[at] of {
@@ -1178,7 +1178,7 @@ export func inspect_assignment(nodes:const ExprNodes in N, revision:u64, used:u6
 }
 
 # Named operators are compared by spelling during binding.
-export func named_operator_at(nodes:const ExprNodes in N, at:u64) -> u64 where {const owner N} {
+export func named_operator_at(nodes:const ExprNodes in N, at:UInt64) -> UInt64 where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
         (Vacant) -> { no_node() };
@@ -1193,18 +1193,18 @@ export func named_operator_at(nodes:const ExprNodes in N, at:u64) -> u64 where {
     };
 }
 
-export data BindingSites { name:u64; annotation:u64; target_type:u64; owner_name:u64; readonly:bool; }
-export enum BindingSyntax:u8 { InvalidBindingSyntax; BareBinding; TypedBinding; RecoveredBinding; }
+export data BindingSites { name:UInt64; annotation:UInt64; target_type:UInt64; owner_name:UInt64; readonly:bool; }
+export enum BindingSyntax:UInt8 { InvalidBindingSyntax; BareBinding; TypedBinding; RecoveredBinding; }
 
-func has_error_role(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+func has_error_role(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     expected:SyntaxRole) -> bool
     where {const owner N} {
     ref role = make SyntaxRole { expected };
-    ref report = make u64 { no_node() };
+    ref report = make UInt64 { no_node() };
     return inspect_error_report(nodes, revision, used, at, role, report) && role == expected
 }
 
-func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+func recovered_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     sites:BindingSites in S) -> bool
     where {const owner N, owner S} {
     if (has_error_role(nodes, revision, used, at, TypeAnnotationRole:SyntaxRole)) {
@@ -1235,7 +1235,7 @@ func recovered_type(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
     }
 }
 
-export func inspect_type_annotation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_type_annotation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:BindingSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     sites.annotation <- at;
@@ -1260,7 +1260,7 @@ export func inspect_type_annotation(nodes:const ExprNodes in N, revision:u64, us
     };
 }
 
-export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                             sites:BindingSites in S) -> BindingSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidBindingSyntax:BindingSyntax;
     val named <- false;
@@ -1309,7 +1309,7 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:u64, used:u64, 
     };
 }
 
-export func is_here_formal(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
+export func is_here_formal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> bool where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -1322,10 +1322,10 @@ export func is_here_formal(nodes:const ExprNodes in N, used:u64, at:u64) -> bool
     };
 }
 
-export enum FormalSyntax:u8 { InvalidFormal; OrdinaryFormal; HereFormalSyntax; }
-export data FormalSites { binding:u64; signature:u64; mode:FormalMode; }
+export enum FormalSyntax:UInt8 { InvalidFormal; OrdinaryFormal; HereFormalSyntax; }
+export data FormalSites { binding:UInt64; signature:UInt64; mode:FormalMode; }
 
-func is_formal_node(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func is_formal_node(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of { (Formal) -> { true }; (HereFormal) -> { true }; (_) -> { false }; }
@@ -1334,10 +1334,10 @@ func is_formal_node(nodes:const ExprNodes in N, at:u64) -> bool where {const own
     };
 }
 
-func valid_prefixed_formal(nodes:const ExprNodes in N, revision:u64, at:u64, binding:u64,
+func valid_prefixed_formal(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, binding:UInt64,
                            previous:const NodeLink in P, mode:FormalMode, fixed:bool) -> bool
     where {const owner N, const owner P} {
-    ref prior = make u64 { no_node() };
+    ref prior = make UInt64 { no_node() };
     if (!optional_syntax_link(nodes, revision, at, previous, prior) ||
         (prior != no_node() && !is_formal_node(nodes, prior))) return false;
     ref typed = make BindingSites {
@@ -1351,7 +1351,7 @@ func valid_prefixed_formal(nodes:const ExprNodes in N, revision:u64, at:u64, bin
     return mode == (ReferenceSlotFormal:FormalMode);
 }
 
-export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_formal(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                             sites:FormalSites in R) -> FormalSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidFormal:FormalSyntax;
     return case nodes[at] of {
@@ -1387,8 +1387,8 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:u64, used:u64, a
     };
 }
 
-export func formal_variadic_at(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
-    -> u64 where {const owner N} {
+export func formal_variadic_at(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64)
+    -> UInt64 where {const owner N} {
     ref sites = make FormalSites {
         binding <- no_node(); signature <- no_node(); mode <- (ValueFormal:FormalMode);
     };
@@ -1405,7 +1405,7 @@ export func formal_variadic_at(nodes:const ExprNodes in N, revision:u64, used:u6
     }
 }
 
-export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
+export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> bool
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1422,7 +1422,7 @@ export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:u64, us
     };
 }
 
-export enum SignatureSyntax:u8 {
+export enum SignatureSyntax:UInt8 {
     OtherSignatureSyntax;
     InvalidSignature;
     SignatureHead;
@@ -1437,14 +1437,14 @@ export enum SignatureSyntax:u8 {
 }
 
 export data SignatureSites {
-    previous:u64;
-    name:u64;
-    annotation:u64;
-    parameter_tail:u64;
+    previous:UInt64;
+    name:UInt64;
+    annotation:UInt64;
+    parameter_tail:UInt64;
     readonly:bool;
 }
 
-func signature_step(nodes:const ExprNodes in N, revision:u64, at:u64,
+func signature_step(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                     previous:const NodeId in P, annotation:const NodeId in A, readonly:bool,
                     sites:SignatureSites in S, mode:SignatureSyntax) -> SignatureSyntax
     where {const owner N, const owner P, const owner A, owner S} {
@@ -1456,7 +1456,7 @@ func signature_step(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-func read_signature_header(nodes:const ExprNodes in N, revision:u64, at:u64,
+func read_signature_header(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                             name:const NodeId in I, parameters:const NodeLink in P, required:NameSyntax,
                             sites:SignatureSites in S, shape:SignatureSyntax) -> SignatureSyntax
     where {const owner N, const owner I, const owner P, owner S} {
@@ -1473,7 +1473,7 @@ func read_signature_header(nodes:const ExprNodes in N, revision:u64, at:u64,
     return shape;
 }
 
-export func inspect_signature(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_signature(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:SignatureSites in S) -> SignatureSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSignature:SignatureSyntax;
     return case nodes[at] of {
@@ -1526,8 +1526,8 @@ export func inspect_signature(nodes:const ExprNodes in N, revision:u64, used:u64
     };
 }
 
-export func find_signature_clause(nodes:const ExprNodes in N, revision:u64, used:u64, tail:u64,
-                                  desired:SignatureSyntax, found:u64 in F) -> bool where {const owner N, owner F} {
+export func find_signature_clause(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, tail:UInt64,
+                                  desired:SignatureSyntax, found:UInt64 in F) -> bool where {const owner N, owner F} {
     if (tail >= used || tail >= intrinsic (len)(nodes)) return false;
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
@@ -1550,9 +1550,9 @@ export func find_signature_clause(nodes:const ExprNodes in N, revision:u64, used
     return false;
 }
 
-export data ScopedProcedureSites { head:u64; signature:u64; body:u64; }
+export data ScopedProcedureSites { head:UInt64; signature:UInt64; body:UInt64; }
 
-func read_scoped_procedure(nodes:const ExprNodes in N, revision:u64, at:u64, header:const NodeId in H,
+func read_scoped_procedure(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, header:const NodeId in H,
                             body:const NodeId in B, sites:ScopedProcedureSites in R)
     -> bool where {const owner N, const owner H, const owner B, owner R} {
     if (!published_syntax_id(nodes, revision, at, header) ||
@@ -1576,7 +1576,7 @@ func read_scoped_procedure(nodes:const ExprNodes in N, revision:u64, at:u64, hea
     return true;
 }
 
-export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                      sites:ScopedProcedureSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1592,8 +1592,8 @@ export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:u64, u
     };
 }
 
-export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-                                         selected:u64 in R) -> bool where {const owner N, owner R} {
+export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+                                         selected:UInt64 in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> {
@@ -1611,13 +1611,13 @@ export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:u6
     }
 }
 
-export enum CallableSyntax:u8 {
+export enum CallableSyntax:UInt8 {
     OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry;
         ModuleCallablePromise;
 }
-export data CallableSites { signature:u64; body:u64; function_form:bool; }
+export data CallableSites { signature:UInt64; body:UInt64; function_form:bool; }
 
-func read_callable_definition(nodes:const ExprNodes in N, revision:u64, at:u64,
+func read_callable_definition(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                               signature:const NodeId in I, body:const NodeId in B, function_form:bool,
                               sites:CallableSites in S, mode:CallableSyntax) -> CallableSyntax
     where {const owner N, const owner I, const owner B, owner S} {
@@ -1629,7 +1629,7 @@ func read_callable_definition(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_callable(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:CallableSites in S) -> CallableSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidCallable:CallableSyntax;
     return case nodes[at] of {
@@ -1669,7 +1669,7 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:u64, used:u64,
     };
 }
 
-export enum DeclarationSyntax:u8 {
+export enum DeclarationSyntax:UInt8 {
     OtherDeclaration;
     InvalidDeclaration;
     NominalRecord;
@@ -1688,23 +1688,23 @@ export enum DeclarationSyntax:u8 {
 }
 
 export data DeclarationSites {
-    name:u64;
-    parent_type:u64;
-    entries:u64;
-    value_type:u64;
-    index_type:u64;
-    owner_name:u64;
+    name:UInt64;
+    parent_type:UInt64;
+    entries:UInt64;
+    value_type:UInt64;
+    index_type:UInt64;
+    owner_name:UInt64;
     readonly:bool;
     nullable:bool;
 }
 
 export data SumArmSites {
-    name:u64;
-    previous:u64;
-    fields:u64;
+    name:UInt64;
+    previous:UInt64;
+    fields:UInt64;
 }
 
-func is_sum_arm(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func is_sum_arm(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
         (Occupied { val syntax <- node; }) -> {
@@ -1716,7 +1716,7 @@ func is_sum_arm(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N
     };
 }
 
-export func inspect_sum_arm(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, sites:SumArmSites in S)
+export func inspect_sum_arm(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, sites:SumArmSites in S)
     -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1739,7 +1739,7 @@ export func inspect_sum_arm(nodes:const ExprNodes in N, revision:u64, used:u64, 
     };
 }
 
-func declaration_name(nodes:const ExprNodes in N, revision:u64, at:u64, name:const NodeId in I,
+func declaration_name(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, name:const NodeId in I,
                       symbolic:bool, sites:DeclarationSites in S) -> bool where {const owner N, const owner I, owner S} {
     if (!published_syntax_id(nodes, revision, at, name)) return false;
     val required <- if (symbolic) { SymbolicName:NameSyntax } else { OrdinaryName:NameSyntax };
@@ -1748,7 +1748,7 @@ func declaration_name(nodes:const ExprNodes in N, revision:u64, at:u64, name:con
     return true;
 }
 
-func nominal_heading(nodes:const ExprNodes in N, revision:u64, at:u64, heading:const NodeId in H,
+func nominal_heading(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, heading:const NodeId in H,
                      sites:DeclarationSites in S) -> bool where {const owner N, const owner H, owner S} {
     if (!published_syntax_id(nodes, revision, at, heading)) return false;
     sites.parent_type <- no_node();
@@ -1770,9 +1770,9 @@ func nominal_heading(nodes:const ExprNodes in N, revision:u64, at:u64, heading:c
     };
 }
 
-export data ValueSymbolSites { name:u64; annotation:u64; explicit_value:bool; }
+export data ValueSymbolSites { name:UInt64; annotation:UInt64; explicit_value:bool; }
 
-func valid_value_symbol(nodes:const ExprNodes in N, revision:u64, at:u64,
+func valid_value_symbol(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
     name:const NodeId in I, annotation:const NodeId in A) -> bool
     where {const owner N, const owner I, const owner A} {
     return published_syntax_id(nodes, revision, at, name) &&
@@ -1781,7 +1781,7 @@ func valid_value_symbol(nodes:const ExprNodes in N, revision:u64, at:u64,
         name_syntax(nodes, at, annotation.index) == (OrdinaryName:NameSyntax)
 }
 
-export func inspect_value_symbol(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_value_symbol(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     sites:ValueSymbolSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1801,7 +1801,7 @@ export func inspect_value_symbol(nodes:const ExprNodes in N, revision:u64, used:
     }
 }
 
-export func inspect_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  sites:DeclarationSites in S) -> DeclarationSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidDeclaration:DeclarationSyntax;
     return case nodes[at] of {
@@ -1894,17 +1894,17 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:u64, used:u
     };
 }
 
-export enum HandleBindingSyntax:u8 { OtherHandleBinding; InvalidHandleBinding; OwnHandleBinding; BorrowHandleBinding; }
+export enum HandleBindingSyntax:UInt8 { OtherHandleBinding; InvalidHandleBinding; OwnHandleBinding; BorrowHandleBinding; }
 
 export data RegionBindingSites {
-    name:u64;
-    schema:u64;
-    input:u64;
+    name:UInt64;
+    schema:UInt64;
+    input:UInt64;
     readonly:bool;
-    transfer_at:u64;
+    transfer_at:UInt64;
 }
 
-export func inspect_region_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_region_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:RegionBindingSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1929,13 +1929,13 @@ export func inspect_region_binding(nodes:const ExprNodes in N, revision:u64, use
 }
 
 export data RegionConstructionSites {
-    schema:u64;
-    capacity:u64;
-    initializers:u64;
-    capacity_at:u64;
+    schema:UInt64;
+    capacity:UInt64;
+    initializers:UInt64;
+    capacity_at:UInt64;
 }
 
-export func inspect_region_construction(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_region_construction(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                          sites:RegionConstructionSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -1957,11 +1957,11 @@ export func inspect_region_construction(nodes:const ExprNodes in N, revision:u64
         };
     };
 }
-export data BoundHandleSites { binding:u64; initializer:u64; readonly:bool; }
-export enum HandleConstructionSyntax:u8 { OtherHandleConstruction; InvalidHandleConstruction; OwnHandleMake; BorrowHandleMake; }
-export data HandleConstructionSites { marker:u64; arguments:u64; actual_owner:u64; }
+export data BoundHandleSites { binding:UInt64; initializer:UInt64; readonly:bool; }
+export enum HandleConstructionSyntax:UInt8 { OtherHandleConstruction; InvalidHandleConstruction; OwnHandleMake; BorrowHandleMake; }
+export data HandleConstructionSites { marker:UInt64; arguments:UInt64; actual_owner:UInt64; }
 
-func read_handle_binding(nodes:const ExprNodes in N, revision:u64, at:u64,
+func read_handle_binding(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                          binding:const NodeId in B, initializer:const NodeId in I,
                          readonly:bool, sites:BoundHandleSites in S, mode:HandleBindingSyntax) -> HandleBindingSyntax
     where {const owner N, const owner B, const owner I, owner S} {
@@ -1973,7 +1973,7 @@ func read_handle_binding(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-export func inspect_handle_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_handle_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:BoundHandleSites in S) -> HandleBindingSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidHandleBinding:HandleBindingSyntax;
     return case nodes[at] of {
@@ -1992,8 +1992,8 @@ export func inspect_handle_binding(nodes:const ExprNodes in N, revision:u64, use
     };
 }
 
-export func native_installation_input(nodes:const ExprNodes in N, revision:u64, used:u64,
-                                      at:u64, input:u64 in R) -> bool
+export func native_installation_input(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+                                      at:UInt64, input:UInt64 in R) -> bool
     where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2013,7 +2013,7 @@ export func native_installation_input(nodes:const ExprNodes in N, revision:u64, 
     }
 }
 
-func read_handle_constructor(nodes:const ExprNodes in N, revision:u64, at:u64, marker:const NodeId in I,
+func read_handle_constructor(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, marker:const NodeId in I,
                              arguments:const NodeLink in L, sites:HandleConstructionSites in S) -> bool
     where {const owner N, const owner I, const owner L, owner S} {
     if (!published_syntax_id(nodes, revision, at, marker) ||
@@ -2023,7 +2023,7 @@ func read_handle_constructor(nodes:const ExprNodes in N, revision:u64, at:u64, m
     return true;
 }
 
-export func inspect_handle_construction(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_handle_construction(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                         sites:HandleConstructionSites in S) -> HandleConstructionSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidHandleConstruction:HandleConstructionSyntax;
     return case nodes[at] of {
@@ -2050,10 +2050,10 @@ export func inspect_handle_construction(nodes:const ExprNodes in N, revision:u64
     };
 }
 
-export data CaseSites { subject:u64; items:u64; }
-export data CaseArmSites { pattern:u64; guard:u64; body:u64; arrow:u64; }
+export data CaseSites { subject:UInt64; items:UInt64; }
+export data CaseArmSites { pattern:UInt64; guard:UInt64; body:UInt64; arrow:UInt64; }
 
-export func inspect_case(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_case(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                          sites:CaseSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2072,7 +2072,7 @@ export func inspect_case(nodes:const ExprNodes in N, revision:u64, used:u64, at:
     };
 }
 
-export func inspect_case_arm(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_case_arm(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                              sites:CaseArmSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2093,9 +2093,9 @@ export func inspect_case_arm(nodes:const ExprNodes in N, revision:u64, used:u64,
     };
 }
 
-export data CaseReceiverSites { previous:u64; destination:u64; selected_field:u64; transfer_at:u64; }
+export data CaseReceiverSites { previous:UInt64; destination:UInt64; selected_field:UInt64; transfer_at:UInt64; }
 
-func is_case_value_receiver(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func is_case_value_receiver(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
@@ -2107,7 +2107,7 @@ func is_case_value_receiver(nodes:const ExprNodes in N, at:u64) -> bool where {c
     };
 }
 
-export func inspect_case_value_receiver(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_case_value_receiver(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                         sites:CaseReceiverSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2140,9 +2140,9 @@ export func inspect_case_value_receiver(nodes:const ExprNodes in N, revision:u64
     };
 }
 
-export data ConstructorCaseSites { constructor:u64; receiver_tail:u64; }
+export data ConstructorCaseSites { constructor:UInt64; receiver_tail:UInt64; }
 
-func valid_case_receiver_sequence(nodes:const ExprNodes in N, revision:u64, pattern:u64, tail:u64, first:u64, end:u64)
+func valid_case_receiver_sequence(nodes:const ExprNodes in N, revision:UInt64, pattern:UInt64, tail:UInt64, first:UInt64, end:UInt64)
     -> bool where {const owner N} {
     val past <- end;
     val current <- tail;
@@ -2160,7 +2160,7 @@ func valid_case_receiver_sequence(nodes:const ExprNodes in N, revision:u64, patt
     return current == no_node();
 }
 
-export func inspect_constructor_case(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_constructor_case(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                      sites:ConstructorCaseSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2184,9 +2184,9 @@ export func inspect_constructor_case(nodes:const ExprNodes in N, revision:u64, u
     };
 }
 
-export data ProtectedSites { body:u64; clauses:u64; discarded:bool; }
+export data ProtectedSites { body:UInt64; clauses:UInt64; discarded:bool; }
 
-export func inspect_protected(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_protected(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:ProtectedSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2207,10 +2207,10 @@ export func inspect_protected(nodes:const ExprNodes in N, revision:u64, used:u64
     };
 }
 
-export enum GuardClauseSyntax:u8 { InvalidGuardClause; HandlerClause; CleanupClause; }
-export data GuardClauseSites { target:u64; previous:u64; }
+export enum GuardClauseSyntax:UInt8 { InvalidGuardClause; HandlerClause; CleanupClause; }
+export data GuardClauseSites { target:UInt64; previous:UInt64; }
 
-export func inspect_guard_clause(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_guard_clause(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  sites:GuardClauseSites in R) -> GuardClauseSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidGuardClause:GuardClauseSyntax;
     return case nodes[at] of {
@@ -2235,9 +2235,9 @@ export func inspect_guard_clause(nodes:const ExprNodes in N, revision:u64, used:
     };
 }
 
-export data CatchSites { name:u64; annotation:u64; readonly:bool; }
+export data CatchSites { name:UInt64; annotation:UInt64; readonly:bool; }
 
-export func inspect_catch_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_catch_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:CatchSites in C) -> bool where {const owner N, owner C} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2258,9 +2258,9 @@ export func inspect_catch_binding(nodes:const ExprNodes in N, revision:u64, used
     };
 }
 
-export data HandlerSites { binding:u64; body:u64; }
+export data HandlerSites { binding:UInt64; body:UInt64; }
 
-export func inspect_handler(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_handler(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                              sites:HandlerSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2280,10 +2280,10 @@ export func inspect_handler(nodes:const ExprNodes in N, revision:u64, used:u64, 
     };
 }
 
-export data EnumMemberSites { name:u64; previous:u64; initializer:u64; }
-export data EnumIntegerSyntax { magnitude:u64; negative:bool; width:u64; }
+export data EnumMemberSites { name:UInt64; previous:UInt64; initializer:UInt64; }
+export data EnumIntegerSyntax { magnitude:UInt64; negative:bool; width:UInt64; }
 
-export func inspect_enum_member(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_enum_member(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:EnumMemberSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2303,7 +2303,7 @@ export func inspect_enum_member(nodes:const ExprNodes in N, revision:u64, used:u
     };
 }
 
-export func inspect_enum_integer(nodes:const ExprNodes in N, used:u64, at:u64,
+export func inspect_enum_integer(nodes:const ExprNodes in N, used:UInt64, at:UInt64,
                                  literal:EnumIntegerSyntax in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2322,16 +2322,16 @@ export func inspect_enum_integer(nodes:const ExprNodes in N, used:u64, at:u64,
     };
 }
 
-export enum BinarySyntax:u8 { OtherBinary; InvalidBinary; ArithmeticBinary; ComparisonBinary; ConcatBinary; }
+export enum BinarySyntax:UInt8 { OtherBinary; InvalidBinary; ArithmeticBinary; ComparisonBinary; ConcatBinary; }
 export data BinarySites {
-    left_operand:u64;
-    right_operand:u64;
-    operator_at:u64;
+    left_operand:UInt64;
+    right_operand:UInt64;
+    operator_at:UInt64;
     arithmetic:ArithmeticOperation;
     relation:ComparisonRelation;
 }
 
-func binary_children(nodes:const ExprNodes in N, revision:u64, at:u64,
+func binary_children(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                      operands:const BinaryOperands in B, sites:BinarySites in S) -> bool
     where {const owner N, const owner B, owner S} {
     if (!published_syntax_id(nodes, revision, at, operands.left_operand) ||
@@ -2342,7 +2342,7 @@ func binary_children(nodes:const ExprNodes in N, revision:u64, at:u64,
     return true;
 }
 
-export func inspect_binary(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_binary(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                             sites:BinarySites in S) -> BinarySyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidBinary:BinarySyntax;
     return case nodes[at] of {
@@ -2369,9 +2369,9 @@ export func inspect_binary(nodes:const ExprNodes in N, revision:u64, used:u64, a
     };
 }
 
-export data ConditionalSites { test:u64; consequent:u64; alternative:u64; }
+export data ConditionalSites { test:UInt64; consequent:UInt64; alternative:UInt64; }
 
-export func inspect_conditional(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_conditional(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:ConditionalSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2393,9 +2393,9 @@ export func inspect_conditional(nodes:const ExprNodes in N, revision:u64, used:u
     };
 }
 
-export data LocalBindingSites { binding:u64; initializer:u64; mode:LocalMode; declaration_const:bool; }
+export data LocalBindingSites { binding:UInt64; initializer:UInt64; mode:LocalMode; declaration_const:bool; }
 
-export func inspect_local_binding(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_local_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                   sites:LocalBindingSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2418,7 +2418,7 @@ export func inspect_local_binding(nodes:const ExprNodes in N, revision:u64, used
     };
 }
 
-export func fixed_reference_local(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
+export func fixed_reference_local(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64)
     -> bool where {const owner N} {
     ref local = make LocalBindingSites {
         binding <- no_node(); initializer <- no_node(); mode <- (ReferenceLocal:LocalMode); declaration_const <- false;
@@ -2427,9 +2427,9 @@ export func fixed_reference_local(nodes:const ExprNodes in N, revision:u64, used
         local.mode == (ReferenceLocal:LocalMode) && local.declaration_const
 }
 
-export data FieldSelectionSites { receiver:u64; field:u64; }
+export data FieldSelectionSites { receiver:UInt64; field:UInt64; }
 
-export func inspect_field_selection(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_field_selection(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:FieldSelectionSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2450,9 +2450,9 @@ export func inspect_field_selection(nodes:const ExprNodes in N, revision:u64, us
     };
 }
 
-export enum InvocationSyntax:u8 { NotAnInvocation; InvalidCallSyntax; OrdinaryInvocation; EffectfulInvocation; }
+export enum InvocationSyntax:UInt8 { NotAnInvocation; InvalidCallSyntax; OrdinaryInvocation; EffectfulInvocation; }
 
-export func inspect_invocation(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:DirectCallSites in R) -> InvocationSyntax where {const owner N, owner R} {
     val ordinary <- direct_invocation(nodes, revision, used, at, sites);
     if (ordinary == (InvalidInvocation:DirectInvocationSyntax)) return InvalidCallSyntax:InvocationSyntax;
@@ -2474,10 +2474,10 @@ export func inspect_invocation(nodes:const ExprNodes in N, revision:u64, used:u6
     };
 }
 
-export enum DeferSyntax:u8 { NotADefer; InvalidDefer; DeferCall; DeferBody; DeferFallback; }
-export data DeferSites { operand:u64; invocation:u64; clauses:u64; }
+export enum DeferSyntax:UInt8 { NotADefer; InvalidDefer; DeferCall; DeferBody; DeferFallback; }
+export data DeferSites { operand:UInt64; invocation:UInt64; clauses:UInt64; }
 
-export func inspect_defer(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_defer(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                            sites:DeferSites in S) -> DeferSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidDefer:DeferSyntax;
     return case nodes[at] of {
@@ -2509,10 +2509,10 @@ export func inspect_defer(nodes:const ExprNodes in N, revision:u64, used:u64, at
     };
 }
 
-export data IndexSites { target:u64; index:u64; }
+export data IndexSites { target:UInt64; index:UInt64; }
 
-export func inspect_index_selection(nodes:const ExprNodes in N, revision:u64, used:u64,
-    at:u64, sites:IndexSites in R) -> bool where {const owner N, owner R} {
+export func inspect_index_selection(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    at:UInt64, sites:IndexSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> {
@@ -2531,12 +2531,12 @@ export func inspect_index_selection(nodes:const ExprNodes in N, revision:u64, us
     }
 }
 
-export enum CasePatternSyntax:u8 {
+export enum CasePatternSyntax:UInt8 {
     InvalidCasePattern; AnyCaseTarget; NullCaseTarget; FalseCaseTarget; TrueCaseTarget;
     NamedCaseMember; ConstructorCaseTarget;
 }
 
-export func case_pattern(nodes:const ExprNodes in N, used:u64, at:u64) -> CasePatternSyntax where {const owner N} {
+export func case_pattern(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> CasePatternSyntax where {const owner N} {
     if (at == no_node()) return AnyCaseTarget:CasePatternSyntax;
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidCasePattern:CasePatternSyntax;
     return case nodes[at] of {
@@ -2555,9 +2555,9 @@ export func case_pattern(nodes:const ExprNodes in N, used:u64, at:u64) -> CasePa
     };
 }
 
-export enum TextLiteralSyntax:u8 { NotTextLiteral; NulFreeLiteral; InteriorNulLiteral; }
+export enum TextLiteralSyntax:UInt8 { NotTextLiteral; NulFreeLiteral; InteriorNulLiteral; }
 
-export func text_literal_syntax(nodes:const ExprNodes in N, used:u64, at:u64) -> TextLiteralSyntax where {const owner N} {
+export func text_literal_syntax(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> TextLiteralSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return NotTextLiteral:TextLiteralSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotTextLiteral:TextLiteralSyntax };
@@ -2572,8 +2572,8 @@ export func text_literal_syntax(nodes:const ExprNodes in N, used:u64, at:u64) ->
     };
 }
 
-export func predicate_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64)
-    -> u64 where {const owner N} {
+export func predicate_operand(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64)
+    -> UInt64 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
@@ -2589,9 +2589,9 @@ export func predicate_operand(nodes:const ExprNodes in N, revision:u64, used:u64
     }
 }
 
-export data AssertionSites { operand:u64; annotation:u64; colon:u64; }
+export data AssertionSites { operand:UInt64; annotation:UInt64; colon:UInt64; }
 
-export func inspect_type_assertion(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_type_assertion(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:AssertionSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2612,9 +2612,9 @@ export func inspect_type_assertion(nodes:const ExprNodes in N, revision:u64, use
     };
 }
 
-export enum OwnerConstraintSyntax:u8 { NotOwnerConstraint; ReadonlyOwnerConstraint; WritableOwnerConstraint; }
+export enum OwnerConstraintSyntax:UInt8 { NotOwnerConstraint; ReadonlyOwnerConstraint; WritableOwnerConstraint; }
 
-export func owner_constraint_syntax(nodes:const ExprNodes in N, at:u64) -> OwnerConstraintSyntax where {const owner N} {
+export func owner_constraint_syntax(nodes:const ExprNodes in N, at:UInt64) -> OwnerConstraintSyntax where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return NotOwnerConstraint:OwnerConstraintSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotOwnerConstraint:OwnerConstraintSyntax };
@@ -2629,7 +2629,7 @@ export func owner_constraint_syntax(nodes:const ExprNodes in N, at:u64) -> Owner
     };
 }
 
-export func binds_local_storage(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func binds_local_storage(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -2642,7 +2642,7 @@ export func binds_local_storage(nodes:const ExprNodes in N, at:u64) -> bool wher
     };
 }
 
-export enum ConstructionSyntax:u8 {
+export enum ConstructionSyntax:UInt8 {
     OtherConstruction;
     InvalidConstruction;
     StorageReservation;
@@ -2651,9 +2651,9 @@ export enum ConstructionSyntax:u8 {
     ExceptionConstructionSyntax;
 }
 
-export data NamedThrowSites { requested:u64; fields:u64; cause:u64; }
+export data NamedThrowSites { requested:UInt64; fields:UInt64; cause:UInt64; }
 
-export func inspect_named_throw(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_named_throw(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:NamedThrowSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
@@ -2676,8 +2676,8 @@ export func inspect_named_throw(nodes:const ExprNodes in N, revision:u64, used:u
     };
 }
 
-export func first_named_throw(nodes:const ExprNodes in N, revision:u64,
-    used:u64) -> u64 where {const owner N} {
+export func first_named_throw(nodes:const ExprNodes in N, revision:UInt64,
+    used:UInt64) -> UInt64 where {const owner N} {
     ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
         no_node(); };
     for (at in 0u64 .. used) {
@@ -2687,15 +2687,15 @@ export func first_named_throw(nodes:const ExprNodes in N, revision:u64,
 }
 
 export data ConstructionSites {
-    requested:u64;
-    queried_operand:u64;
-    placement:u64;
-    initializer:u64;
-    contents:u64;
+    requested:UInt64;
+    queried_operand:UInt64;
+    placement:UInt64;
+    initializer:UInt64;
+    contents:UInt64;
 }
 
-func optional_syntax_link(nodes:const ExprNodes in N, revision:u64, at:u64,
-                          link:const NodeLink in L, selected:u64 in S) -> bool
+func optional_syntax_link(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
+                          link:const NodeLink in L, selected:UInt64 in S) -> bool
     where {const owner N, const owner L, owner S} {
     return case link of {
         (NoLink) -> { selected <- no_node(); true };
@@ -2707,10 +2707,10 @@ func optional_syntax_link(nodes:const ExprNodes in N, revision:u64, at:u64,
     };
 }
 
-func construction_initializer(nodes:const ExprNodes in N, revision:u64, at:u64,
+func construction_initializer(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                               sites:ConstructionSites in R) -> ConstructionSyntax where {const owner N, owner R} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     return case nodes[at] of {
         (Vacant) -> { InvalidConstruction:ConstructionSyntax };
         (Occupied { val syntax <- node; }) -> {
@@ -2743,7 +2743,7 @@ func construction_initializer(nodes:const ExprNodes in N, revision:u64, at:u64,
     };
 }
 
-func read_construction_type(nodes:const ExprNodes in N, revision:u64, at:u64, requested:const NodeId in Q,
+func read_construction_type(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, requested:const NodeId in Q,
                             sites:ConstructionSites in R) -> bool where {const owner N, const owner Q, owner R} {
     if (!published_syntax_id(nodes, revision, at, requested)) return false;
     sites.requested <- requested.index;
@@ -2764,7 +2764,7 @@ func read_construction_type(nodes:const ExprNodes in N, revision:u64, at:u64, re
     };
 }
 
-export func inspect_construction(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_construction(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  sites:ConstructionSites in R) -> ConstructionSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidConstruction:ConstructionSyntax;
     return case nodes[at] of {
@@ -2784,7 +2784,7 @@ export func inspect_construction(nodes:const ExprNodes in N, revision:u64, used:
     };
 }
 
-export func reserves_storage(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> bool
+export func reserves_storage(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> bool
     where {const owner N} {
     ref sites = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -2793,9 +2793,9 @@ export func reserves_storage(nodes:const ExprNodes in N, revision:u64, used:u64,
     return inspect_construction(nodes, revision, used, at, sites) == (StorageReservation:ConstructionSyntax);
 }
 
-export enum BooleanSyntax:u8 { OtherBooleanSyntax; LiteralFalse; LiteralTrue; }
+export enum BooleanSyntax:UInt8 { OtherBooleanSyntax; LiteralFalse; LiteralTrue; }
 
-export func boolean_literal(nodes:const ExprNodes in N, used:u64, at:u64) -> BooleanSyntax where {const owner N} {
+export func boolean_literal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> BooleanSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return OtherBooleanSyntax:BooleanSyntax;
     return case nodes[at] of {
         (Vacant) -> { OtherBooleanSyntax:BooleanSyntax };
@@ -2810,11 +2810,11 @@ export func boolean_literal(nodes:const ExprNodes in N, used:u64, at:u64) -> Boo
     };
 }
 
-export enum LogicalSyntax:u8 { OtherLogicalSyntax; InvalidLogical; LogicalNot; LogicalAnd; LogicalOr; }
-export enum RhsEvaluation:u8 { ConditionalRhs; SkipsRhs; TakesRhs; }
-export data LogicalSites { left_operand:u64; right_operand:u64; right_evaluation:RhsEvaluation; }
+export enum LogicalSyntax:UInt8 { OtherLogicalSyntax; InvalidLogical; LogicalNot; LogicalAnd; LogicalOr; }
+export enum RhsEvaluation:UInt8 { ConditionalRhs; SkipsRhs; TakesRhs; }
+export data LogicalSites { left_operand:UInt64; right_operand:UInt64; right_evaluation:RhsEvaluation; }
 
-func logical_operands(nodes:const ExprNodes in N, revision:u64, at:u64,
+func logical_operands(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                       left:const NodeId in L, right:const NodeId in R,
                       sites:LogicalSites in S, mode:LogicalSyntax) -> LogicalSyntax
     where {const owner N, const owner L, const owner R, owner S} {
@@ -2833,7 +2833,7 @@ func logical_operands(nodes:const ExprNodes in N, revision:u64, at:u64,
     return mode;
 }
 
-export func inspect_logical(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func inspect_logical(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                             sites:LogicalSites in S) -> LogicalSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidLogical:LogicalSyntax;
     return case nodes[at] of {
@@ -2859,21 +2859,21 @@ export func inspect_logical(nodes:const ExprNodes in N, revision:u64, used:u64, 
     };
 }
 
-export func equal_words() -> u64 { return 0u64; }
-export func unequal_words() -> u64 { return 1u64; }
-export func less_words() -> u64 { return 2u64; }
-export func at_most_words() -> u64 { return 3u64; }
-export func greater_words() -> u64 { return 4u64; }
-export func at_least_words() -> u64 { return 5u64; }
+export func equal_words() -> UInt64 { return 0u64; }
+export func unequal_words() -> UInt64 { return 1u64; }
+export func less_words() -> UInt64 { return 2u64; }
+export func at_most_words() -> UInt64 { return 3u64; }
+export func greater_words() -> UInt64 { return 4u64; }
+export func at_least_words() -> UInt64 { return 5u64; }
 
-export func procedure_definition() -> u64 { return 0u64; }
-export func function_definition() -> u64 { return 1u64; }
-export func no_node() -> u64 { return 18446744073709551615u64; }
+export func procedure_definition() -> UInt64 { return 0u64; }
+export func function_definition() -> UInt64 { return 1u64; }
+export func no_node() -> UInt64 { return 18446744073709551615u64; }
 
-export enum GroupSyntax:u8 { OtherGroupSyntax; InvalidGroup; ParenthesizedExpression; }
+export enum GroupSyntax:UInt8 { OtherGroupSyntax; InvalidGroup; ParenthesizedExpression; }
 
-export func inspect_group(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-                          inner:u64 in R) -> GroupSyntax where {const owner N, owner R} {
+export func inspect_group(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+                          inner:UInt64 in R) -> GroupSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidGroup:GroupSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidGroup:GroupSyntax };
@@ -2890,10 +2890,10 @@ export func inspect_group(nodes:const ExprNodes in N, revision:u64, used:u64, at
     };
 }
 
-export func ungrouped(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64) -> u64 where {const owner N} {
+export func ungrouped(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> UInt64 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     val current <- at;
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     val shape <- InvalidGroup:GroupSyntax;
     for (unused in 0u64 .. at + 1u64) {
         shape <- inspect_group(nodes, revision, used, current, inner);
@@ -2904,7 +2904,7 @@ export func ungrouped(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64
     return no_node();
 }
 
-export func is_invocation(nodes:const ExprNodes in N, used:u64, at:u64) -> bool where {const owner N} {
+export func is_invocation(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> bool where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -2919,7 +2919,7 @@ export func is_invocation(nodes:const ExprNodes in N, used:u64, at:u64) -> bool 
     };
 }
 
-export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func is_function(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         Vacant -> false;
@@ -2934,7 +2934,7 @@ export func is_function(nodes:const ExprNodes in N, at:u64) -> bool where {const
     }
 }
 
-export func is_scope_block(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+export func is_scope_block(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
@@ -2947,9 +2947,9 @@ export func is_scope_block(nodes:const ExprNodes in N, at:u64) -> bool where {co
     };
 }
 
-export enum CompletionSyntax:u8 { NotACompletion; ReturnCompletion; ContinueCompletion; BreakCompletion; }
+export enum CompletionSyntax:UInt8 { NotACompletion; ReturnCompletion; ContinueCompletion; BreakCompletion; }
 
-export func completion_syntax(nodes:const ExprNodes in N, at:u64) -> CompletionSyntax where {const owner N} {
+export func completion_syntax(nodes:const ExprNodes in N, at:UInt64) -> CompletionSyntax where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return NotACompletion:CompletionSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotACompletion:CompletionSyntax };
@@ -2967,14 +2967,14 @@ export func completion_syntax(nodes:const ExprNodes in N, at:u64) -> CompletionS
     };
 }
 
-func ready_completion_value(nodes:const ExprNodes in N, revision:u64, at:u64, value:const NodeId in V,
-                             operand:u64 in R) -> bool where {const owner N, const owner V, owner R} {
+func ready_completion_value(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, value:const NodeId in V,
+                             operand:UInt64 in R) -> bool where {const owner N, const owner V, owner R} {
     if (!published_syntax_id(nodes, revision, at, value)) return false;
     operand <- value.index;
     return true;
 }
 
-export func completion_operand(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64, operand:u64 in R) -> bool
+export func completion_operand(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64, operand:UInt64 in R) -> bool
     where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     operand <- no_node();
@@ -2994,15 +2994,15 @@ export func completion_operand(nodes:const ExprNodes in N, revision:u64, used:u6
     };
 }
 
-export func len(tokens:const Tokens in T) -> u64 where {const owner T} {
+export func len(tokens:const Tokens in T) -> UInt64 where {const owner T} {
     return intrinsic (len)(tokens);
 }
 
-func len(nodes:const ExprNodes in N) -> u64 where {const owner N} {
+func len(nodes:const ExprNodes in N) -> UInt64 where {const owner N} {
     return intrinsic (len)(nodes);
 }
 
-export func parse_report_code(nodes:const ExprNodes in N, used:u64, at:u64) -> u8 where {const owner N} {
+export func parse_report_code(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> UInt8 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return 0u8;
     return case nodes[at] of {
         (Occupied { val syntax <- node; }) -> {
@@ -3015,8 +3015,8 @@ export func parse_report_code(nodes:const ExprNodes in N, used:u64, at:u64) -> u
     }
 }
 
-export func inspect_error_report(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-                                role:SyntaxRole in R, report:u64 in S) -> bool
+export func inspect_error_report(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+                                role:SyntaxRole in R, report:UInt64 in S) -> bool
     where {const owner N, owner R, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {

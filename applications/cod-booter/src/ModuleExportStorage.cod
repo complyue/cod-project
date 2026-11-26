@@ -3,43 +3,43 @@ using "./ParserStorage.cod" { no_node, ResourceNature, FormalMode { ValueFormal 
 # The name span and any builtin path span belong to the catalog's spelling
 # bytes. A source export names its publishing module independently of origin.
 export data ModuleExport {
-    module_first:u64;
-    module_past:u64;
-    name_first:u64;
-    name_past:u64;
-    identity:u64;
-    kind:u8;
+    module_first:UInt64;
+    module_past:UInt64;
+    name_first:UInt64;
+    name_past:UInt64;
+    identity:UInt64;
+    kind:UInt8;
     # Exception types carry checkedness. Ordinary callable exports mark a
     # declared failure contract that a selected source call must check.
-    checked:u8;
-    publishing_module:u64;
-    origin_module:u64;
-    owner_module:u64;
-    owner_identity:u64;
-    shape:u8;
+    checked:UInt8;
+    publishing_module:UInt64;
+    origin_module:UInt64;
+    owner_module:UInt64;
+    owner_identity:UInt64;
+    shape:UInt8;
 }
-export array ModuleExports[u64]:ModuleExport;
+export array ModuleExports[UInt64]:ModuleExport;
 
 export data DefaultMemberRange {
-    first_ordinal:u64;
-    past_ordinal:u64;
-    first_byte:u64;
-    past_byte:u64;
+    first_ordinal:UInt64;
+    past_ordinal:UInt64;
+    first_byte:UInt64;
+    past_byte:UInt64;
 }
 export data DefaultExportRef {
-    public_row:u64;
+    public_row:UInt64;
     nature:ResourceNature;
     members:DefaultMemberRange;
 }
-export array DefaultExportRefs[u64]:DefaultExportRef;
+export array DefaultExportRefs[UInt64]:DefaultExportRef;
 
-export func enum_type() -> u8 { return 26u8; }
-export func sum_type() -> u8 { return 39u8; }
-export func constructor_type() -> u8 { return 40u8; }
+export func enum_type() -> UInt8 { return 26u8; }
+export func sum_type() -> UInt8 { return 39u8; }
+export func constructor_type() -> UInt8 { return 40u8; }
 
-export enum AggregateStorage:u8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
-export enum InterfaceCallableKind:u8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
-export enum ByteFunctionCompletion:u8 { NoByteFunction; CheckedByteFunction; ByteFunctionMayFailBounds; }
+export enum AggregateStorage:UInt8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
+export enum InterfaceCallableKind:UInt8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
+export enum ByteFunctionCompletion:UInt8 { NoByteFunction; CheckedByteFunction; ByteFunctionMayFailBounds; }
 
 export data ByteArrayFailures {
     bounds:bool;
@@ -48,43 +48,43 @@ export data ByteArrayFailures {
     invalid_capacity:bool;
 }
 
-export enum ExceptionSchema:u8 { OrdinarySchema; CheckedExceptionSchema; UncheckedExceptionSchema; }
+export enum ExceptionSchema:UInt8 { OrdinarySchema; CheckedExceptionSchema; UncheckedExceptionSchema; }
 
 # Every membership header already identifies its defining source row. In
 # a variadic singleton it is also the identity of the sole implementation.
-export enum FamilyMembership:u8 { UnprovedMembership; PromiseOnly; FixedMethods; VariadicMethod; }
+export enum FamilyMembership:UInt8 { UnprovedMembership; PromiseOnly; FixedMethods; VariadicMethod; }
 
 export data CallableObjectView =
     NoCallableObjectView {} |
     PublishedObjectView {
-        public_row:u64;
-        publisher:u64;
-        defining_module:u64;
-        declaration:u64;
-        incoming_context:u64;
-        selected_context:u64;
+        public_row:UInt64;
+        publisher:UInt64;
+        defining_module:UInt64;
+        declaration:UInt64;
+        incoming_context:UInt64;
+        selected_context:UInt64;
     };
 
-export func callable_view_interface() -> u8 { return 41u8 }
+export func callable_view_interface() -> UInt8 { return 41u8 }
 
 export data CallableUseProof =
     UnselectedCallable {} |
     CheckedCallableUse {
-        site:u64;
-        revision:u64;
-        public_row:u64;
-        publisher:u64;
-        defining_module:u64;
-        declaration:u64;
-        incoming_context:u64;
-        selected_context:u64;
-        ordinal:u64;
+        site:UInt64;
+        revision:UInt64;
+        public_row:UInt64;
+        publisher:UInt64;
+        defining_module:UInt64;
+        declaration:UInt64;
+        incoming_context:UInt64;
+        selected_context:UInt64;
+        ordinal:UInt64;
     };
-export array CallableUseProofs[u64]:CallableUseProof;
-export enum ReceiverImportCheck:u8 { NoReceiverCallables; ReceiverCallablesReady; OtherReceiverResource; }
+export array CallableUseProofs[UInt64]:CallableUseProof;
+export enum ReceiverImportCheck:UInt8 { NoReceiverCallables; ReceiverCallablesReady; OtherReceiverResource; }
 
-export func checked_callable_context(proof:const CallableUseProofs in F, row:u64, revision:u64)
-    -> u64 where {const owner F} {
+export func checked_callable_context(proof:const CallableUseProofs in F, row:UInt64, revision:UInt64)
+    -> UInt64 where {const owner F} {
     if (row >= intrinsic (len)(proof)) return no_node();
     return case proof[row] of {
         CheckedCallableUse { val origin <- revision; val context <- selected_context; } ->
@@ -93,8 +93,8 @@ export func checked_callable_context(proof:const CallableUseProofs in F, row:u64
     }
 }
 
-export func matches_object_call(proof:const CallableUseProofs in F, row:u64, revision:u64,
-    site:u64, public_row:u64, publisher:u64, module:u64, declaration:u64, native_function:u64)
+export func matches_object_call(proof:const CallableUseProofs in F, row:UInt64, revision:UInt64,
+    site:UInt64, public_row:UInt64, publisher:UInt64, module:UInt64, declaration:UInt64, native_function:UInt64)
     -> bool where {const owner F} {
     if (row >= intrinsic (len)(proof) || native_function == no_node()) return false;
     return case proof[row] of {
@@ -112,39 +112,39 @@ export func matches_object_call(proof:const CallableUseProofs in F, row:u64, rev
 export data SumInterfacePayload =
     NoSumInterface {} |
     SumInterface {} |
-    ConstructorReference { defining_module:u64; declaration:u64; } |
-    ConstructorInterface { sum_module:u64; sum_declaration:u64; } |
-    ConstructorField { field_kind:u8; field_module:u64; field_identity:u64; mode:FormalMode; readonly:bool; };
+    ConstructorReference { defining_module:UInt64; declaration:UInt64; } |
+    ConstructorInterface { sum_module:UInt64; sum_declaration:UInt64; } |
+    ConstructorField { field_kind:UInt8; field_module:UInt64; field_identity:UInt64; mode:FormalMode; readonly:bool; };
 
 # An interface header has value_kind zero and precedes its entries. A here
 # operation lists its supplier, then receivers. A record lists its fields.
 # Both declarations and nominal types retain their defining-module identity.
 export data ModuleInterfaceRow {
-    defining_module:u64;
-    declaration:u64;
-    entry_count:u64;
-    owner_count:u64;
-    interface_kind:u8;
-    result_kind:u8;
-    element_kind:u8;
-    value_kind:u8;
-    type_module:u64;
-    type_identity:u64;
-    owner_role:u64;
-    target_readonly:u8;
-    owner_readonly:u8;
-    has_here:u8;
-    failure_checked:u8;
-    failure_module:u64;
-    failure_identity:u64;
-    name_first:u64;
-    name_past:u64;
-    enum_code:u64;
-    native_function:u64;
+    defining_module:UInt64;
+    declaration:UInt64;
+    entry_count:UInt64;
+    owner_count:UInt64;
+    interface_kind:UInt8;
+    result_kind:UInt8;
+    element_kind:UInt8;
+    value_kind:UInt8;
+    type_module:UInt64;
+    type_identity:UInt64;
+    owner_role:UInt64;
+    target_readonly:UInt8;
+    owner_readonly:UInt8;
+    has_here:UInt8;
+    failure_checked:UInt8;
+    failure_module:UInt64;
+    failure_identity:UInt64;
+    name_first:UInt64;
+    name_past:UInt64;
+    enum_code:UInt64;
+    native_function:UInt64;
     callable_kind:InterfaceCallableKind;
     membership:FamilyMembership;
-    native_reception:u8;
-    native_passes_owner:u8;
+    native_reception:UInt8;
+    native_passes_owner:UInt8;
     sum_payload:SumInterfacePayload;
     aggregate_storage:AggregateStorage;
     exception_schema:ExceptionSchema;
@@ -158,10 +158,10 @@ export data ModuleInterfaceRow {
     # A source parameter may require its substituted owner to allocate.
     source_allocates:bool;
 }
-export array ModuleInterfaces[u64]:ModuleInterfaceRow;
+export array ModuleInterfaces[UInt64]:ModuleInterfaceRow;
 
-export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:u64, declaration:u64,
-                                   kind:u8, result:u8, entries:u64) -> void where {owner R} {
+export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:UInt64, declaration:UInt64,
+                                   kind:UInt8, result:UInt8, entries:UInt64) -> void where {owner R} {
     row.defining_module <- defining_module;
     row.declaration <- declaration;
     row.entry_count <- entries;
@@ -202,8 +202,8 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     return;
 }
 
-export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64, declaration:u64,
-                         kind:u8, entries:u64, first:u64, past:u64, payload:const SumInterfacePayload in P) -> void
+export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:UInt64, declaration:UInt64,
+                         kind:UInt8, entries:UInt64, first:UInt64, past:UInt64, payload:const SumInterfacePayload in P) -> void
     where {owner I, const owner P} {
     interfaces[row] <- make ModuleInterfaceRow {
         defining_module <- module; declaration <- declaration; entry_count <- entries; owner_count <- 0u64;
@@ -227,7 +227,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:u64, module:u64,
     return;
 }
 
-export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publisher:u64,
+export func write_object_view(interfaces:ModuleInterfaces in I, at:UInt64, publisher:UInt64,
     view:const CallableObjectView in V) -> void where {owner I, const owner V} {
     interfaces[at] <- make ModuleInterfaceRow {
         defining_module <- publisher; declaration <- no_node(); entry_count <- 0u64; owner_count <- 0u64;
@@ -250,7 +250,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:u64, publishe
     return
 }
 
-export func find_interface(interfaces:const ModuleInterfaces in I, published:u64, defining_module:u64, declaration:u64) -> u64
+export func find_interface(interfaces:const ModuleInterfaces in I, published:UInt64, defining_module:UInt64, declaration:UInt64) -> UInt64
     where {const owner I} {
     if (published > intrinsic (len)(interfaces)) return no_node();
     val row <- 0u64;
@@ -275,7 +275,7 @@ func sum_field_row(row:const ModuleInterfaceRow in R) -> bool where {const owner
     };
 }
 
-func constructor_parent(row:const ModuleInterfaceRow in R, module:u64, declaration:u64) -> bool where {const owner R} {
+func constructor_parent(row:const ModuleInterfaceRow in R, module:UInt64, declaration:UInt64) -> bool where {const owner R} {
     return case row.sum_payload of {
         (ConstructorInterface { val parent_module <- sum_module; val parent_declaration <- sum_declaration; }) -> {
             parent_module == module && parent_declaration == declaration
@@ -284,7 +284,7 @@ func constructor_parent(row:const ModuleInterfaceRow in R, module:u64, declarati
     };
 }
 
-export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, published:u64, parent:u64, entry:u64) -> u64
+export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, published:UInt64, parent:UInt64, entry:UInt64) -> UInt64
     where {const owner I} {
     if (published > intrinsic (len)(interfaces) || parent >= published ||
         interfaces[parent].interface_kind != sum_type() || interfaces[parent].value_kind != 0u8 ||
@@ -312,8 +312,8 @@ export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, publ
     return constructor;
 }
 
-export func checked_aggregate_storage(interfaces:const ModuleInterfaces in I, published:u64, module:u64,
-                                      declaration:u64, kind:u8) -> AggregateStorage where {const owner I} {
+export func checked_aggregate_storage(interfaces:const ModuleInterfaces in I, published:UInt64, module:UInt64,
+                                      declaration:UInt64, kind:UInt8) -> AggregateStorage where {const owner I} {
     val head <- find_interface(interfaces, published, module, declaration);
     if (head == no_node() || interfaces[head].interface_kind != kind) return (UnprovedAggregate:AggregateStorage);
     val storage <- interfaces[head].aggregate_storage;

@@ -7,118 +7,118 @@ using "./ParserStorage.cod" no_node;
 # and invocations consume preceding argument commands in source order.
 # A checked arithmetic command writes a value and a separate fault category.
 export data NativeCommand {
-    opcode:u8;
-    a:u64;
-    b:u64;
-    c:u64;
-    d:u64;
+    opcode:UInt8;
+    a:UInt64;
+    b:UInt64;
+    c:UInt64;
+    d:UInt64;
 }
-export array NativeCommands[u64]:NativeCommand;
+export array NativeCommands[UInt64]:NativeCommand;
 
 export data NativeLiteralRange {
-    first:u64;
-    past:u64;
+    first:UInt64;
+    past:UInt64;
 }
-export array NativeLiteralRanges[u64]:NativeLiteralRange;
+export array NativeLiteralRanges[UInt64]:NativeLiteralRange;
 
 export data NativeUnitRow {
-    command_first:u64;
-    command_past:u64;
-    literal_first:u64;
-    literal_past:u64;
-    name_first:u64;
-    name_past:u64;
-    source_size:u64;
-    labels:u64;
-    slots:u64;
+    command_first:UInt64;
+    command_past:UInt64;
+    literal_first:UInt64;
+    literal_past:UInt64;
+    name_first:UInt64;
+    name_past:UInt64;
+    source_size:UInt64;
+    labels:UInt64;
+    slots:UInt64;
 }
-export array NativeUnitRows[u64]:NativeUnitRow;
+export array NativeUnitRows[UInt64]:NativeUnitRow;
 
 export data NativePlan {
-    used:u64;
-    functions:u64;
-    function_base:u64;
-    labels:u64;
-    slots:u64;
-    diagnostic:u8;
-    node:u64;
+    used:UInt64;
+    functions:UInt64;
+    function_base:UInt64;
+    labels:UInt64;
+    slots:UInt64;
+    diagnostic:UInt8;
+    node:UInt64;
     initialization_notes:bool;
     initialization_obligations:bool;
 }
 
-export func declare_function() -> u8 { return 1u8; }
-export func begin_function() -> u8 { return 2u8; }
-export func position_block() -> u8 { return 3u8; }
-export func jump() -> u8 { return 4u8; }
-export func branch_equal() -> u8 { return 5u8; }
-export func word_constant() -> u8 { return 6u8; }
-export func copy_word() -> u8 { return 7u8; }
-export func place_address() -> u8 { return 8u8; }
-export func load_target() -> u8 { return 9u8; }
-export func store_target() -> u8 { return 10u8; }
-export func checked_add() -> u8 { return 11u8; }
-export func checked_multiply() -> u8 { return 12u8; }
-export func receive_parameter() -> u8 { return 13u8; }
-export func pass_argument() -> u8 { return 14u8; }
-export func invoke_function() -> u8 { return 15u8; }
-export func print_word() -> u8 { return 16u8; }
-export func return_outcome() -> u8 { return 17u8; }
-export func finish_program() -> u8 { return 18u8; }
-export func compare_words() -> u8 { return 19u8; }
-export func checked_subtract() -> u8 { return 20u8; }
-export func checked_divide() -> u8 { return 21u8; }
-export func checked_remainder() -> u8 { return 22u8; }
+export func declare_function() -> UInt8 { return 1u8; }
+export func begin_function() -> UInt8 { return 2u8; }
+export func position_block() -> UInt8 { return 3u8; }
+export func jump() -> UInt8 { return 4u8; }
+export func branch_equal() -> UInt8 { return 5u8; }
+export func word_constant() -> UInt8 { return 6u8; }
+export func copy_word() -> UInt8 { return 7u8; }
+export func place_address() -> UInt8 { return 8u8; }
+export func load_target() -> UInt8 { return 9u8; }
+export func store_target() -> UInt8 { return 10u8; }
+export func checked_add() -> UInt8 { return 11u8; }
+export func checked_multiply() -> UInt8 { return 12u8; }
+export func receive_parameter() -> UInt8 { return 13u8; }
+export func pass_argument() -> UInt8 { return 14u8; }
+export func invoke_function() -> UInt8 { return 15u8; }
+export func print_word() -> UInt8 { return 16u8; }
+export func return_outcome() -> UInt8 { return 17u8; }
+export func finish_program() -> UInt8 { return 18u8; }
+export func compare_words() -> UInt8 { return 19u8; }
+export func checked_subtract() -> UInt8 { return 20u8; }
+export func checked_divide() -> UInt8 { return 21u8; }
+export func checked_remainder() -> UInt8 { return 22u8; }
 # Operands are the category slot, the handler search block, and the bypass block.
-export func branch_catchable() -> u8 { return 23u8; }
+export func branch_catchable() -> UInt8 { return 23u8; }
 
 # These private flag operations let initialization checking correlate
 # a control decision across cleanup. They become word operations for LLVM.
-export func write_flow_flag() -> u8 { return 24u8; }
-export func branch_on_flow_flag() -> u8 { return 25u8; }
+export func write_flow_flag() -> UInt8 { return 24u8; }
+export func branch_on_flow_flag() -> UInt8 { return 25u8; }
 
 # Compile-time facts about a local's storage binding. They share the
 # initialization checker with reservation operations and have no native form.
-export func unbind_local() -> u8 { return 26u8; }
-export func bind_local() -> u8 { return 27u8; }
-export func use_local() -> u8 { return 28u8; }
-export func local_binding_fact(opcode:u8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
+export func unbind_local() -> UInt8 { return 26u8; }
+export func bind_local() -> UInt8 { return 27u8; }
+export func use_local() -> UInt8 { return 28u8; }
+export func local_binding_fact(opcode:UInt8) -> bool { return opcode >= unbind_local() && opcode <= use_local(); }
 
 # A lexical product reserves contiguous backing in its activation. Projection
 # uses the layout's word offset relative to an already selected address.
-export func allocate_words() -> u8 { return 29u8; }
-export func offset_address() -> u8 { return 30u8; }
-export func text_literal() -> u8 { return 31u8; }
-export func text_size() -> u8 { return 32u8; }
-export func text_byte() -> u8 { return 33u8; }
-export func text_contains_nul() -> u8 { return 34u8; }
-export func text_allocate() -> u8 { return 35u8; }
-export func text_release() -> u8 { return 36u8; }
+export func allocate_words() -> UInt8 { return 29u8; }
+export func offset_address() -> UInt8 { return 30u8; }
+export func text_literal() -> UInt8 { return 31u8; }
+export func text_size() -> UInt8 { return 32u8; }
+export func text_byte() -> UInt8 { return 33u8; }
+export func text_contains_nul() -> UInt8 { return 34u8; }
+export func text_allocate() -> UInt8 { return 35u8; }
+export func text_release() -> UInt8 { return 36u8; }
 
 # The proof consumes this demand and publishes a category copy as a word copy.
-export func require_initialized_place() -> u8 { return 37u8; }
-export func copy_completion() -> u8 { return 38u8; }
+export func require_initialized_place() -> UInt8 { return 37u8; }
+export func copy_completion() -> UInt8 { return 38u8; }
 
 # Store this unit's byte offset as an artifact-wide failure site.
-export func source_site() -> u8 { return 39u8; }
+export func source_site() -> UInt8 { return 39u8; }
 
 # Internal outcome words. Zero denotes success. Fatal numeric failures
 # bypass language catches and still leave through the activation cleanup.
-export func returned_word() -> u64 { return 0u64; }
-export func pending_category() -> u64 { return 1u64; }
-export func pending_site() -> u64 { return 2u64; }
-export func call_category() -> u64 { return 3u64; }
-export func call_site() -> u64 { return 4u64; }
-export func arithmetic_fault() -> u64 { return 5u64; }
-export func slot(node:u64) -> u64 { return node + 6u64; }
+export func returned_word() -> UInt64 { return 0u64; }
+export func pending_category() -> UInt64 { return 1u64; }
+export func pending_site() -> UInt64 { return 2u64; }
+export func call_category() -> UInt64 { return 3u64; }
+export func call_site() -> UInt64 { return 4u64; }
+export func arithmetic_fault() -> UInt64 { return 5u64; }
+export func slot(node:UInt64) -> UInt64 { return node + 6u64; }
 
 # Before native verification, storage operations and binding facts can carry
 # the relevant construction or declaration index plus one in c and source node in d.
 # Initialization checking consumes those fields before the provider sees them.
-export func reservation_tag(reservation:u64) -> u64 {
+export func reservation_tag(reservation:UInt64) -> UInt64 {
     return if (reservation == no_node()) { 0u64 } else { reservation + 1u64 };
 }
 
-export func initialization_access(opcode:u8) -> bool {
+export func initialization_access(opcode:UInt8) -> bool {
     return opcode == place_address() || opcode == store_target() || opcode == load_target() ||
         opcode == copy_word() || local_binding_fact(opcode) || opcode == require_initialized_place();
 }

@@ -5,7 +5,7 @@ using "./ModuleExportStorage.cod" { ModuleInterfaces, enum_type };
 using "./NameResolution.cod" { builtin_u8, builtin_u32, builtin_u64, builtin_i64 };
 using "./ProviderNames.cod" { emit_provider_identifier, emit_provider_enum_name };
 
-proc emit_backing(kind:u8) -> void {
+proc emit_backing(kind:UInt8) -> void {
     if (kind == builtin_u8()) { emit("uint8_t"); return; };
     if (kind == builtin_u32()) { emit("uint32_t"); return; };
     if (kind == builtin_u64()) { emit("uint64_t"); return; };
@@ -13,7 +13,7 @@ proc emit_backing(kind:u8) -> void {
     return;
 }
 
-proc emit_code(kind:u8, code:u64) -> void {
+proc emit_code(kind:UInt8, code:UInt64) -> void {
     if (kind == builtin_i64() && code > 9223372036854775807u64) {
         if (code == 9223372036854775808u64) { emit("INT64_MIN"); return; };
         emit("(-INT64_C(");
@@ -30,7 +30,7 @@ proc emit_code(kind:u8, code:u64) -> void {
     return;
 }
 
-func first_member_identity(rows:const ModuleInterfaces in G, first:u64, row:u64) -> bool where {const owner G} {
+func first_member_identity(rows:const ModuleInterfaces in G, first:UInt64, row:UInt64) -> bool where {const owner G} {
     for (earlier in first .. row) {
         if (rows[earlier].declaration == rows[row].declaration) return false;
     };
@@ -38,7 +38,7 @@ func first_member_identity(rows:const ModuleInterfaces in G, first:u64, row:u64)
 }
 
 proc emit_enum_header(name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                      spelling_used:u64, kind:u8, first:u64, past:u64) -> bool where {const owner N, const owner G} {
+                      spelling_used:UInt64, kind:UInt8, first:UInt64, past:UInt64) -> bool where {const owner N, const owner G} {
     emit("typedef ");
     emit_backing(kind);
     emit(" ");
@@ -59,7 +59,7 @@ proc emit_enum_header(name:const String in N, spellings:const SourceBytes in G, 
 }
 
 proc emit_enum_validation(name:const String in N, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                          first:u64, past:u64) -> bool where {const owner N, const owner G} {
+                          first:UInt64, past:UInt64) -> bool where {const owner N, const owner G} {
     emit("static int ");
     emit(name);
     emit("_valid(");
@@ -79,9 +79,9 @@ proc emit_enum_validation(name:const String in N, spellings:const SourceBytes in
 }
 
 export proc write_provider_enum(header:StringBuilder in H, stubs:StringBuilder in S,
-                                keys:const SourceBytes in G, key_used:u64, entry_first:u64, entry_past:u64,
-                                module_first:u64, module_past:u64, spellings:const SourceBytes in G,
-                                spelling_used:u64, rows:const ModuleInterfaces in G, head:u64, published:u64) -> bool
+                                keys:const SourceBytes in G, key_used:UInt64, entry_first:UInt64, entry_past:UInt64,
+                                module_first:UInt64, module_past:UInt64, spellings:const SourceBytes in G,
+                                spelling_used:UInt64, rows:const ModuleInterfaces in G, head:UInt64, published:UInt64) -> bool
     where {owner H, owner S, const owner G} {
     if (key_used > intrinsic (len)(keys) || entry_past > key_used || module_past > key_used ||
         spelling_used > intrinsic (len)(spellings) || published > intrinsic (len)(rows) ||

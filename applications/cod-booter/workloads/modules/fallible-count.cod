@@ -1,11 +1,11 @@
 using "std:exceptions" NullPointerException as MissingCount;
 
-proc release(active:u64 in A) -> void where {owner A} {
+proc release(active:UInt64 in A) -> void where {owner A} {
     active <- active - 1u64;
     return;
 }
 
-export proc read_count(ptr count:const u64 in N, active:u64 in A) -> u64
+export proc read_count(ptr count:const UInt64 in N, active:UInt64 in A) -> UInt64
     throws MissingCount where {const owner N, owner A} {
     active <- active + 1u64;
     defer release(active);

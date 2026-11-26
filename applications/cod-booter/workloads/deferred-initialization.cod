@@ -1,8 +1,8 @@
 using symbol "std:io" @print;
 
 proc decode(val selected:bool) -> void {
-    ptr value:u64 = make u64;
-    ptr pending:u64 = value;
+    ptr value:UInt64 = make UInt64;
+    ptr pending:UInt64 = value;
     defer { behave @print(value); };
     if (selected) {
         defer { (pending <- 3u64):void; };

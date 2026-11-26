@@ -3,7 +3,7 @@ using "std:exceptions" NullPointerException;
 using symbol "std:io" @print;
 
 val active <- 0u64;
-ptr missing:u64 = null in here;
+ptr missing:UInt64 = null in here;
 try {
     behave @print(read(missing, active));
 } catch (failure:const NullPointerException) {

@@ -7,16 +7,16 @@ proc show(text:const String in O) -> void where {const owner O} {
     return;
 }
 
-func size_path(path:const CString in P, adjustment:u64) -> u64 where {const owner P} {
+func size_path(path:const CString in P, adjustment:UInt64) -> UInt64 where {const owner P} {
     return utf8_size(path) + adjustment;
 }
 
-proc later() -> u64 {
+proc later() -> UInt64 {
     behave @print(91u64);
     return 20u64;
 }
 
-proc verify_path(input:const String in S) -> u64 where {const owner S} {
+proc verify_path(input:const String in S) -> UInt64 where {const owner S} {
     try {
         return size_path(input:CString, later());
     } catch (failure:const TypeAssertionFailedError) {
@@ -24,7 +24,7 @@ proc verify_path(input:const String in S) -> u64 where {const owner S} {
     };
 }
 
-proc verify_byte(input:const String in S, index:u64) -> u64 where {const owner S} {
+proc verify_byte(input:const String in S, index:UInt64) -> UInt64 where {const owner S} {
     try {
         if (utf8_byte(input, index) == 0u8) return 7u64;
         return 0u64;

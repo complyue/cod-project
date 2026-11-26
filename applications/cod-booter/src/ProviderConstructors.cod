@@ -12,8 +12,8 @@ using "./ProviderTypeNames.cod" {
     first_prior_handle_with_role,
 };
 
-proc emit_failure_type(name:const String in N, spellings:const SourceBytes in G, spelling_used:u64,
-                        interfaces:const ModuleInterfaces in G, failure:u64) -> bool
+proc emit_failure_type(name:const String in N, spellings:const SourceBytes in G, spelling_used:UInt64,
+                        interfaces:const ModuleInterfaces in G, failure:UInt64) -> bool
     where {const owner N, const owner G} {
     if (interfaces[failure].name_past > spelling_used) return false;
     emit("/* Payload of the checked ");
@@ -38,9 +38,9 @@ proc emit_failure_type(name:const String in N, spellings:const SourceBytes in G,
 }
 
 export proc write_provider_failure_type(header:StringBuilder in H, name:const String in N,
-                                       spellings:const SourceBytes in G, spelling_used:u64,
-                                       interfaces:const ModuleInterfaces in G, interface_used:u64,
-                                       failure_module:u64, failure_identity:u64) -> bool
+                                       spellings:const SourceBytes in G, spelling_used:UInt64,
+                                       interfaces:const ModuleInterfaces in G, interface_used:UInt64,
+                                       failure_module:UInt64, failure_identity:UInt64) -> bool
     where {owner H, const owner N, const owner G} {
     if (spelling_used > intrinsic (len)(spellings)) return false;
     val failure <- find_interface(interfaces, interface_used, failure_module, failure_identity);
@@ -61,8 +61,8 @@ proc emit_constructor_name(name:const String in N, operation:const String in O) 
     return;
 }
 
-proc emit_handle_input(spellings:const SourceBytes in G, spelling_used:u64, rows:const ModuleInterfaces in G,
-                       head:u64, implementation:bool) -> bool where {const owner G} {
+proc emit_handle_input(spellings:const SourceBytes in G, spelling_used:UInt64, rows:const ModuleInterfaces in G,
+                       head:UInt64, implementation:bool) -> bool where {const owner G} {
     if (!implementation) { emit("const "); };
     if (!emit_provider_handle_type(spellings, spelling_used, rows, head)) return false;
     emit(" ");
@@ -72,7 +72,7 @@ proc emit_handle_input(spellings:const SourceBytes in G, spelling_used:u64, rows
 
 proc emit_constructor_signature(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                                 spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                prefix:const ProviderPrefixes in R, head:u64, parent:u64, failure:u64,
+                                prefix:const ProviderPrefixes in R, head:UInt64, parent:UInt64, failure:UInt64,
                                 implementation:bool) -> bool where {const owner N, const owner G, const owner R} {
     emit("cod_native_status ");
     emit_constructor_name(name, "_construct");
@@ -110,7 +110,7 @@ proc emit_constructor_signature(name:const String in N, visits:const Visits in G
 
 proc emit_constructor_checks(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
                              rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R,
-                             head:u64, parent:u64, failure:u64) -> bool where {const owner G, const owner R} {
+                             head:UInt64, parent:UInt64, failure:UInt64) -> bool where {const owner G, const owner R} {
     emit(" {\n    if (!resource");
     if (parent != no_node()) { emit(" || !owner"); };
     if (failure != no_node()) { emit(" || !error"); };
@@ -146,8 +146,8 @@ proc emit_constructor_checks(visits:const Visits in G, keys:const SourceBytes in
     return true;
 }
 
-proc emit_constructor_call(name:const String in N, spellings:const SourceBytes in G, spelling_used:u64,
-                           rows:const ModuleInterfaces in G, head:u64, parent:u64, failure:u64)
+proc emit_constructor_call(name:const String in N, spellings:const SourceBytes in G, spelling_used:UInt64,
+                           rows:const ModuleInterfaces in G, head:UInt64, parent:UInt64, failure:UInt64)
     -> bool where {const owner N, const owner G} {
     emit("    uint64_t acquired = 0;\n");
     if (failure != no_node()) {
@@ -189,7 +189,7 @@ proc emit_constructor_call(name:const String in N, spellings:const SourceBytes i
 
 proc emit_constructor_header(name:const String in N, visits:const Visits in G, keys:const SourceBytes in G,
                              spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                             prefix:const ProviderPrefixes in R, head:u64, parent:u64, failure:u64)
+                             prefix:const ProviderPrefixes in R, head:UInt64, parent:UInt64, failure:UInt64)
     -> bool where {const owner N, const owner G, const owner R} {
     if (failure != no_node() && !emit_failure_type(name, spellings, prefix.spellings, rows, failure)) return false;
     if (!emit_constructor_signature(name, visits, keys, spellings, rows, prefix, head, parent, failure, false)) return false;
@@ -205,7 +205,7 @@ proc emit_constructor_header(name:const String in N, visits:const Visits in G, k
 export proc write_provider_constructor(header:StringBuilder in H, stubs:StringBuilder in S,
                                        visits:const Visits in G, keys:const SourceBytes in G,
                                        spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                       prefix:const ProviderPrefixes in R, head:u64)
+                                       prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
         rows[head].interface_kind != c_constructor() || rows[head].value_kind != 0u8 ||

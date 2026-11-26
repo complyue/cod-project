@@ -2,16 +2,16 @@ using "string.cod" { emit, emitStr };
 using "std:text-storage" { utf8_slice, utf8_size, utf8_byte };
 using "./SourceStorage.cod" SourceBytes;
 
-func ascii_letter(byte:u8) -> bool {
+func ascii_letter(byte:UInt8) -> bool {
     return (byte >= 65u8 && byte <= 90u8) || (byte >= 97u8 && byte <= 122u8);
 }
 
-func ascii_digit(byte:u8) -> bool {
+func ascii_digit(byte:UInt8) -> bool {
     return byte >= 48u8 && byte <= 57u8;
 }
 
-proc emit_identifier_byte(byte:u8) -> void {
-    val index:u64 <- byte;
+proc emit_identifier_byte(byte:UInt8) -> void {
+    val index:UInt64 <- byte;
     if (ascii_digit(byte)) {
         emit(utf8_slice("0123456789", index - 48u64, index - 47u64));
         return;
@@ -28,12 +28,12 @@ proc emit_identifier_byte(byte:u8) -> void {
     return;
 }
 
-proc emit_path_byte(byte:u8) -> void {
+proc emit_path_byte(byte:UInt8) -> void {
     if (byte != 120u8 && (ascii_letter(byte) || ascii_digit(byte))) {
         emit_identifier_byte(byte);
         return;
     };
-    val index:u64 <- byte;
+    val index:UInt64 <- byte;
     val high <- index / 16u64;
     val low <- index % 16u64;
     emit("x");
@@ -42,7 +42,7 @@ proc emit_path_byte(byte:u8) -> void {
     return;
 }
 
-func valid_identifier(spellings:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+func valid_identifier(spellings:const SourceBytes in S, first:UInt64, past:UInt64) -> bool where {const owner S} {
     if (first >= past || past > intrinsic (len)(spellings)) return false;
     if (!ascii_letter(spellings[first]) && spellings[first] != 95u8) return false;
     for (i in first + 1u64 .. past) {
@@ -51,8 +51,8 @@ func valid_identifier(spellings:const SourceBytes in S, first:u64, past:u64) -> 
     return true;
 }
 
-func matches_rule(spellings:const SourceBytes in S, first:u64, past:u64,
-                  rules:const String in R, rule_first:u64, rule_past:u64, prefix:bool)
+func matches_rule(spellings:const SourceBytes in S, first:UInt64, past:UInt64,
+                  rules:const String in R, rule_first:UInt64, rule_past:UInt64, prefix:bool)
     -> bool where {const owner S, const owner R} {
     val width <- rule_past - rule_first;
     if (width == 0u64 || width > past - first || (!prefix && width != past - first)) return false;
@@ -62,7 +62,7 @@ func matches_rule(spellings:const SourceBytes in S, first:u64, past:u64,
     return true;
 }
 
-func matches_reservation(spellings:const SourceBytes in S, first:u64, past:u64,
+func matches_reservation(spellings:const SourceBytes in S, first:UInt64, past:UInt64,
                          rules:const String in R, prefix:bool) -> bool where {const owner S, const owner R} {
     val rule_first <- 0u64;
     for (i in 0u64 .. utf8_size(rules)) {
@@ -74,43 +74,43 @@ func matches_reservation(spellings:const SourceBytes in S, first:u64, past:u64,
     return false;
 }
 
-func reserved_member(spellings:const SourceBytes in S, first:u64, past:u64) -> bool where {const owner S} {
+func reserved_member(spellings:const SourceBytes in S, first:UInt64, past:UInt64) -> bool where {const owner S} {
     # BEGIN GENERATED MEMBER RESERVATIONS
     return matches_reservation(spellings, first, past, "alignas\nalignof\nauto\nbool\nbreak\ncase\nchar\nconst\nconstexpr\ncontinue\ndefault\ndo\ndouble\nelse\nenum\nextern\nfalse\nfloat\nfor\ngoto\nif\ninline\nint\nlong\nnullptr\nregister\nrestrict\nreturn\nshort\nsigned\nsizeof\nstatic\nstatic_assert\nstruct\nswitch\nthread_local\ntrue\ntypedef\ntypeof\ntypeof_unqual\nunion\nunsigned\nvoid\nvolatile\nwhile\nNULL\n", false) ||
         matches_reservation(spellings, first, past, "_\nINT\nUINT\nPTRDIFF_\nSIZE_\nWCHAR_\nWINT_\nSIG_ATOMIC_\n", true);
     # END GENERATED MEMBER RESERVATIONS
 }
 
-export proc emit_provider_identifier(spellings:const SourceBytes in S, first:u64, past:u64)
+export proc emit_provider_identifier(spellings:const SourceBytes in S, first:UInt64, past:UInt64)
     -> bool where {const owner S} {
     if (!valid_identifier(spellings, first, past)) return false;
     for (i in first .. past) { emit_identifier_byte(spellings[i]); };
     return true;
 }
 
-export func valid_provider_member(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
+export func valid_provider_member(spellings:const SourceBytes in S, used:UInt64, first:UInt64, past:UInt64)
     -> bool where {const owner S} {
     return used <= intrinsic (len)(spellings) && past <= used &&
         valid_identifier(spellings, first, past) && !reserved_member(spellings, first, past);
 }
 
-export func provider_member_error(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
-    -> u32 where {const owner S} {
+export func provider_member_error(spellings:const SourceBytes in S, used:UInt64, first:UInt64, past:UInt64)
+    -> UInt32 where {const owner S} {
     if (used > intrinsic (len)(spellings) || past > used || !valid_identifier(spellings, first, past)) return 2u32;
     if (reserved_member(spellings, first, past)) return 5u32;
     return 0u32;
 }
 
-export proc emit_provider_member(spellings:const SourceBytes in S, used:u64, first:u64, past:u64)
+export proc emit_provider_member(spellings:const SourceBytes in S, used:UInt64, first:UInt64, past:UInt64)
     -> bool where {const owner S} {
     if (!valid_provider_member(spellings, used, first, past)) return false;
     for (i in first .. past) { emit_identifier_byte(spellings[i]); };
     return true;
 }
 
-export proc emit_provider_enum_name(paths:const SourceBytes in G, entry_first:u64, entry_past:u64,
-                                    module_first:u64, module_past:u64, spellings:const SourceBytes in G,
-                                    type_first:u64, type_past:u64)
+export proc emit_provider_enum_name(paths:const SourceBytes in G, entry_first:UInt64, entry_past:UInt64,
+                                    module_first:UInt64, module_past:UInt64, spellings:const SourceBytes in G,
+                                    type_first:UInt64, type_past:UInt64)
     -> bool where {const owner G} {
     val path_size <- intrinsic (len)(paths);
     if (entry_first >= entry_past || module_first >= module_past || entry_past > path_size ||

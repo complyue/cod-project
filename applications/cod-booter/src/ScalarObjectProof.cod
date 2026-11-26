@@ -29,7 +29,7 @@ using "./ModuleExports.cod" {
 }
 using "./NativeCommands.cod" { NativeCommands, NativeUnitRows, declare_function, begin_function };
 
-export func primitive_names(source:const SourceBytes in S, nodes:const ExprNodes in N, used:u64)
+export func primitive_names(source:const SourceBytes in S, nodes:const ExprNodes in N, used:UInt64)
     -> bool where {const owner S, const owner N} {
     if (used > intrinsic (len)(nodes)) return false;
     val first <- 0u64;
@@ -50,7 +50,7 @@ export func primitive_names(source:const SourceBytes in S, nodes:const ExprNodes
 # operator-family spelling. Along with exact builtin u64 operands this makes
 # the arithmetic selection independent of source fallback or contributions.
 export func primitive_definition_namespace(source:const SourceBytes in S,
-    nodes:const ExprNodes in N, used:u64, revision:u64)
+    nodes:const ExprNodes in N, used:UInt64, revision:UInt64)
     -> bool where {const owner S, const owner N} {
     if (!primitive_names(source, nodes, used)) return false;
     ref named = make ModuleSelectionSites {
@@ -66,7 +66,7 @@ export func primitive_definition_namespace(source:const SourceBytes in S,
     return true
 }
 
-func completed_primitive_namespace(visits:const Visits in G, used:u64, module:u64) -> bool
+func completed_primitive_namespace(visits:const Visits in G, used:UInt64, module:UInt64) -> bool
     where {const owner G} {
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
@@ -79,7 +79,7 @@ func completed_primitive_namespace(visits:const Visits in G, used:u64, module:u6
 # spelling, no extension on the selected family and no unchecked lookup edge.
 export func primitive_receiver_namespace(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, links:const NameWork in L, dependencies:const SelectedExports in E,
-    visits:const Visits in G, visit_used:u64, used:u64, revision:u64) -> bool
+    visits:const Visits in G, visit_used:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner S, const owner N, const owner B, const owner L, const owner E, const owner G} {
     if (!primitive_names(source, nodes, used) || used > intrinsic (len)(names) ||
         used > intrinsic (len)(links) || used > intrinsic (len)(dependencies)) return false;
@@ -115,10 +115,10 @@ export func primitive_receiver_namespace(source:const SourceBytes in S, nodes:co
 }
 
 func scalar_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
-    operands:const OperandFacts in F, definition:u64, at:u64, used:u64, revision:u64)
+    operands:const OperandFacts in F, definition:UInt64, at:UInt64, used:UInt64, revision:UInt64)
     -> bool where {const owner N, const owner B, const owner F} {
     if (at >= used || operands[at].kind != scalar_u64()) return false;
-    ref inner = make u64 { no_node() };
+    ref inner = make UInt64 { no_node() };
     if (inspect_group(nodes, revision, used, at, inner) == ParenthesizedExpression) {
         return inner < at && scalar_expression(nodes, names, operands, definition, inner, used, revision)
     };
@@ -150,8 +150,8 @@ func scalar_expression(nodes:const ExprNodes in N, names:const NameBindings in B
 }
 
 export func checked_scalar_body(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, operands:const OperandFacts in F, definition:u64, used:u64,
-    revision:u64) -> bool where {const owner N, const owner B, const owner L, const owner F} {
+    links:const NameWork in L, operands:const OperandFacts in F, definition:UInt64, used:UInt64,
+    revision:UInt64) -> bool where {const owner N, const owner B, const owner L, const owner F} {
     if (definition >= used || used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
         used > intrinsic (len)(links) || used > intrinsic (len)(operands) ||
         names[definition].declaration != definition || links[definition].next_method != no_node() ||
@@ -161,12 +161,12 @@ export func checked_scalar_body(nodes:const ExprNodes in N, names:const NameBind
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
         !callable.function_form || callable.body >= definition || is_scope_block(nodes, callable.body))
         return false;
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     if (!block_tail(nodes, revision, used, callable.body, tail) || tail >= callable.body ||
         inspect_sequence_entry(nodes, revision, used, tail, entry) != BlockSequence ||
         entry.previous != no_node() || entry.item >= tail) return false;
-    ref expression = make u64 { entry.item };
+    ref expression = make UInt64 { entry.item };
     case nodes[entry.item] of {
         Occupied { val syntax <- node; } -> {
             case syntax.payload of {
@@ -182,7 +182,7 @@ export func checked_scalar_body(nodes:const ExprNodes in N, names:const NameBind
     return scalar_expression(nodes, names, operands, definition, expression, used, revision)
 }
 
-export func scalar_body_signature(interfaces:const ModuleInterfaces in I, head:u64, past:u64)
+export func scalar_body_signature(interfaces:const ModuleInterfaces in I, head:UInt64, past:UInt64)
     -> bool where {const owner I} {
     if (head >= past || past > intrinsic (len)(interfaces) ||
         interfaces[head].interface_kind != callable_binding() ||
@@ -200,7 +200,7 @@ export func scalar_body_signature(interfaces:const ModuleInterfaces in I, head:u
     return true
 }
 
-func declares_scalar_body(commands:const NativeCommands in C, count:u64, ordinal:u64, arity:u64)
+func declares_scalar_body(commands:const NativeCommands in C, count:UInt64, ordinal:UInt64, arity:UInt64)
     -> bool where {const owner C} {
     if (ordinal == no_node() || count > intrinsic (len)(commands)) return false;
     val declared <- false;
@@ -221,8 +221,8 @@ func declares_scalar_body(commands:const NativeCommands in C, count:u64, ordinal
 }
 
 export func mark_scalar_bodies(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, operands:const OperandFacts in F, used:u64, revision:u64,
-    interfaces:ModuleInterfaces in I, count:u64, commands:const NativeCommands in C, command_count:u64) -> bool
+    links:const NameWork in L, operands:const OperandFacts in F, used:UInt64, revision:UInt64,
+    interfaces:ModuleInterfaces in I, count:UInt64, commands:const NativeCommands in C, command_count:UInt64) -> bool
     where {const owner N, const owner B, const owner L, const owner F, owner I, const owner C} {
     if (count > intrinsic (len)(interfaces)) return false;
     val header <- 0u64;
@@ -240,31 +240,31 @@ export func mark_scalar_bodies(nodes:const ExprNodes in N, names:const NameBindi
 }
 
 export data ObjectPrefixes {
-    visits:u64;
-    exports:u64;
-    interfaces:u64;
-    units:u64;
-    commands:u64;
-    functions:u64;
+    visits:UInt64;
+    exports:UInt64;
+    interfaces:UInt64;
+    units:UInt64;
+    commands:UInt64;
+    functions:UInt64;
 }
 
 export data ObjectExportSite {
-    row:u64;
-    publisher:u64;
-    defining_module:u64;
-    declaration:u64;
+    row:UInt64;
+    publisher:UInt64;
+    defining_module:UInt64;
+    declaration:UInt64;
 }
 
-func completed_callable_context(visits:const Visits in G, module:u64) -> bool where {const owner G} {
+func completed_callable_context(visits:const Visits in G, module:UInt64) -> bool where {const owner G} {
     return case visits[module - 1u64] of {
         Checked { val structural <- inherited_structural; } -> !structural;
         _ -> false
     }
 }
 
-func published_callable_context(visits:const Visits in G, interfaces:const ModuleInterfaces in G, first:u64, past:u64,
-    limit:u64, site:const ObjectExportSite in P, visit_used:u64)
-    -> u64 where {const owner G, const owner P} {
+func published_callable_context(visits:const Visits in G, interfaces:const ModuleInterfaces in G, first:UInt64, past:UInt64,
+    limit:UInt64, site:const ObjectExportSite in P, visit_used:UInt64)
+    -> UInt64 where {const owner G, const owner P} {
     if (first > past || past > limit || limit > intrinsic (len)(interfaces)) return no_node();
     val header <- first;
     val found <- no_node();
@@ -301,7 +301,7 @@ func published_callable_context(visits:const Visits in G, interfaces:const Modul
 
 export func incoming_callable_context(visits:const Visits in G, exports:const ModuleExports in G,
     interfaces:const ModuleInterfaces in G, limits:const ObjectPrefixes in L,
-    site:const ObjectExportSite in E) -> u64
+    site:const ObjectExportSite in E) -> UInt64
     where {const owner G, const owner L, const owner E} {
     if (site.publisher == 0u64 || site.publisher > limits.visits ||
         limits.visits > intrinsic (len)(visits) || site.row >= limits.exports ||
@@ -327,9 +327,9 @@ export func incoming_callable_context(visits:const Visits in G, exports:const Mo
 }
 
 func verified_scalar_ordinal(interfaces:const ModuleInterfaces in G, units:const NativeUnitRows in G,
-    limits:const ObjectPrefixes in P, header:u64, definition:u64, unit:u64, key_first:u64, key_past:u64,
-    functions_first:u64, functions_past:u64, interfaces_first:u64, interfaces_past:u64)
-    -> u64 where {const owner G, const owner P} {
+    limits:const ObjectPrefixes in P, header:UInt64, definition:UInt64, unit:UInt64, key_first:UInt64, key_past:UInt64,
+    functions_first:UInt64, functions_past:UInt64, interfaces_first:UInt64, interfaces_past:UInt64)
+    -> UInt64 where {const owner G, const owner P} {
     if (unit >= limits.units || key_first >= key_past ||
         units[unit].name_first != key_first || units[unit].name_past != key_past ||
         units[unit].command_first >= units[unit].command_past || units[unit].command_past > limits.commands ||
@@ -343,8 +343,8 @@ func verified_scalar_ordinal(interfaces:const ModuleInterfaces in G, units:const
 }
 
 export func completed_scalar_ordinal(visits:const Visits in G, interfaces:const ModuleInterfaces in G,
-    units:const NativeUnitRows in G, limits:const ObjectPrefixes in P, module:u64, definition:u64)
-    -> u64 where {const owner G, const owner P} {
+    units:const NativeUnitRows in G, limits:const ObjectPrefixes in P, module:UInt64, definition:UInt64)
+    -> UInt64 where {const owner G, const owner P} {
     if (module == 0u64 || module > limits.visits || limits.visits > intrinsic (len)(visits) ||
         limits.units > intrinsic (len)(units) || definition == no_node()) return no_node();
     val header <- find_interface(interfaces, limits.interfaces, module, definition);
@@ -369,9 +369,9 @@ export func completed_scalar_ordinal(visits:const Visits in G, interfaces:const 
 }
 
 func prepare_object_callable(view:const ObjectExportSite in E, mode:ModuleSelectionMode,
-    native_scope:u64, primitive_receiver:bool, visits:const Visits in G, exports:const ModuleExports in G,
+    native_scope:UInt64, primitive_receiver:bool, visits:const Visits in G, exports:const ModuleExports in G,
     interfaces:const ModuleInterfaces in G, units:const NativeUnitRows in G, limits:const ObjectPrefixes in L,
-    proof:CallableUseProofs in P, row:u64, site:u64, revision:u64)
+    proof:CallableUseProofs in P, row:UInt64, site:UInt64, revision:UInt64)
     -> bool where {const owner E, const owner G, const owner L, owner P} {
     val incoming <- incoming_callable_context(visits, exports, interfaces, limits, view);
     if (incoming == no_node()) return false;
@@ -392,7 +392,7 @@ func prepare_object_callable(view:const ObjectExportSite in E, mode:ModuleSelect
     return true
 }
 
-func same_callable_contexts(proof:const CallableUseProofs in P, left:u64, right:u64)
+func same_callable_contexts(proof:const CallableUseProofs in P, left:UInt64, right:UInt64)
     -> bool where {const owner P} {
     return case proof[left] of {
         CheckedCallableUse { val incoming <- incoming_context; val context <- selected_context; } ->
@@ -406,11 +406,11 @@ func same_callable_contexts(proof:const CallableUseProofs in P, left:u64, right:
 }
 
 export func prepare_object_callables(source:const SourceBytes in S, catalog:const SourceBytes in B,
-    spellings:const SourceBytes in G, spelling_used:u64, selections:const CheckedSelections in F, selected_used:u64,
-    used:u64, revision:u64, module:u64, primitive_receiver:bool,
+    spellings:const SourceBytes in G, spelling_used:UInt64, selections:const CheckedSelections in F, selected_used:UInt64,
+    used:UInt64, revision:UInt64, module:UInt64, primitive_receiver:bool,
     visits:const Visits in G, exports:const ModuleExports in G, interfaces:const ModuleInterfaces in G,
     units:const NativeUnitRows in G, limits:const ObjectPrefixes in L,
-    proof:CallableUseProofs in P, work:NameWork in W, problem:u64 in R)
+    proof:CallableUseProofs in P, work:NameWork in W, problem:UInt64 in R)
     -> bool where {const owner S, const owner B, const owner F, const owner G, const owner L,
                    owner P, owner W, owner R} {
     problem <- no_node();
@@ -460,9 +460,9 @@ export func prepare_object_callables(source:const SourceBytes in S, catalog:cons
     return true
 }
 
-func publish_callable_view(proof:const CallableUseProofs in P, use:u64, revision:u64,
-    interfaces:ModuleInterfaces in F, header:u64, public_row:u64, publisher:u64,
-    defining_module:u64, declaration:u64) -> bool where {const owner P, owner F} {
+func publish_callable_view(proof:const CallableUseProofs in P, use:UInt64, revision:UInt64,
+    interfaces:ModuleInterfaces in F, header:UInt64, public_row:UInt64, publisher:UInt64,
+    defining_module:UInt64, declaration:UInt64) -> bool where {const owner P, owner F} {
     if (use >= intrinsic (len)(proof)) return false;
     return case proof[use] of {
         CheckedCallableUse {
@@ -482,8 +482,8 @@ func publish_callable_view(proof:const CallableUseProofs in P, use:u64, revision
 }
 
 export func publish_callable_views(exports:const ModuleExports in E, uses:const StagedExportUses in E,
-    proof:const CallableUseProofs in P, export_count:u64, export_base:u64, publisher:u64, revision:u64,
-    interfaces:ModuleInterfaces in F, first:u64) -> u64 where {const owner E, const owner P, owner F} {
+    proof:const CallableUseProofs in P, export_count:UInt64, export_base:UInt64, publisher:UInt64, revision:UInt64,
+    interfaces:ModuleInterfaces in F, first:UInt64) -> UInt64 where {const owner E, const owner P, owner F} {
     if (export_count > intrinsic (len)(exports) || export_count > intrinsic (len)(uses) ||
         export_count > no_node() - export_base || first > intrinsic (len)(interfaces)) return no_node();
     val next <- first;

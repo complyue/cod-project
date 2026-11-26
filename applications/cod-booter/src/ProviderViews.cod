@@ -13,13 +13,13 @@ using "./NativeProviderLayout.cod" {
 using "./ProviderRecordLayout.cod" { ABIRecordLayout, append_layout_field, finish_layout };
 using "./ProviderNames.cod" emit_provider_member;
 
-enum ScalarSpelling:u8 { UnsupportedScalar; UInt8; UInt32; UInt64; Int64; Float32; Float64; }
-array FieldOffsets[u64]:u64;
+enum ScalarSpelling:UInt8 { UnsupportedScalar; Unsigned8; Unsigned32; Unsigned64; Signed64; Binary32; Binary64; }
+array FieldOffsets[UInt64]:UInt64;
 
-export data ABIPrimitiveLayout { size:u64; alignment:u64; }
-export array ABIPrimitiveLayouts[u64]:ABIPrimitiveLayout;
+export data ABIPrimitiveLayout { size:UInt64; alignment:UInt64; }
+export array ABIPrimitiveLayouts[UInt64]:ABIPrimitiveLayout;
 
-func primitive_layout_index(representation:ABIRepresentation) -> u64 {
+func primitive_layout_index(representation:ABIRepresentation) -> UInt64 {
     return case representation of {
         (ABIInt8) -> { 0u64 };
         (ABIInt32) -> { 1u64 };
@@ -38,7 +38,7 @@ proc measure_primitive(handle target:ProviderLayout in L, representation:ABIRepr
 }
 
 export proc measure_provider_primitives(handle target:ProviderLayout in L, layouts:ABIPrimitiveLayouts in A)
-    -> u64 where {const owner L, owner A} {
+    -> UInt64 where {const owner L, owner A} {
     if (intrinsic (len)(layouts) != 5u64) return 0u64;
     measure_primitive(target, ABIInt8, layouts);
     measure_primitive(target, ABIInt32, layouts);
@@ -48,49 +48,49 @@ export proc measure_provider_primitives(handle target:ProviderLayout in L, layou
     return provider_struct_alignment(target);
 }
 
-func scalar_spelling(kind:u8) -> ScalarSpelling {
-    if (kind == builtin_bool() || kind == builtin_u8()) return (UInt8:ScalarSpelling);
-    if (kind == builtin_u32()) return (UInt32:ScalarSpelling);
-    if (kind == builtin_u64()) return (UInt64:ScalarSpelling);
-    if (kind == builtin_i64()) return (Int64:ScalarSpelling);
-    if (kind == builtin_f32()) return (Float32:ScalarSpelling);
-    if (kind == builtin_f64()) return (Float64:ScalarSpelling);
+func scalar_spelling(kind:UInt8) -> ScalarSpelling {
+    if (kind == builtin_bool() || kind == builtin_u8()) return (Unsigned8:ScalarSpelling);
+    if (kind == builtin_u32()) return (Unsigned32:ScalarSpelling);
+    if (kind == builtin_u64()) return (Unsigned64:ScalarSpelling);
+    if (kind == builtin_i64()) return (Signed64:ScalarSpelling);
+    if (kind == builtin_f32()) return (Binary32:ScalarSpelling);
+    if (kind == builtin_f64()) return (Binary64:ScalarSpelling);
     return (UnsupportedScalar:ScalarSpelling);
 }
 
 func abi_representation(representation:ScalarSpelling) -> ABIRepresentation {
     return case representation of {
-        (UInt8) -> { ABIInt8 };
-        (UInt32) -> { ABIInt32 };
-        (UInt64) -> { ABIInt64 };
-        (Int64) -> { ABIInt64 };
-        (Float32) -> { ABIFloat32 };
-        (Float64) -> { ABIFloat64 };
+        (Unsigned8) -> { ABIInt8 };
+        (Unsigned32) -> { ABIInt32 };
+        (Unsigned64) -> { ABIInt64 };
+        (Signed64) -> { ABIInt64 };
+        (Binary32) -> { ABIFloat32 };
+        (Binary64) -> { ABIFloat64 };
         (UnsupportedScalar) -> { ABIInt8 };
     };
 }
 
 proc emit_scalar(representation:ScalarSpelling) -> void {
     case representation of {
-        (UInt8) -> { emit("uint8_t"); };
-        (UInt32) -> { emit("uint32_t"); };
-        (UInt64) -> { emit("uint64_t"); };
-        (Int64) -> { emit("int64_t"); };
-        (Float32) -> { emit("float"); };
-        (Float64) -> { emit("double"); };
+        (Unsigned8) -> { emit("uint8_t"); };
+        (Unsigned32) -> { emit("uint32_t"); };
+        (Unsigned64) -> { emit("uint64_t"); };
+        (Signed64) -> { emit("int64_t"); };
+        (Binary32) -> { emit("float"); };
+        (Binary64) -> { emit("double"); };
         (UnsupportedScalar) -> {};
     };
     return;
 }
 
-export proc emit_provider_scalar_type(kind:u8) -> bool {
+export proc emit_provider_scalar_type(kind:UInt8) -> bool {
     val representation <- scalar_spelling(kind);
     if (representation == (UnsupportedScalar:ScalarSpelling)) return false;
     emit_scalar(representation);
     return true;
 }
 
-proc emit_view_name(name:const String in N, index:u64, row:bool) -> void where {const owner N} {
+proc emit_view_name(name:const String in N, index:UInt64, row:bool) -> void where {const owner N} {
     emit("cod_native_");
     emit(name);
     if (row) { emit("_row"); } else { emit("_view"); };
@@ -98,7 +98,7 @@ proc emit_view_name(name:const String in N, index:u64, row:bool) -> void where {
     return;
 }
 
-func measure_fields(primitives:const ABIPrimitiveLayouts in L, interfaces:const ModuleInterfaces in G, head:u64,
+func measure_fields(primitives:const ABIPrimitiveLayouts in L, interfaces:const ModuleInterfaces in G, head:UInt64,
                     layout:ABIRecordLayout in R, offsets:FieldOffsets in R) -> bool
     where {const owner L, const owner G, owner R} {
     val representation <- (UnsupportedScalar:ScalarSpelling);
@@ -115,8 +115,8 @@ func measure_fields(primitives:const ABIPrimitiveLayouts in L, interfaces:const 
     return true;
 }
 
-proc emit_c_row(name:const String in N, index:u64, spellings:const SourceBytes in G, spelling_used:u64,
-                interfaces:const ModuleInterfaces in G, head:u64) -> bool where {const owner N, const owner G} {
+proc emit_c_row(name:const String in N, index:UInt64, spellings:const SourceBytes in G, spelling_used:UInt64,
+                interfaces:const ModuleInterfaces in G, head:UInt64) -> bool where {const owner N, const owner G} {
     emit("typedef struct ");
     emit_view_name(name, index, true);
     emit(" {\n");
@@ -134,9 +134,9 @@ proc emit_c_row(name:const String in N, index:u64, spellings:const SourceBytes i
     return true;
 }
 
-proc emit_row_layout(name:const String in N, index:u64, spellings:const SourceBytes in G,
-                     spelling_used:u64, interfaces:const ModuleInterfaces in G, head:u64, offsets:const FieldOffsets in R,
-                     size:u64, alignment:u64) -> bool where {const owner N, const owner G, const owner R} {
+proc emit_row_layout(name:const String in N, index:UInt64, spellings:const SourceBytes in G,
+                     spelling_used:UInt64, interfaces:const ModuleInterfaces in G, head:UInt64, offsets:const FieldOffsets in R,
+                     size:UInt64, alignment:UInt64) -> bool where {const owner N, const owner G, const owner R} {
     emit("_Static_assert(sizeof(");
     emit_view_name(name, index, true);
     emit(") == ");
@@ -160,7 +160,7 @@ proc emit_row_layout(name:const String in N, index:u64, spellings:const SourceBy
     return true;
 }
 
-proc emit_view_header(name:const String in N, index:u64, readonly:bool, representation:ScalarSpelling)
+proc emit_view_header(name:const String in N, index:UInt64, readonly:bool, representation:ScalarSpelling)
     -> void where {const owner N} {
     emit("typedef struct ");
     emit_view_name(name, index, false);
@@ -174,7 +174,7 @@ proc emit_view_header(name:const String in N, index:u64, readonly:bool, represen
     return;
 }
 
-proc emit_view_layout(name:const String in N, index:u64) -> void where {const owner N} {
+proc emit_view_layout(name:const String in N, index:UInt64) -> void where {const owner N} {
     emit("_Static_assert(sizeof(");
     emit_view_name(name, index, false);
     emit(") == 2 * sizeof(uint64_t) && offsetof(");
@@ -184,10 +184,10 @@ proc emit_view_layout(name:const String in N, index:u64) -> void where {const ow
 }
 
 export proc write_provider_view(header:StringBuilder in H, stubs:StringBuilder in S,
-                               primitives:const ABIPrimitiveLayouts in L, record_alignment:u64,
-                               name:const String in N, index:u64, readonly:bool,
-                               interfaces:const ModuleInterfaces in G, used:u64, array_row:u64,
-                               spellings:const SourceBytes in G, spelling_used:u64) -> bool
+                               primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64,
+                               name:const String in N, index:UInt64, readonly:bool,
+                               interfaces:const ModuleInterfaces in G, used:UInt64, array_row:UInt64,
+                               spellings:const SourceBytes in G, spelling_used:UInt64) -> bool
     where {owner H, owner S, const owner L, const owner N, const owner G} {
     if (used > intrinsic (len)(interfaces) || spelling_used > intrinsic (len)(spellings) ||
         array_row >= used || interfaces[array_row].interface_kind != array_type() ||

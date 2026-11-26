@@ -17,15 +17,15 @@ using "./CompilerStatus.cod" CompilerStatus {
 
 export data ModuleWorkspacePlan {
     source:ExpressionScratchPlan;
-    commands:u64;
+    commands:UInt64;
 }
 
 export data NativeModuleResult {
     analysis:ModuleBindingResult;
     plan:NativePlan;
-    backend_status:u8;
-    rejected_first:u64;
-    rejected_past:u64;
+    backend_status:UInt8;
+    rejected_first:UInt64;
+    rejected_past:UInt64;
     first_position:SourcePosition;
     past_position:SourcePosition;
     related_position:SourcePosition;
@@ -33,8 +33,8 @@ export data NativeModuleResult {
 
 # Opening and lending the source revision are separate operations. The
 # provider keeps the mapping and line index live throughout work.
-export proc compile_with_module_source(here open() -> u8, here work() -> CompilerStatus, here release() -> void,
-                                       source_status:u8 in R) -> CompilerStatus where {owner R} {
+export proc compile_with_module_source(here open() -> UInt8, here work() -> CompilerStatus, here release() -> void,
+                                       source_status:UInt8 in R) -> CompilerStatus where {owner R} {
     source_status <- 0u8;
     defer { release(); };
     source_status <- open();
@@ -83,7 +83,7 @@ func clear_rejection(result:NativeModuleResult in R) -> void where {owner R} {
 
 # The source revision and its index outlive scratch. Retain only numeric
 # positions after the revision is released by the outer driver.
-export proc compile_with_module_workspace(here work(tokens:u64, nodes:u64, commands:u64) -> CompilerStatus,
+export proc compile_with_module_workspace(here work(tokens:UInt64, nodes:UInt64, commands:UInt64) -> CompilerStatus,
                                           here release() -> void, source:const SourceBytes in S, lines:const SourceLines in S,
                                           workspace:ModuleWorkspacePlan in W, result:NativeModuleResult in R) -> CompilerStatus
     where {const owner S, owner W, owner R} {
@@ -126,8 +126,8 @@ func retain_rejection(nodes:const ExprNodes in N, result:NativeModuleResult in R
 # Construct borrows the initialized command prefix under the scratch
 # owner's lifetime. The session can own a partially acquired resource.
 export proc compile_native_module(here begin() -> bool,
-                                  here construct(rows:const NativeCommands in C, used:u64, labels:u64, slots:u64) -> u8,
-                                  here finish() -> u8, here release() -> void,
+                                  here construct(rows:const NativeCommands in C, used:UInt64, labels:UInt64, slots:UInt64) -> UInt8,
+                                  here finish() -> UInt8, here release() -> void,
                                   source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
                                   spellings:const SourceBytes in B, exports:const ModuleExports in E,
                                   selected:SelectedExports in X, bindings:NameBindings in Y,

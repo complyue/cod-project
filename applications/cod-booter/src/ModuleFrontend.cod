@@ -78,37 +78,37 @@ using "./CompletionChecking.cod" {
 
 export data ModuleBindingResult {
     frontend:FrontendResult;
-    stage:u8;
-    diagnostic:u8;
-    related_first:u64;
-    symbol_binder:u64;
+    stage:UInt8;
+    diagnostic:UInt8;
+    related_first:UInt64;
+    symbol_binder:UInt64;
     requires_operand_checks:bool;
 }
 
-export func module_read_failed() -> u8 { return 1u8; }
-export func module_selection_failed() -> u8 { return 2u8; }
-export func module_binding_failed() -> u8 { return 3u8; }
-export func module_operands_failed() -> u8 { return 4u8; }
-export func module_completion_failed() -> u8 { return 5u8; }
-func unsupported_array_length() -> u8 { return 74u8; }
-func unsupported_ordinary_here() -> u8 { return 76u8; }
-func invalid_catch_annotation() -> u8 { return 77u8; }
-func unsupported_lexical_callable() -> u8 { return 108u8; }
-func unsupported_nominal_sum() -> u8 { return 114u8; }
-func unsupported_named_region() -> u8 { return 116u8; }
-func unsupported_const_local() -> u8 { return 117u8; }
-func unsupported_constructor_case() -> u8 { return 120u8; }
-func unsupported_procedure_symbol() -> u8 { return 123u8; }
-func unsupported_scoped_procedure() -> u8 { return 124u8; }
-func unsupported_reference_group() -> u8 { return 134u8; }
-func unsupported_identity_reference() -> u8 { return 135u8; }
-func unsupported_reserved_initializer() -> u8 { return 136u8; }
-func unsupported_assertion_message() -> u8 { return 137u8; }
-func unsupported_reference_identity() -> u8 { return 138u8; }
-func unsupported_returning_condition() -> u8 { return 143u8 }
+export func module_read_failed() -> UInt8 { return 1u8; }
+export func module_selection_failed() -> UInt8 { return 2u8; }
+export func module_binding_failed() -> UInt8 { return 3u8; }
+export func module_operands_failed() -> UInt8 { return 4u8; }
+export func module_completion_failed() -> UInt8 { return 5u8; }
+func unsupported_array_length() -> UInt8 { return 74u8; }
+func unsupported_ordinary_here() -> UInt8 { return 76u8; }
+func invalid_catch_annotation() -> UInt8 { return 77u8; }
+func unsupported_lexical_callable() -> UInt8 { return 108u8; }
+func unsupported_nominal_sum() -> UInt8 { return 114u8; }
+func unsupported_named_region() -> UInt8 { return 116u8; }
+func unsupported_const_local() -> UInt8 { return 117u8; }
+func unsupported_constructor_case() -> UInt8 { return 120u8; }
+func unsupported_procedure_symbol() -> UInt8 { return 123u8; }
+func unsupported_scoped_procedure() -> UInt8 { return 124u8; }
+func unsupported_reference_group() -> UInt8 { return 134u8; }
+func unsupported_identity_reference() -> UInt8 { return 135u8; }
+func unsupported_reserved_initializer() -> UInt8 { return 136u8; }
+func unsupported_assertion_message() -> UInt8 { return 137u8; }
+func unsupported_reference_identity() -> UInt8 { return 138u8; }
+func unsupported_returning_condition() -> UInt8 { return 143u8 }
 
-func constructing_throw_profile(nodes:const ExprNodes in N, revision:u64, used:u64,
-    at:u64) -> u8 where {const owner N} {
+func constructing_throw_profile(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    at:UInt64) -> UInt8 where {const owner N} {
     ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
         no_node(); };
     if (!inspect_named_throw(nodes, revision, used, at,
@@ -137,7 +137,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
 }
 
 export func binding_diagnostic(nodes:const ExprNodes in N, result:ModuleBindingResult in R,
-                               stage:u8, diagnostic:u8, at:u64) -> void where {const owner N, owner R} {
+                               stage:UInt8, diagnostic:UInt8, at:UInt64) -> void where {const owner N, owner R} {
     result.stage <- stage;
     result.diagnostic <- diagnostic;
     result.frontend.diagnostic_first <- no_node();
@@ -149,8 +149,8 @@ export func binding_diagnostic(nodes:const ExprNodes in N, result:ModuleBindingR
 }
 
 func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork in W, tree:const ParseResult in T,
-                               emit_object:bool) -> u64 where {const owner N, const owner W, const owner T} {
-    ref item = make u64 { no_node() };
+                               emit_object:bool) -> UInt64 where {const owner N, const owner W, const owner T} {
+    ref item = make UInt64 { no_node() };
     if (!first_module_item(nodes, tree.revision, tree.used, tree.root, item)) return tree.root;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     for (unused in 0u64 .. tree.used) {
@@ -163,7 +163,7 @@ func first_extended_declaration(nodes:const ExprNodes in N, work:const NameWork 
     return no_node();
 }
 
-func extended_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, item:u64, form:u64,
+func extended_declaration(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, item:UInt64, form:UInt64,
                           emit_object:bool) -> bool where {const owner N} {
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
@@ -184,14 +184,14 @@ func extended_declaration(nodes:const ExprNodes in N, revision:u64, used:u64, it
     return shape != OtherDeclaration || mode == CProvider || mode == CEntry || reexport || module_item_publication(nodes, used, item);
 }
 
-func uses_native_boundary(nodes:const ExprNodes in N, used:u64) -> bool where {const owner N} {
+func uses_native_boundary(nodes:const ExprNodes in N, used:UInt64) -> bool where {const owner N} {
     for (at in 0u64 .. used) {
         if (native_boundary_form(nodes, at)) return true;
     };
     return false;
 }
 
-func native_boundary_form(nodes:const ExprNodes in N, at:u64) -> bool where {const owner N} {
+func native_boundary_form(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
         (Occupied { val syntax <- node; }) -> {
@@ -208,7 +208,7 @@ func native_boundary_form(nodes:const ExprNodes in N, at:u64) -> bool where {con
     };
 }
 
-func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bool where {const owner N} {
+func construction_query_supported(nodes:const ExprNodes in N, operand:UInt64) -> bool where {const owner N} {
     if (operand == no_node()) return true;
     return case nodes[operand] of {
         (Vacant) -> { false };
@@ -224,8 +224,8 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:u64) -> bo
 }
 
 # Declaration checking can resolve projection operands without emitting an address.
-func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
-    emit_object:bool, publish_defaults:bool, requires_operand_checks:bool in P) -> u8
+func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+    emit_object:bool, publish_defaults:bool, requires_operand_checks:bool in P) -> UInt8
     where {const owner N, owner P} {
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -326,7 +326,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:u64, used:u64,
 
 # Find the first unsupported source form by byte position, including headers
 # and enclosing constructs whose syntax is stored after their operands.
-func check_source_profile(nodes:const ExprNodes in N, used:u64, emit_object:bool,
+func check_source_profile(nodes:const ExprNodes in N, used:UInt64, emit_object:bool,
     publish_defaults:bool, result:ModuleBindingResult in R) -> bool
     where {const owner N, owner R} {
     if (used > intrinsic (len)(nodes)) return true;
@@ -361,7 +361,7 @@ export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:
 export func select_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                 builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
                                 graph_spellings:const SourceBytes in G, graph_exports:const ModuleExports in H,
-                                spelling_size:u64, export_count:u64,
+                                spelling_size:UInt64, export_count:UInt64,
                                 selected:SelectedExports in X, emit_object:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner G, const owner H, owner X, owner R} {
     if (!check_parsed_module_profile(nodes, emit_object, false, result)) return false;
@@ -375,9 +375,9 @@ export func select_parsed_module(source:const SourceBytes in S, nodes:const Expr
 }
 
 export func bind_selected_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                 selections:const CheckedSelections in C, selected_used:u64,
+                                 selections:const CheckedSelections in C, selected_used:UInt64,
                                  selected:SelectedExports in X, bindings:NameBindings in Y,
-                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
                                  facts:AggregateFacts in F, views:SuppliedViews in H,
                                      emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
@@ -390,9 +390,9 @@ export func bind_selected_module(source:const SourceBytes in S, nodes:const Expr
 }
 
 export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                 selections:const CheckedSelections in C, selected_used:u64,
+                                 selections:const CheckedSelections in C, selected_used:UInt64,
                                  selected:SelectedExports in X, bindings:NameBindings in Y,
-                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:u64,
+                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
                                  facts:AggregateFacts in F, views:SuppliedViews in H,
                                      emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R,
                                      recovery:ProductTypeRecovery in P) -> bool
@@ -559,7 +559,7 @@ export func analyze_module_operands(source:const SourceBytes in S, tokens:Tokens
 
 export func analyze_bound_operands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
-                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:u64, facts:OperandFacts in F,
+                                   work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:UInt64, facts:OperandFacts in F,
                                    owners:CallOwners in O, result:ModuleBindingResult in R) -> bool
     where {const owner S, const owner N, const owner X, const owner Y, const owner W, const owner I, owner F, owner O, owner R} {
     val declaration <- first_extended_declaration(nodes, work, result.frontend.tree, true);

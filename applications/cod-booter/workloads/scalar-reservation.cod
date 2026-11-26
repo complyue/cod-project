@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
 
-proc print_word(val value:u64) -> void {
+proc print_word(val value:UInt64) -> void {
     behave @print(value);
     return;
 }
 
 proc decode(val alternate:bool) -> void {
-    val length <- make u64 in here;
-    ptr first:u64 = length;
-    ptr second:u64 = first;
+    val length <- make UInt64 in here;
+    ptr first:UInt64 = length;
+    ptr second:UInt64 = first;
     if (alternate) {
         (first <- 3u64):void;
     } else {
@@ -16,7 +16,7 @@ proc decode(val alternate:bool) -> void {
     };
     defer print_word(second);
 
-    ptr status:u64 = make typeof(length);
+    ptr status:UInt64 = make typeof(length);
     defer {
         (status <- length + 10u64):void;
         behave @print(status);

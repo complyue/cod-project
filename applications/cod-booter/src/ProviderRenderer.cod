@@ -23,15 +23,15 @@ using "./ProviderHere.cod" write_provider_here;
 using "./ParserStorage.cod" no_node;
 
 data ProviderTypeUse { seen:bool; borrowed:bool; }
-array ProviderTypeUses[u64]:ProviderTypeUse;
+array ProviderTypeUses[UInt64]:ProviderTypeUse;
 
-func native_group(ordinal:u64) -> u8 {
+func native_group(ordinal:UInt64) -> UInt8 {
     if (ordinal == 0u64) return c_constructor();
     if (ordinal == 1u64) return c_entry();
     return c_operation();
 }
 
-export func provider_record_layout_needed(rows:const ModuleInterfaces in G, used:u64) -> bool
+export func provider_record_layout_needed(rows:const ModuleInterfaces in G, used:UInt64) -> bool
     where {const owner G} {
     if (used > intrinsic (len)(rows)) return false;
     val head <- 0u64;
@@ -55,14 +55,14 @@ export func provider_record_layout_needed(rows:const ModuleInterfaces in G, used
 }
 
 func same_native_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
-                      left:u64, right:u64, used:u64) -> bool where {const owner G} {
+                      left:UInt64, right:UInt64, used:UInt64) -> bool where {const owner G} {
     return rows[left].name_past <= used && rows[right].name_past <= used &&
         same_bytes(spellings, rows[left].name_first, rows[left].name_past,
                    spellings, rows[right].name_first, rows[right].name_past);
 }
 
 func register_handle_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
-                          prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, head:u64)
+                          prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, head:UInt64)
     -> bool where {const owner G, const owner R, owner T} {
     if (types[head].seen) return true;
     for (prior in 0u64 .. prefix.interfaces) {
@@ -75,7 +75,7 @@ func register_handle_name(rows:const ModuleInterfaces in G, spellings:const Sour
 
 proc emit_borrow_once(header:StringBuilder in H, stubs:StringBuilder in S,
                        rows:const ModuleInterfaces in G, spellings:const SourceBytes in G, prefix:const ProviderPrefixes in R,
-                       types:ProviderTypeUses in T, module:u64, identity:u64, wrote_borrow:bool in B)
+                       types:ProviderTypeUses in T, module:UInt64, identity:UInt64, wrote_borrow:bool in B)
     -> bool where {owner H, owner S, const owner G, const owner R, owner T, owner B} {
     val head <- find_provider_handle(rows, prefix.interfaces, module, identity);
     if (head == no_node() || !register_handle_name(rows, spellings, prefix, types, head)) return false;
@@ -95,7 +95,7 @@ proc emit_borrow_once(header:StringBuilder in H, stubs:StringBuilder in S,
 
 proc emit_enum_once(header:StringBuilder in H, stubs:StringBuilder in S, visits:const Visits in G,
                      keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                     prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, module:u64, identity:u64)
+                     prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, module:UInt64, identity:UInt64)
     -> bool where {owner H, owner S, const owner G, const owner R, owner T} {
     val head <- find_interface(rows, prefix.interfaces, module, identity);
     if (head == no_node() || rows[head].interface_kind != enum_type()) return false;
@@ -112,7 +112,7 @@ proc emit_enum_once(header:StringBuilder in H, stubs:StringBuilder in S, visits:
 
 proc emit_group_enums(header:StringBuilder in H, stubs:StringBuilder in S, visits:const Visits in G,
                        keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                       prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, group:u8)
+                       prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T, group:UInt8)
     -> bool where {owner H, owner S, const owner G, const owner R, owner T} {
     val head <- 0u64;
     val past <- 0u64;
@@ -136,7 +136,7 @@ proc emit_group_enums(header:StringBuilder in H, stubs:StringBuilder in S, visit
 
 proc emit_group_borrows(header:StringBuilder in H, stubs:StringBuilder in S, spellings:const SourceBytes in G,
                          rows:const ModuleInterfaces in G, prefix:const ProviderPrefixes in R, types:ProviderTypeUses in T,
-                         group:u8, wrote_borrow:bool in B)
+                         group:UInt8, wrote_borrow:bool in B)
     -> bool where {owner H, owner S, const owner G, const owner R, owner T, owner B} {
     val head <- 0u64;
     val past <- 0u64;
@@ -162,7 +162,7 @@ proc emit_group_borrows(header:StringBuilder in H, stubs:StringBuilder in S, spe
 }
 
 func unique_callable_name(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
-                          head:u64, spelling_used:u64) -> bool where {const owner G} {
+                          head:UInt64, spelling_used:UInt64) -> bool where {const owner G} {
     val earlier <- 0u64;
     for (unused in 0u64 .. head) {
         if (earlier == head) return true;
@@ -174,8 +174,8 @@ func unique_callable_name(rows:const ModuleInterfaces in G, spellings:const Sour
 }
 
 func check_provider_record(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
-                           prefix:const ProviderPrefixes in R, module:u64, identity:u64)
-    -> u32 where {const owner G, const owner R} {
+                           prefix:const ProviderPrefixes in R, module:UInt64, identity:UInt64)
+    -> UInt32 where {const owner G, const owner R} {
     val head <- find_interface(rows, prefix.interfaces, module, identity);
     if (head == no_node() || rows[head].interface_kind != record_type()) return 2u32;
     val status <- 0u32;
@@ -187,7 +187,7 @@ func check_provider_record(rows:const ModuleInterfaces in G, spellings:const Sou
 }
 
 export func provider_boundary_error(rows:const ModuleInterfaces in G, spellings:const SourceBytes in G,
-                                    prefix:const ProviderPrefixes in R) -> u32
+                                    prefix:const ProviderPrefixes in R) -> UInt32
     where {const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || prefix.spellings > intrinsic (len)(spellings)) return 2u32;
     val head <- 0u64;
@@ -224,9 +224,9 @@ export func provider_boundary_error(rows:const ModuleInterfaces in G, spellings:
 }
 
 proc emit_callable(header:StringBuilder in H, stubs:StringBuilder in S,
-                    primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                    primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64, visits:const Visits in G,
                     keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                    prefix:const ProviderPrefixes in R, head:u64)
+                    prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
     ref spelling = make StringBuilder();
     val ready <- false;
@@ -246,9 +246,9 @@ proc emit_callable(header:StringBuilder in H, stubs:StringBuilder in S,
 }
 
 proc emit_group_adapters(header:StringBuilder in H, stubs:StringBuilder in S,
-                          primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                          primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64, visits:const Visits in G,
                           keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                          prefix:const ProviderPrefixes in R, group:u8)
+                          prefix:const ProviderPrefixes in R, group:UInt8)
     -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
     val head <- 0u64;
     for (unused in 0u64 .. prefix.interfaces) {
@@ -267,7 +267,7 @@ proc emit_group_adapters(header:StringBuilder in H, stubs:StringBuilder in S,
 }
 
 export proc render_provider_pair(header:StringBuilder in H, stubs:StringBuilder in S,
-                                 primitives:const ABIPrimitiveLayouts in L, record_alignment:u64, visits:const Visits in G,
+                                 primitives:const ABIPrimitiveLayouts in L, record_alignment:UInt64, visits:const Visits in G,
                                  keys:const SourceBytes in G, spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
                                  prefix:const ProviderPrefixes in R)
     -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {

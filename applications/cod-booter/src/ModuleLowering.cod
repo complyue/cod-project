@@ -80,43 +80,43 @@ using "./NativeCommands.cod" {
 };
 
 data LoweringState {
-    syntax_revision:u64;
-    syntax_used:u64;
-    active_function:u64;
-    active_scope:u64;
-    exception_target:u64;
-    return_target:u64;
-    return_slot:u64;
-    return_ready:u64;
-    caught_failure:u64;
+    syntax_revision:UInt64;
+    syntax_used:UInt64;
+    active_function:UInt64;
+    active_scope:UInt64;
+    exception_target:UInt64;
+    return_target:UInt64;
+    return_slot:UInt64;
+    return_ready:UInt64;
+    caught_failure:UInt64;
     live:bool;
     local_return:bool;
-    scope_cleanup:u64;
-    scope_scan_flag:u64;
+    scope_cleanup:UInt64;
+    scope_scan_flag:UInt64;
     scope_scan_pending:bool;
-    case_index:u64;
-    case_join:u64;
-    case_arm:u64;
-    case_next:u64;
-    case_present_flag:u64;
+    case_index:UInt64;
+    case_join:UInt64;
+    case_arm:UInt64;
+    case_next:UInt64;
+    case_present_flag:UInt64;
     case_read:bool;
     case_completed:bool;
     case_resumed:bool;
-    finalizer:u64;
-    break_landing:u64;
-    break_value:u64;
-    scan_landing:u64;
+    finalizer:UInt64;
+    break_landing:UInt64;
+    break_value:UInt64;
+    scan_landing:UInt64;
     pending_break:bool;
     pending_scan:bool;
 }
 
-export func native_unsupported() -> u8 { return 1u8; }
-export func native_command_capacity() -> u8 { return 2u8; }
-export func invalid_native_module() -> u8 { return 3u8; }
-export func unproved_callable_completion() -> u8 { return 4u8; }
+export func native_unsupported() -> UInt8 { return 1u8; }
+export func native_command_capacity() -> UInt8 { return 2u8; }
+export func invalid_native_module() -> UInt8 { return 3u8; }
+export func unproved_callable_completion() -> UInt8 { return 4u8; }
 
-func command(code:NativeCommands in C, plan:NativePlan in P, opcode:u8,
-             a:u64, b:u64, c:u64, d:u64) -> void where {owner C, owner P} {
+func command(code:NativeCommands in C, plan:NativePlan in P, opcode:UInt8,
+             a:UInt64, b:UInt64, c:UInt64, d:UInt64) -> void where {owner C, owner P} {
     if (plan.diagnostic != 0u8) return;
     val at <- plan.used;
     if (at == intrinsic (len)(code)) {
@@ -139,19 +139,19 @@ func command(code:NativeCommands in C, plan:NativePlan in P, opcode:u8,
     return;
 }
 
-func emit(code:NativeCommands in C, plan:NativePlan in P, opcode:u8, a:u64, b:u64) -> void
+func emit(code:NativeCommands in C, plan:NativePlan in P, opcode:UInt8, a:UInt64, b:UInt64) -> void
     where {owner C, owner P} {
     command(code, plan, opcode, a, b, 0u64, 0u64);
 }
 
-func storage_operation(code:NativeCommands in C, plan:NativePlan in P, opcode:u8, a:u64, b:u64,
-                       reservation:u64, at:u64) -> void where {owner C, owner P} {
+func storage_operation(code:NativeCommands in C, plan:NativePlan in P, opcode:UInt8, a:UInt64, b:UInt64,
+                       reservation:UInt64, at:UInt64) -> void where {owner C, owner P} {
     val tag <- reservation_tag(reservation);
     command(code, plan, opcode, a, b, tag, if (tag == 0u64) { 0u64 } else { at });
 }
 
 func initialize_guarded_locals(names:const NameBindings in B, code:NativeCommands in C, plan:NativePlan in P,
-                                scope:u64) -> void where {const owner B, owner C, owner P} {
+                                scope:UInt64) -> void where {const owner B, owner C, owner P} {
     val declaration <- names[scope].guarded_local_link;
     for (unused in 0u64 .. intrinsic (len)(names)) {
         if (declaration == no_node()) return;
@@ -160,34 +160,34 @@ func initialize_guarded_locals(names:const NameBindings in B, code:NativeCommand
     };
 }
 
-func new_block(plan:NativePlan in P) -> u64 where {owner P} {
+func new_block(plan:NativePlan in P) -> UInt64 where {owner P} {
     val label <- plan.labels;
     plan.labels <- label + 1u64;
     return label;
 }
 
-func new_slot(plan:NativePlan in P) -> u64 where {owner P} {
+func new_slot(plan:NativePlan in P) -> UInt64 where {owner P} {
     val index <- plan.slots;
     plan.slots <- index + 1u64;
     return index;
 }
 
 func position(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-              label:u64) -> void where {owner C, owner P, owner R} {
+              label:UInt64) -> void where {owner C, owner P, owner R} {
     emit(code, plan, position_block(), label, plan.function_base + state.active_function);
     state.live <- true;
     return;
 }
 
 func finish_block(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                  destination:u64) -> void where {owner C, owner P, owner R} {
+                  destination:UInt64) -> void where {owner C, owner P, owner R} {
     emit(code, plan, jump(), destination, 0u64);
     state.live <- false;
     return;
 }
 
 func forward_return(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                    returned:u64, continuation:u64, prepared:u64, ready:u64) -> void where {owner C, owner P, owner R} {
+                    returned:UInt64, continuation:UInt64, prepared:UInt64, ready:UInt64) -> void where {owner C, owner P, owner R} {
     if (returned == continuation) return;
     position(code, plan, state, returned);
     if (prepared != no_node()) { emit(code, plan, copy_word(), state.return_slot, prepared); } else {};
@@ -195,7 +195,7 @@ func forward_return(code:NativeCommands in C, plan:NativePlan in P, state:Loweri
     finish_block(code, plan, state, continuation);
 }
 
-func source_failure(code:NativeCommands in C, plan:NativePlan in P, category:u64, at:u64) -> void
+func source_failure(code:NativeCommands in C, plan:NativePlan in P, category:UInt64, at:UInt64) -> void
     where {owner C, owner P} {
     emit(code, plan, word_constant(), pending_category(), category);
     emit(code, plan, source_site(), pending_site(), at);
@@ -206,7 +206,7 @@ func invocation_failure(code:NativeCommands in C, plan:NativePlan in P) -> void 
     emit(code, plan, copy_word(), pending_site(), call_site());
 }
 
-func save_failure(code:NativeCommands in C, plan:NativePlan in P) -> u64 where {owner C, owner P} {
+func save_failure(code:NativeCommands in C, plan:NativePlan in P) -> UInt64 where {owner C, owner P} {
     val category <- new_slot(plan);
     val site <- new_slot(plan);
     emit(code, plan, copy_completion(), category, pending_category());
@@ -214,7 +214,7 @@ func save_failure(code:NativeCommands in C, plan:NativePlan in P) -> u64 where {
     return category;
 }
 
-func restore_failure(code:NativeCommands in C, plan:NativePlan in P, saved:u64) -> void
+func restore_failure(code:NativeCommands in C, plan:NativePlan in P, saved:UInt64) -> void
     where {owner C, owner P} {
     emit(code, plan, copy_completion(), pending_category(), saved);
     emit(code, plan, copy_word(), pending_site(), saved + 1u64);
@@ -225,7 +225,7 @@ func restore_failure(code:NativeCommands in C, plan:NativePlan in P, saved:u64) 
 # enclosing exception continuation, which includes any finalizer.
 func lower_dispatch(nodes:const ExprNodes in N, links:const NameWork in L,
                     facts:const OperandFacts in F, code:NativeCommands in C,
-                    plan:NativePlan in P, state:LoweringState in R, at:u64, first:u64) -> void
+                    plan:NativePlan in P, state:LoweringState in R, at:UInt64, first:UInt64) -> void
     where {const owner N, const owner L, const owner F, owner C, owner P, owner R} {
     position(code, plan, state, at);
     val ordinary <- new_block(plan);
@@ -262,7 +262,7 @@ func lower_dispatch(nodes:const ExprNodes in N, links:const NameWork in L,
 
 func check_target_presence(sites:const CompletionSites in S, code:NativeCommands in C,
                            plan:NativePlan in P, state:LoweringState in R,
-                           at:u64, failure_at:u64) -> void
+                           at:UInt64, failure_at:UInt64) -> void
     where {const owner S, owner C, owner P, owner R} {
     val presence <- sites[at].presence;
     if (presence == present_target()) return;
@@ -282,7 +282,7 @@ func check_target_presence(sites:const CompletionSites in S, code:NativeCommands
 
 func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
                     sites:const CompletionSites in S, code:NativeCommands in C,
-                    plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                    plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner F, const owner S, owner C, owner P, owner R} {
     if (facts[at].needs_target != 0u8) {
         check_target_presence(sites, code, plan, state, at, syntax_first(nodes, state.syntax_used, at));
@@ -291,14 +291,14 @@ func require_target(nodes:const ExprNodes in N, facts:const OperandFacts in F,
 
 func lower_node(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     lower_expression(nodes, names, links, interfaces, facts, sites, code, plan, state, at, false);
 }
 
 func lower_completed_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                           facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                          plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                          plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, at);
     if (!state.live || facts[at].reception == independent_value()) return;
@@ -310,9 +310,9 @@ func lower_completed_bits(nodes:const ExprNodes in N, names:const NameBindings i
 
 func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
-    ref tail = make u64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
     ref cases = make CaseSites { subject <- no_node(); items <- no_node(); };
     ref guarded = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
@@ -331,7 +331,7 @@ func lower_bits(nodes:const ExprNodes in N, names:const NameBindings in B, links
 # of that same head in the supplying activation.
 func prepare_owner_address(nodes:const ExprNodes in N, facts:const OperandFacts in F,
                            code:NativeCommands in C, plan:NativePlan in P,
-                           owner_site:u64, destination:u64, revision:u64, used:u64) -> void
+                           owner_site:UInt64, destination:UInt64, revision:UInt64, used:UInt64) -> void
     where {const owner N, const owner F, owner C, owner P} {
     val chain <- facts[owner_site].owner_chain;
     if (chain == no_node()) { plan.diagnostic <- invalid_native_module(); return; };
@@ -346,7 +346,7 @@ func prepare_owner_address(nodes:const ExprNodes in N, facts:const OperandFacts 
 
 func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                       plan:NativePlan in P, state:LoweringState in R, first:u64) -> void
+                       plan:NativePlan in P, state:LoweringState in R, first:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val argument <- first;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -378,7 +378,7 @@ func prepare_arguments(nodes:const ExprNodes in N, names:const NameBindings in B
 }
 
 func invoke(nodes:const ExprNodes in N, links:const NameWork in L,
-             facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P, call:u64, first:u64, symbolic:bool) -> void
+             facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P, call:UInt64, first:UInt64, symbolic:bool) -> void
     where {const owner N, const owner L, const owner F, owner C, owner P} {
     if (symbolic) {
         emit(code, plan, print_word(), slot(first), 0u64);
@@ -400,14 +400,14 @@ func invoke(nodes:const ExprNodes in N, links:const NameWork in L,
     };
 }
 
-func pass_prepared_operand(code:NativeCommands in C, plan:NativePlan in P, word:u64, chain:u64) -> void
+func pass_prepared_operand(code:NativeCommands in C, plan:NativePlan in P, word:UInt64, chain:UInt64) -> void
     where {owner C, owner P} {
     emit(code, plan, pass_argument(), word, 0u64);
     if (chain != no_node()) { emit(code, plan, pass_argument(), slot(chain), 0u64); };
 }
 
 func guard_word(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                word:u64, zero_fails:bool, category:u64, source_at:u64) -> void
+                word:UInt64, zero_fails:bool, category:UInt64, source_at:UInt64) -> void
     where {owner C, owner P, owner R} {
     val ready <- new_block(plan);
     val failed <- new_block(plan);
@@ -421,7 +421,7 @@ func guard_word(code:NativeCommands in C, plan:NativePlan in P, state:LoweringSt
 
 func lower_text_intrinsic(nodes:const ExprNodes in N, links:const NameWork in L,
                           code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                          at:u64, text:u64, first:u64, intrinsic_kind:u8) -> void
+                          at:UInt64, text:UInt64, first:UInt64, intrinsic_kind:UInt8) -> void
     where {const owner N, const owner L, owner C, owner P, owner R} {
     if (intrinsic_kind != text_byte_export()) {
         emit(code, plan, text_size(), slot(at), slot(text));
@@ -438,9 +438,9 @@ func lower_text_intrinsic(nodes:const ExprNodes in N, links:const NameWork in L,
 
 func lower_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                plan:NativePlan in P, state:LoweringState in R, at:u64, arguments:u64, first:u64, symbolic:bool) -> void
+                plan:NativePlan in P, state:LoweringState in R, at:UInt64, arguments:UInt64, first:UInt64, symbolic:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
-    ref first_argument = make u64 { no_node() };
+    ref first_argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, arguments, ArgumentSequence, first_argument)) {
         plan.diagnostic <- invalid_native_module();
         return;
@@ -470,7 +470,7 @@ func propagate_invocation_failure(code:NativeCommands in C, plan:NativePlan in P
 
 func lower_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                       plan:NativePlan in P, state:LoweringState in R, at:u64, place:u64, input:u64) -> void
+                       plan:NativePlan in P, state:LoweringState in R, at:UInt64, place:UInt64, input:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, input);
     if (!state.live || plan.diagnostic != 0u8) return;
@@ -486,8 +486,8 @@ func lower_transfer_call(nodes:const ExprNodes in N, names:const NameBindings in
 
 func lower_assignment(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                       facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                      plan:NativePlan in P, state:LoweringState in R, at:u64,
-                      place:u64, input:u64, rebind:bool) -> void
+                      plan:NativePlan in P, state:LoweringState in R, at:UInt64,
+                      place:UInt64, input:UInt64, rebind:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (rebind && scalar_kind(facts[place].kind)) {
         val declaration <- names[place].declaration;
@@ -528,7 +528,7 @@ func lower_assignment(nodes:const ExprNodes in N, names:const NameBindings in B,
     emit(code, plan, copy_word(), slot(at), slot(input));
 }
 
-func native_arithmetic(operation:ArithmeticOperation) -> u8 {
+func native_arithmetic(operation:ArithmeticOperation) -> UInt8 {
     return case operation of {
         (Addition) -> { checked_add() };
         (Subtraction) -> { checked_subtract() };
@@ -538,7 +538,7 @@ func native_arithmetic(operation:ArithmeticOperation) -> u8 {
     };
 }
 
-func native_relation(relation:ComparisonRelation) -> u64 {
+func native_relation(relation:ComparisonRelation) -> UInt64 {
     return case relation of {
         (Equal) -> { equal_words() };
         (Unequal) -> { unequal_words() };
@@ -550,8 +550,8 @@ func native_relation(relation:ComparisonRelation) -> u64 {
 }
 
 func lower_arithmetic(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                      output:u64, left:u64, right:u64, operation:ArithmeticOperation,
-                      operator_at:u64)
+                      output:UInt64, left:UInt64, right:UInt64, operation:ArithmeticOperation,
+                      operator_at:UInt64)
     -> void where {owner C, owner P, owner R} {
     command(code, plan, native_arithmetic(operation), output, left, right, arithmetic_fault());
     val ready <- new_block(plan);
@@ -568,7 +568,7 @@ func lower_arithmetic(code:NativeCommands in C, plan:NativePlan in P, state:Lowe
 func lower_augmented_transfer(
     nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
     facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-    plan:NativePlan in P, state:LoweringState in R, at:u64,
+    plan:NativePlan in P, state:LoweringState in R, at:UInt64,
     transfer:const AugmentedTransferSites in U)
     -> void where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S,
                    owner C, owner P, owner R, const owner U} {
@@ -594,7 +594,7 @@ func lower_augmented_transfer(
 
 func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                   facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                  plan:NativePlan in P, state:LoweringState in R, at:u64, operands:const BinarySites in I, compare:bool) -> void
+                  plan:NativePlan in P, state:LoweringState in R, at:UInt64, operands:const BinarySites in I, compare:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
     val left <- operands.left_operand;
     val right <- operands.right_operand;
@@ -613,7 +613,7 @@ func lower_binary(nodes:const ExprNodes in N, names:const NameBindings in B, lin
 
 func lower_logical(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                    facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                   plan:NativePlan in P, state:LoweringState in R, at:u64, left:u64, right:u64, negate:bool, conjunction:bool, policy:RhsEvaluation) -> void
+                   plan:NativePlan in P, state:LoweringState in R, at:UInt64, left:UInt64, right:UInt64, negate:bool, conjunction:bool, policy:RhsEvaluation) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     lower_bits(nodes, names, links, interfaces, facts, sites, code, plan, state, left);
     if (!state.live || plan.diagnostic != 0u8) return;
@@ -652,10 +652,10 @@ func lower_logical(nodes:const ExprNodes in N, names:const NameBindings in B, li
 
 func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                 facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                plan:NativePlan in P, state:LoweringState in R, container:u64, sequence:SequenceSyntax, destination:u64, read_result:bool) -> void
+                plan:NativePlan in P, state:LoweringState in R, container:UInt64, sequence:SequenceSyntax, destination:UInt64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
-    ref item = make u64 { no_node() };
-    ref tail = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
+    ref tail = make UInt64 { no_node() };
     if (sequence == ModuleSequence) {
         if (!first_module_item(nodes, state.syntax_revision, state.syntax_used, container, item)) {
             plan.diagnostic <- invalid_native_module();
@@ -698,7 +698,7 @@ func lower_list(nodes:const ExprNodes in N, names:const NameBindings in B, links
 func prepare_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                         facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                         plan:NativePlan in P, state:LoweringState in R,
-                        arm:u64, at:u64, destination:u64, read_result:bool) -> bool
+                        arm:UInt64, at:UInt64, destination:UInt64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val used <- scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8;
     val has_result <- used && scalar_kind(facts[arm].kind);
@@ -724,7 +724,7 @@ func prepare_result_arm(nodes:const ExprNodes in N, names:const NameBindings in 
 func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                       facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                       plan:NativePlan in P, state:LoweringState in R,
-                      arm:u64, at:u64, next:u64, read_result:bool) -> bool
+                      arm:UInt64, at:UInt64, next:UInt64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (!prepare_result_arm(nodes, names, links, interfaces, facts, sites, code, plan, state, arm, at, slot(at), read_result))
         return false;
@@ -734,7 +734,7 @@ func lower_result_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func lower_conditional(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                       plan:NativePlan in P, state:LoweringState in R, at:u64, branch:const ConditionalSites in I, read_result:bool) -> void
+                       plan:NativePlan in P, state:LoweringState in R, at:UInt64, branch:const ConditionalSites in I, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
     val condition <- branch.test;
     lower_bits(nodes, names, links, interfaces, facts, sites, code, plan, state, condition);
@@ -754,7 +754,7 @@ func lower_conditional(nodes:const ExprNodes in N, names:const NameBindings in B
 
 func lower_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                      facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                     plan:NativePlan in P, state:LoweringState in R, arm:u64, subject:u64, syntax:const CaseArmSites in I) -> void
+                     plan:NativePlan in P, state:LoweringState in R, arm:UInt64, subject:UInt64, syntax:const CaseArmSites in I) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
     val mode <- facts[arm].case_match;
     val pattern <- syntax.pattern;
@@ -828,7 +828,7 @@ func lower_case_items(nodes:const ExprNodes in N, names:const NameBindings in B,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                        plan:NativePlan in P, state:LoweringState in R, choice:const CaseSites in I) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
-    ref item = make u64 { no_node() };
+    ref item = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, choice.items, BlockSequence, item)) {
         plan.diagnostic <- invalid_native_module();
         return;
@@ -860,7 +860,7 @@ func lower_case_items(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 # Publish the saved address's presence once. Later flags name that same
 # decision, including when initialization proof follows a fallthrough.
-func lower_case_presence(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R, subject:u64) -> u64
+func lower_case_presence(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R, subject:UInt64) -> UInt64
     where {owner C, owner P, owner R} {
     val flag <- new_slot(plan);
     val absent <- new_block(plan);
@@ -879,7 +879,7 @@ func lower_case_presence(code:NativeCommands in C, plan:NativePlan in P, state:L
 
 func lower_case(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                  facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                 plan:NativePlan in P, state:LoweringState in R, at:u64, read_result:bool) -> void
+                 plan:NativePlan in P, state:LoweringState in R, at:UInt64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     ref choice = make CaseSites { subject <- no_node(); items <- no_node(); };
     if (!inspect_case(nodes, state.syntax_revision, state.syntax_used, at, choice)) {
@@ -929,7 +929,7 @@ func lower_case(nodes:const ExprNodes in N, names:const NameBindings in B, links
 }
 
 func deliver_case_break(names:const NameBindings in B, code:NativeCommands in C, plan:NativePlan in P,
-                        state:LoweringState in R, value:u64) -> void
+                        state:LoweringState in R, value:UInt64) -> void
     where {const owner B, owner C, owner P, owner R} {
     val target <- state.case_index;
     if (names[target].finalizer != state.finalizer) {
@@ -968,14 +968,14 @@ func deliver_case_scan(nodes:const ExprNodes in N, names:const NameBindings in B
 
 func lower_case_break(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                       plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                       plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val target <- names[at].declaration;
     if (target == no_node() || target != state.case_index) {
         plan.diagnostic <- native_unsupported();
         return;
     } else {};
-    ref value = make u64 { no_node() };
+    ref value = make UInt64 { no_node() };
     if (!completion_operand(nodes, state.syntax_revision, state.syntax_used, at, value)) {
         plan.diagnostic <- invalid_native_module();
         return;
@@ -991,7 +991,7 @@ func lower_case_break(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func lower_range(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                  facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                 plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                 plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
     ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
@@ -1056,7 +1056,7 @@ func lower_range(nodes:const ExprNodes in N, names:const NameBindings in B, link
 
 func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                     facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                    plan:NativePlan in P, state:LoweringState in R, at:u64, first:u64, next:u64, read_result:bool) -> bool
+                    plan:NativePlan in P, state:LoweringState in R, at:UInt64, first:UInt64, next:UInt64, read_result:bool) -> bool
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val normal <- false;
     val clause <- first;
@@ -1088,7 +1088,7 @@ func lower_handlers(nodes:const ExprNodes in N, names:const NameBindings in B, l
 }
 
 func enter_finalizer(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                     entry:u64, reason:u64, kind:u64, finalizer:u64) -> void
+                     entry:UInt64, reason:UInt64, kind:UInt64, finalizer:UInt64) -> void
     where {owner C, owner P, owner R} {
     position(code, plan, state, entry);
     emit(code, plan, write_flow_flag(), reason, kind);
@@ -1096,7 +1096,7 @@ func enter_finalizer(code:NativeCommands in C, plan:NativePlan in P, state:Lower
 }
 
 func match_finalizer_exit(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                          reason:u64, kind:u64, destination:u64) -> void where {owner C, owner P, owner R} {
+                          reason:UInt64, kind:UInt64, destination:UInt64) -> void where {owner C, owner P, owner R} {
     val rest <- new_block(plan);
     command(code, plan, branch_on_flow_flag(), reason, kind, destination, rest);
     position(code, plan, state, rest);
@@ -1104,10 +1104,10 @@ func match_finalizer_exit(code:NativeCommands in C, plan:NativePlan in P, state:
 
 func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-               plan:NativePlan in P, state:LoweringState in R, at:u64, read_result:bool) -> void
+               plan:NativePlan in P, state:LoweringState in R, at:UInt64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     ref protected = make ProtectedSites { body <- no_node(); clauses <- no_node(); discarded <- false; };
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!inspect_protected(nodes, state.syntax_revision, state.syntax_used, at, protected) ||
         !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, protected.clauses, ClauseSequence, first)) {
         plan.diagnostic <- invalid_native_module();
@@ -1219,7 +1219,7 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
 
 func lower_binding(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                    facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                   plan:NativePlan in P, state:LoweringState in R, at:u64, binding:const LocalBindingSites in I) -> void
+                   plan:NativePlan in P, state:LoweringState in R, at:UInt64, binding:const LocalBindingSites in I) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
     val initializer <- binding.initializer;
     if (binding.mode == ValueLocal) {
@@ -1247,7 +1247,7 @@ func lower_binding(nodes:const ExprNodes in N, names:const NameBindings in B, li
 
 func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                         facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                        plan:NativePlan in P, state:LoweringState in R, at:u64, reservation:bool,
+                        plan:NativePlan in P, state:LoweringState in R, at:UInt64, reservation:bool,
                         construction:const ConstructionSites in K) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner K} {
     if (facts[at].allocation_owner != no_node()) {
@@ -1270,8 +1270,8 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
     val words <- facts[at].product_words;
     if (words != 0u64) {
         emit(code, plan, allocate_words(), slot(at), words);
-        ref tail = make u64 { no_node() };
-        ref item = make u64 { no_node() };
+        ref tail = make UInt64 { no_node() };
+        ref item = make UInt64 { no_node() };
         if (!block_tail(nodes, state.syntax_revision, state.syntax_used, body, tail) ||
             !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, BlockSequence, item)) {
             plan.diagnostic <- invalid_native_module();
@@ -1319,7 +1319,7 @@ func lower_construction(nodes:const ExprNodes in N, names:const NameBindings in 
 
 func lower_place_address(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                          facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                         plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                         plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (name_syntax(nodes, state.syntax_used, at) == OrdinaryName) {
         emit(code, plan, copy_word(), slot(at), slot(names[at].declaration));
@@ -1337,7 +1337,7 @@ func lower_place_address(nodes:const ExprNodes in N, names:const NameBindings in
     };
 }
 
-func text_place_reservation(nodes:const ExprNodes in N, names:const NameBindings in B, at:u64, revision:u64, used:u64) -> u64
+func text_place_reservation(nodes:const ExprNodes in N, names:const NameBindings in B, at:UInt64, revision:UInt64, used:UInt64) -> UInt64
     where {const owner N, const owner B} {
     val declaration <- names[at].declaration;
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
@@ -1349,7 +1349,7 @@ func text_place_reservation(nodes:const ExprNodes in N, names:const NameBindings
 
 func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                   facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                  plan:NativePlan in P, state:LoweringState in R, at:u64, value:u64) -> void
+                  plan:NativePlan in P, state:LoweringState in R, at:UInt64, value:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (value != no_node()) {
         if (state.return_slot != no_node() && facts[names[at].scope].reception != borrowed_ref()) {
@@ -1369,7 +1369,7 @@ func lower_return(nodes:const ExprNodes in N, names:const NameBindings in B, lin
 
 func lower_bound_name(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                        facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                       plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                       plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (facts[at].enum_constant != 0u8) {
         emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
@@ -1394,7 +1394,7 @@ func lower_bound_name(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func lower_group(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                  facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                 plan:NativePlan in P, state:LoweringState in R, at:u64, inside:u64) -> void
+                 plan:NativePlan in P, state:LoweringState in R, at:UInt64, inside:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val used <- (scalar_kind(facts[at].kind) || immutable_text_kind(facts[at].kind)) &&
         facts[at].discarded_result == 0u8;
@@ -1410,14 +1410,14 @@ func lower_group(nodes:const ExprNodes in N, names:const NameBindings in B, link
 
 func lower_block_expression(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                              facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                             plan:NativePlan in P, state:LoweringState in R, at:u64, read_result:bool) -> void
+                             plan:NativePlan in P, state:LoweringState in R, at:UInt64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val destination <- if (scalar_kind(facts[at].kind) && facts[at].discarded_result == 0u8) { slot(at) } else { no_node() };
     lower_list(nodes, names, links, interfaces, facts, sites, code, plan, state, at, BlockSequence, destination, read_result);
 }
 
 func lower_local_enum_tests(links:const NameWork in L, code:NativeCommands in C, plan:NativePlan in P,
-                           state:LoweringState in R, member_head:u64, word:u64, ready:u64) -> void
+                           state:LoweringState in R, member_head:UInt64, word:UInt64, ready:UInt64) -> void
     where {const owner L, owner C, owner P, owner R} {
     val member <- member_head;
     val next <- no_node();
@@ -1433,7 +1433,7 @@ func lower_local_enum_tests(links:const NameWork in L, code:NativeCommands in C,
 
 func lower_enum_membership(interfaces:const ModuleInterfaces in I, links:const NameWork in L,
                           facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
-                          state:LoweringState in R, at:u64, operand:u64, colon:u64) -> void
+                          state:LoweringState in R, at:UInt64, operand:UInt64, colon:UInt64) -> void
     where {const owner I, const owner L, const owner F, owner C, owner P, owner R} {
     val head <- links[at].enum_members;
     val ready <- new_block(plan);
@@ -1456,7 +1456,7 @@ func lower_enum_membership(interfaces:const ModuleInterfaces in I, links:const N
 
 func lower_assertion(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                      facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                     plan:NativePlan in P, state:LoweringState in R, at:u64, operand:u64, colon:u64) -> void
+                     plan:NativePlan in P, state:LoweringState in R, at:UInt64, operand:UInt64, colon:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (facts[at].enum_constant != 0u8) {
         emit(code, plan, word_constant(), slot(at), facts[at].discriminator_code);
@@ -1481,7 +1481,7 @@ func lower_assertion(nodes:const ExprNodes in N, names:const NameBindings in B, 
 }
 
 func lower_case_fallthrough(nodes:const ExprNodes in N, names:const NameBindings in B, code:NativeCommands in C,
-                            plan:NativePlan in P, state:LoweringState in R, at:u64) -> void
+                            plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> void
     where {const owner N, const owner B, owner C, owner P, owner R} {
     if (names[at].declaration != state.case_arm || state.case_next == no_node()) {
         plan.diagnostic <- native_unsupported();
@@ -1499,7 +1499,7 @@ func lower_caught_raise(code:NativeCommands in C, plan:NativePlan in P, state:Lo
 
 func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                       facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                      plan:NativePlan in P, state:LoweringState in R, at:u64, read_result:bool) -> void
+                      plan:NativePlan in P, state:LoweringState in R, at:UInt64, read_result:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     if (!state.live || plan.diagnostic != 0u8) return;
     if (at >= state.syntax_used) { plan.diagnostic <- invalid_native_module(); return; };
@@ -1671,7 +1671,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     val defer_shape <- inspect_defer(nodes, state.syntax_revision, state.syntax_used, at, action);
     if (defer_shape == DeferCall) {
         val call_form <- inspect_invocation(nodes, state.syntax_revision, state.syntax_used, action.invocation, call);
-        ref argument = make u64 { no_node() };
+        ref argument = make UInt64 { no_node() };
         if ((call_form != OrdinaryInvocation && call_form != EffectfulInvocation) ||
             !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, call.arguments, ArgumentSequence, argument)) {
             plan.diagnostic <- invalid_native_module();
@@ -1720,14 +1720,14 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     return;
 }
 
-func formal_owner_word(facts:const OperandFacts in F, formal:u64) -> u64 where {const owner F} {
+func formal_owner_word(facts:const OperandFacts in F, formal:UInt64) -> UInt64 where {const owner F} {
     if (facts[formal].passes_owner == 0u8) return no_node();
     return facts[facts[formal].owner].owner_chain;
 }
 
-func callable_parameters(nodes:const ExprNodes in N, tree:const ParseResult in T, signature:u64,
-                           first:u64 in R) -> bool where {const owner N, const owner T, owner R} {
-    ref head = make u64 { no_node() };
+func callable_parameters(nodes:const ExprNodes in N, tree:const ParseResult in T, signature:UInt64,
+                           first:UInt64 in R) -> bool where {const owner N, const owner T, owner R} {
+    ref head = make UInt64 { no_node() };
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
     };
@@ -1736,7 +1736,7 @@ func callable_parameters(nodes:const ExprNodes in N, tree:const ParseResult in T
         first_sequence_entry(nodes, tree.revision, tree.used, sites.parameter_tail, FormalSequence, first);
 }
 
-func formal_count(links:const NameWork in L, facts:const OperandFacts in F, first:u64, used:u64) -> u64
+func formal_count(links:const NameWork in L, facts:const OperandFacts in F, first:UInt64, used:UInt64) -> UInt64
     where {const owner L, const owner F} {
     val current <- first;
     val count <- 0u64;
@@ -1749,7 +1749,7 @@ func formal_count(links:const NameWork in L, facts:const OperandFacts in F, firs
 }
 
 func receive_formals(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                     code:NativeCommands in C, plan:NativePlan in P, state:const LoweringState in R, first:u64) -> void
+                     code:NativeCommands in C, plan:NativePlan in P, state:const LoweringState in R, first:UInt64) -> void
     where {const owner N, const owner L, const owner F, owner C, owner P, const owner R} {
     val formal <- first;
     val index <- 0u64;
@@ -1776,7 +1776,7 @@ func receive_formals(nodes:const ExprNodes in N, links:const NameWork in L, fact
 }
 
 func initialize_defer_flags(sites:const CompletionSites in S, code:NativeCommands in C, plan:NativePlan in P,
-                            scope:u64, used:u64) -> void where {const owner S, owner C, owner P} {
+                            scope:UInt64, used:UInt64) -> void where {const owner S, owner C, owner P} {
     val action <- sites[scope].last_defer;
     for (unused in 0u64 .. used) {
         if (action == no_node()) return;
@@ -1787,7 +1787,7 @@ func initialize_defer_flags(sites:const CompletionSites in S, code:NativeCommand
 
 func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                          facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                         plan:NativePlan in P, state:LoweringState in R, body:u64, next:u64) -> void
+                         plan:NativePlan in P, state:LoweringState in R, body:UInt64, next:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val exception_target <- state.exception_target;
     val return_target <- state.return_target;
@@ -1819,7 +1819,7 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
 
 func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F,
                  sites:const CompletionSites in S, code:NativeCommands in C,
-                 plan:NativePlan in P, state:LoweringState in R, scope:u64) -> void
+                 plan:NativePlan in P, state:LoweringState in R, scope:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val action <- sites[scope].last_defer;
     val invoke_block <- no_node();
@@ -1827,7 +1827,7 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
     val failed <- no_node();
     ref deferred = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
-    ref argument = make u64 { no_node() };
+    ref argument = make UInt64 { no_node() };
     val kind <- NotADefer;
     val invocation_mode <- OrdinaryInvocation;
     for (unused in 0u64 .. syntax_len(nodes)) {
@@ -1864,13 +1864,13 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
 }
 
 func begin_text_owner(facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
-                      scope:u64) -> void where {const owner F, owner C, owner P} {
+                      scope:UInt64) -> void where {const owner F, owner C, owner P} {
     val chain <- facts[scope].owner_chain;
     if (chain != no_node()) { emit(code, plan, word_constant(), slot(chain), 0u64); };
 }
 
 func release_text_owner(facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
-                        scope:u64) -> void where {const owner F, owner C, owner P} {
+                        scope:UInt64) -> void where {const owner F, owner C, owner P} {
     val chain <- facts[scope].owner_chain;
     if (chain != no_node()) { emit(code, plan, text_release(), slot(chain), 0u64); };
 }
@@ -1880,7 +1880,7 @@ func release_text_owner(facts:const OperandFacts in F, code:NativeCommands in C,
 # only after the local drain has run.
 func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                       facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
-                      plan:NativePlan in P, state:LoweringState in R, scope:u64) -> void
+                      plan:NativePlan in P, state:LoweringState in R, scope:UInt64) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
     val outer_scope <- state.active_scope;
     val outer_exception <- state.exception_target;
@@ -1944,12 +1944,12 @@ func lower_full_scope(nodes:const ExprNodes in N, names:const NameBindings in B,
 
 func lower_activation(nodes:const ExprNodes in N, tree:const ParseResult in T, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
                       facts:const OperandFacts in F, sites:const CompletionSites in S,
-                      code:NativeCommands in C, plan:NativePlan in P, scope:u64) -> void
+                      code:NativeCommands in C, plan:NativePlan in P, scope:UInt64) -> void
     where {const owner N, const owner T, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P} {
     plan.node <- scope;
     val program <- scope == tree.root;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (!program && (inspect_callable(nodes, tree.revision, tree.used, scope, callable) != ModuleCallable ||
         !callable_parameters(nodes, tree, callable.signature, first))) {
         plan.diagnostic <- invalid_native_module();
@@ -2027,7 +2027,7 @@ func lower_activation(nodes:const ExprNodes in N, tree:const ParseResult in T, n
 
 func check_initialized_formals(nodes:const ExprNodes in N, links:const NameWork in L,
                                code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
-                               first:u64) -> void where {const owner N, const owner L, owner C, owner P, owner R} {
+                               first:UInt64) -> void where {const owner N, const owner L, owner C, owner P, owner R} {
     val formal <- first;
     ref sites = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal; };
     val complete <- no_node();
@@ -2058,7 +2058,7 @@ func check_initialized_formals(nodes:const ExprNodes in N, links:const NameWork 
     };
 }
 
-func module_command_supported(names:const NameBindings in B, sites:const CompletionSites in S, at:u64) -> bool
+func module_command_supported(names:const NameBindings in B, sites:const CompletionSites in S, at:UInt64) -> bool
     where {const owner B, const owner S} {
     return sites[at].event == skipped_operand() || names[at].scope == no_node() ||
         names[at].kind != exception_binding() || sites[at].forwarded_operand != 0u8;
@@ -2068,7 +2068,7 @@ func module_command_supported(names:const NameBindings in B, sites:const Complet
 # to LLVM only when this operation succeeds.
 export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResult in T, names:const NameBindings in B,
                                 links:const NameWork in L, interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F, sites:const CompletionSites in S,
-                                code:NativeCommands in C, plan:NativePlan in P, base:u64, entry:bool) -> bool
+                                code:NativeCommands in C, plan:NativePlan in P, base:UInt64, entry:bool) -> bool
     where {const owner N, const owner T, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P} {
     plan.used <- 0u64;
     plan.initialization_notes <- false;
@@ -2079,7 +2079,7 @@ export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResu
     plan.slots <- 0u64;
     plan.diagnostic <- invalid_native_module();
     plan.node <- no_node();
-    ref first = make u64 { no_node() };
+    ref first = make UInt64 { no_node() };
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) || tree.root != tree.used - 1u64 ||
         !first_module_item(nodes, tree.revision, tree.used, tree.root, first)) return false;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };

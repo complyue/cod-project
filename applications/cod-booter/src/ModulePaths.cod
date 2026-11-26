@@ -1,15 +1,15 @@
 using "./SourceStorage.cod" SourceBytes;
 
-export enum ModulePathKind:u8 { InvalidPath; SourceRelative; PackagePath; }
+export enum ModulePathKind:UInt8 { InvalidPath; SourceRelative; PackagePath; }
 
-func invalid_segment(path:const SourceBytes in P, first:u64, past:u64) -> bool
+func invalid_segment(path:const SourceBytes in P, first:UInt64, past:UInt64) -> bool
     where {const owner P} {
     if (first == past) return true;
     if (past - first > 2u64 || path[first] != 46u8) return false;
     return past - first == 1u64 || path[first + 1u64] == 46u8
 }
 
-export func classify_module_path(path:const SourceBytes in P, first:u64, past:u64)
+export func classify_module_path(path:const SourceBytes in P, first:UInt64, past:UInt64)
     -> ModulePathKind where {const owner P} {
     if (first >= past || past > intrinsic (len)(path)) return InvalidPath:ModulePathKind;
     if (past - first >= 2u64 && path[first] == 46u8 && path[first + 1u64] == 47u8) {

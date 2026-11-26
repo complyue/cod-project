@@ -9,18 +9,18 @@ using "./ParserInput.cod" ParseResult;
 # This small expression backend accepts only its existing four operations.
 # The slots here are backend operands in postorder.
 export data ArithmeticOperands {
-    opcode:u8;
-    immediate:u64;
-    left_slot:u64;
-    right_slot:u64;
-    source_at:u64;
+    opcode:UInt8;
+    immediate:UInt64;
+    left_slot:UInt64;
+    right_slot:UInt64;
+    source_at:UInt64;
 }
 
-func checked_anchor(first:u64, past:u64, at:u64) -> bool {
+func checked_anchor(first:UInt64, past:UInt64, at:UInt64) -> bool {
     return first <= at && at < past;
 }
 
-export func arithmetic_operands(nodes:const ExprNodes in N, revision:u64, used:u64, at:u64,
+export func arithmetic_operands(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 operation:ArithmeticOperands in O) -> bool where {const owner N, owner O} {
     if (at >= used || at >= len(nodes)) return false;
     operation.immediate <- 0u64;
@@ -61,10 +61,10 @@ export func arithmetic_operands(nodes:const ExprNodes in N, revision:u64, used:u
 
 # Emit in postorder so both operands are available. The backend emits checked
 # arithmetic and reports runtime overflow at the operator's byte offset.
-export proc lower_expression(here emit(ordinal:u64, kind:u8, number:u64, left:u64, right:u64,
-                                      operation_at:u64) -> bool,
+export proc lower_expression(here emit(ordinal:UInt64, kind:UInt8, number:UInt64, left:UInt64, right:UInt64,
+                                      operation_at:UInt64) -> bool,
                              nodes:const ExprNodes in N, tree:const ParseResult in R,
-                             rejected_node:u64 in D) -> bool
+                             rejected_node:UInt64 in D) -> bool
     where {const owner N, const owner R, owner D} {
     rejected_node <- no_node();
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > len(nodes)) return false;

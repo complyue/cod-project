@@ -71,7 +71,7 @@ using "./ParserStorage.cod" SyntaxRole {
 };
 using "./SourceStorage.cod" { SourceBytes, Token };
 
-enum BlockItemMode:u8 { OrdinaryBlockItem; ConstructorInitializerItem; DirectCaseArmItem; }
+enum BlockItemMode:UInt8 { OrdinaryBlockItem; ConstructorInitializerItem; DirectCaseArmItem; }
 
 data ParseControls { supplied_here:bool; case_control:bool }
 
@@ -82,52 +82,52 @@ func restore_controls(result:ParseResult in R, saved:const ParseControls in C) -
     return
 }
 
-func expected_operand() -> u8 { return 1u8; }
-func expected_close() -> u8 { return 2u8; }
-func expected_u64() -> u8 { return 3u8; }
-func literal_too_large() -> u8 { return 4u8; }
-export func unexpected_token() -> u8 { return 6u8; }
-func expected_argument_separator() -> u8 { return 7u8; }
-export func expected_deferred_call() -> u8 { return 8u8; }
-func expected_block() -> u8 { return 10u8; }
-func expected_block_close() -> u8 { return 11u8; }
-func expected_block_separator() -> u8 { return 12u8; }
-func expected_try_clause() -> u8 { return 13u8; }
-func expected_catch_header() -> u8 { return 14u8; }
-func expected_catch_name() -> u8 { return 15u8; }
-func catch_all_must_be_last() -> u8 { return 17u8; }
-func expected_symbol() -> u8 { return 18u8; }
-func expected_binding_operator() -> u8 { return 21u8; }
-func unsupported_fixed_reference_group() -> u8 { return 148u8 }
-func expected_condition_open() -> u8 { return 27u8; }
-func unsupported_returning_pattern() -> u8 { return 52u8 }
-func expected_exception_initializer() -> u8 { return 32u8; }
-func invalid_exception_placement() -> u8 { return 33u8; }
-func duplicate_exception_placement() -> u8 { return 34u8; }
-func expected_range_header() -> u8 { return 36u8; }
-func expected_handle_constructor() -> u8 { return 37u8; }
-func expected_handle_owner() -> u8 { return 38u8; }
-func expected_here_receiver() -> u8 { return 39u8; }
-func duplicate_here_body() -> u8 { return 40u8; }
-func expected_index_close() -> u8 { return 42u8; }
-func expected_array_length_query() -> u8 { return 43u8; }
-func expected_case_of() -> u8 { return 46u8; }
-func expected_case_arrow() -> u8 { return 47u8; }
-func invalid_text_literal() -> u8 { return 113u8; }
-func expected_region_capacity() -> u8 { return 115u8; }
-func expected_assertion_message() -> u8 { return 51u8; }
-func unsupported_case_pattern() -> u8 { return 48u8; }
-func invalid_throwing_case_arm() -> u8 { return 49u8; }
+func expected_operand() -> UInt8 { return 1u8; }
+func expected_close() -> UInt8 { return 2u8; }
+func expected_u64() -> UInt8 { return 3u8; }
+func literal_too_large() -> UInt8 { return 4u8; }
+export func unexpected_token() -> UInt8 { return 6u8; }
+func expected_argument_separator() -> UInt8 { return 7u8; }
+export func expected_deferred_call() -> UInt8 { return 8u8; }
+func expected_block() -> UInt8 { return 10u8; }
+func expected_block_close() -> UInt8 { return 11u8; }
+func expected_block_separator() -> UInt8 { return 12u8; }
+func expected_try_clause() -> UInt8 { return 13u8; }
+func expected_catch_header() -> UInt8 { return 14u8; }
+func expected_catch_name() -> UInt8 { return 15u8; }
+func catch_all_must_be_last() -> UInt8 { return 17u8; }
+func expected_symbol() -> UInt8 { return 18u8; }
+func expected_binding_operator() -> UInt8 { return 21u8; }
+func unsupported_fixed_reference_group() -> UInt8 { return 148u8 }
+func expected_condition_open() -> UInt8 { return 27u8; }
+func unsupported_returning_pattern() -> UInt8 { return 52u8 }
+func expected_exception_initializer() -> UInt8 { return 32u8; }
+func invalid_exception_placement() -> UInt8 { return 33u8; }
+func duplicate_exception_placement() -> UInt8 { return 34u8; }
+func expected_range_header() -> UInt8 { return 36u8; }
+func expected_handle_constructor() -> UInt8 { return 37u8; }
+func expected_handle_owner() -> UInt8 { return 38u8; }
+func expected_here_receiver() -> UInt8 { return 39u8; }
+func duplicate_here_body() -> UInt8 { return 40u8; }
+func expected_index_close() -> UInt8 { return 42u8; }
+func expected_array_length_query() -> UInt8 { return 43u8; }
+func expected_case_of() -> UInt8 { return 46u8; }
+func expected_case_arrow() -> UInt8 { return 47u8; }
+func invalid_text_literal() -> UInt8 { return 113u8; }
+func expected_region_capacity() -> UInt8 { return 115u8; }
+func expected_assertion_message() -> UInt8 { return 51u8; }
+func unsupported_case_pattern() -> UInt8 { return 48u8; }
+func invalid_throwing_case_arm() -> UInt8 { return 49u8; }
 
-func append_decimal_digit(number:u64 in N, byte:u8) -> bool where {owner N} {
-    val zero:u8 <- DIGIT_0;
-    val digit:u64 <- byte - zero;
+func append_decimal_digit(number:UInt64 in N, byte:UInt8) -> bool where {owner N} {
+    val zero:UInt8 <- DIGIT_0;
+    val digit:UInt64 <- byte - zero;
     if (number > (18446744073709551615u64 - digit) / 10u64) return false;
     number <- number * 10u64 + digit;
     return true;
 }
 
-func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
+func integer_width(source:const SourceBytes in S, token:const Token in T) -> UInt64
     where {const owner S, const owner T} {
     val end <- token.past;
     val length <- end - token.first;
@@ -140,7 +140,7 @@ func integer_width(source:const SourceBytes in S, token:const Token in T) -> u64
 }
 
 func parse_integer_magnitude(source:const SourceBytes in S, token:const Token in T,
-                                   result:ParseResult in R, width:u64) -> u64 where {const owner S, const owner T, owner R} {
+                                   result:ParseResult in R, width:UInt64) -> UInt64 where {const owner S, const owner T, owner R} {
     val suffix <- if (width == 0u64) { 0u64 } else { if (width == 8u64) { 2u64 } else { 3u64 } };
     val end <- token.past - suffix;
     val number <- 0u64;
@@ -160,7 +160,7 @@ func parse_integer_magnitude(source:const SourceBytes in S, token:const Token in
 # Read the mathematical operand. The enum check decides whether its sign
 # and magnitude denote a member of the selected backing type.
 export func parse_enum_integer_literal(source:const SourceBytes in S, tokens:const Tokens in T,
-    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- result.next;
     val negative <- punct_at(source, tokens, first, past) == MINUS;
@@ -176,14 +176,14 @@ export func parse_enum_integer_literal(source:const SourceBytes in S, tokens:con
     return result.diagnostic == 0u8
 }
 
-func outer_invocation(nodes:const ExprNodes in A, result:const ParseResult in R, root:u64) -> u64
+func outer_invocation(nodes:const ExprNodes in A, result:const ParseResult in R, root:UInt64) -> UInt64
     where {const owner A, const owner R} {
     val selected <- ungrouped(nodes, result.revision, result.used, root);
     return if (is_invocation(nodes, result.used, selected)) { selected } else { no_node() };
 }
 
 func parse_defer(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val keyword <- tokens[result.next].first;
     val operand_start <- result.next + 1u64;
@@ -239,7 +239,7 @@ func starts_recoverable_block_item(source:const SourceBytes in S, token:const To
 }
 
 func parse_constructor_initializer_item(source:const SourceBytes in S, tokens:const Tokens in T,
-    nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val label <- initializer_label(source, tokens, result.next, past);
     if (label == no_node()) { parse_expression_at(source, tokens, nodes, result, past, 1u8) }
@@ -248,7 +248,7 @@ func parse_constructor_initializer_item(source:const SourceBytes in S, tokens:co
 
 func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
-                      past:u64, previous:u64, mode:BlockItemMode) -> bool
+                      past:UInt64, previous:UInt64, mode:BlockItemMode) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     val first_new <- result.used;
@@ -285,7 +285,7 @@ func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func finish_block(source:const SourceBytes in S, tokens:const Tokens in T,
                   nodes:ExprNodes in A, result:ParseResult in R,
-                  past:u64, first:u64, last:u64, scoped:bool) -> void
+                  past:UInt64, first:UInt64, last:UInt64, scoped:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val close <- result.next;
     if (scoped) {
@@ -304,7 +304,7 @@ func finish_block(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_braced_items(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64, mode:BlockItemMode) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, mode:BlockItemMode) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != LEFT_BRACE) { # '{'
@@ -336,13 +336,13 @@ func parse_braced_items(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 export func parse_block(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_braced_items(source, tokens, nodes, result, past, (OrdinaryBlockItem:BlockItemMode));
 }
 
 func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != LEFT_PAREN) {
@@ -391,7 +391,7 @@ func parse_catch_binding(source:const SourceBytes in S, tokens:const Tokens in T
 # its binding and body together so a later pass can check that binding's scope.
 func parse_catch_clause(source:const SourceBytes in S, tokens:const Tokens in T,
                         nodes:ExprNodes in A, result:ParseResult in R,
-                        past:u64, previous:u64) -> bool
+                        past:UInt64, previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -421,7 +421,7 @@ func parse_catch_clause(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_catches(source:const SourceBytes in S, tokens:const Tokens in T,
-                   nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
+                   nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val last <- no_node();
     val catch_all <- false;
@@ -436,7 +436,7 @@ func parse_catches(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_guard_clauses(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val last <- parse_catches(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) return no_node();
@@ -462,7 +462,7 @@ func parse_guard_clauses(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func append_protected_block(nodes:ExprNodes in A, result:ParseResult in R,
-                             first:u64, body:u64, clauses:u64, discarded:bool) -> void where {owner A, owner R} {
+                             first:UInt64, body:UInt64, clauses:UInt64, discarded:bool) -> void where {owner A, owner R} {
     append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, clauses), make ProtectedBlock {
         body <- make NodeId { revision <- result.revision; index <- body; };
         clause_tail <- make NodeId { revision <- result.revision; index <- clauses; };
@@ -471,7 +471,7 @@ func append_protected_block(nodes:ExprNodes in A, result:ParseResult in R,
 }
 
 func parse_try(source:const SourceBytes in S, tokens:const Tokens in T,
-               nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+               nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val begin <- result.next;
     val first <- tokens[begin].first;
@@ -490,7 +490,7 @@ func parse_try(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 export func parse_symbol(tokens:const Tokens in T, nodes:ExprNodes in A,
-                         result:ParseResult in R, past:u64) -> bool
+                         result:ParseResult in R, past:UInt64) -> bool
     where {const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past || tokens[at].kind != symbol_name()) {
@@ -505,7 +505,7 @@ export func parse_symbol(tokens:const Tokens in T, nodes:ExprNodes in A,
 }
 
 func parse_behave(source:const SourceBytes in S, tokens:const Tokens in T,
-                  nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                  nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -535,7 +535,7 @@ func parse_behave(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
-                      past:u64, kind:u8, guard_arm:bool) -> void
+                      past:UInt64, kind:UInt8, guard_arm:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val first <- tokens[at].first;
@@ -605,7 +605,7 @@ func parse_completion(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
-func binding_has_owner(nodes:const ExprNodes in A, result:const ParseResult in R, at:u64) -> bool
+func binding_has_owner(nodes:const ExprNodes in A, result:const ParseResult in R, at:UInt64) -> bool
     where {const owner A, const owner R} {
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -614,8 +614,8 @@ func binding_has_owner(nodes:const ExprNodes in A, result:const ParseResult in R
         binding.owner_name != no_node();
 }
 
-func append_local_binding(nodes:ExprNodes in A, result:ParseResult in R, first:u64,
-                          binding:u64, initializer:u64, operator_at:u64, mode:LocalMode, declaration_const:bool) -> void
+func append_local_binding(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64,
+                          binding:UInt64, initializer:UInt64, operator_at:UInt64, mode:LocalMode, declaration_const:bool) -> void
     where {owner A, owner R} {
     append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, initializer), make LocalBinding {
         binding <- make NodeId { revision <- result.revision; index <- binding; };
@@ -625,7 +625,7 @@ func append_local_binding(nodes:ExprNodes in A, result:ParseResult in R, first:u
 }
 
 func parse_initializer_operand(source:const SourceBytes in S, tokens:const Tokens in T,
-    nodes:ExprNodes in A, result:ParseResult in R, past:u64, allow_result_annotation:bool) -> bool
+    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, allow_result_annotation:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- result.next;
     ref controls = make ParseControls {
@@ -643,7 +643,7 @@ func parse_initializer_operand(source:const SourceBytes in S, tokens:const Token
 
 func parse_binding_item(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
-                         past:u64, first:u64, mode:LocalMode, declaration_const:bool) -> void
+                         past:UInt64, first:UInt64, mode:LocalMode, declaration_const:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val reports <- result.reports;
     if (!parse_local_binding_name(source, tokens, nodes, result, past, mode == PointerLocal)) return;
@@ -681,7 +681,7 @@ func parse_binding_item(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
-                         past:u64, mode:LocalMode, declaration_const:bool) -> void
+                         past:UInt64, mode:LocalMode, declaration_const:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + (if (declaration_const) { 2u64 } else { 1u64 });
@@ -692,7 +692,7 @@ func parse_local_binding(source:const SourceBytes in S, tokens:const Tokens in T
     }
 }
 
-func append_reference_group_item(nodes:ExprNodes in A, result:ParseResult in R, previous:u64, item:u64) -> void
+func append_reference_group_item(nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64, item:UInt64) -> void
     where {owner A, owner R} {
     ref prior = make NoLink {};
     if (previous != no_node()) {
@@ -706,8 +706,8 @@ func append_reference_group_item(nodes:ExprNodes in A, result:ParseResult in R, 
     })
 }
 
-func append_reference_group(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                            last:u64, final_block:u64) -> void where {owner A, owner R} {
+func append_reference_group(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                            last:UInt64, final_block:UInt64) -> void where {owner A, owner R} {
     ref body = make NoLink {};
     if (final_block != no_node()) {
         body = make LinkTo { node <- make NodeId { revision <- result.revision; index <- final_block; }; };
@@ -720,7 +720,7 @@ func append_reference_group(nodes:ExprNodes in A, result:ParseResult in R, first
 }
 
 func parse_reference_item(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64) -> bool
+                          nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     ref controls = make ParseControls {
@@ -733,7 +733,7 @@ func parse_reference_item(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func parse_reference_group(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                           nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     val first <- tokens[start].first;
@@ -768,7 +768,7 @@ func parse_reference_group(source:const SourceBytes in S, tokens:const Tokens in
 }
 
 func parse_initialize_reservation(source:const SourceBytes in S, tokens:const Tokens in T,
-                                  nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                                  nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     result.next <- start + 1u64;
@@ -797,7 +797,7 @@ func parse_initialize_reservation(source:const SourceBytes in S, tokens:const To
 }
 
 func parse_null(source:const SourceBytes in S, tokens:const Tokens in T,
-                nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val first <- tokens[at].first;
@@ -815,7 +815,7 @@ func parse_null(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
-                       nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val head <- result.next + 1u64;
@@ -888,7 +888,7 @@ func parse_conditional(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_range(source:const SourceBytes in S, tokens:const Tokens in T,
-                 nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                 nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -941,7 +941,7 @@ func parse_range(source:const SourceBytes in S, tokens:const Tokens in T,
 
 func parse_exception_local(source:const SourceBytes in S, tokens:const Tokens in T,
                            nodes:ExprNodes in A, result:ParseResult in R,
-                           past:u64, width:u64) -> void
+                           past:UInt64, width:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + width;
@@ -960,7 +960,7 @@ func parse_exception_local(source:const SourceBytes in S, tokens:const Tokens in
     append_local_binding(nodes, result, first, binding, initializer, tokens[assignment].first, ExceptionLocal, false);
 }
 
-export func callable_local_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+export func callable_local_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (at >= past) return false;
     val mode <- if (const_word(source, tokens[at])) { at + 1u64 } else { at };
@@ -971,7 +971,7 @@ export func callable_local_head(source:const SourceBytes in S, tokens:const Toke
 }
 
 func parse_callable_local(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val fixed <- const_word(source, tokens[result.next]);
@@ -996,7 +996,7 @@ func parse_callable_local(source:const SourceBytes in S, tokens:const Tokens in 
     });
 }
 
-func handle_local_prefix(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> u64
+func handle_local_prefix(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner T} {
     if (at + 1u64 < past && handle_word(source, tokens[at]) && tokens[at + 1u64].kind == identifier())
         return 1u64;
@@ -1008,7 +1008,7 @@ func handle_local_prefix(source:const SourceBytes in S, tokens:const Tokens in T
 
 func parse_handle_local(source:const SourceBytes in S, tokens:const Tokens in T,
                         nodes:ExprNodes in A, result:ParseResult in R,
-                        past:u64, width:u64) -> void
+                        past:UInt64, width:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val owning <- width != 1u64;
@@ -1043,7 +1043,7 @@ func parse_handle_local(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_region_binding(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 2u64;
@@ -1074,7 +1074,7 @@ func parse_region_binding(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func parse_array_length(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     val selected <- start + 2u64;
@@ -1098,7 +1098,7 @@ func parse_array_length(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
 }
 
-func starts_short_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> bool
+func starts_short_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (first >= past || tokens[first].kind != identifier()) return false;
     val next <- first + 1u64;
@@ -1112,7 +1112,7 @@ func starts_short_case_arm(source:const SourceBytes in S, tokens:const Tokens in
 }
 
 # Grouped expressions and labelled arguments keep their usual grammar.
-func starts_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> bool
+func starts_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, first:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     if (starts_short_case_arm(source, tokens, first, past)) return true;
     if (punct_at(source, tokens, first, past) != LEFT_PAREN) return false; # '('
@@ -1140,7 +1140,7 @@ func append_case_pattern(source:const SourceBytes in S, token:const Token in T,
 }
 
 func parse_case_value_receiver(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                               result:ParseResult in R, past:u64, preceding:u64) -> bool
+                               result:ParseResult in R, past:UInt64, preceding:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     if (start >= past || !val_word(source, tokens[start])) {
@@ -1189,7 +1189,7 @@ func parse_case_value_receiver(source:const SourceBytes in S, tokens:const Token
 }
 
 func finish_constructor_case(tokens:const Tokens in T, nodes:ExprNodes in A, result:ParseResult in R,
-                             first:u64, constructor:u64, receiver:u64) -> bool
+                             first:UInt64, constructor:UInt64, receiver:UInt64) -> bool
     where {const owner T, owner A, owner R} {
     val end <- tokens[result.next].past;
     result.next <- result.next + 1u64;
@@ -1206,7 +1206,7 @@ func finish_constructor_case(tokens:const Tokens in T, nodes:ExprNodes in A, res
 }
 
 func parse_constructor_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                            result:ParseResult in R, past:u64) -> bool
+                            result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     if (start >= past || reserved_module_name(source, tokens[start]) ||
@@ -1229,7 +1229,7 @@ func parse_constructor_case(source:const SourceBytes in S, tokens:const Tokens i
 }
 
 func parse_short_case_body(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                           nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at < past &&
@@ -1249,7 +1249,7 @@ func parse_short_case_body(source:const SourceBytes in S, tokens:const Tokens in
 }
 
 func at_braced_case_body(source:const SourceBytes in S, tokens:const Tokens in T,
-                         first:u64, arrow:u64, past:u64) -> bool where {const owner S, const owner T} {
+                         first:UInt64, arrow:UInt64, past:UInt64) -> bool where {const owner S, const owner T} {
     if (first > arrow || !punct_pair_at(source, tokens, arrow, past, MINUS, GREATER_THAN) ||
         punct_at(source, tokens, arrow + 1u64, past) != LEFT_BRACE ||
         closing_token(tokens, arrow + 1u64, past) == no_node()) return false;
@@ -1272,7 +1272,7 @@ func at_braced_case_body(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                    result:ParseResult in R, past:u64) -> void
+                    result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val head <- result.next;
     val first <- tokens[head].first;
@@ -1365,7 +1365,7 @@ func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nod
     });
 }
 
-func append_case_expression(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64, subject:u64, tail:u64)
+func append_case_expression(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64, subject:UInt64, tail:UInt64)
     -> void where {owner A, owner R} {
     ref items = make NoLink {};
     if (tail != no_node()) {
@@ -1379,7 +1379,7 @@ func append_case_expression(nodes:ExprNodes in A, result:ParseResult in R, first
 }
 
 func parse_case_items(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                      result:ParseResult in R, past:u64, subject:u64, first:u64) -> void
+                      result:ParseResult in R, past:UInt64, subject:UInt64, first:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != LEFT_BRACE) { result.diagnostic <- expected_block(); return; } else {};
@@ -1404,7 +1404,7 @@ func parse_case_items(source:const SourceBytes in S, tokens:const Tokens in T, n
 }
 
 func parse_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                result:ParseResult in R, past:u64) -> void
+                result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -1420,7 +1420,7 @@ func parse_case(source:const SourceBytes in S, tokens:const Tokens in T, nodes:E
     (result.case_control <- enclosing_case_control):void;
 }
 
-func utf8_width(source:const SourceBytes in S, at:u64, past:u64) -> u64 where {const owner S} {
+func utf8_width(source:const SourceBytes in S, at:UInt64, past:UInt64) -> UInt64 where {const owner S} {
     val lead <- source[at];
     if (lead < 128u8) return 1u64;
     if (lead < 194u8 || lead > 244u8) return 0u64;
@@ -1436,16 +1436,16 @@ func utf8_width(source:const SourceBytes in S, at:u64, past:u64) -> u64 where {c
     return width;
 }
 
-func hex_digit(byte:u8) -> u64 {
-    val digit:u64 <- byte;
-    val zero:u8 <- DIGIT_0;
+func hex_digit(byte:UInt8) -> UInt64 {
+    val digit:UInt64 <- byte;
+    val zero:UInt8 <- DIGIT_0;
     if (byte >= DIGIT_0 && byte <= DIGIT_9) return digit - zero;
     if (byte >= UPPER_A && byte <= UPPER_F) return digit - 55u64;
     if (byte >= LOWER_A && byte <= LOWER_F) return digit - 87u64;
     return 16u64;
 }
 
-func unicode_escape(source:const SourceBytes in S, brace:u64, past:u64, contains_zero:bool in N) -> u64
+func unicode_escape(source:const SourceBytes in S, brace:UInt64, past:UInt64, contains_zero:bool in N) -> UInt64
     where {const owner S, owner N} {
     if (brace + 1u64 >= past || source[brace] != LEFT_BRACE) return no_node();
     val codepoint <- 0u64;
@@ -1464,7 +1464,7 @@ func unicode_escape(source:const SourceBytes in S, brace:u64, past:u64, contains
     return no_node();
 }
 
-func append_text_literal(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
+func append_text_literal(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
                           contains_zero:bool) -> void where {owner A, owner R} {
     append_syntax_node(nodes, result, first, past, make TextLiteral { interior_zero <- contains_zero; });
 }
@@ -1522,7 +1522,7 @@ func parse_text_literal(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_callable_body(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     ref controls = make ParseControls {
         supplied_here <- result.supplied_here; case_control <- result.case_control
@@ -1535,7 +1535,7 @@ func parse_callable_body(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_scoped_procedure(source:const SourceBytes in S, tokens:const Tokens in T,
-                           nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64, name:u64) -> void
+                           nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, first:UInt64, name:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_scoped_procedure_signature(source, tokens, nodes, result, past, name);
     if (result.diagnostic != 0u8) return;
@@ -1550,7 +1550,7 @@ func parse_scoped_procedure(source:const SourceBytes in S, tokens:const Tokens i
 }
 
 func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -1598,7 +1598,7 @@ func parse_effect(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in T,
-                    nodes:ExprNodes in A, result:ParseResult in R, past:u64, function_form:bool, lexical:bool) -> void
+                    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, function_form:bool, lexical:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -1648,7 +1648,7 @@ export func parse_callable(source:const SourceBytes in S, tokens:const Tokens in
 }
 
 func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
-                   nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                   nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_operand(); return; } else {};
@@ -1784,7 +1784,7 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func begins_checked_ref_argument(source:const SourceBytes in S, tokens:const Tokens in T,
-                                 at:u64, past:u64) -> bool where {const owner S, const owner T} {
+                                 at:UInt64, past:UInt64) -> bool where {const owner S, const owner T} {
     val operand <- at + 2u64;
     if (operand >= past || !not_word(source, tokens[at]) || !null_word(source, tokens[at + 1u64]) ||
         (in_word(source, tokens[operand]) || is_word(source, tokens[operand]))) return false;
@@ -1796,8 +1796,8 @@ func begins_checked_ref_argument(source:const SourceBytes in S, tokens:const Tok
 
 # Each argument entry links to the previous entry and its ordinary expression.
 # The checked ref bit belongs to preparation at this call site.
-func append_argument(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                     preceding:u64, operand:u64, checked:bool, selection_at:u64) -> void where {owner A, owner R} {
+func append_argument(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                     preceding:UInt64, operand:UInt64, checked:bool, selection_at:UInt64) -> void where {owner A, owner R} {
     ref previous = make NoLink {};
     if (preceding != no_node()) {
         previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
@@ -1813,7 +1813,7 @@ func append_argument(nodes:ExprNodes in A, result:ParseResult in R, first:u64, p
 
 func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
                     nodes:ExprNodes in A, result:ParseResult in R,
-                    first:u64, previous:u64, past:u64, named:bool, field_labels:bool) -> bool
+                    first:UInt64, previous:UInt64, past:UInt64, named:bool, field_labels:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val argument <- no_node();
     val start <- result.next;
@@ -1859,7 +1859,7 @@ func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_arguments(source:const SourceBytes in S, tokens:const Tokens in T,
-                     nodes:ExprNodes in A, result:ParseResult in R, past:u64, named:bool, field_labels:bool) -> u64
+                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, named:bool, field_labels:bool) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     if (start >= past) { result.diagnostic <- expected_operand(); return no_node(); } else {};
@@ -1882,7 +1882,7 @@ func parse_arguments(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_initializer_field(source:const SourceBytes in S, tokens:const Tokens in T,
-                             nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> bool
+                             nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, previous:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
     val name <- result.root;
@@ -1914,7 +1914,7 @@ func parse_initializer_field(source:const SourceBytes in S, tokens:const Tokens 
 }
 
 func parse_initializer_fields(source:const SourceBytes in S, tokens:const Tokens in T,
-                              nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
+                              nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     val tail <- no_node();
@@ -1934,7 +1934,7 @@ func parse_initializer_fields(source:const SourceBytes in S, tokens:const Tokens
 
 # A bare or parenthesized name followed by an assignment can select a product
 # field or a scalar block's lexical destination. The checked type decides.
-func initializer_label(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> u64
+func initializer_label(source:const SourceBytes in S, tokens:const Tokens in T, first:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner T} {
     val operator_at <- first;
     for (at in first .. past) {
@@ -1953,15 +1953,15 @@ func initializer_label(source:const SourceBytes in S, tokens:const Tokens in T, 
     return no_node();
 }
 
-func append_parenthesized(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                           operand:u64) -> void where {owner A, owner R} {
+func append_parenthesized(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                           operand:UInt64) -> void where {owner A, owner R} {
     append_syntax_node(nodes, result, first, past, make Parenthesized {
         expression <- make NodeId { revision <- result.revision; index <- operand; };
     });
 }
 
 func parse_initializer_assignment(source:const SourceBytes in S, tokens:const Tokens in T,
-                                  nodes:ExprNodes in A, result:ParseResult in R, past:u64, label:u64) -> void
+                                  nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, label:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- result.next;
     val left <- label;
@@ -1997,7 +1997,7 @@ func parse_initializer_assignment(source:const SourceBytes in S, tokens:const To
 }
 
 func parse_exception_placement(source:const SourceBytes in S, tokens:const Tokens in T,
-                               nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
+                               nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val site <- result.next;
     if (site >= past) return no_node();
@@ -2037,7 +2037,7 @@ func parse_exception_placement(source:const SourceBytes in S, tokens:const Token
 
 func parse_construction_type(source:const SourceBytes in S, tokens:const Tokens in T,
                              nodes:ExprNodes in A, result:ParseResult in R,
-                             past:u64, exception:bool) -> bool
+                             past:UInt64, exception:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (exception || at >= past || !typeof_word(source, tokens[at]) || punct_at(source, tokens, at + 1u64, past) != LEFT_PAREN)
@@ -2059,7 +2059,7 @@ func parse_construction_type(source:const SourceBytes in S, tokens:const Tokens 
 
 func parse_make_handle(source:const SourceBytes in S, tokens:const Tokens in T,
                        nodes:ExprNodes in A, result:ParseResult in R,
-                       past:u64, first:u64, owning:bool) -> void
+                       past:UInt64, first:UInt64, owning:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + if (owning) { 2u64 } else { 1u64 };
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
@@ -2105,8 +2105,8 @@ func parse_make_handle(source:const SourceBytes in S, tokens:const Tokens in T,
     };
 }
 
-func append_named_throw(nodes:ExprNodes in A, result:ParseResult in R, first:u64, past:u64,
-                         requested:u64, fields:u64, cause:u64) -> void where {owner A, owner R} {
+func append_named_throw(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, past:UInt64,
+                         requested:UInt64, fields:UInt64, cause:UInt64) -> void where {owner A, owner R} {
     ref field_list = make NoLink {};
     ref cause_link = make NoLink {};
     if (fields != no_node()) {
@@ -2125,7 +2125,7 @@ func append_named_throw(nodes:ExprNodes in A, result:ParseResult in R, first:u64
 }
 
 func parse_region_construction(source:const SourceBytes in S, tokens:const Tokens in T,
-                               nodes:ExprNodes in A, result:ParseResult in R, past:u64, first:u64) -> void
+                               nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, first:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
@@ -2155,7 +2155,7 @@ func parse_region_construction(source:const SourceBytes in S, tokens:const Token
 }
 
 func parse_construction(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -2263,7 +2263,7 @@ func parse_construction(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_call(source:const SourceBytes in S, tokens:const Tokens in T,
-                nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+                nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     if (punct_at(source, tokens, open, past) != LEFT_PAREN) return false; # '('
@@ -2295,7 +2295,7 @@ func parse_call(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_field_access(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val base <- result.root;
     val operation_at <- tokens[result.next].first;
@@ -2311,7 +2311,7 @@ func parse_field_access(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_index_access(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val base <- result.root;
     val open <- result.next;
@@ -2332,7 +2332,7 @@ func parse_index_access(source:const SourceBytes in S, tokens:const Tokens in T,
     if (result.diagnostic == 0u8) { (result.next <- close + 1u64):void; } else {};
 }
 
-func here_header_close(source:const SourceBytes in S, tokens:const Tokens in T, opening:u64, past:u64) -> u64
+func here_header_close(source:const SourceBytes in S, tokens:const Tokens in T, opening:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner T} {
     if (punct_at(source, tokens, opening, past) != LEFT_PAREN) return no_node();
     val depth <- 1u64;
@@ -2350,7 +2350,7 @@ func here_header_close(source:const SourceBytes in S, tokens:const Tokens in T, 
 }
 
 func parse_here_receiver(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, previous:u64, close:u64) -> bool
+                         nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64, close:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val explicit_ref <- ref_word(source, tokens[result.next]);
@@ -2371,7 +2371,7 @@ func parse_here_receiver(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_here_receivers(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, close:u64) -> u64
+                          nodes:ExprNodes in A, result:ParseResult in R, close:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     val receivers <- no_node();
@@ -2389,7 +2389,7 @@ func parse_here_receivers(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
-                     nodes:ExprNodes in A, result:ParseResult in R, past:u64, close:u64) -> void
+                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, close:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val call <- result.root;
     val first <- tokens[result.next].first;
@@ -2422,9 +2422,9 @@ func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
-enum HereSuffix:u8 { Unavailable; CanAttach; AlreadyAttached; }
+enum HereSuffix:UInt8 { Unavailable; CanAttach; AlreadyAttached; }
 
-func here_suffix(nodes:const ExprNodes in N, used:u64, at:u64) -> HereSuffix where {const owner N} {
+func here_suffix(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> HereSuffix where {const owner N} {
     if (at >= used) return (Unavailable:HereSuffix);
     return case nodes[at] of {
         (Vacant) -> { (Unavailable:HereSuffix) };
@@ -2441,7 +2441,7 @@ func here_suffix(nodes:const ExprNodes in N, used:u64, at:u64) -> HereSuffix whe
 }
 
 func parse_postfix(source:const SourceBytes in S, tokens:const Tokens in T,
-                   nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                   nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val here <- (Unavailable:HereSuffix);
     val close <- no_node();
@@ -2472,7 +2472,7 @@ func parse_postfix(source:const SourceBytes in S, tokens:const Tokens in T,
     };
 }
 
-func prefix_end(source:const SourceBytes in S, tokens:const Tokens in T, first:u64, past:u64) -> u64
+func prefix_end(source:const SourceBytes in S, tokens:const Tokens in T, first:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner T} {
     for (at in first .. past) {
         if (punct_at(source, tokens, at, past) != EXCLAMATION && !not_word(source, tokens[at])) return at;
@@ -2480,7 +2480,7 @@ func prefix_end(source:const SourceBytes in S, tokens:const Tokens in T, first:u
     return past;
 }
 
-func append_negation(nodes:ExprNodes in A, result:ParseResult in R, first:u64, operand:u64) -> void
+func append_negation(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64, operand:UInt64) -> void
     where {owner A, owner R} {
     append_syntax_node(nodes, result, first, syntax_past(nodes, result.used, operand), make Negation {
         operand <- make NodeId { revision <- result.revision; index <- operand; };
@@ -2488,7 +2488,7 @@ func append_negation(nodes:ExprNodes in A, result:ParseResult in R, first:u64, o
 }
 
 func parse_prefix(source:const SourceBytes in S, tokens:const Tokens in T,
-                  nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                  nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- result.next;
     val primary <- prefix_end(source, tokens, first, past);
@@ -2508,7 +2508,7 @@ func parse_prefix(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func augmented_operation(source:const SourceBytes in S, tokens:const Tokens in T,
-                         at:u64, past:u64, arithmetic:ArithmeticOperation in A)
+                         at:UInt64, past:UInt64, arithmetic:ArithmeticOperation in A)
     -> bool where {const owner S, const owner T, owner A} {
     if (at >= past || at >= intrinsic (len)(tokens) || tokens[at].kind != punctuation())
         return false;
@@ -2528,7 +2528,7 @@ func augmented_operation(source:const SourceBytes in S, tokens:const Tokens in T
 
 func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens in T,
                               nodes:ExprNodes in A, result:ParseResult in R,
-                              past:u64, minimum:u8) -> void
+                              past:UInt64, minimum:UInt8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_prefix(source, tokens, nodes, result, past);
     if (result.diagnostic != 0u8) return;
@@ -2568,7 +2568,7 @@ func parse_expression_operand(source:const SourceBytes in S, tokens:const Tokens
 
 func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T,
                          nodes:ExprNodes in A, result:ParseResult in R,
-                         past:u64, minimum:u8) -> void
+                         past:UInt64, minimum:UInt8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_expression_operand(source, tokens, nodes, result, past, minimum);
     if (result.diagnostic != 0u8 || minimum != 1u8) return;
@@ -2576,7 +2576,7 @@ func parse_expression_at(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_result_annotation(source:const SourceBytes in S, tokens:const Tokens in T,
-                             nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                             nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val colon <- result.next;
     if (punct_at(source, tokens, colon, past) != COLON) return; # ':'
@@ -2608,7 +2608,7 @@ func parse_result_annotation(source:const SourceBytes in S, tokens:const Tokens 
 
 func parse_binary(source:const SourceBytes in S, tokens:const Tokens in T,
                   nodes:ExprNodes in A, result:ParseResult in R,
-                  past:u64, minimum:u8) -> void
+                  past:UInt64, minimum:UInt8) -> void
     where {const owner S, const owner T, owner A, owner R} {
     # Every accepted operator advances next. An error leaves next at the
     # failing token so the caller can recover or report its source span.
@@ -2618,7 +2618,7 @@ func parse_binary(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 export func parse_next_expression(source:const SourceBytes in S, tokens:const Tokens in T,
-                                  nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                                  nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     if (result.next < past && assert_word(source, tokens[result.next])) {
         parse_predicate_assertion(source, tokens, nodes, result, past);
@@ -2628,7 +2628,7 @@ export func parse_next_expression(source:const SourceBytes in S, tokens:const To
 }
 
 func parse_predicate_assertion(source:const SourceBytes in S, tokens:const Tokens in T,
-                                nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> void
+                                nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     val start <- result.next + 1u64;
@@ -2660,24 +2660,24 @@ func parse_predicate_assertion(source:const SourceBytes in S, tokens:const Token
     })
 }
 
-func equality_binding() -> u8 { return 3u8 }
+func equality_binding() -> UInt8 { return 3u8 }
 
-enum FixedInfixOperation:u8 {
+enum FixedInfixOperation:UInt8 {
     NoFixedInfix;
     AddInfix; SubtractInfix; MultiplyInfix; DivideInfix; RemainderInfix;
     EqualInfix; UnequalInfix; LessInfix; AtMostInfix; GreaterInfix; AtLeastInfix;
     IsInfix; IsNotInfix; ConcatenateInfix; AndInfix; OrInfix;
 }
 
-data FixedInfix { operation:FixedInfixOperation; first:u64; past:u64 }
+data FixedInfix { operation:FixedInfixOperation; first:UInt64; past:UInt64 }
 
-func select_infix(infix:FixedInfix in I, operation:FixedInfixOperation, binding:u8)
-    -> u8 where {owner I} {
+func select_infix(infix:FixedInfix in I, operation:FixedInfixOperation, binding:UInt8)
+    -> UInt8 where {owner I} {
     infix.operation <- operation;
     return binding
 }
 
-func fixed_comparison(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> FixedInfixOperation
+func fixed_comparison(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> FixedInfixOperation
     where {const owner S, const owner T} {
     if (punct_pair_at(source, tokens, at, past, EQUAL, EQUAL)) return (EqualInfix:FixedInfixOperation);
     if (punct_pair_at(source, tokens, at, past, EXCLAMATION, EQUAL)) return (UnequalInfix:FixedInfixOperation);
@@ -2689,7 +2689,7 @@ func fixed_comparison(source:const SourceBytes in S, tokens:const Tokens in T, a
 }
 
 func classify_fixed_infix(source:const SourceBytes in S, tokens:const Tokens in T,
-    first:u64, past:u64, infix:FixedInfix in I) -> u8
+    first:UInt64, past:UInt64, infix:FixedInfix in I) -> UInt8
     where {const owner S, const owner T, owner I} {
     # The argument reader owns the '->' label.
     if (first >= past || punct_pair_at(source, tokens, first, past, MINUS, GREATER_THAN)) return 0u8;
@@ -2752,7 +2752,7 @@ func arithmetic_operation(operation:FixedInfixOperation) -> ArithmeticOperation 
 
 func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
                  nodes:ExprNodes in A, result:ParseResult in R,
-                 past:u64, minimum:u8) -> bool
+                 past:UInt64, minimum:UInt8) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     ref infix = make FixedInfix { operation <- (NoFixedInfix:FixedInfixOperation); first <- 0u64; past <- 0u64 };
     val binding <- classify_fixed_infix(source, tokens, result.next, past, infix);
@@ -2806,7 +2806,7 @@ func parse_infix(source:const SourceBytes in S, tokens:const Tokens in T,
 # Tokens come from the indexed lexer over source. The caller supplies
 # initialized node storage and receives a root index or a diagnostic at next.
 export func parse_expression(source:const SourceBytes in S, tokens:const Tokens in T,
-                             nodes:ExprNodes in A, first:u64, past:u64,
+                             nodes:ExprNodes in A, first:UInt64, past:UInt64,
                              result:ParseResult in R) -> void
     where {const owner S, const owner T, owner A, owner R} {
     reset_parse_result(first, result);

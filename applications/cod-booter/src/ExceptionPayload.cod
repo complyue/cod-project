@@ -20,18 +20,18 @@ using "./ModuleExportStorage.cod" {
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type, exception_schema };
 
-export data PayloadField { first:u64; past:u64; kind:u8; readonly:bool; }
-export array PayloadFields[u64]:PayloadField;
+export data PayloadField { first:UInt64; past:UInt64; kind:UInt8; readonly:bool; }
+export array PayloadFields[UInt64]:PayloadField;
 
-export data PayloadSchema { count:u64; local_first:u64; imported_header:u64; }
+export data PayloadSchema { count:UInt64; local_first:UInt64; imported_header:UInt64; }
 export data CaughtFieldUse =
     NoCaughtField {} |
-    CaughtField { binding:u64; nominal:ExceptionType; ordinal:u64; kind:u8; readonly:bool; };
-export array CaughtFieldUses[u64]:CaughtFieldUse;
+    CaughtField { binding:UInt64; nominal:ExceptionType; ordinal:UInt64; kind:UInt8; readonly:bool; };
+export array CaughtFieldUses[UInt64]:CaughtFieldUse;
 
-export func unknown_exception_field() -> u8 { return 47u8 }
+export func unknown_exception_field() -> UInt8 { return 47u8 }
 
-func set_field(fields:PayloadFields in F, index:u64, first:u64, past:u64, kind:u8,
+func set_field(fields:PayloadFields in F, index:UInt64, first:UInt64, past:UInt64, kind:UInt8,
     readonly:bool) -> void where {owner F} {
     fields[index] <- make PayloadField {
         first <- first; past <- past; kind <- kind; readonly <- readonly;
@@ -39,12 +39,12 @@ func set_field(fields:PayloadFields in F, index:u64, first:u64, past:u64, kind:u
     return;
 }
 
-func exception_bits_kind(binding:u8) -> u8 {
+func exception_bits_kind(binding:UInt8) -> UInt8 {
     return if (binding == builtin_u64() || binding == builtin_u32() || binding == builtin_u8() ||
         binding == builtin_bool()) { binding } else { 0u8 };
 }
 
-func local_field_count(work:const NameWork in W, first:u64, tail:u64, limit:u64) -> u64
+func local_field_count(work:const NameWork in W, first:UInt64, tail:UInt64, limit:UInt64) -> UInt64
     where {const owner W} {
     if (first == no_node()) return if (tail == no_node()) { 0u64 } else { no_node() };
     val field <- first;
@@ -58,7 +58,7 @@ func local_field_count(work:const NameWork in W, first:u64, tail:u64, limit:u64)
 
 func local_schema(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W,
-                  record:u64, first:u64, used:u64, revision:u64, fields:PayloadFields in F)
+                  record:UInt64, first:UInt64, used:UInt64, revision:UInt64, fields:PayloadFields in F)
     -> bool where {const owner N, const owner B, const owner W, owner F} {
     val at <- first;
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <-
@@ -82,7 +82,7 @@ func local_schema(nodes:const ExprNodes in N, names:const NameBindings in B,
     return at == no_node();
 }
 
-func imported_schema(interfaces:const ModuleInterfaces in I, head:u64, spelling_used:u64,
+func imported_schema(interfaces:const ModuleInterfaces in I, head:UInt64, spelling_used:UInt64,
     fields:PayloadFields in F)
     -> bool where {const owner I, owner F} {
     val first <- head + 1u64;
@@ -101,9 +101,9 @@ func imported_schema(interfaces:const ModuleInterfaces in I, head:u64, spelling_
     return true;
 }
 
-export func select_payload_field(source:const SourceBytes in S, first:u64, past:u64,
+export func select_payload_field(source:const SourceBytes in S, first:UInt64, past:UInt64,
     names:const SourceBytes in N,
-                  fields:const PayloadFields in F, count:u64) -> u64
+                  fields:const PayloadFields in F, count:UInt64) -> UInt64
     where {const owner S, const owner N, const owner F} {
     for (index in 0u64 .. count) {
         if (same_bytes(source, first, past, names, fields[index].first,
@@ -115,8 +115,8 @@ export func select_payload_field(source:const SourceBytes in S, first:u64, past:
 export func find_payload_schema(nodes:const ExprNodes in N, work:const NameWork in W,
                                 aggregates:const AggregateFacts in F,
                                     interfaces:const ModuleInterfaces in I,
-                                published:u64, type:const ExceptionType in T, module:u64, used:u64,
-                                    revision:u64,
+                                published:UInt64, type:const ExceptionType in T, module:UInt64, used:UInt64,
+                                    revision:UInt64,
                                 schema:PayloadSchema in R) -> bool
     where {const owner N, const owner W, const owner F, const owner I, const owner T, owner R} {
     if (type.defining_module == 0u64 || used > intrinsic (len)(work)) return false;
@@ -147,9 +147,9 @@ export func find_payload_schema(nodes:const ExprNodes in N, work:const NameWork 
 
 export func read_payload_schema(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W,
-                                interfaces:const ModuleInterfaces in I, spelling_used:u64,
+                                interfaces:const ModuleInterfaces in I, spelling_used:UInt64,
                                     type:const ExceptionType in T,
-                                used:u64, revision:u64, schema:const PayloadSchema in Q,
+                                used:UInt64, revision:UInt64, schema:const PayloadSchema in Q,
                                     fields:PayloadFields in F)
     -> bool where {const owner N, const owner B, const owner W, const owner I, const owner T,
         const owner Q, owner F} {
@@ -164,11 +164,11 @@ func prepare_caught_field(source:const SourceBytes in S, nodes:const ExprNodes i
     names:const NameBindings in B,
                           work:const NameWork in W, selected:const SelectedExports in E,
                               aggregates:const AggregateFacts in A,
-                          spellings:const SourceBytes in P, spelling_used:u64,
-                              interfaces:const ModuleInterfaces in I, published:u64,
-                          uses:CaughtFieldUses in F, at:u64, binding:u64, field:u64, module:u64,
-                              used:u64, revision:u64)
-    -> u8 where {const owner S, const owner N, const owner B, const owner W, const owner E,
+                          spellings:const SourceBytes in P, spelling_used:UInt64,
+                              interfaces:const ModuleInterfaces in I, published:UInt64,
+                          uses:CaughtFieldUses in F, at:UInt64, binding:UInt64, field:UInt64, module:UInt64,
+                              used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner S, const owner N, const owner B, const owner W, const owner E,
         const owner A,
                  const owner P, const owner I, owner F} {
     ref caught = make CatchSites { name <- no_node(); annotation <- no_node(); readonly <- false; };
@@ -201,7 +201,7 @@ func prepare_caught_field(source:const SourceBytes in S, nodes:const ExprNodes i
 }
 
 func selected_catch(nodes:const ExprNodes in N, names:const NameBindings in B,
-                     receiver:u64, used:u64, revision:u64) -> u64
+                     receiver:UInt64, used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner B} {
     val name <- ungrouped(nodes, revision, used, receiver);
     if (name_syntax(nodes, used, name) == OrdinaryName && names[name].kind == exception_binding())
@@ -209,8 +209,8 @@ func selected_catch(nodes:const ExprNodes in N, names:const NameBindings in B,
     return no_node()
 }
 
-export func first_caught_field(nodes:const ExprNodes in N, names:const NameBindings in B, used:u64,
-    revision:u64) -> u64
+export func first_caught_field(nodes:const ExprNodes in N, names:const NameBindings in B, used:UInt64,
+    revision:UInt64) -> UInt64
     where {const owner N, const owner B} {
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     for (at in 0u64 .. used) {
@@ -224,11 +224,11 @@ export func prepare_caught_fields(source:const SourceBytes in S, nodes:const Exp
     names:const NameBindings in B,
                                   work:const NameWork in W, selected:const SelectedExports in E,
                                       aggregates:const AggregateFacts in A,
-                                  spellings:const SourceBytes in P, spelling_used:u64,
-                                      interfaces:const ModuleInterfaces in I, published:u64,
-                                  uses:CaughtFieldUses in F, failed:u64 in R, module:u64, used:u64,
-                                      revision:u64)
-    -> u8 where {const owner S, const owner N, const owner B, const owner W, const owner E,
+                                  spellings:const SourceBytes in P, spelling_used:UInt64,
+                                      interfaces:const ModuleInterfaces in I, published:UInt64,
+                                  uses:CaughtFieldUses in F, failed:UInt64 in R, module:UInt64, used:UInt64,
+                                      revision:UInt64)
+    -> UInt8 where {const owner S, const owner N, const owner B, const owner W, const owner E,
         const owner A,
                  const owner P, const owner I, owner F, owner R} {
     if (used > intrinsic (len)(uses) || used > intrinsic (len)(names) ||

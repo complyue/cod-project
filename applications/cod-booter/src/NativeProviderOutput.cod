@@ -1,5 +1,5 @@
 using "./NativeSource.cod" Path;
 
 export proc "C" publish_provider_pair(handle directory:Path in A, header:const String in H,
-                                      stubs:const String in S) -> u64
+                                      stubs:const String in S) -> UInt64
     where {const owner A, const owner H, const owner S};

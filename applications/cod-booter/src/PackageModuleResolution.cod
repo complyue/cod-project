@@ -5,16 +5,16 @@ using "./SourceStorage.cod" SourceBytes;
 
 export data PackageResolution =
     MissingModule {} |
-    SearchFailed { os_error:u64; } |
-    AmbiguousModule { first_root:u64; second_root:u64; } |
-    PackageModule { root:u64; };
-export array PackageResolutions[u64]:PackageResolution;
+    SearchFailed { os_error:UInt64; } |
+    AmbiguousModule { first_root:UInt64; second_root:UInt64; } |
+    PackageModule { root:UInt64; };
+export array PackageResolutions[UInt64]:PackageResolution;
 
-export func absent_module() -> u64 { return 18446744073709551615u64 }
+export func absent_module() -> UInt64 { return 18446744073709551615u64 }
 
 export proc probe_package_roots(
-    rows:const PackageSourceRoots in G, paths:const SourceBytes in G, row_count:u64, path_used:u64,
-    module:const SourceBytes in M, first:u64, past:u64, resolution:PackageResolutions in R)
+    rows:const PackageSourceRoots in G, paths:const SourceBytes in G, row_count:UInt64, path_used:UInt64,
+    module:const SourceBytes in M, first:UInt64, past:UInt64, resolution:PackageResolutions in R)
     -> void where {const owner G, const owner M, owner R} {
     if (row_count > intrinsic (len)(rows) || path_used > intrinsic (len)(paths) ||
         classify_module_path(module, first, past) != PackagePath) {

@@ -11,8 +11,8 @@ using "./ModuleParser.cod" parse_module;
 export data FrontendResult {
     scan:ScanResult;
     tree:ParseResult;
-    diagnostic_first:u64;
-    diagnostic_past:u64;
+    diagnostic_first:UInt64;
+    diagnostic_past:UInt64;
 }
 
 func scan_source(source:const SourceBytes in S, tokens:Tokens in T,
@@ -41,7 +41,7 @@ func scan_source(source:const SourceBytes in S, tokens:Tokens in T,
     return true;
 }
 
-func finish_read(tokens:const Tokens in T, nodes:const ExprNodes in N, eof:u64, result:FrontendResult in R) -> bool
+func finish_read(tokens:const Tokens in T, nodes:const ExprNodes in N, eof:UInt64, result:FrontendResult in R) -> bool
     where {const owner T, const owner N, owner R} {
     if (!result.tree.exhausted && result.tree.reports == 0u64 && result.tree.diagnostic == 0u8 &&
         result.tree.next == eof) return true;

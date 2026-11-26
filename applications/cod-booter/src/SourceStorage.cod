@@ -1,25 +1,25 @@
-export array SourceBytes[u64]:u8;
+export array SourceBytes[UInt64]:UInt8;
 
 data SourceLine {
-    first:u64;
-    past:u64;
+    first:UInt64;
+    past:UInt64;
 }
-export array SourceLines[u64]:SourceLine;
+export array SourceLines[UInt64]:SourceLine;
 
 export data SourcePosition {
-    line:u64;
-    column:u64;
+    line:UInt64;
+    column:UInt64;
 }
 
 export data DelimiterLink =
     OrdinaryToken {} |
-    UnmatchedDelimiter { previous:u64; } |
-    MatchedDelimiter { closing:u64; };
+    UnmatchedDelimiter { previous:UInt64; } |
+    MatchedDelimiter { closing:UInt64; };
 
 # A token refers to a half-open byte span in the caller's source.
 export data Token {
-    kind:u8;
-    first:u64;
-    past:u64;
+    kind:UInt8;
+    first:UInt64;
+    past:UInt64;
     delimiter:DelimiterLink;
 }

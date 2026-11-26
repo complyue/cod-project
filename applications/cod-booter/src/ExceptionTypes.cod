@@ -12,7 +12,7 @@ using "./ParserStorage.cod" {
 
 # Module zero identifies the builtin exception catalog. User definitions keep
 # the identity assigned by their defining module through every publication.
-export data ExceptionType { defining_module:u64; declaration:u64; checked:bool; }
+export data ExceptionType { defining_module:UInt64; declaration:UInt64; checked:bool; }
 
 export func exception_schema(type:const ExceptionType in T) -> ExceptionSchema where {const owner T}
     {
@@ -20,8 +20,8 @@ export func exception_schema(type:const ExceptionType in T) -> ExceptionSchema w
 }
 
 func inspect_local_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
-                             selected:const SelectedExports in E, record:u64, defining_module:u64,
-                             used:u64, revision:u64, result:ExceptionType in R) -> bool
+                             selected:const SelectedExports in E, record:UInt64, defining_module:UInt64,
+                             used:UInt64, revision:UInt64, result:ExceptionType in R) -> bool
     where {const owner N, const owner B, const owner E, owner R} {
     if (defining_module == 0u64 || defining_module == no_node() || record >= used) return false;
     ref schema = make DeclarationSites {
@@ -43,9 +43,9 @@ func inspect_local_exception(nodes:const ExprNodes in N, names:const NameBinding
 }
 
 export func resolve_exception_type(nodes:const ExprNodes in N, names:const NameBindings in B,
-                                   selected:const SelectedExports in E, marker:u64,
-                                       defining_module:u64,
-                                   used:u64, revision:u64, result:ExceptionType in R) -> bool
+                                   selected:const SelectedExports in E, marker:UInt64,
+                                       defining_module:UInt64,
+                                   used:UInt64, revision:UInt64, result:ExceptionType in R) -> bool
     where {const owner N, const owner B, const owner E, owner R} {
     if (marker >= used || used > intrinsic (len)(names)) return false;
     val identity <- names[marker].declaration;
@@ -65,7 +65,7 @@ export func resolve_exception_type(nodes:const ExprNodes in N, names:const NameB
     return true;
 }
 
-export func exception_type_covers(expected_module:u64, expected:u64, module:u64, category:u64,
+export func exception_type_covers(expected_module:UInt64, expected:UInt64, module:UInt64, category:UInt64,
     checked:bool) -> bool {
     if (expected_module == 0u64) {
         if (expected == no_node() || expected == exception_root_identity()) return true;

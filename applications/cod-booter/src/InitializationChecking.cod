@@ -17,8 +17,8 @@ using "./InitializationReadiness.cod" {
     InitializationResult, complete_initialization_readiness, check_initialization,
 };
 
-func initialization_storage_exhausted() -> u8 { return 14u8; }
-func invalid_initialization_flow() -> u8 { return 15u8; }
+func initialization_storage_exhausted() -> UInt8 { return 14u8; }
+func invalid_initialization_flow() -> UInt8 { return 15u8; }
 
 func prove_initialization(code:const NativeCommands in C, plan:const NativePlan in P, result:InitializationResult in R)
     -> bool where {const owner C, const owner P, owner R} {

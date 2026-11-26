@@ -828,7 +828,7 @@ class LLVMEmission {
         auto *overflow = b_.CreateAnd(b_.CreateICmpEQ(left, llvm::ConstantInt::get(context_, llvm::APInt::getSignedMinValue(native->getBitWidth()))),
             b_.CreateICmpEQ(right, llvm::ConstantInt::getSigned(native, -1)));
         if (op == "/") {
-          require(b_.CreateNot(overflow), expr.at, "i64 division overflow"); result = b_.CreateSDiv(left, right);
+          require(b_.CreateNot(overflow), expr.at, "Int64 division overflow"); result = b_.CreateSDiv(left, right);
         } else result = b_.CreateSRem(left, b_.CreateSelect(overflow, llvm::ConstantInt::get(native, 1), right));
       } else result = op == "/" ? b_.CreateUDiv(left, right) : b_.CreateURem(left, right);
     }

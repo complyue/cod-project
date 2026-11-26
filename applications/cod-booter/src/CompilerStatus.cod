@@ -1,4 +1,4 @@
-export enum CompilerStatus:u8 {
+export enum CompilerStatus:UInt8 {
     Complete = 0;
     Rejected = 1;
     FormUnsupported = 2;

@@ -1,4 +1,4 @@
-export enum ASCII:u8 {
+export enum ASCII:UInt8 {
     NUL = 0;
     SOH = 1;
     STX = 2;

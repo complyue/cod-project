@@ -45,7 +45,7 @@ inline EagerTypes eager_types(std::string_view name, const std::vector<Type> &ar
     if (name == "!") {
       if (argument != Type::boolean) return error("logical negation requires bool");
     } else if (argument != Type::integer && !(name == "-" && floating(argument)))
-      return error("numeric unary operation requires i64, or floating point for negation");
+      return error("numeric unary operation requires Int64, or floating point for negation");
     types.result = types.operand = argument;
     types.failing = name == "-" && argument == Type::integer;
   } else {

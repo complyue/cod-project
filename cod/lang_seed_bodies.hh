@@ -870,7 +870,7 @@ class BodyExtraction {
       single_owner(text, expr.children.front()->at);
       for (size_t i = 1; i < expr.children.size(); ++i)
         if (operand(expr, i).type != Type::uint64)
-          fail(expr.children[i]->at, "text byte offset must have type u64");
+          fail(expr.children[i]->at, "text byte offset must have type UInt64");
       if (access == BuiltinOperation::text_slice) {
         expect(!in_iteration_ && !supplied_body(), expr.at,
                "seed needs a text slice owned by the enclosing full scope");

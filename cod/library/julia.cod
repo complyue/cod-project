@@ -1,0 +1,2 @@
+export type Int = Int64
+export type UInt = UInt64

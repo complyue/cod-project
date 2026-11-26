@@ -29,19 +29,19 @@ using "./ParserStorage.cod" FormalMode {
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./SourceStorage.cod" SourceBytes;
 
-func expected_parameter_list() -> u8 { return 23u8; }
-export func expected_owner_clause() -> u8 { return 24u8; }
-func invalid_exception_owner() -> u8 { return 35u8; }
-func invalid_value_parameter_owner() -> u8 { return 41u8; }
-func expected_identity_reference() -> u8 { return 50u8; }
+func expected_parameter_list() -> UInt8 { return 23u8; }
+export func expected_owner_clause() -> UInt8 { return 24u8; }
+func invalid_exception_owner() -> UInt8 { return 35u8; }
+func invalid_value_parameter_owner() -> UInt8 { return 41u8; }
+func expected_identity_reference() -> UInt8 { return 50u8; }
 
-func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64) -> bool
+func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T} {
     return at + 2u64 < past && val_word(source, tokens[at]) && var_word(source, tokens[at + 1u64]) &&
         punct_at(source, tokens, at + 2u64, past) != COLON;
 }
 
-func ellipsis_at(source:const SourceBytes in S, tokens:const Tokens in T, at:u64, past:u64)
+func ellipsis_at(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64)
     -> bool where {const owner S, const owner T} {
     if (at >= past || tokens[at].kind != punctuation()) return false;
     val first <- tokens[at].first;
@@ -52,7 +52,7 @@ func ellipsis_at(source:const SourceBytes in S, tokens:const Tokens in T, at:u64
 # Formal parameters link to their preceding parameter and retain the typed name.
 export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
                      nodes:ExprNodes in A, result:ParseResult in R,
-                     past:u64, previous:u64, field:bool) -> bool
+                     past:UInt64, previous:UInt64, field:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_name(); return false; } else {};
@@ -156,7 +156,7 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
 
 func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
-                      past:u64, allow_here:bool, multiple_here:bool, allow_variadic:bool) -> u64
+                      past:UInt64, allow_here:bool, multiple_here:bool, allow_variadic:bool) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val last <- no_node();
     if (punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return last; # ')'
@@ -187,7 +187,7 @@ func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, lexical:bool, operators:bool) -> u64
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, lexical:bool, operators:bool) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val reserved <- at < past && (if (lexical) { reserved_lexical_binder(source, tokens[at]) }
@@ -209,7 +209,7 @@ func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func finish_callable_head(tokens:const Tokens in T, nodes:ExprNodes in A, result:ParseResult in R,
-                          name:u64, parameters:u64, open:u64) -> void
+                          name:UInt64, parameters:UInt64, open:UInt64) -> void
     where {const owner T, owner A, owner R} {
     val close <- result.next;
     ref entries = make NoLink {};
@@ -227,7 +227,7 @@ func finish_callable_head(tokens:const Tokens in T, nodes:ExprNodes in A, result
 
 # Each header clause links to the preceding header node and its own operand.
 func parse_owning_region_result(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                                result:ParseResult in R, previous:u64, first:u64, past:u64) -> bool
+                                result:ParseResult in R, previous:UInt64, first:UInt64, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val end <- tokens[result.next + 1u64].past;
     result.next <- result.next + 2u64;
@@ -256,7 +256,7 @@ func parse_owning_region_result(source:const SourceBytes in S, tokens:const Toke
 }
 
 func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                       result:ParseResult in R, past:u64, kind:u8) -> bool
+                       result:ParseResult in R, past:UInt64, kind:UInt8) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val previous <- result.root;
     val first <- tokens[result.next].first;
@@ -334,7 +334,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
 }
 
 func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64, previous:u64) -> void
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, previous:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
@@ -366,7 +366,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
 }
 
 func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T,
-                         nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool, operators:bool) -> void
+                         nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, native:bool, operators:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val name <- start_parameter_list(source, tokens, nodes, result, past, false, operators);
     if (name == no_node()) return;
@@ -377,7 +377,7 @@ func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T
 }
 
 func parse_owner_clause(source:const SourceBytes in S, tokens:const Tokens in T,
-                        nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+                        nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     val readonly <- at < past && const_word(source, tokens[at]);
@@ -405,7 +405,7 @@ func parse_owner_clause(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_constraint(source:const SourceBytes in S, tokens:const Tokens in T,
-                      nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> bool
+                      nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, ordinary:bool) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (!ordinary || at >= past || owner_word(source, tokens[at]) || const_word(source, tokens[at]))
@@ -422,7 +422,7 @@ func parse_constraint(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens in T,
-                       nodes:ExprNodes in A, result:ParseResult in R, past:u64, ordinary:bool) -> void
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, ordinary:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 1u64;
     if (punct_at(source, tokens, result.next, past) != LEFT_BRACE) { # '{'
@@ -443,7 +443,7 @@ export func parse_constraints(source:const SourceBytes in S, tokens:const Tokens
 }
 
 func parse_signature_clauses(source:const SourceBytes in S, tokens:const Tokens in T,
-                             nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool) -> void
+                             nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, native:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     if (punct_pair_at(source, tokens, result.next, past, MINUS, GREATER_THAN)) { # '->'
         if (!parse_type_clause(source, tokens, nodes, result, past, result_clause_node())) return;
@@ -462,7 +462,7 @@ func parse_signature_clauses(source:const SourceBytes in S, tokens:const Tokens 
 }
 
 export func parse_callable_signature(source:const SourceBytes in S, tokens:const Tokens in T,
-                                     nodes:ExprNodes in A, result:ParseResult in R, past:u64, native:bool,
+                                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, native:bool,
                                      operators:bool) -> void
     where {const owner S, const owner T, owner A, owner R} {
     parse_callable_head(source, tokens, nodes, result, past, native, operators);
@@ -476,7 +476,7 @@ export func parse_callable_signature(source:const SourceBytes in S, tokens:const
 }
 
 export func parse_scoped_procedure_signature(source:const SourceBytes in S, tokens:const Tokens in T,
-                                             nodes:ExprNodes in A, result:ParseResult in R, past:u64, name:u64) -> void
+                                             nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, name:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     result.next <- open + 1u64;
@@ -499,7 +499,7 @@ export func parse_scoped_procedure_signature(source:const SourceBytes in S, toke
 }
 
 func parse_procedure_type(source:const SourceBytes in S, tokens:const Tokens in T,
-                          nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> bool
+                          nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> bool
     where {const owner S, const owner T, owner A, owner R} {
     val at <- result.next;
     if (at >= past) { result.diagnostic <- expected_type(); return false; };
@@ -526,7 +526,7 @@ func parse_procedure_type(source:const SourceBytes in S, tokens:const Tokens in 
     return result.diagnostic == 0u8;
 }
 
-func append_procedure_input(nodes:ExprNodes in A, result:ParseResult in R, previous:u64) -> void
+func append_procedure_input(nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64) -> void
     where {owner A, owner R} {
     val annotation <- result.root;
     ref prior = make NoLink {};
@@ -542,7 +542,7 @@ func append_procedure_input(nodes:ExprNodes in A, result:ParseResult in R, previ
 }
 
 func parse_procedure_inputs(source:const SourceBytes in S, tokens:const Tokens in T,
-                            nodes:ExprNodes in A, result:ParseResult in R, past:u64) -> u64
+                            nodes:ExprNodes in A, result:ParseResult in R, past:UInt64) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val tail <- no_node();
     if (punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return tail; # ')'
@@ -562,7 +562,7 @@ func parse_procedure_inputs(source:const SourceBytes in S, tokens:const Tokens i
 }
 
 export func parse_procedure_symbol_type(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
-                                        result:ParseResult in R, past:u64, first:u64, name:u64) -> void
+                                        result:ParseResult in R, past:UInt64, first:UInt64, name:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
     result.next <- result.next + 2u64; # 'proc('
     val tail <- parse_procedure_inputs(source, tokens, nodes, result, past);

@@ -1,14 +1,14 @@
 using symbol "std:io" @print;
 using "std:text-storage" { utf8_size, utf8_byte };
 
-data Destination { writes:u64; }
+data Destination { writes:UInt64; }
 
 proc observe(text:const String in O) -> void where {const owner O} {
     behave @print(utf8_size(text));
     return;
 }
 
-proc prepare(count:const u64 in D, target:Destination in D, input:const String in S) -> ref const String in D
+proc prepare(count:const UInt64 in D, target:Destination in D, input:const String in S) -> ref const String in D
     where {owner D, const owner S} {
     target.writes <- count + 1u64;
     return make String(input) in D;

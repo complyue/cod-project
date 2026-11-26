@@ -9,15 +9,15 @@ using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition };
 using "./SourceAccess.cod" locate_source_position;
 using "./ParserStorage.cod" no_node;
 
-export func package_issue() -> u8 { return 19u8 }
-export func package_delivery_failure() -> u8 { return 20u8 }
-export func dependency_diagnostics_incomplete() -> u8 { return 21u8 }
+export func package_issue() -> UInt8 { return 19u8 }
+export func package_delivery_failure() -> UInt8 { return 20u8 }
+export func dependency_diagnostics_incomplete() -> UInt8 { return 21u8 }
 
 proc report_at(
     source:const SourceBytes in S, lines:const SourceLines in S,
-    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:u64,
-    first:u64, past:u64, importer:const SourceBytes in I, import_first:u64, import_past:u64,
-    spelling:const SourceBytes in M, start:u64, end:u64,
+    handle diagnostic:DiagnosticDestination in D, kind:PackageDiagnosticKind, os_error:UInt64,
+    first:UInt64, past:UInt64, importer:const SourceBytes in I, import_first:UInt64, import_past:UInt64,
+    spelling:const SourceBytes in M, start:UInt64, end:UInt64,
     candidate:const SourceBytes in A, other:const SourceBytes in B, run:DiagnosticRuns in Q)
     -> CompilerStatus
     where {const owner S, owner D, const owner I, const owner M, const owner A, const owner B, owner Q} {
@@ -48,10 +48,10 @@ proc report_at(
 
 export proc report_package_path(
     handle importing:SourceRevision in S, handle diagnostic:DiagnosticDestination in D,
-    const val kind:PackageDiagnosticKind, const val os_error:u64,
-    const val first:u64, const val past:u64,
-    importer:const SourceBytes in I, const val import_first:u64, const val import_past:u64,
-    spelling:const SourceBytes in M, const val start:u64, const val end:u64,
+    const val kind:PackageDiagnosticKind, const val os_error:UInt64,
+    const val first:UInt64, const val past:UInt64,
+    importer:const SourceBytes in I, const val import_first:UInt64, const val import_past:UInt64,
+    spelling:const SourceBytes in M, const val start:UInt64, const val end:UInt64,
     candidate:const SourceBytes in A, other:const SourceBytes in B, run:DiagnosticRuns in Q)
     -> CompilerStatus
     where {const owner S, owner D, const owner I, const owner M, const owner A, const owner B, owner Q} {

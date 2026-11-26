@@ -8,38 +8,38 @@ using "./ProviderViews.cod" emit_provider_scalar_type;
 using "./ParserStorage.cod" no_node;
 
 export data ProviderPrefixes {
-    modules:u64;
-    keys:u64;
-    spellings:u64;
-    interfaces:u64;
+    modules:UInt64;
+    keys:UInt64;
+    spellings:UInt64;
+    interfaces:UInt64;
 }
 
-export proc emit_provider_interface_name(spellings:const SourceBytes in G, spelling_used:u64,
-                                         rows:const ModuleInterfaces in G, head:u64)
+export proc emit_provider_interface_name(spellings:const SourceBytes in G, spelling_used:UInt64,
+                                         rows:const ModuleInterfaces in G, head:UInt64)
     -> bool where {const owner G} {
     if (spelling_used > intrinsic (len)(spellings) || head >= intrinsic (len)(rows) ||
         rows[head].name_past > spelling_used) return false;
     return emit_provider_identifier(spellings, rows[head].name_first, rows[head].name_past);
 }
 
-export func find_provider_handle(rows:const ModuleInterfaces in G, used:u64, module:u64, identity:u64)
-    -> u64 where {const owner G} {
+export func find_provider_handle(rows:const ModuleInterfaces in G, used:UInt64, module:UInt64, identity:UInt64)
+    -> UInt64 where {const owner G} {
     val head <- find_interface(rows, used, module, identity);
     if (head == no_node()) return head;
     if (rows[head].interface_kind != c_handle_type() && rows[head].interface_kind != c_constructor()) return no_node();
     return head;
 }
 
-export func first_prior_handle_with_role(rows:const ModuleInterfaces in G, first:u64, input:u64)
-    -> u64 where {const owner G} {
+export func first_prior_handle_with_role(rows:const ModuleInterfaces in G, first:UInt64, input:UInt64)
+    -> UInt64 where {const owner G} {
     for (prior in first .. input) {
         if (rows[prior].value_kind == c_handle_type() && rows[prior].owner_role == rows[input].owner_role) return prior;
     };
     return no_node();
 }
 
-export proc emit_provider_handle_type(spellings:const SourceBytes in G, spelling_used:u64,
-                                      rows:const ModuleInterfaces in G, head:u64) -> bool where {const owner G} {
+export proc emit_provider_handle_type(spellings:const SourceBytes in G, spelling_used:UInt64,
+                                      rows:const ModuleInterfaces in G, head:UInt64) -> bool where {const owner G} {
     emit("cod_native_");
     if (!emit_provider_interface_name(spellings, spelling_used, rows, head)) return false;
     emit("_borrow");
@@ -48,7 +48,7 @@ export proc emit_provider_handle_type(spellings:const SourceBytes in G, spelling
 
 export proc emit_checked_provider_enum_name(visits:const Visits in G, keys:const SourceBytes in G,
                                             spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                            prefix:const ProviderPrefixes in R, head:u64)
+                                            prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {const owner G, const owner R} {
     if (prefix.interfaces > intrinsic (len)(rows) || head >= prefix.interfaces ||
         rows[head].interface_kind != enum_type() || rows[head].entry_count >= prefix.interfaces - head ||
@@ -65,7 +65,7 @@ export proc emit_checked_provider_enum_name(visits:const Visits in G, keys:const
 
 export proc emit_provider_bits_type(visits:const Visits in G, keys:const SourceBytes in G,
                                     spellings:const SourceBytes in G, rows:const ModuleInterfaces in G,
-                                    prefix:const ProviderPrefixes in R, kind:u8, module:u64, identity:u64)
+                                    prefix:const ProviderPrefixes in R, kind:UInt8, module:UInt64, identity:UInt64)
     -> bool where {const owner G, const owner R} {
     if (kind != enum_type()) return emit_provider_scalar_type(kind);
     val head <- find_interface(rows, prefix.interfaces, module, identity);
