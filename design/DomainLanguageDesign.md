@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 223
+Discussion revision: 224
 
 Recorded: 2026-11-25
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r224 the [grouped-method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) extends [standalone callable declarations](#standalone-callable-declarations) through [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups), P-740/P-741. Check value and actual-type refinements across one open method family and an equivalent installed family. The r223 owner, receiver and module visibility contracts continue. [Method groups and value dispatch](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch)
 
 At r223 the [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) specifies the callee-local slot for every OO receiver under [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver), P-724/P-725. The r222 source heads and type-carried dispatch continue. Apply the existing [independent slot and target qualifiers](RegionalOwnership.md#independent-binding-and-target-qualifiers). Check rebinding in both access modes and a field update through a writable receiver.
 
@@ -441,6 +443,8 @@ Haskell 2010 spells the analogous import `import Model (Receipt(Accepted))` or `
 
 #### Case expressions and branch-local variables
 
+Grouped method arms use `=>` to introduce callable bodies. A `case` uses `->` to enter a selected branch within the executing body. Constant heads share typed literal and nominal enum matching with [method groups](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch). The surrounding construct determines selection and control.
+
 The full source form is `case subject of { (pattern) | guard -> { body }; ... }`. A guard is optional. In the full form, parentheses delimit the pattern and preserve the subject’s established result mode. Parentheses written around the subject itself follow ordinary expression rules. Ordinary statements may appear between arms. An arm header and its `->` must be a direct item of the body of the case that owns it. An ordinary group, `if`, full scope or callback nested in that body cannot declare another arm of that case. A nested `case ... of` owns a new arm sequence. Arrows in other grammar productions, such as `value -> parameter` in a call, retain their ordinary interpretation. After `->`, single braces group statements in the enclosing callable and double braces invoke a full scope. An empty header `()` and a wildcard `(_)` accept any subject without binding it, including a null pointer. A written bare `|` before `->` supplies no predicate. Thus `() | -> {{ ... }}` is a catch-all with a local return. With `() | ready() -> {{ ... }}`, call ready once when reached and enter the body only if it returns true. A trailing here argument uses `=>` and has its own handoff contract. The seed [expression grammar](../cod/lang_syntax.hh) provides `if` with `else`. Haskell’s case expressions supply the precedent for constructor patterns, source order and guards over pattern-bound names. [Haskell 2010 §3.13](https://www.haskell.org/onlinereport/haskell2010/haskellch3.html#x8-460003.13)
 
 **Short arms.** At the start of a direct case item, `Name -> expr` tests a visible constructor of the subject sum or a member of the subject enum exactly as `(Name) -> { expr }` does. A constructor can have fields that this arm ignores. Enum member lookup uses the subject’s member table, including alternate spellings. When the tokens form a direct short head, that pattern interpretation takes precedence over an ordinary expression starting with the same name and arrow. A bare name introduces no local. A constructor followed by a braced receiving specification introduces the same branch-local bindings as the parenthesized constructor pattern. Either head, an enum member or a wildcard can take an optional `| guard` before the arm arrow. The pattern parentheses are optional in each of these forms. For every case subject, `_ -> expr` is the unguarded wildcard `(_) -> { expr }`, including for null. The author chooses to cover all remaining values and assumes responsibility for what happens when a sum or enum grows. Using a wildcard alone calls for no diagnostic.
@@ -720,6 +724,8 @@ The same here signature accepts bodies using zero, one or several separately pro
 
 #### Standalone callable declarations
 
+With a complete public signature, `;` ends a declaration, `{ … }` supplies one method body, and `of { (…) => … }` supplies a group. The public parameters provide slots, labels and admitted types. Each arm may accept the full slot, refine its actual type or require a typed constant value. A body-bearing group contributes real methods to the permitted named family, including a symbolic procedure family. An `effect` with a method group instead installs its own complete anonymous family when reached. [Canonical grammar and selection](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) · [Method arm boundaries](SymbolicDynamicScope.md#method-arm-boundaries)
+
 [D-10](SymbolicDynamicScope.md#callable-declarations-and-methods) owns callable identities, signature declarations and methods. H-258 requires explicit parameter/result signatures on a bodyless declaration. [D-24](CallableResultInference.md#establishing-a-result-contract) applies H-423: an independently established declaration can supply a definition's omitted result contract. The same rules govern func/proc and named/anonymous definitions where applicable.
 
 A declaration supplies requirements, not an executable dispatch candidate. Ordinary body-bearing methods compete under the existing applicability/specificity rules. An applicable inherited or generic body may satisfy a more-specific declaration if it meets that declaration's result, kind, access and owner obligations. A declaration does not implicitly introduce a negative or abstract override that blocks an otherwise applicable body.
@@ -796,6 +802,8 @@ Associated methods use declared signatures; body-inferred result types remain un
 #### Concrete-data dispatch through abstract parameters
 
 H-229 requires dispatch to use the actual concrete data type. A parameter or result annotated Entity checks that interface requirement; it does not turn a Node into Entity for later method selection or erase a previously established Node <: Weighted relation. Source and caller-selected implementations still need a unique most-specific match for the concrete argument types. Abstract inheritance and explicit adapter selection determine applicability; field shape and mere module loading establish no conformance.
+
+A grouped public input may therefore admit `Shipment` while a method binds a readonly `Refrigerated` input in the same owner. If an independent method specializes another argument to the enum member `Express`, a refrigerated express shipment needs a unique best implementation at that intersection. The [worked example](SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) covers all four combinations.
 
 For Node <: Weighted <: Entity, the confirmed dispatch target is score(Weighted)=2 through direct, broad-parameter, nested and Weighted-helper calls. An exact score(Node)=7 remains more specific on all paths. Selecting the original Node without its adapter must still fail an Entity requirement.
 

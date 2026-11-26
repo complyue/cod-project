@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Define callable methods by types and constant values
+
+<a id="h-grouped-method-dispatch-20261125"></a>
+**H-GROUPED-METHOD-DISPATCH-20261125.** In the CoD project design conversation the project user asked for “常量参数值参与method dispatch” and “公共头声明更泛类型的参数，内部方法声明更具体类型的参数”. The user confirmed the `of` method list, `=>` arms and the requirement to brace the whole method body for a direct-level parameterized trailing callback, and requested support in the planned zero-configuration formatter. [D-10 r268→269](design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch) and [D-07 r223→224](design/DomainLanguageDesign.md#concrete-data-dispatch-through-abstract-parameters) broaden the [grouped installation](#h-grouped-local-proc-install-20261124) documented at `9f9ef18bfebe025d799e0b3c35a097ba45cd58cd:design/SymbolicDynamicScope.md`. The new method arrow supersedes that installation’s `->` arm spelling. Open named families can specialize actual values and types across authorized module extensions. Each installed family must cover its symbol. [P-740/P-741 and the confirmed boundary](design/DesignAuthorityRegistry.md#d-10-method-groups) also cover enum r6, D-15r83 and D-21r38. The idiomatics guideline r5, guide r13 and syntax showcase document the [method-arm boundaries](design/SymbolicDynamicScope.md#method-arm-boundaries). Compiler and formatter delivery require separate evidence.
+
 ## 2026-11-25 — Qualify protected-name diagnostics by compiler stage
 
 <a id="k-seed-protected-binder-stage-20261125"></a>

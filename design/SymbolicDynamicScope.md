@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 268 · Recorded: 2026-11-25 · Phase: language/application co-design.
+Design revision: 269 · Recorded: 2026-11-25 · Phase: language/application co-design.
 
 ## Design authority
+
+At r269 [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups) records the [project user’s grouped-method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) under P-740/P-741. [Named and installed groups](#grouped-method-definitions-and-value-dispatch) share typed constant and type refinements, unique-most-specific selection and [delimited method bodies](#method-arm-boundaries). The r268 public-call and installed-family requirements continue. Check an open intersection, actual-owner access, complete installed coverage and formatter round trips. General named-constant spelling is open.
 
 At r268 the [project user’s decision](../CHANGELOG.md#h-perform-family-capture-20261125) extends [D-10-FAMILY-EFFECT-REQUIREMENTS](DesignAuthorityRegistry.md#d-10-family-effect-requirements) to [handler activation and replay](#captured-values-and-call-behavior). The installed family’s outstanding symbols determine the full capture and restoration set. The stage boundary, local-supply rule and invocation ordering continue from r267.
 
@@ -638,18 +640,128 @@ When a diagnostic identifies the anonymous procedure, label it `local proc @verb
 
 The seed currently parses both spellings through the same body path and applies the module-family extension check. The booter’s grammar currently reads the short body spelling. The new same-signature behavior requires implementation in both. [Seed reader](../cod/lang_syntax.hh) · [Booter reader](../applications/cod-booter/src/ExpressionParser.cod)
 
-### Installing a local family with several methods
+### Grouped method definitions and value dispatch
 
-Write the common result and owner clause once, after the symbol. Each arm declares ordinary method formals and supplies an expression or a braced procedure body. Here the symbol accepts a readonly `Shipment` and returns `u64`. A `Refrigerated` shipment also has a `cold_fee:u64` field.
+A group defines one or more methods of one callable. After a complete `func` or `proc`
+signature, including its result, checked failures and any `where` clause, `of {` opens
+a method list. At that same point `{` opens an ordinary method body and `;` ends a
+bodyless declaration. Each list item has a parenthesized parameter head, `=>`, and an
+expression or braced method body. Each method owns its parameter bindings, return
+destination, cleanup and source location. Result types use `->`. A [case arm](DomainLanguageDesign.md#case-expressions-and-branch-local-variables)
+also uses `->` and has its own ordered matching, guards and fallthrough.
+
+The complete header supplies the admitted input types and slots, public argument names,
+defaults, result and owner/access contracts. Each arm refines those same slots. An arm may
+bind a parameter of its public type or a more specific admissible type, accept a slot with
+`_`, or match a constant value. When the methods instead declare their own input signatures,
+write the common name, result and any common constraints once, as in
+`proc schedule_retry -> void { (0u8) => { close_attempt() } (n:u8) => { enqueue_retry(n) } }`.
+That form can group methods of different arities under the existing family-formation rules.
+The ordinary restriction on overloading a variadic method applies to both forms.
+
+Here a `Refrigerated` shipment carries a `cold_fee:u64` field. The public argument label
+`item` applies to every call. The name `cold` is local to the method that introduces it.
 
 ```cod
-effect @quote -> u64 where {const owner S} {
-    (item:const Shipment in S)     -> 10u64;
-    (item:const Refrigerated in S) -> { 10u64 + item.cold_fee }
+enum Service:u8 { Standard; Express; }
+
+func surcharge(item:const Shipment in S, service:Service) -> u64 where {const owner S} of {
+    (cold:const Refrigerated in S, Express) => cold.cold_fee + 10u64;
+    (cold:const Refrigerated in S, _)       => cold.cold_fee;
+    (_, Express)                            => 10u64;
+    (_, _)                                  => 0u64
 }
 ```
 
-`effect proc @quote -> …` is the equivalent long spelling. The method list requires at least one arm. A single arm has the same meaning as its standalone local method. The semicolon separates the first expression body from the next parenthesized formal list, including when both are on one line. A braced body delimits itself. The syntax tree records one installation, its shared header and a list of method definitions. Each arm has its own parameter bindings, return scope and source location. A method head accepts the ordinary formal-parameter grammar. Value patterns, guards and fallthrough belong to `case`.
+Select the unique most-specific applicable method in the selected family. A narrower type
+or a constant restricts the tuples a method accepts. A method accepting a strict subset
+of another method's input tuples is more specific. The broad header supplies the public
+contract. Only a method with a body supplies an implementation. An ordinary shipment
+costs 0 or 10 for standard or express service. A refrigerated shipment with a fee of 3
+costs 3 or 13, including through a statically broad `Shipment` parameter. The `cold`
+binding preserves the actual owner `S` and readonly access.
+
+Remove the first arm and the refrigerated-express tuple has two incomparable best matches.
+A general arm cannot resolve their intersection. A module with extension permission may
+contribute that intersection to the named family. A world containing all four methods
+returns 13 for refrigerated express service regardless of declaration or import order. Apply ordinary demanded-call and callable-view
+coverage to that world. A complete `typeof origin` promise requires all its admitted calls
+to be covered. A group itself imposes no global totality requirement on an open named
+family. [Callable promises](DomainLanguageDesign.md#standalone-callable-declarations)
+· [Actual-type dispatch](DomainLanguageDesign.md#concrete-data-dispatch-through-abstract-parameters)
+
+**Constant heads.** The selected method may depend on an actual argument whose value becomes
+known at runtime. Boolean and fixed-width integer literal patterns compare typed values.
+For a slot of a known enum type, a bare member in pattern position resolves in that enum's
+member table even if a lexical variable has the same spelling. Aliases denote one canonical
+member. Two otherwise identical methods differing only by such an alias are duplicate
+definitions. Raw backing integers and equal codes in different nominal enums denote
+different values. A typed binder such as `name:T` retains its ordinary formal meaning.
+Matching uses the established typed value directly. It invokes no user equality, conversion
+or effect. A named compile-time constant can supply the same typed singleton restriction.
+Its general source spelling in a method head remains open. [Enum names and matching](TypedEnums.md#names-and-case-matching)
+
+Select the public signature and bind labels and defaults under the ordinary call rules.
+Prepare the selected arguments once in their established evaluation order and default
+environments. Then their actual types and values choose the method. A default that fills a
+shared slot can therefore select its constant arm. Default-presence/count metadata can rank public signatures. Their default expressions are
+analyzed and evaluated only for the selected contract. A failed preparation propagates
+without trying another method. [Named arguments and defaults](#named-arguments-defaults-and-complete-binding)
+
+A named `func`, `proc` or `proc @name` group registers methods in the permitted lexical
+family. An `effect` with bodies installs its written anonymous family when reached. A full
+installation signature also introduces the list with `of`, as in
+`effect @score(n:u8) -> u64 of { (0u8) => 0u64; (_) => 1u64 }`. The established short
+installation below uses the same arms. Ordinary callable-kind restrictions and each
+symbol's capture, installation and invocation rules govern its use.
+
+#### Method arm boundaries
+
+A braced body immediately after the method `=>` ends its arm at the matching closing brace.
+A bare expression before another arm requires a separating `;`. The final expression may
+end at the list's closing brace. At the direct delimiter depth of the method list, a bare
+expression body cannot attach a parameterized trailing `here` callback. Enclose the entire
+method body in single braces to supply that callback there. A nested callback's own closing
+brace ends the callback. It cannot delimit an enclosing bare method body.
+
+```cod
+proc score(x:u64) -> u64 of {
+    (0u64)  => { read_fee() }
+    (n:u64) => {
+        apply(n) (v) => { v + 1u64 }
+    }
+}
+```
+
+The first arm may also read `(0u64) => read_fee();`. Removing that semicolon while leaving
+the body bare rejects the following `(n:u64) => { … }` at list depth. This rule holds even
+when `read_fee` could receive a callback of precisely that shape. To express one method
+calling such an overload, write `(0u64) => { read_fee() (n:u64) => { n + 1u64 } }`.
+A semicolon after the callback cannot repair a forbidden attachment. Only a separator
+immediately after the preceding call starts the next arm. In the bare final expression
+`finish(apply(n) (v) => { v + 1u64 })`, the callback is inside the argument parentheses
+of `finish`, below the method list’s direct level. A reader can locate these boundaries
+using delimiters alone. The nested callback keeps its
+ordinary lexical control and [brace semantics](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable).
+
+The planned configuration-free formatter must preserve the number of methods and which call
+receives each callback across formatting and reparsing. Preserve the separators and outer method braces that establish those boundaries, including
+when wrapping to the project's 100-column width. Test the two-arm and one-arm cases above, the rejected unseparated form and a second
+format of the formatted source. Whitespace cannot repair the rejected source or decide
+the author's intent. [Semicolon omission](#semicolon-omission-and-syntax-ux)
+
+### Installing a local family with several methods
+
+The short installation writes the common result and owner clause once, after the symbol. Its declared procedure signature supplies the public input domain, including the nominal enum type of a member-pattern slot. Here the symbol accepts a readonly `Shipment` and returns `u64`. A `Refrigerated` shipment also has a `cold_fee:u64` field.
+
+```cod
+effect @quote -> u64 where {const owner S} {
+    (item:const Shipment in S)     => 10u64;
+    (item:const Refrigerated in S) => { 10u64 + item.cold_fee }
+}
+```
+
+The optional `proc` in `effect proc @quote -> …` has the same meaning here. The installation records its shared header and the written group of methods. A single method with ordinary formals has the same meaning as its standalone installation. [Method heads, arms and separators](#grouped-method-definitions-and-value-dispatch) apply to installations with or without a public parameter list.
 
 Check the shared header and the complete family against the resolved symbol’s procedure signature. Every argument tuple admitted by the symbol must select a unique most-specific applicable method, and that method must satisfy the shared result and the symbol’s owner, access and checked-failure obligations. The call’s actual arguments supply `S` for that invocation. A missing general case, ambiguous winners or an incompatible winning method reject the installation. Ordinary family formation rules apply, including the restriction on overloading a variadic method. [Method selection and coverage](AheadOfTimeExecutionPreparation.md#callable-method-and-native-implementation-hierarchy)
 
@@ -663,7 +775,7 @@ Reaching the effect captures the [outstanding requirements](#family-wide-effect-
 | --- | --- |
 | `@score(x)` | Select the family lexically at the call site. Apply ordinary method dispatch to the actual arguments. Its body uses current dynamic bindings. The call needs no installation for its own callee. |
 | `effect proc @score(x:u64) -> u64 { ... }` | Install the one local body under the selected symbol. Dynamic calls reach that body. |
-| `effect @score -> u64 { … }` | Install the methods under the shared header as one local family. Dynamic calls use ordinary overload selection. |
+| `effect @score -> u64 { … }` | Install the methods under the shared header as one local family. Dynamic calls select the unique most-specific applicable method by actual types, values and the family’s contracts. |
 | `effect proc @score;` | Activate the lexically selected family and install its handler in the current dynamic scope. Snapshot the required symbolic bindings at activation. The expression yields void. |
 | `perform @score(x)` | Use the currently installed handler and replay its saved symbolic bindings. |
 | `behave @score(x)` | Use the currently installed handler with the dynamic bindings current at invocation. |
@@ -1084,7 +1196,7 @@ proc dispatch(first:T, rest:T...) -> void where T;
 function pair(x:T, y:U) -> i64 where {T, U};
 ```
 
-Type parameters are inferred from argument type evidence at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds and repeated-variable relationships, independently of declaration order. Equally specific candidates remain ambiguous. A variadic method stands alone in its family. Its pack length is runtime data. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
+A named definition can also register a [group of methods](#grouped-method-definitions-and-value-dispatch) under one public header. Type parameters are inferred from argument type evidence at a demanded call. Repeated occurrences constrain those types to agree; bounds use the caller's selected conformance information. A type parameter that cannot be inferred from inputs is diagnosed. Unique-most-specific dispatch compares signature constraints, including concrete types, bounds and repeated-variable relationships, independently of declaration order. Equally specific candidates remain ambiguous. A variadic method stands alone in its family. Its pack length is runtime data. This bounded prototype does not supply generic ADT constructors, explicit type-argument calls or a complete higher-rank type system.
 
 #### Procedure families before the first method
 
@@ -1404,6 +1516,8 @@ run();
 
 Where the grammar attaches the first block as a callback, a suspicious presentation can warrant a warning that the block is passed to run and is invoked only under run's behavior; inserting `;` states the independent-scope intent. An intentionally formatted multiline callback must not warn merely because a newline precedes its block. Exact warning triggers and safe formatter output need focused examples and incremental refinement; indentation is not proof of intent.
 
+[Method-list boundaries](#method-arm-boundaries) require a separator before an arm following a bare expression, or a braced body that ends the preceding arm. A parameterized trailing callback at the direct level of a bare method expression requires outer method braces. Both the parser and planned formatter respect this boundary independently of layout.
+
 Other review cases include return/throw operands across lines, call/index/operator continuations, comments, blank lines and separators inside braced receiving specifications. Preserve D-16’s reserved fraction `//` and `#` line comments. A trailing callback header ends at `) =>`. The braces that follow determine its control destinations.
 
 Acceptance of incremental grammar/diagnostic work should show both the admitted omission and its deterministic meaning, meaningful warnings with valid suggested rewrites for the targeted trap, and ordinary omission/multiline cases without unnecessary warnings. Preserve selected argument order, first-slot callback binding, local returns, captures and cleanup. Current compiler support must be reported separately; this source principle alone does not imply that every illustrated omission is already parsed or diagnosed.
@@ -1495,7 +1609,7 @@ adjust(5u64, 3u64 -> unknown);               # reject: unknown parameter
 
 Check arguments from left to right for each candidate. A positional argument fills the next declaration slot in order, including a slot with a default. An in-position label advances the same way. Never guess a destination from a value’s type or from the slots left over after an out-of-order label. The explicitly selected trailing-callback form above first fills slot one with its callback, so its written positional arguments start at slot two. Named arguments fill matching unfilled slots. Duplicate names, supplying a slot positionally and by name, unknown names and missing required slots reject that candidate binding. A call needs an applicable unambiguous declaration/method; do not run operands or defaults speculatively to try candidates. An explicitly supplied value suppresses its default; explicit null is still an argument with ordinary owner/nullability checks. An explicit default request instead uses the declared initializer as specified below. A required parameter may follow a default-bearing one because named binding can complete it. Ordinary omission needs no positional hole marker; `-> parameter` is an explicit named default request, not a positional placeholder. These rules apply to both functions and procedures.
 
-**Selection precedes default analysis (H-477).** Select a unique overload using the declared signatures, supplied argument types and binding forms, declared constraints, and default-presence/count metadata under H-474/H-475. Do not analyze a default expression to infer candidate types, resolve its free names, check its effects or decide whether a competing candidate is applicable. An omitted slot or `-> parameter` needs a declared default; checking that the recipe exists is not analysis of its contents.
+**Selection precedes default analysis (H-477).** Public signature selection precedes default analysis. A [method group](#grouped-method-definitions-and-value-dispatch) can subsequently refine the selected contract using its prepared arguments. Select a unique overload using the declared signatures, supplied argument types and binding forms, declared constraints, and default-presence/count metadata under H-474/H-475. Do not analyze a default expression to infer candidate types, resolve its free names, check its effects or decide whether a competing candidate is applicable. An omitted slot or `-> parameter` needs a declared default; checking that the recipe exists is not analysis of its contents.
 
 Parsing records default syntax and its definition/caller lookup context. H-456's definition-site symbolic identities remain tied to that context; deferred semantic analysis cannot rebind them to caller identities. Only after unique overload selection, analyze the defaults needed for that call and complete their type/owner/access/effect and generic obligations. This analysis precedes execution; H-458 separately governs when the checked defaults actually run.
 
@@ -1617,7 +1731,7 @@ func origin(flag:bool) -> bool { return flag; }
 proc consume(f:typeof origin) -> u64 { return f(7u64); }
 
 proc caller() -> u64 {
-    # Design example: one local named callable family with two methods.
+    # Signature notation for one local family with two different result types.
     func adapted(n:u64) -> u64 { return n + 1u64; }
     func adapted(flag:bool) -> bool { return not flag; }
     return consume(adapted);
@@ -1630,7 +1744,7 @@ Each required signature includes its callable-kind, input/result, passing/access
 
 A target may contain additional methods, but they do not widen the calls admitted through the origin view. Check the actual selected target method for each required call domain: an extra overload cannot introduce ambiguity or intercept a required case with an incompatible result, permission, owner or failure contract. A merely present compatible method is insufficient if ordinary dispatch would select an incompatible one. Unknown coverage remains an explicit proof/implementation gap; it cannot be silently accepted because the current caller happens not to exercise that case. Detailed generic/domain proofs remain under D-26's bounded coverage process.
 
-The caller may define a local named callable to adapt available operations explicitly and pass that family. It can forward each required signature, perform already permitted conversions, or implement an appropriate generic method. Its bodies must satisfy the same owner, capture, effect and cleanup rules; an adapter does not waive incompatibilities. Local multi-method declaration grouping/spelling is implementation and grammar work: the example denotes one callable binding with several methods, not repeated ordinary local-variable bindings or authorization for arbitrary same-scope duplicates. Source/target default expressions stay in their declared type contracts; adaptation does not duplicate them as value captures.
+The caller may define a local named callable to adapt available operations explicitly and pass that family. It can forward each required signature, perform already permitted conversions, or implement an appropriate generic method. Its bodies must satisfy the same owner, capture, effect and cleanup rules; an adapter does not waive incompatibilities. The example exercises distinct result types for the two required signatures. Methods sharing a result contract can use one [grouped definition](#grouped-method-definitions-and-value-dispatch). Source/target default expressions stay in their declared type contracts; adaptation does not duplicate them as value captures.
 
 This whole-family compatibility obligation is distinct from [D-21's semantic-method/native-implementation hierarchy](AheadOfTimeExecutionPreparation.md#callable-method-and-native-implementation-hierarchy). It does not demand one native body per origin signature, forbid code sharing or require emitting dead code. Code elimination cannot weaken source compatibility. Defaults and named arguments still need an applicable unambiguous origin signature at each call. Apply H-474's default-count rule to that origin contract; whole-family completeness supplies no extra ambiguity tie-break. The target's own unused defaults cannot change the origin-view choice. The selected family/world defines the contract, without promising coverage of future unrelated extensions or interpretations.
 
@@ -1716,7 +1830,7 @@ Caller-default failure precedes input ownership transfer; callee-default failure
 
 **Further review:** complete block grammar; helper/type-name hygiene and dependency checks in caller-defaults; public declaration versus implementing-method parameter names; conflicting defaults across declarations; type-bound default context transport and explicit contract erasure; and broader named pack composition. H-474 covers type-first comparison and fewer defaults for fixed overloads. H-475 covers explicit default requests and empty-pack binding. H-476/H-477 admits established type evidence from used defaults only after unique overload selection, with circular/unresolved inference rejected; default analysis never filters competing candidates and a selected-default error never retries selection. The declaration is the public naming/default contract; implementation-local names cannot change it. Default effects and checked failures stay visible through the selected contract. D-16 remains unchanged.
 
-**Acceptance:** complete reordered bindings and default omission; accept positional arguments after an in-position label and reject them after a reordered label; reject duplicate, unknown and missing-required bindings; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers zero-versus-one default on equal type matches, exact matching with a default beating widening without one, equal-count ambiguity, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds explicit default and empty-pack binding, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional values after reordered requests and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport, local family grammar and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Seed implementation coverage is recorded in the [language capability reference](../tests/cod/language/README.md).
+**Acceptance:** complete reordered bindings and default omission; accept positional arguments after an in-position label and reject them after a reordered label; reject duplicate, unknown and missing-required bindings; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers zero-versus-one default on equal type matches, exact matching with a default beating widening without one, equal-count ambiguity, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds explicit default and empty-pack binding, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional values after reordered requests and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Seed implementation coverage is recorded in the [language capability reference](../tests/cod/language/README.md).
 
 ### Evaluated bits and storage places
 

@@ -1,11 +1,11 @@
 # Idiomatics guideline
 
-Guideline revision: 4 · Updated: 2026-11-24
+Guideline revision: 5 · Updated: 2026-11-25
 
 ## Design authority
 
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics) covers this guideline at
-r4, including the [normal-completion formatting rule](../CHANGELOG.md#h-normal-completion-20261124) and applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
+r5 under the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125), including the [normal-completion formatting rule](../CHANGELOG.md#h-normal-completion-20261124) and applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
 [canonical code style](#canonical-code-style). The project user's
 [quality-standard approval and formatting decisions](../CHANGELOG.md#h-idiomatics-guideline-20261123)
 establish both scopes, including the initial maximum of 100 source columns.
@@ -161,6 +161,31 @@ attachment, and preserve the distinction between grouping and a full scope. Foll
 [semicolon and whitespace rules](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux).
 Canonical layout cannot replace an author's semantic choices about ownership, callable kind,
 dynamic context or control flow.
+
+The planned formatter must preserve the extent of every method and its callbacks when it wraps
+a group at 100 columns. This boundary has no formatting option. Check the following two inputs
+as distinct programs (assume `read_fee` accepts either a plain call or a trailing `here` callback).
+
+```cod
+proc rate(n:u64) -> u64 of {
+    (0u64) => read_fee();
+    (x:u64) => { x + 1u64 }
+}
+```
+
+```cod
+proc rate(n:u64) -> u64 of {
+    (_) => { read_fee() (x:u64) => { x + 1u64 } }
+}
+```
+
+Format and reparse each program. The first must still have two methods. The second must still
+have one method containing one callback with the same control destinations. Preserve a required
+`;` at a bare expression boundary, the outer method braces around a direct-level parameterized
+trailing callback, and the callback's own single or double braces. A second format must give the
+same text. Removing the first program's separator leaves a rejected boundary. Diagnose it and
+let the author choose whether to end the method or enclose the entire callback-bearing body.
+[Method arm boundaries](../design/SymbolicDynamicScope.md#method-arm-boundaries)
 
 A formatter may remove a trailing empty return when fallthrough completes the same invocation
 with the same result, scope exits, cleanup order and observable completion at every deferred

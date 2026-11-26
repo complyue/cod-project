@@ -13,7 +13,9 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 12 applies the [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) to the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
+Guide revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
+to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
+It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
 and [direct-parent construction](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product). It applies the [normal-completion rule](../CHANGELOG.md#h-normal-completion-20261124), the [single-directive import](../CHANGELOG.md#h-proc-import-identity-20261124) and the confirmed [writing and review guideline](IdiomaticsGuideline.md) under
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics), P-694/P-695, and the
 [canonical source style](IdiomaticsGuideline.md#canonical-code-style). The
@@ -418,6 +420,32 @@ or writable array covariance.
 [Super-calls in OO bodies](../design/DomainLanguageDesign.md#super-calls-in-oo-bodies) ·
 [Concrete dispatch](../design/DomainLanguageDesign.md#concrete-data-dispatch-through-abstract-parameters)
 
+### Put type and value specializations in one method group
+
+A carrier publishes a surcharge for any `ShippingRate` and `Priority`, using the rate types above
+and the earlier priority enum. Parcels incur their handling charge and urgent shipments incur a
+flat charge of 10. Express the two rules and their intersection in one `func` definition.
+
+```cod
+func surcharge(rate:const ShippingRate in S, priority:Priority) -> u64 where {const owner S} of {
+    (parcel:const ParcelRate in S, Urgent) => parcel.handling + 10u64;
+    (parcel:const ParcelRate in S, _) => parcel.handling;
+    (_, Urgent) => 10u64;
+    (_, _) => 0u64
+}
+```
+
+For a parcel with handling charge 3, the standard surcharge is 3 and the urgent surcharge is 13.
+An ordinary shipping rate incurs 0 and 10 respectively. A caller can pass the parcel through a
+`ShippingRate` reference and still get 13. `parcel` names the same readonly object in its actual
+owner `S`. The public labels remain `rate` and `priority`. `Urgent` matches a member of `Priority`.
+
+Each `=>` supplies a method. Reordering these arms preserves the result. Omitting the first
+leaves two equally applicable, incomparable specializations for an urgent parcel. An integrating
+module with extension permission can supply that intersection when it brings the rules together.
+Use `case … of` inside a method when a guard or the order of tests carries business meaning.
+[Grouped methods and value dispatch](../design/SymbolicDynamicScope.md#grouped-method-definitions-and-value-dispatch)
+
 ### Give distinct stored facts distinct names
 
 When designing both types, names such as `carrier_code` and `label_code` make it clear which
@@ -675,6 +703,25 @@ to select the carrier’s symbol and gain extension permission. If the package a
 that vocabulary identity with `symbol from`, the import reuses it. A different identity conflicts. Downstream billing code can keep using the
 vocabulary identity. When one call simply needs a different calculation, give that calculation an
 ordinary name. [Module selection](../design/ModuleWorlds.md#default-and-complete-public-selections)
+
+To replace a policy just for one batch, install the complete set of local methods together. Suppose
+`@credit` has the public signature `proc(Priority) -> u64`. Inside the following scope each urgent
+shipment receives one credit. On scope exit the previous policy is restored.
+
+```cod
+{{
+    effect @credit -> u64 {
+        (Urgent) => 1u64;
+        (_) => 0u64
+    }
+    rate_pending_shipments()
+}}
+```
+
+Here the batch requests the installed policy with `behave @credit(priority)`. The symbol signature
+supplies the enum domain and the wildcard covers every remaining member. Installing this group
+changes one dynamic binding. Publishing a reusable extension uses the module's procedure family.
+[Grouped handler installation](../design/SymbolicDynamicScope.md#installing-a-local-family-with-several-methods)
 
 ## Treat absence as part of the interface
 
@@ -1261,6 +1308,25 @@ run();
 
 Omitting the separator attaches the block to the call. Its execution then depends on `run`'s
 callback behavior. A line break alone cannot express the independent-scope intent.
+
+In a method list, close a short expression with `;` before the next arm. A directly braced method
+body ends at its own `}`. When a method body supplies a parameterized trailing `here` callback at
+the list's direct level, put single braces around the **entire method body**. For example, suppose
+`read_fee()` returns 10 and `apply_to_fee` calls its supplied body with that same fee.
+
+```cod
+proc adjusted_fee(extra:u64) -> u64 of {
+    (0u64) => { read_fee() }
+    (n:u64) => {
+        apply_to_fee() (fee) => { fee + n }
+    }
+}
+```
+
+`adjusted_fee(0u64)` returns 10 and `adjusted_fee(2u64)` returns 12. The first arm can also be
+written `(0u64) => read_fee();`. In the second, the inner `}` ends the callback and the outer `}`
+ends the method. Keep both levels when wrapping lines. The same boundary applies in a grouped
+`effect` installation. [Method arm boundaries](../design/SymbolicDynamicScope.md#method-arm-boundaries)
 
 The shipment example's triple-quoted doclet sits directly before the exported function. It documents
 that definition and contributes no runtime text value or effect. Its `[Shipment](Shipment)` link
