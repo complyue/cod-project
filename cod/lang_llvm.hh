@@ -2589,19 +2589,22 @@ class LLVMEmission {
     b_.CreateStore(record, scope_->head);
     return empty_scalar();
   }
-  llvm::StructType *scoped_effect_layout(size_t method) {
-    const auto &target = program_->methods.at(method);
-    const auto &call = call_layouts_.at(method);
+  llvm::StructType *scoped_effect_layout(const CheckedInstance &instance) {
+    const auto &target = program_->methods.at(instance.method);
+    const auto &call = call_layouts_.at(instance.method);
     const auto explicit_inputs = target.scope_inputs->named->explicit_parameters;
     std::vector<llvm::Type *> fields(call.operands - explicit_inputs, scalar_);
     fields.insert(fields.end(), call.owners, b_.getPtrTy());
     fields.insert(fields.end(), call.array_owners.size(), array_capability_);
+    for (const auto symbol : instance.scoped_replay_bindings)
+      fields.push_back(symbols_.at(symbol)->getValueType());
     return llvm::StructType::get(context_, fields);
   }
   llvm::Value *install_scoped_effect(const Expression &expr, const CheckedOperation &operation) {
     if (!operation.publishes_effect) return empty_scalar();
-    const auto method = program_->instances.at(*operation.scoped_effect).method;
-    auto *layout = scoped_effect_layout(method);
+    const auto &instance = program_->instances.at(*operation.scoped_effect);
+    const auto method = instance.method;
+    auto *layout = scoped_effect_layout(instance);
     auto *record = slot(layout, "scoped.effect.activation");
     unsigned field = 0;
     for (size_t i = 0; i < operation.arguments.size(); ++i) {
@@ -2619,6 +2622,11 @@ class LLVMEmission {
       auto *capability = array_capability(operation.array_allocator_arguments->at(role));
       b_.CreateStore(capability, b_.CreateStructGEP(layout, record, field++));
     }
+    for (const auto symbol : instance.scoped_replay_bindings) {
+      auto *binding = symbols_.at(symbol);
+      auto *saved = b_.CreateLoad(binding->getValueType(), binding, "scoped.replay.capture");
+      b_.CreateStore(saved, b_.CreateStructGEP(layout, record, field++));
+    }
     if (field != layout->getNumElements()) throw std::logic_error("invalid scoped effect activation layout");
     b_.CreateStore(record, symbols_.at(*operation.symbol));
     return empty_scalar();
@@ -2632,18 +2640,36 @@ class LLVMEmission {
         if (!reachable()) return nullptr;
       }
       const auto target = program_->symbols.at(symbol).scoped_instance.value();
-      const auto method = program_->instances.at(target).method;
+      const auto &instance = program_->instances.at(target);
+      const auto method = instance.method;
       auto *callee = specialize_ ? specialized_.at(target) : general_.at(method);
       auto *valid = block("scoped.effect.installed"), *missing = block("scoped.effect.unbound");
       b_.CreateCondBr(b_.CreateIsNotNull(record), valid, missing);
       b_.SetInsertPoint(missing);
       fail_path(ExceptionCategory::unsound_runtime_typing, expr.at);
       b_.SetInsertPoint(valid);
-      auto *layout = scoped_effect_layout(method);
-      for (unsigned field = 0; field < layout->getNumElements(); ++field)
+      auto *layout = scoped_effect_layout(instance);
+      const auto &replay = instance.scoped_replay_bindings;
+      const auto inputs = layout->getNumElements() - replay.size();
+      for (unsigned field = 0; field < inputs; ++field)
         arguments.push_back(b_.CreateLoad(layout->getElementType(field), b_.CreateStructGEP(layout, record, field)));
       if (callee->arg_size() != arguments.size()) throw std::logic_error("invalid scoped effect invocation layout");
-      return propagate(b_.CreateCall(callee, arguments));
+      SavedEffects previous;
+      if (expr.kind == Expression::Kind::perform) {
+        auto field = inputs;
+        for (const auto symbol : replay) {
+          auto *binding = symbols_.at(symbol);
+          auto *type = binding->getValueType();
+          previous.push_back({symbol, b_.CreateLoad(type, binding, "scoped.replay.previous")});
+          auto *saved = b_.CreateLoad(type, b_.CreateStructGEP(layout, record, field++));
+          b_.CreateStore(saved, binding);
+        }
+      }
+      // The raw outcome returns after the selected body's cleanup has run.
+      // Restore the caller before propagating any abrupt outcome.
+      auto *result = b_.CreateCall(callee, arguments);
+      restore_effects(previous);
+      return propagate(result);
     });
   }
   llvm::Value *region_address(llvm::Value *owner, llvm::Value *offset, llvm::Value *size) {
@@ -5604,7 +5630,12 @@ public:
     const auto collect_operations = [&](const auto &operations) {
       for (const auto &[expr, operation] : operations) {
         if (operation.callee) retain_method(program.instances[*operation.callee].method);
-        if (operation.scoped_effect) retain_method(program.instances[*operation.scoped_effect].method);
+        if (operation.scoped_effect) {
+          const auto &target = program.instances[*operation.scoped_effect];
+          retain_method(target.method);
+          if (operation.publishes_effect)
+            used_symbols.insert(target.scoped_replay_bindings.begin(), target.scoped_replay_bindings.end());
+        }
         for (const auto &call : operation.nominal_calls) retain_method(program.instances[call.callee].method);
         if (operation.opened_source) {
           prepared_sources.insert(*operation.opened_source);

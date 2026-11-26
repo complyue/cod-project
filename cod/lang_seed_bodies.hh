@@ -756,10 +756,22 @@ class BodyExtraction {
       return target->second;
     }
 
+    CheckedOperation scalar_symbol(const Expression &source, size_t id) const {
+      const auto &symbol = declarations().symbols.at(id);
+      expect(!symbol.reference && symbol.type && scalar_type(*symbol.type), source.at,
+             "replacement seed needs a scalar symbolic binding");
+      CheckedOperation op;
+      op.symbol = id;
+      if (source.kind != Kind::touch) op.type = *symbol.type;
+      return op;
+    }
+
     const CheckedOperation &ordinary_operand(const Expression &source) {
       if (source.kind != Kind::symbol) return extract(source);
       require_executable_expression(source);
       const auto id = selected_symbol(source);
+      if (!declarations().symbols.at(id).reference)
+        return remember(source, scalar_symbol(source, id));
       CheckedOperation operation;
       operation.type = reference_target(source, id);
       operation.symbol = id;
@@ -1076,7 +1088,7 @@ class BodyExtraction {
         const auto &source = *expr.children[i];
         const auto &arg = operands.empty() ? ordinary_operand(source) : *operands[i];
         const auto &formal = target.parameters[i];
-        const auto current_symbol = source.kind == Kind::symbol ? arg.symbol : std::nullopt;
+        const auto current_symbol = source.kind == Kind::symbol && arg.view ? arg.symbol : std::nullopt;
         if (current_symbol)
           expect(target.result.type && !region_receiver && target.here.empty() &&
                  !parameter.selects_caller_place() && (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref),
@@ -1328,6 +1340,17 @@ class BodyExtraction {
                expr.children.front()->at, "replacement seed needs the declared writable target of a borrowed effect");
         CheckedOperation op;
         op.symbol = id;
+        return op;
+      }
+      if (symbol.type && scalar_type(*symbol.type)) {
+        expect(expr.binding == "<-" && expr.children.size() == 1, expr.at,
+               "a scalar symbol installation requires an explicit value transfer");
+        const auto &value = operand(expr, 0);
+        CheckedOperation op;
+        op.symbol = id;
+        op.operand_type = *symbol.type;
+        if (value.type == Type::never) op.type = Type::never;
+        else takes_value(value, *symbol.type, expr.children.front()->at);
         return op;
       }
       require_owning_symbol(expr, id);
@@ -1881,6 +1904,7 @@ class BodyExtraction {
         op.integer = expr.text == "true";
         return op;
       case Kind::name: return name(expr);
+      case Kind::symbol: case Kind::touch: return scalar_symbol(expr, selected_symbol(expr));
       case Kind::callable: return define_local(expr);
       case Kind::unary: case Kind::binary: return eager(expr);
       case Kind::call: return call(expr).value();

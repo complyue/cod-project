@@ -646,6 +646,8 @@ struct CheckedInstance {
   // Completed capability arguments for this executable frame. An empty
   // layout is valid. A missing layout cannot supply the LLVM call ABI.
   std::optional<std::set<size_t>> array_allocator_roles = {};
+  // The completed snapshot suffix for a publishing scoped handler frame.
+  std::set<size_t> scoped_replay_bindings = {};
 };
 struct CheckedHereContract {
   struct Component {
