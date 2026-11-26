@@ -1,0 +1,181 @@
+using "./ParserStorage.cod" no_node;
+using "./NativeCommands.cod" {
+    NativeCommands, NativePlan, initialization_access, place_address, load_target, store_target,
+    copy_word, position_block, word_constant, jump, branch_equal, branch_catchable,
+    begin_function, declare_function, return_outcome, finish_program, write_flow_flag,
+    branch_on_flow_flag, unbind_local, bind_local, use_local, require_initialized_place,
+    copy_completion, pending_category,
+};
+
+export enum InitializationAccess:u8 { NoAccess; ResetAccess; EstablishAccess; ReadPayload; ReadBinding; PromiseWrite; }
+export enum FlowFlagWrite:u8 { KeepFlags; SetFlag; CopyFlag; UnknownFailure; }
+
+export data InitializationOperation {
+    activation:u64;
+    first:u64;
+    second:u64;
+    labels:bool;
+    access:InitializationAccess;
+    tag:u64;
+    site:u64;
+    writes:FlowFlagWrite;
+    write_slot:u64;
+    write_input:u64;
+    guard_slot:u64;
+    guard_expected:u64;
+    known_guard:u64;
+}
+export array InitializationOperations[u64]:InitializationOperation;
+export array InitializationIndices[u64]:u64;
+export array InitializationTags[u64]:bool;
+
+export func initialization_obligation(access:InitializationAccess) -> bool {
+    return access == (ReadPayload:InitializationAccess) || access == (ReadBinding:InitializationAccess) || access == (PromiseWrite:InitializationAccess)
+}
+
+func access_kind(opcode:u8) -> InitializationAccess {
+    if (opcode == place_address() || opcode == unbind_local()) return (ResetAccess:InitializationAccess);
+    if (opcode == store_target() || opcode == bind_local()) return (EstablishAccess:InitializationAccess);
+    if (opcode == load_target() || opcode == copy_word()) return (ReadPayload:InitializationAccess);
+    if (opcode == use_local()) return (ReadBinding:InitializationAccess);
+    if (opcode == require_initialized_place()) return (PromiseWrite:InitializationAccess);
+    return (NoAccess:InitializationAccess)
+}
+
+func read_edges(opcode:u8, a:u64, b:u64, c:u64, d:u64, previous_slot:u64, previous_value:u64,
+                op:InitializationOperation in O) -> void where {owner O} {
+    if (opcode == jump()) {
+        op.labels <- true;
+        op.first <- a;
+        return
+    };
+    if (opcode == branch_catchable()) {
+        op.labels <- true;
+        op.first <- b;
+        op.second <- c;
+        return
+    };
+    if (opcode == branch_equal() || opcode == branch_on_flow_flag()) {
+        op.labels <- true;
+        op.first <- c;
+        op.second <- d;
+        op.guard_expected <- b;
+        if (opcode == branch_on_flow_flag() || a == pending_category()) { (op.guard_slot <- a):void };
+        if (opcode == branch_equal() && a == previous_slot) { (op.known_guard <- previous_value):void };
+    }
+}
+
+func read_flag_write(opcode:u8, a:u64, b:u64, c:u64, op:InitializationOperation in O) -> void
+    where {owner O} {
+    if (opcode == write_flow_flag() || (opcode == word_constant() && a == pending_category())) {
+        op.writes <- (SetFlag:FlowFlagWrite);
+        op.write_slot <- a;
+        op.write_input <- b;
+        return
+    };
+    if (opcode == copy_completion()) {
+        op.writes <- if (c == 0u64) { (CopyFlag:FlowFlagWrite) } else { (UnknownFailure:FlowFlagWrite) };
+        op.write_slot <- a;
+        (op.write_input <- b):void
+    }
+}
+
+func resolve_edge(labels:const InitializationIndices in L, operations:const InitializationOperations in O,
+                  reference:u64, from_label:bool, activation:u64) -> u64 where {const owner L, const owner O} {
+    if (reference == no_node()) return no_node();
+    if (from_label && reference >= intrinsic (len)(labels)) return no_node();
+    val target <- if (from_label) { (labels[reference]) } else { reference };
+    if (target >= intrinsic (len)(operations) || operations[target].activation != activation) return no_node();
+    return target
+}
+
+# Read the command prefix once. The second loop links recorded label operands.
+# Only the driver can pass these fresh rows to later phases as readonly inputs.
+export func extract_initialization_flow(
+    code:const NativeCommands in C, plan:const NativePlan in P,
+    operations:InitializationOperations in F, labels:InitializationIndices in F,
+    entries:InitializationIndices in F, reset_seen:InitializationTags in F, demanded:InitializationTags in F) -> bool
+    where {const owner C, const owner P, owner F} {
+    val used <- plan.used;
+    if (used > intrinsic (len)(code) || used != intrinsic (len)(operations) ||
+        used != intrinsic (len)(entries) || plan.labels != intrinsic (len)(labels) ||
+        intrinsic (len)(reset_seen) != intrinsic (len)(demanded)) return false;
+    val activation <- no_node();
+    val constant_slot <- no_node();
+    val constant_value <- no_node();
+    val opcode <- 0u8;
+    val a <- 0u64;
+    val b <- 0u64;
+    val c <- 0u64;
+    val d <- 0u64;
+    val access <- (NoAccess:InitializationAccess);
+    for (at in 0u64 .. used) {
+        opcode <- code[at].opcode;
+        a <- code[at].a;
+        b <- code[at].b;
+        c <- code[at].c;
+        d <- code[at].d;
+        if (opcode == begin_function()) {
+            if (b >= plan.labels) return false;
+            activation <- at;
+            entries[at] <- b;
+        } else {
+            if (opcode != declare_function()) {
+                if (activation == no_node()) return false;
+                operations[at].activation <- activation;
+                if (opcode == position_block()) {
+                    if (a >= plan.labels || labels[a] != no_node()) return false;
+                    (labels[a] <- at):void;
+                };
+                read_edges(opcode, a, b, c, d, constant_slot, constant_value, operations[at]);
+                if (operations[at].labels &&
+                    (operations[at].first == no_node() || (opcode != jump() && operations[at].second == no_node())))
+                    return false;
+                if (!operations[at].labels && opcode != return_outcome() && opcode != finish_program())
+                    { (operations[at].first <- at + 1u64):void };
+                read_flag_write(opcode, a, b, c, operations[at]);
+                if (initialization_access(opcode) && c != 0u64) {
+                    if (c >= intrinsic (len)(demanded)) return false;
+                    access <- access_kind(opcode);
+                    operations[at].access <- access;
+                    operations[at].tag <- c;
+                    operations[at].site <- d;
+                    if (initialization_obligation(access)) { (demanded[c] <- true):void };
+                    if (access == (ResetAccess:InitializationAccess)) { (reset_seen[c] <- true):void };
+                }
+            }
+        };
+        if (opcode == word_constant()) {
+            constant_slot <- a;
+            (constant_value <- b):void;
+        } else { (constant_slot <- no_node()):void };
+    };
+    val root <- no_node();
+    val first <- no_node();
+    val second <- no_node();
+    val from_label <- false;
+    val frame <- no_node();
+    val resolved_first <- no_node();
+    val resolved_second <- no_node();
+    for (at in 0u64 .. used) {
+        if (entries[at] != no_node()) {
+            root <- resolve_edge(labels, operations, entries[at], true, at);
+            if (root == no_node()) return false;
+            (entries[at] <- root):void
+        };
+        first <- operations[at].first;
+        second <- operations[at].second;
+        from_label <- operations[at].labels;
+        frame <- operations[at].activation;
+        resolved_first <- resolve_edge(labels, operations, first, from_label, frame);
+        resolved_second <- resolve_edge(labels, operations, second, from_label, frame);
+        if ((first != no_node() && resolved_first == no_node()) ||
+            (second != no_node() && resolved_second == no_node())) return false;
+        operations[at].first <- resolved_first;
+        (operations[at].second <- resolved_second):void
+    };
+    for (tag in 1u64 .. intrinsic (len)(demanded)) {
+        if (demanded[tag] && !reset_seen[tag]) return false
+    };
+    return true
+}

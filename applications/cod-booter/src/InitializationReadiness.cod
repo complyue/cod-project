@@ -1,0 +1,112 @@
+using "./ParserStorage.cod" no_node;
+using "./InitializationFlow.cod" {
+    InitializationOperations, InitializationIndices, InitializationTags, initialization_obligation
+};
+using "./InitializationFlow.cod" InitializationAccess { ResetAccess, EstablishAccess, ReadBinding, PromiseWrite };
+using "./InitializationControl.cod" InitializationStates;
+
+export data UnreadyFact {
+    state:u64;
+    tag:u64;
+    previous:u64;
+}
+export array UnreadyFacts[u64]:UnreadyFact;
+
+export data InitializationResult {
+    diagnostic:u8;
+    node:u64;
+}
+
+func unproved_initialization() -> u8 { return 13u8; }
+func unproved_local_binding() -> u8 { return 17u8; }
+func incomplete_place_initialization() -> u8 { return 19u8; }
+
+func can_be_unready(facts:const UnreadyFacts in F, head:u64, count:u64, tag:u64) -> bool where {const owner F} {
+    val item <- head;
+    for (unused in 0u64 .. count) {
+        if (item == no_node()) return false;
+        if (facts[item].tag == tag) return true;
+        item <- facts[item].previous
+    };
+    return false
+}
+
+func add_fact(facts:UnreadyFacts in F, heads:InitializationIndices in F, count:u64 in F, state:u64, tag:u64) -> bool
+    where {owner F} {
+    if (state == no_node() || can_be_unready(facts, heads[state], count, tag)) return true;
+    if (count == intrinsic (len)(facts)) return false;
+    facts[count].state <- state;
+    facts[count].tag <- tag;
+    facts[count].previous <- heads[state];
+    heads[state] <- count;
+    (count <- count + 1u64):void;
+    return true
+}
+
+# Each work item supplies only a newly reached (state, tag) pair.
+# A read can neither change the facts nor direct the completion work.
+export func complete_initialization_readiness(
+    operations:const InitializationOperations in O, demanded:const InitializationTags in O,
+    states:const InitializationStates in S, roots:const InitializationIndices in S, states_used:u64,
+    facts:UnreadyFacts in F, heads:InitializationIndices in F, count:u64 in F) -> bool
+    where {const owner O, const owner S, owner F} {
+    val at <- no_node();
+    val tag <- 0u64;
+    val frame <- no_node();
+    val state <- no_node();
+    for (from in 0u64 .. states_used) {
+        at <- states[from].operation;
+        tag <- operations[at].tag;
+        if (initialization_obligation(operations[at].access)) {
+            frame <- operations[at].activation;
+            if (!add_fact(facts, heads, count, roots[frame], tag)) return false
+        };
+        if (operations[at].access == ResetAccess && demanded[tag] &&
+            (!add_fact(facts, heads, count, states[from].first, tag) ||
+             !add_fact(facts, heads, count, states[from].second, tag))) return false
+    };
+    for (item in 0u64 .. intrinsic (len)(facts)) {
+        if (item == count) return true;
+        state <- facts[item].state;
+        tag <- facts[item].tag;
+        at <- states[state].operation;
+        if (!(operations[at].access == EstablishAccess && operations[at].tag == tag) &&
+            (!add_fact(facts, heads, count, states[state].first, tag) ||
+             !add_fact(facts, heads, count, states[state].second, tag))) return false
+    };
+    return true
+}
+
+func unready_at(states:const InitializationStates in S, head:u64, states_used:u64,
+                facts:const UnreadyFacts in F, fact_heads:const InitializationIndices in F,
+                facts_used:u64, tag:u64) -> bool where {const owner S, const owner F} {
+    val state <- head;
+    for (unused in 0u64 .. states_used) {
+        if (state == no_node()) return false;
+        if (can_be_unready(facts, fact_heads[state], facts_used, tag)) return true;
+        state <- states[state].previous
+    };
+    return false
+}
+
+# Authorize an obligation only after the reachability and readiness
+# products are sealed. These readonly loans carry no scheduling capability.
+export func check_initialization(
+    operations:const InitializationOperations in O, states:const InitializationStates in S,
+    operation_heads:const InitializationIndices in S, states_used:u64,
+    facts:const UnreadyFacts in F, fact_heads:const InitializationIndices in F, facts_used:u64,
+    result:InitializationResult in R) -> bool
+    where {const owner O, const owner S, const owner F, owner R} {
+    for (at in 0u64 .. intrinsic (len)(operations)) {
+        if (initialization_obligation(operations[at].access) &&
+            unready_at(states, operation_heads[at], states_used, facts, fact_heads,
+                       facts_used, operations[at].tag)) {
+            result.node <- operations[at].site;
+            result.diagnostic <- if (operations[at].access == PromiseWrite) { incomplete_place_initialization() }
+                else { if (operations[at].access == ReadBinding) { unproved_local_binding() }
+                       else { unproved_initialization() } };
+            return false
+        }
+    };
+    return true
+}

@@ -1,0 +1,158 @@
+using "./ParserStorage.cod" no_node;
+using "./InitializationFlow.cod" { InitializationOperations, InitializationIndices };
+using "./InitializationFlow.cod" FlowFlagWrite { KeepFlags, SetFlag, CopyFlag, UnknownFailure };
+
+export data InitializationState {
+    operation:u64;
+    history:u64;
+    previous:u64;
+    first:u64;
+    second:u64;
+}
+export array InitializationStates[u64]:InitializationState;
+
+export data InitializationFlag {
+    previous:u64;
+    slot:u64;
+    value:u64;
+}
+export array InitializationFlags[u64]:InitializationFlag;
+
+export data InitializationControlResult {
+    states:u64;
+    flags:u64;
+    exhausted:bool;
+}
+
+func flag_value(flags:const InitializationFlags in F, history:u64, slot:u64) -> u64 where {const owner F} {
+    val update <- history;
+    for (unused in 0u64 .. intrinsic (len)(flags)) {
+        if (update == no_node()) return no_node();
+        if (flags[update].slot == slot) return flags[update].value;
+        update <- flags[update].previous;
+    };
+    return no_node()
+}
+
+func matching_flags(flags:const InitializationFlags in F, first:u64, second:u64) -> bool where {const owner F} {
+    val update <- first;
+    val slot <- no_node();
+    for (unused in 0u64 .. intrinsic (len)(flags)) {
+        if (update == no_node() || update == second) return true;
+        slot <- flags[update].slot;
+        if (flag_value(flags, first, slot) != flag_value(flags, second, slot)) return false;
+        update <- flags[update].previous;
+    };
+    return update == no_node() || update == second
+}
+
+func same_flags(flags:const InitializationFlags in F, first:u64, second:u64) -> bool where {const owner F} {
+    return first == second ||
+        (matching_flags(flags, first, second) && matching_flags(flags, second, first))
+}
+
+func unknown_failure_category() -> u64 { return no_node() - 1u64; }
+
+func append_flag(flags:InitializationFlags in F, result:InitializationControlResult in F, history:u64,
+                 slot:u64, value:u64) -> u64 where {owner F} {
+    if (flag_value(flags, history, slot) == value) return history;
+    val next <- result.flags;
+    if (next >= intrinsic (len)(flags)) {
+        result.exhausted <- true;
+        return no_node()
+    };
+    flags[next].previous <- history;
+    flags[next].slot <- slot;
+    flags[next].value <- value;
+    result.flags <- next + 1u64;
+    return next
+}
+
+func existing_state(states:const InitializationStates in F, flags:const InitializationFlags in F,
+                    head:u64, used:u64, history:u64) -> u64 where {const owner F} {
+    val state <- head;
+    for (unused in 0u64 .. used) {
+        if (state == no_node()) return no_node();
+        if (same_flags(flags, states[state].history, history)) return state;
+        state <- states[state].previous;
+    };
+    return no_node()
+}
+
+func state_for(states:InitializationStates in F, flags:const InitializationFlags in F,
+               heads:InitializationIndices in F, result:InitializationControlResult in F,
+               operation:u64, history:u64) -> u64 where {owner F} {
+    val existing <- existing_state(states, flags, heads[operation], result.states, history);
+    if (existing != no_node()) return existing;
+    val next <- result.states;
+    if (next >= intrinsic (len)(states)) {
+        result.exhausted <- true;
+        return no_node()
+    };
+    states[next].operation <- operation;
+    states[next].history <- history;
+    states[next].previous <- heads[operation];
+    heads[operation] <- next;
+    result.states <- next + 1u64;
+    return next
+}
+
+# Discover each (operation, incoming flag state) once. This phase only
+# receives linked control records. No tag proof can schedule another entry.
+export func complete_initialization_control(
+    operations:const InitializationOperations in O, entries:const InitializationIndices in O,
+    states:InitializationStates in F, flags:InitializationFlags in F,
+    heads:InitializationIndices in F, roots:InitializationIndices in F, result:InitializationControlResult in F)
+    -> bool where {const owner O, owner F} {
+    val used <- intrinsic (len)(operations);
+    if (used != intrinsic (len)(entries) || used != intrinsic (len)(heads) || used != intrinsic (len)(roots)) return false;
+    val root <- no_node();
+    for (at in 0u64 .. used) {
+        root <- entries[at];
+        if (root != no_node()) {
+            if (root >= used) return false;
+            roots[at] <- state_for(states, flags, heads, result, root, no_node());
+            if (result.exhausted) return false
+        }
+    };
+    val at <- no_node();
+    val history <- no_node();
+    val known <- no_node();
+    val first <- no_node();
+    val second <- no_node();
+    val write_input <- no_node();
+    for (state in 0u64 .. intrinsic (len)(states)) {
+        if (state == result.states) return true;
+        at <- states[state].operation;
+        history <- states[state].history;
+        if (operations[at].writes != KeepFlags) {
+            write_input <- operations[at].write_input;
+            if (operations[at].writes == CopyFlag) { (write_input <- flag_value(flags, history, write_input)):void };
+            if (operations[at].writes == UnknownFailure) { (write_input <- unknown_failure_category()):void };
+            history <- append_flag(flags, result, history, operations[at].write_slot, write_input);
+            if (result.exhausted) return false
+        };
+        first <- operations[at].first;
+        second <- operations[at].second;
+        known <- operations[at].known_guard;
+        if (known == no_node() && operations[at].guard_slot != no_node()) {
+            known <- flag_value(flags, history, operations[at].guard_slot);
+            if (known == unknown_failure_category() && operations[at].guard_expected != 0u64)
+                { (known <- no_node()):void }
+        };
+        if (second != no_node() && known != no_node()) {
+            if (known != operations[at].guard_expected) { (first <- second):void };
+            (second <- no_node()):void
+        };
+        if (first != no_node()) {
+            if (first >= used) return false;
+            (states[state].first <- state_for(states, flags, heads, result, first, history)):void
+        };
+        if (second != no_node()) {
+            if (second >= used) return false;
+            (states[state].second <- state_for(states, flags, heads, result, second, history)):void
+        };
+        if (result.exhausted) return false
+    };
+    return true
+}

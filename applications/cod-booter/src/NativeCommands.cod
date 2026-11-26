@@ -42,6 +42,8 @@ export data NativePlan {
     slots:u64;
     diagnostic:u8;
     node:u64;
+    initialization_notes:bool;
+    initialization_obligations:bool;
 }
 
 export func declare_function() -> u8 { return 1u8; }

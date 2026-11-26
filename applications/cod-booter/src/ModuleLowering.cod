@@ -73,7 +73,7 @@ using "./NativeCommands.cod" {
     store_target, checked_add, checked_multiply, checked_subtract, checked_divide,
     checked_remainder, receive_parameter, pass_argument, invoke_function, print_word,
     return_outcome, finish_program, returned_word, pending_category, pending_site, call_category,
-    call_site, arithmetic_fault, slot, reservation_tag, allocate_words, offset_address,
+    call_site, arithmetic_fault, slot, reservation_tag, allocate_words, offset_address, initialization_access,
     text_literal, text_size, text_byte, text_contains_nul, text_allocate, text_release,
     require_initialized_place, copy_completion, source_site,
 };
@@ -127,6 +127,13 @@ func command(code:NativeCommands in C, plan:NativePlan in P, opcode:u8,
     code[at].b <- b;
     code[at].c <- c;
     code[at].d <- d;
+    if (c != 0u64 && initialization_access(opcode)) {
+        plan.initialization_notes <- true;
+        if (opcode == load_target() || opcode == copy_word() || opcode == use_local() ||
+            opcode == require_initialized_place()) { (plan.initialization_obligations <- true):void };
+    };
+    if (opcode == write_flow_flag() || opcode == branch_on_flow_flag() || opcode == copy_completion() ||
+        opcode == require_initialized_place()) { (plan.initialization_notes <- true):void };
     plan.used <- at + 1u64;
     return;
 }
@@ -1989,6 +1996,8 @@ export func lower_native_module(nodes:const ExprNodes in N, tree:const ParseResu
                                 code:NativeCommands in C, plan:NativePlan in P, base:u64, entry:bool) -> bool
     where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner S, owner C, owner P} {
     plan.used <- 0u64;
+    plan.initialization_notes <- false;
+    plan.initialization_obligations <- false;
     plan.functions <- tree.used;
     plan.function_base <- base;
     plan.labels <- tree.used;

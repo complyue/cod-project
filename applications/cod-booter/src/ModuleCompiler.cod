@@ -10,7 +10,8 @@ using "./ModuleFrontend.cod" {
 };
 using "./NativeCommands.cod" { NativeCommands, NativePlan };
 using "./ModuleLowering.cod" lower_native_module;
-using "./InitializationChecking.cod" { InitializationResult, check_native_initialization };
+using "./InitializationChecking.cod" check_native_initialization;
+using "./InitializationReadiness.cod" InitializationResult;
 
 # The mapped revision and all working buffers remain live through lowering.
 # Only successful completion publishes commands for native construction.
