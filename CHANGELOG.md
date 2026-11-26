@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Prioritize correct handler replay in the replacement seed
+
+<a id="k-seed-replay-delivery-20261126"></a>
+**K-SEED-REPLAY-DELIVERY-20261126.** The project user challenged treating replay omission as a first principle in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). [D-ARCH-REVIEW r221→222](design/ImplementationArchitecture.md#emission-boundary-for-live-handler-installations) continues [H-PERFORM-FAMILY-CAPTURE-20261125](#h-perform-family-capture-20261125). The [previous seed profile](https://github.com/complyue/cod-project/blob/6ca6183a/applications/cod-booter/README.md#trusted-source-and-the-seed) requires proof of an empty set for its supported live handlers. Ordinary family capture and replay remain the delivery target. Registry r1334→1335 continues P-682/P-683.
+
 ## 2026-11-26 — Clarify component sourcing for domain-specific databases
 
 <a id="h-dsds-package-sourcing-20261126"></a>
