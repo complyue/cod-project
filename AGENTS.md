@@ -8,6 +8,8 @@ The design discussion maintains the language contracts, confirms major program s
 
 Development mainline chooses implementation details, fixes regressions, verifies the real workload and publishes within the agreed design. Share material milestones, blockers and design questions as they arise. [Responsibilities and examples](design/ImplementationArchitecture.md#design-review-and-delivery-responsibilities)
 
+Pull requests are a normal publication route. The project user may delegate a specific merge to another agent. Use authority already granted for the change, including an explicit decision in a PR or its originating discussion. Record the decision and its scope once and link it where needed. The merge commit identifies the revision delivered. [PR authorization and design evidence](design/ImplementationArchitecture.md#pull-request-authorization-and-design-evidence)
+
 ## Before coding
 
 1. Identify the component, intended behavior and acceptance workload. Ask which component to change if the request leaves that unclear.
@@ -122,4 +124,4 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 ## Documentation and repository hygiene
 
 - Outside changelogs, describe current contracts, implementation, evidence, limits and open questions. Keep current alternatives and relevant evidence where useful. Use brief changelog records with stable IDs and immutable commit/path locators for history. Keep journals and obsolete snapshots out of the repository.
-- After an authorized hygiene inspection, correct and self-review the inspected scope, then stage precise hunks, commit and push the maintenance work. Preserve concurrent edits and keep source and test changes out of documentation-only work.
+- After an authorized hygiene inspection, correct and self-review the inspected scope, then stage precise hunks, commit and publish the maintenance work through the authorized route. Preserve concurrent edits and keep source and test changes out of documentation-only work.

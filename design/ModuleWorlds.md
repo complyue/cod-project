@@ -4,7 +4,7 @@ Design revision: 84 · Recorded: 2026-11-25 · Status: module-world contract; im
 
 ## Design authority
 
-At r84 the [ASCII vocabulary example](../CHANGELOG.md#k-ascii-vocabulary-20261125) applies the existing [default and complete public selections](#default-and-complete-public-selections) to a type with many members under [D-15](DesignAuthorityRegistry.md#d-15). Compare an omitted selector with an explicit member subset, then use another member through the selected enum type.
+At r84 the [ASCII vocabulary example](../CHANGELOG.md#k-ascii-vocabulary-20261125) applies the existing [default and complete public selections](#default-and-complete-public-selections) to a type with many members under [D-15](DesignAuthorityRegistry.md#d-15) and [D-15-DEFAULT-EXPORTS](DesignAuthorityRegistry.md#d-15-default-exports), continuing P-692/P-693. Compare an omitted selector with an explicit member subset, then use another member through the selected enum type.
 
 At r83 the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) applies r82's family identity and extension permissions to value-refined methods under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Check a receiving world with independent cold-shipment and express-service methods, then supply the intersection there. Selection uses the same permissions and actual argument evidence in either import order.
 
