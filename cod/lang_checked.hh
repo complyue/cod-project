@@ -601,8 +601,17 @@ class ScalarChecker {
       std::optional<size_t> native_operation = {};
       bool operator==(const Resource &) const = default;
     };
+    struct SelectedMember {
+      Token spelling;
+      size_t ordinal;
+    };
+    struct DefaultSelection {
+      std::string name;
+      std::vector<SelectedMember> members;
+    };
     std::map<std::string, Resource> exports;
-    std::vector<std::string> public_order, defaults;
+    std::vector<std::string> public_order;
+    std::vector<DefaultSelection> defaults;
     bool publication_ready = false;
   };
   std::vector<ModuleNames> modules_;
@@ -24724,43 +24733,48 @@ class ScalarChecker {
     if (inserted) module_names().public_order.push_back(name);
   }
 
-  void select_enum_members(const Form &form, const Type &type) {
-    if (type.kind != Type::enumeration) implementation_gap(form.at, "member selection outside an enum");
-    const auto select = [&](const Token &name) {
-      const auto value = enum_member(type, name.text);
-      if (!value) fail(name.at, "unknown member '" + name.text + "' of enum '" + type.name + "'");
-      const auto [binding, inserted] = module_names().enum_members.emplace(name.text, *value);
-      if (!inserted && binding->second != *value)
-        fail(name.at, "conflicting enum member selection '" + name.text + "'");
-    };
-    if (form.selected_members->empty()) {
-      for (const auto &member : program_.enums.at(type.identity).source->enum_members) select(member.name);
-    } else {
-      for (const auto &name : *form.selected_members) select(name);
-    }
-  }
-
   void bind_sum_constructor(const Token &name, SumConstructor constructor) {
     const auto [selected, inserted] = module_names().constructors.emplace(name.text, constructor);
     if (!inserted && selected->second != constructor)
       fail(name.at, "conflicting data constructor '" + name.text + "'");
   }
 
-  void select_sum_constructors(const Form &form, const Type &type) {
-    const auto &alternatives = program_.sums.at(type.identity).alternatives;
-    if (form.selected_members->empty()) {
-      for (size_t i = 0; i < alternatives.size(); ++i)
-        bind_sum_constructor(alternatives[i].source->name, {type.identity, i});
-      return;
+  template <typename Select>
+  void select_resource_members(const ModuleNames::Resource &resource, const std::vector<Token> &names,
+      const Location &at, const Select &select) const {
+    if (resource.kind != ModuleNames::Resource::Kind::type) fail(at, "member selection requires a type");
+    const auto &type = resource.type;
+    if (type.kind == Type::sum) {
+      const auto &alternatives = program_.sums.at(type.identity).alternatives;
+      if (names.empty()) {
+        for (size_t i = 0; i < alternatives.size(); ++i) select(alternatives[i].source->name, i);
+      } else for (const auto &name : names) {
+        const auto found = std::ranges::find_if(alternatives, [&](const auto &alternative) {
+          return alternative.source->name.text == name.text;
+        });
+        if (found == alternatives.end())
+          fail(name.at, "unknown data constructor '" + name.text + "' of '" + type.name + "'");
+        select(name, static_cast<size_t>(found - alternatives.begin()));
+      }
+    } else {
+      if (type.kind != Type::enumeration) implementation_gap(at, "member selection outside an enum");
+      const auto select_enum = [&](const Token &name) {
+        const auto value = enum_member(type, name.text);
+        if (!value) fail(name.at, "unknown member '" + name.text + "' of enum '" + type.name + "'");
+        select(name, value->member);
+      };
+      if (names.empty()) {
+        for (const auto &member : program_.enums.at(type.identity).source->enum_members) select_enum(member.name);
+      } else for (const auto &name : names) select_enum(name);
     }
-    for (const auto &name : *form.selected_members) {
-      const auto found = std::ranges::find_if(alternatives, [&](const auto &alternative) {
-        return alternative.source->name.text == name.text;
-      });
-      if (found == alternatives.end())
-        fail(name.at, "unknown data constructor '" + name.text + "' of '" + type.name + "'");
-      bind_sum_constructor(name, {type.identity, static_cast<size_t>(found - alternatives.begin())});
-    }
+  }
+
+  void bind_resource_member(const Type &type, const Token &name, size_t ordinal) {
+    if (type.kind == Type::sum) return bind_sum_constructor(name, {type.identity, ordinal});
+    const EnumValue value{type, ordinal};
+    const auto [binding, inserted] = module_names().enum_members.emplace(name.text, value);
+    if (!inserted && binding->second != value)
+      fail(name.at, "conflicting enum member selection '" + name.text + "'");
   }
 
   std::optional<Form::ResourceNature> publication_nature(const ModuleNames::Resource &resource) const {
@@ -24780,16 +24794,18 @@ class ScalarChecker {
 
   void bind_module_resource(const Form &form, const std::string &local, ModuleNames::Resource resource,
                             std::optional<Form::ResourceNature> nature,
-                            const std::set<std::string_view> &fresh_symbols) {
+                            const std::set<std::string_view> &fresh_symbols,
+                            std::span<const ModuleNames::SelectedMember> members = {}) {
     using Resource = ModuleNames::Resource;
     const bool importing = form.kind == Form::Kind::import_resource;
     const bool reexporting = form.kind == Form::Kind::export_from_resource;
     if (nature && publication_nature(resource) != nature)
       fail(form.at, "symbolic resource kind does not match its publication");
     if (form.selected_members) {
-      if (resource.kind != Resource::Kind::type) fail(form.at, "member selection requires a type");
-      if (resource.type.kind == Type::sum) select_sum_constructors(form, resource.type);
-      else select_enum_members(form, resource.type);
+      select_resource_members(resource, *form.selected_members, form.at,
+          [&](const Token &name, size_t ordinal) { bind_resource_member(resource.type, name, ordinal); });
+    } else for (const auto &[name, ordinal] : members) {
+      bind_resource_member(resource.type, name, ordinal);
     }
     if (reexporting) {
       publish(local, resource, form.at);
@@ -24865,11 +24881,17 @@ class ScalarChecker {
     if (form.kind != Form::Kind::using_resource && form.kind != Form::Kind::symbol_from &&
         form.kind != Form::Kind::import_resource && form.kind != Form::Kind::export_from_resource)
       implementation_gap(form.at, "mixin body redefinition remains unproved");
-    if (form.selection != Form::Selection::named) {
-      const auto &names = form.selection == Form::Selection::defaults ? publisher.defaults : publisher.public_order;
-      if (form.selection == Form::Selection::defaults && names.empty())
+    if (form.selection == Form::Selection::defaults) {
+      if (publisher.defaults.empty())
         fail(form.at, "source module has no default exports; select names explicitly or use '{..}'");
-      for (const auto &name : names) {
+      for (const auto &selection : publisher.defaults) {
+        const auto &resource = publisher.exports.at(selection.name);
+        bind_module_resource(form, selection.name, resource, publication_nature(resource), fresh_symbols, selection.members);
+      }
+      return;
+    }
+    if (form.selection == Form::Selection::all_public) {
+      for (const auto &name : publisher.public_order) {
         const auto &resource = publisher.exports.at(name);
         bind_module_resource(form, name, resource, publication_nature(resource), fresh_symbols);
       }
@@ -24882,13 +24904,21 @@ class ScalarChecker {
     bind_module_resource(form, form.alias, found->second, form.resource_nature, fresh_symbols);
   }
 
-  void mark_default_export(const std::string &name, std::optional<Form::ResourceNature> nature, const Location &at) {
-    auto &publisher = module_names();
+  void mark_default_export(std::vector<ModuleNames::DefaultSelection> &defaults, const std::string &name,
+      std::optional<Form::ResourceNature> nature, const Location &at,
+      const std::optional<std::vector<Token>> &selected_members = {}) const {
+    const auto &publisher = module_names();
     const auto found = publisher.exports.find(name);
     if (found == publisher.exports.end() || publication_nature(found->second) != nature)
       fail(at, std::string("default selection requires a public name with the stated kind '") + (nature ? "@" : "") + name + "'");
-    if (std::ranges::find(publisher.defaults, name) == publisher.defaults.end())
-      publisher.defaults.push_back(name);
+    std::vector<ModuleNames::SelectedMember> members;
+    if (selected_members) select_resource_members(found->second, *selected_members, at,
+        [&](const Token &member, size_t ordinal) { members.push_back({member, ordinal}); });
+    if (std::ranges::none_of(defaults, [&](const auto &entry) {
+          return entry.name == name && std::ranges::equal(entry.members, members, [](const auto &a, const auto &b) {
+            return a.spelling.text == b.spelling.text && a.ordinal == b.ordinal;
+          });
+        })) defaults.push_back({name, std::move(members)});
   }
 
   void publish_module(const SourceModule &source) {
@@ -24911,14 +24941,16 @@ class ScalarChecker {
         fail(form->at, "symbolic resource kind does not match its definition");
       publish(form->name, resource, form->at);
     }
+    std::vector<ModuleNames::DefaultSelection> defaults;
     for (const auto &form : source.forms()) {
       if (form->default_exporting) {
         const auto &resource = module_names().exports.at(form->name);
-        mark_default_export(form->name, publication_nature(resource), form->at);
+        mark_default_export(defaults, form->name, publication_nature(resource), form->at);
       }
       for (const auto &mark : form->default_names)
-        mark_default_export(mark.name.text, mark.nature, mark.name.at);
+        mark_default_export(defaults, mark.name.text, mark.nature, mark.name.at, mark.selected_members);
     }
+    module_names().defaults = std::move(defaults);
   }
 
   bool cancels_module_installation(size_t symbol) const {

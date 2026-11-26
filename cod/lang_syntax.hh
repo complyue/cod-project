@@ -513,6 +513,7 @@ struct Form {
   struct DefaultMark {
     Token name;
     std::optional<ResourceNature> nature;
+    std::optional<std::vector<Token>> selected_members;
   };
   Kind kind;
   Location at;
@@ -1069,11 +1070,7 @@ class Parser {
   void resource_item(Form &form) {
     resource_selection(form, form.using_symbol);
     if (!form.symbolic && (form.kind == Form::Kind::using_resource || form.kind == Form::Kind::import_resource) && take("{")) {
-      auto &members = form.selected_members.emplace();
-      if (!take("..")) {
-        do { members.push_back(ordinary_name()); } while (take(",") && !is("}"));
-      }
-      expect("}");
+      form.selected_members = member_selection();
     }
     if (!take("with")) return;
     if (form.kind != Form::Kind::mixin_resource)
@@ -1086,6 +1083,14 @@ class Parser {
       form.mappings.push_back({local.text, source.text, local.at});
       expect(";");
     }
+  }
+  std::vector<Token> member_selection() {
+    std::vector<Token> members;
+    if (!take("..")) {
+      do { members.push_back(ordinary_name()); } while (take(",") && !is("}"));
+    }
+    expect("}");
+    return members;
   }
   Type parse_type(Parameter *parameter = nullptr) {
     const auto at = peek().at;
@@ -2850,7 +2855,9 @@ public:
           if (!nature && peek().kind == TokenKind::symbol)
             fail(peek().at, "symbolic default selectors require 'var' or 'proc'");
           auto selector = nature ? name(TokenKind::symbol) : lexical_name();
-          form->default_names.push_back({std::move(selector), nature});
+          Form::DefaultMark mark{std::move(selector), nature, {}};
+          if (!nature && take("{")) mark.selected_members = member_selection();
+          form->default_names.push_back(std::move(mark));
           if (!take(",")) break;
         }
         expect("}");
