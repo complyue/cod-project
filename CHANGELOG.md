@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Prove the lexer's read-only range once per phase
+
+<a id="k-seed-readonly-range-phase-20261125"></a>
+**K-SEED-READONLY-RANGE-PHASE-20261125.** The [architecture review](design/ImplementationArchitecture.md#proving-the-read-only-byte-comparison-range) continues D-ARCH-REVIEW r200→201 under the [phase rule](#h-completed-callee-behavior-20261125) and [material-consumer rule](#h-compiler-work-necessity-20261125). In `e52519a7:applications/cod-booter/src/Lexer.cod`, the bound byte comparison and its completed callees establish that the next iteration inherits the same selections. The seed may omit discovery and loop settlement for that profile while preserving the runtime loop, cleanup and independent final comparison.
+
 ## 2026-11-25 — Omit target discovery in completed direct lexer wrappers
 
 <a id="k-seed-wrapper-target-preparation-20261125"></a>
