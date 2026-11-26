@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Complete the case result before applying the enclosing return
+
+<a id="k-seed-case-arm-result-20261126"></a>
+**K-SEED-CASE-ARM-RESULT-20261126.** [D-ARCH-REVIEW r219→220](design/ImplementationArchitecture.md#returning-a-case-with-a-full-scope-arm) applies [D-07-CASE](design/DesignAuthorityRegistry.md#d-07-case), [D-17-FULL-SCOPE](design/DesignAuthorityRegistry.md#d-17-full-scope) and [D-24-TAIL](design/DesignAuthorityRegistry.md#d-24-tail) to the [two arms in `report_symbol_binder`](https://github.com/complyue/cod-project/blob/6b797d28/applications/cod-booter/src/ModuleGraph.cod#L820). The replacement seed stops at 821:81. The review establishes the order from scope result to case result to enclosing return. Registry r1329→1330 continues P-682/P-683. Implementation and linked evidence remain with mainline.
+
 ## 2026-11-26 — Separate omitted-result inference from statement-call use in the seed
 
 <a id="k-seed-omitted-statement-result-20261126"></a>

@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r220 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r219 for [returning a case with a full-scope arm](#returning-a-case-with-a-full-scope-arm). The [review](../CHANGELOG.md#k-seed-case-arm-result-20261126) applies the existing case, full-scope and result contracts to two successive consumers of a sealed result.
+
 At r219 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r218 for [statement calls with an omitted result](#statement-calls-with-an-omitted-result). The [review](../CHANGELOG.md#k-seed-omitted-statement-result-20261126) applies D-24-TAIL and D-10-DISCARD to the existing extraction and emission boundary.
 
 At r218 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r217 under the [replacement pipeline decision](../CHANGELOG.md#h-compiler-pipeline-replacement-20261125). The [recursive allocator review](../CHANGELOG.md#k-seed-recursive-allocator-20261126) applies P-682/P-683 to capability completion and the separate empty-replay prerequisite.
@@ -793,6 +795,14 @@ In [`bind_graph_module`](../applications/cod-booter/src/ModuleGraph.cod), `prepa
 Extract a pending call when selection, operand preparation and extraction of the following statements are independent of its result. Record the selected body, site, ordered operands, owner substitutions and normal and abrupt continuations. During the callee’s one extraction, collect its own return and tail evidence under the [body-form rules](CallableResultInference.md#results-of-proc-func-and-here-bodies). A later pass seals one result per selected body and interpretation. This first profile accepts normal no-value evidence or a reached bare return, with all other result evidence compatible. An ordinary `func` value tail, a payload return, a throw-only definition without an established contract, or a dependency on another omitted result lies outside it. An ignored result at the caller supplies no evidence for `void`.
 
 Application reads the sealed result and constructs the final call operation and ABI. The pending record has no provisional type or fallthrough fact. Preserve operand failure before entry, writes before an entered failure, cleanup, and the normal successor. Check those observations on a linked range call and confirm the result is independent of declaration order. Keep a result-sensitive use and an unresolved result located before output publication. The unmodified booter call establishes whether translation passes the original site.
+
+#### Returning a case with a full-scope arm
+
+In [`report_symbol_binder`](../applications/cod-booter/src/ModuleGraph.cod), `return case selections[selection_row]` has a `SelectedResource` arm and a wildcard. The selected arm receives `origin` and `identity` by value, then invokes a full scope. Its local returns supply either `ScratchFailed` or the result of [`report_symbol_rejection`](../applications/cod-booter/src/NativeDiagnostics.cod), which declares `CompilerStatus`. The wildcard supplies `ScratchFailed` directly. These sources establish the nominal result independently of the enclosing procedure’s annotation.
+
+Extract the subject, patterns, receptions, arm operands and their control destinations once. The outer return ends its lexical path even while the case result is pending. Seal the full scope’s contract from its own return evidence. A case-result producer then reads the completed arm contracts and the established coverage to determine the normal result. A later consumer reads that result, checks the enclosing return and assembles the backend operations. Neither interface can revisit a body or alter its inputs. This fixed order suffices for a directly returned exhaustive case with independent, exactly matching scalar or enum results. The [ordinary case rules](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern other joins.
+
+At runtime, evaluate the indexed subject once. Prepare the received values and enter the full scope only on its matching arm. A local return prepares its payload before scope cleanup. The case receives the outcome after cleanup. An abrupt exit propagates through the enclosing cleanup without delivering an arm value. Verify distinguishable enum members on normal arms, the returned call using a received field, and the order of cleanup on a failing selected arm. Retain prior outputs when an independently established result cannot satisfy the required transfer.
 
 #### Extracting the path-key callback
 
