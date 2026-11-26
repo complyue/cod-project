@@ -3537,7 +3537,6 @@ class ScalarChecker {
         fail(at, "a direct String place requires a non-null text target");
       require_payload_access(source, at);
     } else rebind_type(target.type, source.type, at);
-    require_live_view(source, at);
     const auto physical = physical_slots(target.slots);
     for (const auto id : overlapping_slots(target.slots)) {
       const auto &binding = bindings_->at(id);
@@ -3658,7 +3657,6 @@ class ScalarChecker {
       view.selection_identity = entry->second;
     }
     select_targets(view, view.targets);
-    require_live_view(view, at);
     return view;
   }
   bool mutable_payload_target(size_t place) const {
@@ -5233,7 +5231,6 @@ class ScalarChecker {
       const auto owner = *view.owners.begin();
       if (operation.callable_call && const_owner(owner))
         implementation_gap(expr.at, "const owner access through a callable value");
-      require_live_view(view, operation.argument(expr, i + offset).at);
       if (const auto [found, inserted] = owners.emplace(role, owner); !inserted) {
         const auto equality = compare_owners(found->second, owner);
         if (equality == OwnerMatch::unknown) implementation_gap(expr.at, "borrowed call requires an unproved owner equality");
@@ -7472,7 +7469,6 @@ class ScalarChecker {
             view.read_only || !one_owner(view))
           fail(operand.at, "ref var requires a live initialized writable array binding");
         reference_destination(view, operand.at);
-        require_live_view(view, operand.at);
         require_payload_access(view, operand.at);
       }
       operation.arguments[i].binding_slot = true;
@@ -12001,7 +11997,6 @@ class ScalarChecker {
     if (!operand.checked_ref_argument || type == Type::never) return actual;
     const auto &at = *operand.checked_ref_argument;
     if (!actual.view || actual.mixed_view) fail(at, "a checked ref selection requires an existing target view");
-    require_live_view(actual, at);
     if (!actual.targets.contains(null_target)) return actual;
     using Presence = CheckedOperation::CheckedRefPresence;
     // Fresh array backing has no individual payload place in targets. Its
@@ -20174,7 +20169,6 @@ class ScalarChecker {
       for (const auto *operand : {&left, &right}) if (operand->type != Type::never) {
         if (!operand->view || operand->mixed_view)
           fail(expr.at, "reference identity requires existing target views, not independent values");
-        require_live_view(*operand, expr.at);
       }
       operation.type = left_type == Type::never || right_type == Type::never ? Type{Type::never} : Type{Type::boolean};
       if (operation.type != Type::never) {
@@ -20765,7 +20759,6 @@ class ScalarChecker {
         operation.fixed_binding = false;
       }
       if (source.view && (result == GroupResult::value || (read && !discard))) {
-        require_live_view(source, expr.at);
         read_view(source, expr.at);
         operation.predicate = projected_predicate(source);
       } else operation.predicate = predicate_of(source);
@@ -20808,7 +20801,6 @@ class ScalarChecker {
       const auto type = check(operand, instance, operations, false, false, nullptr,
           ExpectedTypeUse::materialization, false, IndexedUse::immediate_target, NativeLoanContext::discard_result);
       if (type == Type::null_ref) fail(expr.at, "explicit discard requires an independently typed operand");
-      require_live_view(operations.at(&operand), operand.at);
       operation.type = type == Type::never ? Type{Type::never} : Type{Type::void_type};
       break;
     }
