@@ -1,0 +1,78 @@
+# What Should a Composed Operation Retain?
+
+*Scoped Callbacks and Region-Owned Plans in CoD*
+
+**Working paper · opening draft.** The [companion developer guide](../docs/BuildingReusableDomainOperations.md) turns the argument into API and code-review decisions.
+
+## Abstract
+
+A booking team wants to define “expand each route and offer its affordable seats” once. An interactive caller returns the first match. An auditor records every match. Later, the team wants to keep the pricing policy after its builder returns. Which parts of the operation can survive that transition? A synchronous `here` connection can refer to a live receiver and pass control to its current caller. A region can retain typed policy data and links among its nodes. A method on those nodes can accept fresh `here` arguments on every drive. Both representations can implement a snapshot, a live policy, or a policy supplied at execution. We give a six-case example that separates those decisions, a bounded trace-preservation argument, and a case where letting a lexical connection escape would invalidate the comparison. We use a parsing HLVM and an Actor pipeline to test how far the result travels.
+
+## The question a caller needs answered
+
+If a fare cap changes between preparing a search and asking it for seats, which price wins? If the consumer stops, who receives the stop? If a factory returns, who owns the next traversal? These questions admit independent answers. The paper studies three choices that an API can expose separately.
+
+| Choice | Possible contracts | Observable consequence |
+| --- | --- | --- |
+| When is the policy selected? | Copy a value during preparation, bind a particular receiver, or consult this drive's provider. | Changing a value, rebinding a slot, and installing a different provider can yield three different lists of offers. |
+| What must remain available? | A connection inside its supplying activation, or a rooted data graph in a named owner. | The second caller may arrive after the builder has returned or the graph has been reopened. |
+| Who supplies execution and control? | Each invocation supplies an input, run state, a terminal and its valid control destinations. | Two drives can share a rule while stopping independently and releasing their own cursors. |
+
+In CoD a region-owned plan can be an ordinary nominal ADT with a call-operator method `(())`. Use `proc` when that method performs procedural work such as consulting a dynamic service. Its receiver type tracks its owner, for example `const FareRule in G`. A bound `func … in O` functor *value* has separate storage rules. The durable representation considered here contains domain data with a typed root. One region may contain a whole plan. The current module world supplies method meanings when the graph is used. [Callable kinds](../design/CallableStorageAndHereAccess.md#callable-value-kinds) · [Regional overload example](../design/ProducersAndTransformers.md#a-regional-functor-returned-by-an-overload) · [Owner-bearing types](../design/RegionalOwnership.md#owner-bearing-types-are-intrinsic)
+
+## One mutation, three answers
+
+Prepare a fare filter while the selected policy object X has a ceiling of 100. Before driving it, mutate **that same X** to 70 and select a different policy object Y with ceiling 90 for this drive. Supply the fares 80 and 95 in order. The collecting terminal accepts every offer and always replies true. Each row describes one contract implemented twice. The scoped supplier remains live throughout this experiment.
+
+| Contract | Scoped connection | Region-owned plan | Offers |
+| --- | --- | --- | --- |
+| Preparation-time snapshot | Prepare an immutable scalar limit of 100. | Copy 100 into a scalar field in G. | 80, 95 |
+| Live selected receiver | Prepare the receiver X and read its ceiling when driven. | Keep a permitted same-owner edge to X in G and read the field when driven. | None |
+| Current drive's policy | Receive Y through a drive argument or consult the declared current service. | The plan method receives Y or consults the same current service. G retains the rule to apply. | 80 |
+
+Mutation and rebinding require separate tests. Rebinding the original receiver slot to Y leaves an already prepared receiver designating X. A callback deliberately written to re-read the slot implements a different policy. Similarly, a readonly view of X governs access through that view. Another authorized writer can still change X. A client asking for an immutable published configuration needs the corresponding publication or writer discipline. For dynamic services, specify what is already bound and what is looked up at the call site. A permitted `behave` uses the binding current at execution. `perform` requests the selected handler's replay behavior. [Prepared connections](../design/ProducersAndTransformers.md#lexical-variables-for-open-pipelines) · [Effect lookup in a callback](../design/CallableStorageAndHereAccess.md#an-effect-in-a-here-callback)
+
+The matrix yields two concrete counterexamples to simple storage heuristics. Copying X's ceiling into a regional ADT changes the live-receiver answer from no offers to two. Reading a mutable policy object in a scoped callback changes the snapshot answer in the opposite direction. Either change can look reasonable in a review containing only types, owners and a single unmodified run.
+
+## What agreement during a drive means
+
+Take a fresh fixture with a fixed cap of 100. Route A has seats priced 120, 80 and 80. Route B has one seat priced 90. The route source takes void feedback. A seat source takes Boolean feedback for *that route*. A filter replies true upstream on rejection. On acceptance it relays the consumer's ordinary reply. Each opened cursor defers its close. Both 80s are independent seats.
+
+| Terminal behavior | Offers reaching terminal | Effect on traversal |
+| --- | --- | --- |
+| Always reply true | A's two 80s, then B's 90 | Both route-specific seat cursors open and close. The route cursor closes last. |
+| Reply false at the first 80, then true | A's first 80, then B's 90 | False closes A's seat traversal. The outer route source advances to B. |
+| Return outward at the first 80 | A's first 80 | That seat receives no normal reply. A's seat cursor then the route cursor close. The caller receives 80. B never opens. |
+
+**Bounded proposition.** Consider the finite serial fragment consisting of a route enumeration, a per-route seat enumeration and a fare filter. Compare a scoped connection with a regional implementation after each has prepared successfully. Give both the same ordered inputs, binding contract, receiver mutations and effect responses, compatible method meanings, fresh traversal-local state, and the same terminal with a valid synchronous control destination. Assume successful cursor acquisition and cleanup for this fixture. The two implementations have the same drive trace when they execute the stages above. Observe policy reads or service requests at the points promised by the contract, ordered offers including duplicates, replies, cursor opens and closes, and the caller's result or escaping checked failure. Internal loads of a plan field are outside this domain trace.
+
+**Argument.** Start with no route open in either implementation. An empty route stream closes without an offer. On opening a route, the two executions reach the same next seat with the same live cursors. A rejected seat records the same policy decision and receives true without invoking the terminal. For an accepted seat, both invoke the current terminal once. True advances both to the next seat. False takes both to the same route boundary, where the seat cursor closes. An outward return bypasses both normal reply paths and unwinds the active cursors from inner to outer. An uncaught checked failure from the receiving body gives the same cleanup prefix and propagates to its eligible handler. Normal exhaustion closes the seat cursor and continues the argument on the remaining routes. These cases exhaust the finite traversal. Reconstructing a result list alone would miss the false/return distinction. [Reference traversal and cleanup](../design/ProducersAndTransformers.md#one-fare-search-three-spellings) · [Three first-seat continuations](ComposingEnumerativeChoice.md#three-continuations-at-the-first-acceptable-seat)
+
+## Where the equivalence ends
+
+Let a builder return, then ask another caller to drive the same plan twice. A lexical connection depending on the builder's activation has lost a required dependency. The regional version can put its typed root in a caller-supplied writable G, or give the caller the owning region with a valid entry root. Its method accepts a fresh input and fresh callbacks on each call. A same-owner edge preserves target identity. Copying bits for an eligible scalar preserves its value. Importing a graph from another owner needs a domain transfer or lookup with a stated identity contract. These choices matter even for an in-memory region. Reopening a published DBMR adds data layout, root validation and compatible method interpretation as further prerequisites. [Regional graph transfer](../design/RegionalAndLexicalStorageRefactor.md#graph-transfer-with-growing-source-or-destination) · [Result owners](../design/ConstructionAndAcquisition.md#result-bound-owners-and-ordinary-liveness)
+
+Reentry supplies a second test. Give a rule a two-offer limit. Drive it again from inside its first terminal, with fresh input and an independent terminal. Each drive should have two offers available. A shared mutable “remaining” field lets one drive deplete the other. A stored configured limit and an invocation-local counter implement the stated contract. A customer-wide quota has a different, legitimate contract and needs an explicitly shared owner and a defined update order. The paper's drive claim also leaves preparation effects, allocation failures, cleanup failures and publishing costs to separate observations.
+
+## Two tests beyond fare search
+
+**Parsing.** In the planned production toolchain `pcl.cod` is the parsing HLVM. The CoD parser is an application of that HLVM. Its program is the DBMR `cod.grammar` shipped with `e-wrks/cod`. Store alternative nodes and their typed grammar edges in G. On each drive supply input and session storage, a distinct result owner N and four fresh callbacks for consumed success, consumed failure, empty success and empty failure. Ordinary ordered choice retries its right child from the saved entry state only on left empty failure. Empty success commits to the left result. Consumption is a protocol decision and cannot in general be reconstructed from an offset comparison. The proposed rule contract selects one outcome exactly once on normal completion. General `here` callability by itself supplies no such law. A decisive run closes the first result region while keeping G, then parses again into another result region with different callbacks. Expressing a generic owner-indexed rule interface and a storable heterogeneous graph remains part of the parser study. [Rule protocol](../design/ParserCombinatorLibSupport.md#the-rule-interface) · [Packaged parser](../design/ParserCombinatorLibSupport.md#packaged-production-parser)
+
+**Event processing.** A live gateway and a replay driver can share the rule “decode frames, then normalize.” A synchronous admission step can use a fresh receiver. If work continues in a later Actor turn, preserve the chosen processing site or queue identity and the admitted payload under their actual ownership rules. Deliver with that turn's execution context. An observer must distinguish local admission from a later alarm. The event paper supplies an experiment in which splitting two readings across sites stays quiet, while pairing them at one site can emit an alarm. Re-selecting the site at delivery can change that outcome even with identical normalized values. [Live and replay ingress](OpenEventPipelines.md#one-ingress-plan-for-live-and-replay) · [Worker observations](OpenEventPipelines.md#a-worker-that-can-distinguish-the-histories)
+
+For both domains, an operator can compose a reusable middle before a client supplies either endpoint. In PCL a regional `left <|> right` could build a grammar node with two typed child edges and defer its choice until a parse. A local numeric `RuleId` alone would identify neither the grammar owner nor the protocol of its result. A homogeneous arena of expression rules is a useful first case. Rules with different result types require additional evidence before an arbitrary stored child can be invoked safely. For an event pipeline the corresponding obligation is the compatibility of the two stages' message and transport protocols. A common composition idiom gives each library room to express its own obligations.
+
+## Evidence and next experiments
+
+The fare traces are hand derivations against the linked project designs. The following experiments specify what could refute the argument or limit its usefulness.
+
+1. Run all six cells of the fare matrix, then repeat with a slot rebind in isolation. A policy lookup at the wrong time should produce a distinguishable offer list.
+2. Instrument both drive implementations with cursor identities and normal replies. Exercise an empty route, duplicate prices, a false reply, an outward return and a checked failure. Compare ordered events up to the stated observation boundary.
+3. Drive the regional plan after its builder has returned and again during reentry. Check the lexical escape diagnostic separately. Reopen a data-only graph and repeat with a compatible reader. A stale callback, lost root or shared per-drive counter fails its corresponding case.
+4. Compare the two representations on a real change request. Add an audit terminal, then replace a live source with replay. Record changed declarations, duplicated policy code and protocol adapters. These measurements could support or qualify the productivity rationale in the companion guide.
+
+## Relation to prior work
+
+Danvy and Nielsen study how defunctionalization represents functions as data and recovers application through an interpreter. CoD gives a domain-library author a related source-level choice. The added questions here are which actual owner keeps the graph valid, when its policy is bound, and which synchronous control destinations each execution supplies. A general transformation, full parser equivalence and measured development-cost results remain open research. [Danvy and Nielsen, *Defunctionalization at Work* (2001)](https://doi.org/10.7146/brics.v8i23.21684)
+
+Brachthäuser, Schuster and Ostermann use second-class functions and capabilities to reason about the safe use of effect handlers. Their work gives a point of comparison for passing an operation a caller-supplied capability during a bounded execution. Tofte and Talpin use a stack of regions in a translation of a typed call-by-value language. Their storage semantics supplies another comparison for lifetimes. The CoD case combines scoped control with an explicitly owned application graph that another client may reopen. Its review obligation spans both lifetimes and the domain's decision about which values or identities survive. [*Effects as Capabilities* (2020)](https://doi.org/10.1145/3428194) · [*Implementation of the Typed Call-by-Value λ-Calculus Using a Stack of Regions* (1994)](https://doi.org/10.1145/174675.177855)

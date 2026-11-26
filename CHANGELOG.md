@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Open a paper and developer guide on retaining composed operations
+
+<a id="k-composed-operation-retention-20261126"></a>
+**K-COMPOSED-OPERATION-RETENTION-20261126.** The project user requested an English working paper and a companion product guide applying its best practices to domain development. The [opening paper](papers/WhatShouldAComposedOperationRetain.md) develops the mutation, lifetime and control cases from the [existing parser study](https://github.com/complyue/cod-project/blob/358d8e2568ec9cf55799269faf8d73c5c011bcf8/design/ParserCombinatorLibSupport.md#lexical-composition-or-an-independently-owned-plan). The [developer guide](docs/BuildingReusableDomainOperations.md) applies them to adding a terminal, replaying a source and retaining a rule. [D-DOC-IDIOMATICS](design/DesignAuthorityRegistry.md#d-doc-idiomatics) continues the [previous guide](https://github.com/complyue/cod-project/blob/358d8e2568ec9cf55799269faf8d73c5c011bcf8/docs/IdiomaticCoD.md#name-reusable-pipeline-connections) through r16. The commission covers the investigation and companion documentation. Language extensions, executable acceptance and productivity measurements remain open.
+
 ## 2026-11-26 — Put review routing first in the project rules
 
 <a id="k-review-routing-20261126"></a>

@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+Guide revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
@@ -1092,6 +1092,8 @@ For an input offering 8000, 12050, 14099 and 16000 cents, the invocation reports
 floor is 10000 cents, conversion divides by 100, and the limit stops upstream before it offers the
 fourth item. Reusing a stage gives it fresh traversal-local state; reusing a source does not promise
 that an already consumed cursor will replay.
+
+For a policy that another caller must drive after its builder returns, see [Building reusable domain operations in CoD](BuildingReusableDomainOperations.md#keep-a-rule-after-the-builder-returns). Its fare search adds an audit terminal and a replay inventory to the same rule.
 
 For prebound operands, the corresponding downstream-first spelling is:
 
