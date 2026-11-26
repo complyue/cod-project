@@ -1,8 +1,10 @@
-# Compiler artifacts and persistent stage reuse
+# Compiler modes, selectable stages and persistent stage reuse
 
-Revision 7 · 2026-11-25 · Stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 8 · 2026-11-25 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r8 [D-20-COMPILER-MODES](../../../design/DesignAuthorityRegistry.md#d-20-compiler-modes) covers [default execution and optimized builds](#default-execution-and-optimized-builds). The [project user’s decision](../../../CHANGELOG.md#h-default-run-and-optimized-build-20261125) sets the compilation and runtime trade-off and release scope through C-80/P-746/P-747. It continues r7’s independent stage controls and leaves backend optimization choices open.
 
 [**D-20-STAGE-CONTROLS**](../../../design/DesignAuthorityRegistry.md#d-20-stage-controls) covers [independently selectable compiler operations](#independently-selectable-compiler-operations) at r7. The [project user’s decision](../../../CHANGELOG.md#h-compiler-pipeline-replacement-20261125) derives this scope from C-80 and charter §§5.3 and 9, through P-744/P-745. The same compiler results serve editor feedback and build requests. Their revision, dependencies and validation status must remain identifiable. The r6 proposals for persistence, representation and cache policy continue with their original qualification.
 
@@ -12,6 +14,18 @@ Revision 7 · 2026-11-25 · Stage controls confirmed. Persistent artifact design
 - **Baseline / assessment:** [H-353](../../../CHANGELOG.md#h-353) selects a CoD-native compiler pilot and investigation of DBMR stage caches. [K-473](../../../CHANGELOG.md#k-473) records the draft; [K-515](../../../CHANGELOG.md#k-515) preserves this pipeline scope while the set adopts H-356's separately authorized defer prerequisite. C-80/P-314/P-315/P-317 links typed compiler intent and reusable structured results to C-01/C-05 and charter §§2, 5.3–5.4, 7 and 12.
 - **Dependencies / invariants:** P-316/P-318, D-01 regional representation, D-14 owners, D-15 independent module worlds and D-16 numerical/syntax compatibility. Preserve identities, selected interpretations and relocation; no native addresses in persistent artifacts and no cross-module world editing.
 - **Acceptance / exclusions:** future cached and uncached paths must preserve applicable semantic observations and reject stale/incompatible reuse, with actual time/memory measurements. No cache schema, partition algorithm, checksum, file API or implementation is selected here.
+
+## Default execution and optimized builds
+
+| Mode | User-visible result on a successful invocation | Compilation goal and availability |
+| --- | --- | --- |
+| Default `cod` invocation on a program entry | Compile and run it immediately, as with `go run`. Leave no executable as a user output. | Aim for Go-like fast compilation and machine code with moderate runtime performance in the seed, booter and first release of `e-wrks/cod`. |
+| Default seed bootstrap build | Produce the `cod-booter` executable and keep it for subsequent invocations. | Use the fast compilation path. The seed build can request intermediate bitcode and provider files and link them into the tool. |
+| Explicit optimizing compilation | Write an executable for later use. Building it leaves the program unexecuted by default. | Spend more compile time on high-quality machine code. Experimental in the first release of `e-wrks/cod`, formally supported in 2.0. |
+
+The ordinary edit–run cycle gives priority to the time from invoking the compiler to entering the program. Any executable needed internally for a run is a compiler implementation detail. Explicit requests for a binary, object, bitcode or provider files have their own output contract. The seed uses the fast path to build its persistent executable. A parse-only or check-only request ends at its selected operation.
+
+Fast and optimizing compilation preserve the program’s observable semantics and applicable runtime checks. For acceptance, use an entry that prints a recognizable value. An ordinary `cod` invocation prints it once and leaves no new or replaced user executable. Verify the seed default separately by invoking the resulting `cod-booter` in a subsequent process. An optimizing build delivers an executable with no entry effect during the build. Launching that executable then prints the same value. A compilation failure prevents launch. Go-like compilation speed and moderate runtime performance are qualitative design targets. Backend settings and numeric targets remain open.
 
 ## Independently selectable compiler operations
 
@@ -68,7 +82,7 @@ Before a persistence checkpoint can be implemented, specify the required capture
 
 ## Compilation scale and evidence
 
-Demand-driven analysis and one selected semantic program do not require one indivisible LLVM optimization unit. Preserve useful callable boundaries and recursive cycles; do not duplicate a dynamic call tree into source expansions as a long-term architecture. Physical LLVM partitioning and optimization policy need measurement and a separate decision, not a second backend.
+Demand-driven analysis and one selected semantic program do not require one indivisible LLVM optimization unit. Preserve useful callable boundaries and recursive cycles; do not duplicate a dynamic call tree into source expansions as a long-term architecture. The [selected mode](#default-execution-and-optimized-builds) sets the compile-time budget relative to runtime code quality. Physical LLVM partitioning and the choice of optimization passes remain implementation decisions.
 
 Measure tokenization/parsing, semantic analysis, artifact I/O/validation and native optimization separately. Useful later comparisons include cold versus warm compilation, a leaf-module edit, different adapter selections over the same definitions, and shared/deep dependency graphs. Report peak memory, artifact size and the amount of actual reused work alongside elapsed time. Preserve diagnostics and ownership/effect rejection on both cached and uncached paths.
 

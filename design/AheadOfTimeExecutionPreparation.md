@@ -1,6 +1,8 @@
 # Ahead-of-time execution preparation and runtime micro-dispatch
 
-Design revision: 38 · Recorded: 2026-11-25 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+Design revision: 39 · Recorded: 2026-11-25 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
+
+The [compiler mode](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds) determines whether the driver immediately runs the prepared program or delivers an executable. The fast path prepares native code for prompt execution or for building the booter. The production optimizing mode can spend more compile time improving the generated code.
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 
@@ -9,6 +11,8 @@ Semantic method selection uses actual argument types, declared conformance, any 
 Function preparation selects code under a static signature. Here invocation resolves live access to the actual defining activation. Maintain current owner-plus-locator resolution across nested calls and backing growth. Internal symbolic handler replay data and borrowed activation references have separate lifetime and cleanup responsibilities.
 
 ## Design authority
+
+At r39 [D-21](DesignAuthorityRegistry.md#d-21) continues r38’s method-selection, native-coverage and effect-timing contracts across the [compiler modes](DesignAuthorityRegistry.md#d-20-compiler-modes). The [human decision](../CHANGELOG.md#h-default-run-and-optimized-build-20261125) sets driver behavior and code quality priorities. Each mode must preserve the same dispatch and runtime effects.
 
 At r38 the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125) extends the r37 selection contract to typed constant arms under [D-10-METHOD-GROUPS](DesignAuthorityRegistry.md#d-10-method-groups). Verify that a runtime enum value and an actual subtype select the same intersection method as a statically known pair. The source contract leaves representation and optimization to the compiler.
 

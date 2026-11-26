@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Make fast compile-and-run the default and schedule optimizing builds
+
+<a id="h-default-run-and-optimized-build-20261125"></a>
+**H-DEFAULT-RUN-AND-OPTIMIZED-BUILD-20261125.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user confirmed “cod 默认模式是 `go run` 语义，不产出binary” and clarified “seed 默认是产出 cod-booter binary 没毛病”. Seed, booter and the first production release target Go-like fast compilation with moderate runtime performance. The user specified “高质量机器码的优化编译模式，默认是产出binary，而不是立即运行，规划在 e-wrks/cod 首版实验，2.0正式提供。” [D-20-COMPILER-MODES](design/DesignAuthorityRegistry.md#d-20-compiler-modes), C-80/P-746/P-747, adds the [charter principle](design/RegionalSemanticPlatformCharter.md#核心原则) and [mode acceptance](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds). Against [the prior pipeline](https://github.com/complyue/cod-project/blob/3e10ecec/applications/cod-booter/docs/CompilerPipeline.md), pipeline r7→8, roadmap r44→45, D-ARCH-REVIEW r212→213 and D-21 r38→39 retain independent stage selection and native execution semantics.
+
 ## 2026-11-25 — Accept completed seed results at the existing LLVM interface
 
 <a id="k-replacement-seed-llvm-handoff-20261125"></a>
