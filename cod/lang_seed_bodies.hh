@@ -341,6 +341,19 @@ class BodyExtraction {
       return extract(*expr.children.at(index));
     }
 
+    static CheckedOperation operand_result(const CheckedOperation &source) {
+      CheckedOperation result;
+      result.type = source.type;
+      result.binding = source.binding;
+      result.place = source.place;
+      result.owners = source.owners;
+      result.read_only = source.read_only;
+      result.fixed_binding = source.fixed_binding;
+      result.view = source.view;
+      result.indexed_target = source.indexed_target;
+      return result;
+    }
+
     static void takes_value(const CheckedOperation &value, const Type &to, const Location &at) {
       expect(scalar_type(value.type) && transfers_value(value.type, to),
              at, "replacement seed needs an admitted value transfer");
@@ -1463,7 +1476,7 @@ class BodyExtraction {
       }
       expect(type == Type::c_string, expr.at,
              "replacement seed supports enum, void and CString result assertions");
-      auto op = operand(expr, 0);
+      auto op = operand_result(operand(expr, 0));
       expect(text_type(op.type) && op.view && op.read_only && op.owners.size() == 1,
              expr.at, "replacement seed needs a readonly String loan for a CString assertion");
       op.check_c_string = op.type == Type::string;
@@ -1598,7 +1611,7 @@ class BodyExtraction {
       case Kind::raise: return throw_exception(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::rebind: case Kind::transfer: return assign(expr);
-      case Kind::grouped: return operand(expr, 0);
+      case Kind::grouped: return operand_result(operand(expr, 0));
       case Kind::typed_expression: return typed_expression(expr);
       case Kind::block:
         expect(!expr.scoped, expr.at, "replacement seed has no extracted full-scope body");
