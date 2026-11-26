@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-25 — Replace the seed pipeline and make compiler stages selectable
+
+<a id="h-compiler-pipeline-replacement-20261125"></a>
+**H-COMPILER-PIPELINE-REPLACEMENT-20261125.** In the [CoD design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user made restarting a project-wide engineering prohibition, explicitly stating “即使未来的 e-wrks/cod 也不允许走这条路，确实遇到技术困难跟我讨论。” They authorized “按你的建议开新的编译管线开发”. They requested independent parse, type, lexical-access, ownership and emission controls where feasible in the seed and booter and required them in production for LSP/IDE and build users. [D-ARCH-REVIEW r210→211](design/ImplementationArchitecture.md#replacement-seed-pipeline) extends the [phase](#h-completed-callee-behavior-20261125) and [workqueue](#h-workqueue-value-20261125) decisions. The [legacy scheduler at the decision baseline](https://github.com/complyue/cod-project/blob/d46a2bbf44e2d4cf153bd4064eb5d2fecdbb6333/cod/lang_checked.hh#L24536) remains a reference. [D-20-STAGE-CONTROLS](design/DesignAuthorityRegistry.md#d-20-stage-controls), pipeline r6→7 and roadmap r43→44, records P-744/P-745 and stage-specific acceptance. The [trusted seed’s delivery and timing gates](design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) continue. A concrete obstacle to the restart prohibition returns to the user for decision.
+
 ## 2026-11-25 — Record delegated PR authorization and commission the ASCII scanner path
 
 <a id="h-pr-route-and-ascii-delivery-20261125"></a>

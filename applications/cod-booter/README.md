@@ -1,8 +1,10 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 43 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 44 · Recorded: 2026-11-25 · Phase: initial seed delivery through alternating booter and seed development.
 
 ## Design authority
+
+At r44 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues r43's trusted input, runtime and self-check boundaries. The [replacement seed decision](../../CHANGELOG.md#h-compiler-pipeline-replacement-20261125) assigns the new translator to mainline. [D-20-STAGE-CONTROLS](../../design/DesignAuthorityRegistry.md#d-20-stage-controls) sets the bootstrap goals and production requirement, with separate acceptance for each stage.
 
 At r43 [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap) continues r42’s seed/checker boundary for the [family capture decision](../../CHANGELOG.md#h-perform-family-capture-20261125). The seed must emit scoped replay for valid source.
 
@@ -92,7 +94,7 @@ For supported live `here` captures, the seed prepares the selected storage addre
 
 Remove a static check and the computation used exclusively to support it when translation has no use for its result. This includes whole-program type or ownership proofs whose sole purpose is to reject invalid input. Seed translation makes no claim of source validity. The CoD booter owns type, ownership and other semantic validation, including checking the full source world of its own compiler entry. Record supported self-check coverage separately from generating or running the first booter and from a successful self-build.
 
-The annotated tag [archive/checked-cpp-seed](https://github.com/complyue/cod-project/tree/archive/checked-cpp-seed) preserves the checked seed at `a0922741`. Its 52 focused comparisons across both seed modes and its Lexer, TokenBuffer and ModuleIndex outputs establish the checked-stage reference. Removal of unnecessary checks proceeds in the active implementation. Add an individual opt-in seed check when a concrete engineering use warrants it. Document that use, how to enable the check and the behavior it diagnoses. The default path pays none of the analysis cost unique to that check. The [cutover and acceptance](../../design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) cover the generated booter and its supported commands.
+The annotated tag [archive/checked-cpp-seed](https://github.com/complyue/cod-project/tree/archive/checked-cpp-seed) preserves the checked seed at `a0922741`. Its 52 focused comparisons across both seed modes and its Lexer, TokenBuffer and ModuleIndex outputs establish the checked-stage reference. The [replacement C++ pipeline](../../design/ImplementationArchitecture.md#replacement-seed-pipeline) is the active development path. Reuse established translation logic where its dependencies are explicit. The booter should apply the seed’s experience with [selectable operations](docs/CompilerPipeline.md#independently-selectable-compiler-operations) when its development resumes. Add an individual opt-in seed check when a concrete engineering use warrants it. Document that use, how to enable the check and the behavior it diagnoses. The default path pays none of the analysis cost unique to that check. The [cutover and acceptance](../../design/ImplementationArchitecture.md#seed-checker-migration-and-performance-acceptance) cover the generated booter and its supported commands.
 
 ### Compiler memory acceptance
 
@@ -147,7 +149,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | --- | --- |
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
-| `cod` | The future production compiler written in CoD, including full diagnostics and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
+| `cod` | The future production compiler written in CoD, including full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
 | `codup` | Toolchain version management in the role of rustup. |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
