@@ -2,7 +2,7 @@
 
 Design revision: 39 · Recorded: 2026-11-25 America/Los_Angeles · Status: AOT execution-preparation behavior and native-coverage contract; bounded experimental evidence; permanent mechanisms retain their separate review scopes.
 
-The [compiler mode](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds) determines whether the driver immediately runs the prepared program or delivers an executable. The fast path prepares native code for prompt execution or for building the booter. The production optimizing mode can spend more compile time improving the generated code.
+The ordinary `cod` driver uses the fast path to compile and run a program. The seed uses that path to build and keep `cod-booter`. The production `cfe` (Compile for Ever) command can spend more compile time improving the machine code and saves the executable for later use. [Compiler modes and release milestones](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 During AOT compilation, CoD checks the required behavior and prepares native implementations, semantic method selectors and local micro-dispatch paths. Proven call-site facts can resolve selections, demand or reuse specializations and permit direct-call emission. Preparing selection code does not execute that selection or the source program’s runtime effects. At runtime, execution follows the prepared code and performs remaining selections using actual runtime evidence.
 

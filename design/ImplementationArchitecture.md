@@ -10,7 +10,7 @@ At r215 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r214
 
 At r214 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r213 for the [synchronous path-key callback in the replacement seed](#extracting-the-path-key-callback). The [review](../CHANGELOG.md#k-seed-pipeline-path-key-callback-20261125) applies the existing supplied-body, native loan and completion contracts to phase-owned inputs for the LLVM backend.
 
-At r213 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r212’s [replacement seed pipeline](#replacement-seed-pipeline) under the [compiler modes decision](../CHANGELOG.md#h-default-run-and-optimized-build-20261125). The bootstrap performance target governs default-path work. The high-quality optimizing mode belongs to [D-20-COMPILER-MODES](DesignAuthorityRegistry.md#d-20-compiler-modes).
+At r213 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r212’s [replacement seed pipeline](#replacement-seed-pipeline) under the [compiler modes decision](../CHANGELOG.md#h-default-run-and-optimized-build-20261125). The bootstrap performance target governs default-path work. The production optimizing command, subsequently named `cfe`, belongs to [D-20-COMPILER-MODES](DesignAuthorityRegistry.md#d-20-compiler-modes).
 
 At r212 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r211 for the [first LLVM handoff](#replacement-seed-pipeline). The [adapter review](../CHANGELOG.md#k-replacement-seed-llvm-handoff-20261125) identifies the existing LLVM and provider consumers, the lifetime of their source references and the boundary between their emission walk and upstream collection.
 

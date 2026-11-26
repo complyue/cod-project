@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26 — Name the `cfe` entry point throughout the compiler design
+
+<a id="k-cfe-entry-point-20261126"></a>
+**K-CFE-ENTRY-POINT-20261126.** Registry r1323→1324 continues [D-20-COMPILER-MODES](design/DesignAuthorityRegistry.md#d-20-compiler-modes) from the [confirmed `cfe` contract](https://github.com/complyue/cod-project/blob/b2fbf663/applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds). The project rules, charter, architecture and roadmap now use the same production command name. The [pipeline](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds) retains the output, acceptance and release terms of [H-CFE-OUTPUT-DIRECTORY-20261126](#h-cfe-output-directory-20261126).
+
 ## 2026-11-26 — Open a paper and developer guide on retaining composed operations
 
 <a id="k-composed-operation-retention-20261126"></a>
