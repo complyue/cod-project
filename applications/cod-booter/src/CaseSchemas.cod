@@ -7,7 +7,9 @@ using "./ParserStorage.cod" {
     SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
     FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
     IndexSites, inspect_index_selection, owner_constraint_syntax,
-    OwnerConstraintSyntax { ReadonlyOwnerConstraint },
+    AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer },
+    ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
+    OwnerConstraintSyntax { ReadonlyOwnerConstraint, NotOwnerConstraint },
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
     CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, AnyCaseTarget },
     ConstructorCaseSites, inspect_constructor_case, CaseReceiverSites, inspect_case_value_receiver,
@@ -43,7 +45,8 @@ export data ConstructorCaseFact =
     CaseFieldReceipt { case_site:u64; arm:u64; pattern:u64; field:u64; value_type:DeclaredType; } |
     CaseProductField { receiver:u64; field:u64; ordinal:u64; record:DeclaredType; value_type:DeclaredType; } |
     CaseSumReceipt { receipt:u64; arm:u64; value_type:DeclaredType; } |
-    CaseSumProjection { receiver:u64; field:u64; receipt:u64; arm:u64; record:DeclaredType; value_type:DeclaredType; };
+    CaseSumProjection { receiver:u64; field:u64; receipt:u64; arm:u64; record:DeclaredType; value_type:DeclaredType; } |
+    LocalSumConstruction { transfer:u64; sum:u64; arm:u64; fields:u64; };
 export array ConstructorCaseFacts[u64]:ConstructorCaseFact;
 
 data IndexedCaseLoan {
@@ -85,7 +88,7 @@ func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBind
     val owner_site <- names[binding.owner_name].declaration;
     val marker <- binding.target_type;
     if (owner_site >= used || marker >= used || names[marker].kind != array_type() ||
-        (!binding.readonly && owner_constraint_syntax(nodes, owner_site) != ReadonlyOwnerConstraint))
+        owner_constraint_syntax(nodes, owner_site) == NotOwnerConstraint)
         return false;
     if (!describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision, element))
         return false;
@@ -819,12 +822,51 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     return true
 }
 
+func indexed_braced_transfer(nodes:const ExprNodes in N, at:u64, used:u64, revision:u64,
+    assignment:AssignmentSites in A, construction:ConstructionSites in C) -> bool
+    where {const owner N, owner A, owner C} {
+    if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer) return false;
+    ref index = make IndexSites { target <- no_node(); index <- no_node() };
+    return inspect_index_selection(nodes, revision, at, assignment.destination, index) &&
+        inspect_construction(nodes, revision, at, assignment.input, construction) == BracedConstruction &&
+        construction.placement == no_node() && construction.queried_operand == no_node()
+}
+
+func prepare_local_sum_write(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    transfer:u64, input:u64, requested:u64, used:u64, revision:u64,
+    report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, const owner W, const owner A, owner F, owner R} {
+    val arm <- names[requested].declaration;
+    if (arm >= used || names[transfer].kind != 0u8)
+        return case_problem(report, input, unproved_sum_subject());
+    val sum <- work[arm].declaring_sum;
+    if (sum >= used || sum >= intrinsic (len)(aggregate) ||
+        aggregate[sum] != (CoDBitsAggregate:AggregateStorage))
+        return case_problem(report, input, unproved_sum_subject());
+    ref count = make u64 { 0u64 };
+    ref ordinal = make u64 { no_node() };
+    ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
+    # Registration has already rejected any visible initializer definition for an arm.
+    if (local_sum_constructor(nodes, names, work, sum, requested, used, revision, count, ordinal) != arm ||
+        !inspect_sum_arm(nodes, revision, used, arm, sites))
+        return case_problem(report, input, unselected_case_constructor());
+    facts[input] <- make LocalSumConstruction { transfer <- transfer; sum <- sum; arm <- arm; fields <- sites.fields };
+    return true
+}
+
 export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:u64, revision:u64)
     -> bool where {const owner N} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
     for (at in 0u64 .. used) {
-        if (case_pattern(nodes, used, at) == ConstructorCaseTarget ||
+        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) ||
+            case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
              (name_syntax(nodes, used, choice.subject) == OrdinaryName ||
               inspect_index_selection(nodes, revision, used, choice.subject, indexed)))) return true
@@ -851,10 +893,21 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             if (work[at].sum_loan_formals && first == no_node()) { (first <- at):void }
         }
     };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
     for (at in 0u64 .. used) {
         if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
-        if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void }
+        if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
+        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) &&
+            names[construction.requested].kind == constructor_type()) {
+            if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,
+                construction.requested, used, revision, report)) return false;
+            if (first == no_node()) { (first <- at):void }
+        }
     };
     return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,
         spellings, spelling_used, interfaces, published, aggregate, facts, used, revision, report)

@@ -73,6 +73,7 @@ using "./ParserStorage.cod" {
     is_function,
     BinaryOperands, named_operator_at, inspect_assignment, AssignmentSites,
     ConstructionSites, inspect_construction, NamedThrowSites, inspect_named_throw,
+    IndexSites, inspect_index_selection,
     SumArmSites, inspect_sum_arm,
     LogicalSites, inspect_logical,
     ungrouped,
@@ -144,6 +145,7 @@ export data NameWorkSlot {
     module_scalar:u8;
     local_symbol_conflict:u64;
     case_schema_prepared:bool;
+    declaring_sum:u64;
     enclosing_case_arm:u64;
     arm_case:u64;
     sum_loan_formals:bool;
@@ -196,7 +198,7 @@ data NameState {
     module_names:u64;
     module_candidates:bool;
     source_only:bool;
-    array_fill:u64;
+    local_sum_input:u64;
     runtime_floor:u64;
     transfer_binding:u64;
     transfer_resolved:bool;
@@ -820,6 +822,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:u64, 
         work[at].receiver_import <- NoReceiverCallables;
         work[at].next_method <- no_node();
         work[at].case_schema_prepared <- false;
+        work[at].declaring_sum <- no_node();
         work[at].enclosing_case_arm <- no_node();
         work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
@@ -1413,7 +1416,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         return;
     };
     val requested <- construction.requested;
-    if (state.source_only && state.array_fill == at &&
+    if (state.source_only && state.local_sum_input == at &&
         shape == BracedConstruction && construction.placement == no_node() &&
         construction.queried_operand == no_node()) {
         val found <- lookup(source, nodes, work, requested, 0u64, state.used);
@@ -1473,7 +1476,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             return;
         } else {};
         work[at].slot_array_construction <- array_initializer;
-        val previous_input <- state.array_fill;
+        val previous_input <- state.local_sum_input;
         if (array_initializer && bindings[requested].kind == array_type()) {
             ref fill = make SequenceEntry { previous <- no_node(); item <- no_node() };
             if (inspect_sequence_entry(nodes, state.syntax_revision, at, tail, fill) != ArgumentSequence ||
@@ -1483,10 +1486,10 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             };
             # Bind the constructor name in its own argument. The array
             # schema and the fill's actual parent are checked after binding.
-            (state.array_fill <- fill.item):void
+            (state.local_sum_input <- fill.item):void
         };
         resolve_list(source, nodes, bindings, work, state, tail);
-        state.array_fill <- previous_input;
+        state.local_sum_input <- previous_input;
         return;
     } else {};
     val body <- construction.contents;
@@ -1792,7 +1795,15 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
             return
         }
     };
+    val previous_input <- state.local_sum_input;
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    if (state.source_only && mode == PlaceTransfer && bindings[at].kind == 0u8 &&
+        inspect_index_selection(nodes, state.syntax_revision, at, assignment.destination, indexed)) {
+        (state.local_sum_input <- assignment.input):void
+    };
     resolve_expression(source, nodes, bindings, work, state, assignment.input);
+    state.local_sum_input <- previous_input;
+    return
 }
 
 func resolve_logical(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -2246,7 +2257,7 @@ func register_selection(source:const SourceBytes in S, nodes:const ExprNodes in 
 }
 
 func register_constructors(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                           work:NameWork in W, state:NameState in R, tail:u64) -> void
+                           work:NameWork in W, state:NameState in R, sum:u64, tail:u64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     ref first = make u64 { no_node() };
     if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, SumSequence, first) ||
@@ -2262,7 +2273,9 @@ func register_constructors(source:const SourceBytes in S, nodes:const ExprNodes 
             return;
         };
         declare_module_name(source, nodes, bindings, work, state, sites.name, arm, constructor_type());
-        if (arm == tail || state.diagnostic != 0u8) return;
+        if (state.diagnostic != 0u8) return;
+        work[arm].declaring_sum <- sum;
+        if (arm == tail) return;
         arm <- work[arm].next;
     };
     reject_name(state, tail, invalid_module_tree());
@@ -2305,7 +2318,7 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
             declare_module_name(source, nodes, bindings, work, state, declaration.name, form, kind);
         };
         if (declaration_shape == NominalSum && state.diagnostic == 0u8) {
-            register_constructors(source, nodes, bindings, work, state, declaration.entries);
+            register_constructors(source, nodes, bindings, work, state, form, declaration.entries);
         };
         if (selection_shape == SelectionReady) {
             register_selection(source, nodes, bindings, selected, work, state, form, selection);
@@ -3071,7 +3084,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
-        source_only <- state.source_only; array_fill <- no_node();
+        source_only <- state.source_only; local_sum_input <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
@@ -3551,7 +3564,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
-        source_only <- declarations_only; array_fill <- no_node();
+        source_only <- declarations_only; local_sum_input <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();

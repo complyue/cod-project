@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction } };
 
 export data DeclarationDemand {
     scope:u64;
@@ -232,6 +232,7 @@ export func discover_declaration_demand(
     val shape <- InvalidInvocation;
     val callee <- no_node();
     val transfer <- InvalidAssignment;
+    val local_sum_write <- false;
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
@@ -276,7 +277,9 @@ export func discover_declaration_demand(
             problem <- site;
             return false
         };
-        if (links[site].case_schema_prepared || selects_caught_field(fields, site) || checked_call ||
+        local_sum_write <- site < intrinsic (len)(cases) &&
+            (case cases[site] of { LocalSumConstruction -> true; _ -> false });
+        if (links[site].case_schema_prepared || local_sum_write || selects_caught_field(fields, site) || checked_call ||
             has_imported_native_loan(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction) ||
             predicate_operand(nodes, revision, used, site) != no_node() ||

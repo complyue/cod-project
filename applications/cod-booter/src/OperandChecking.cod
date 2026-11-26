@@ -87,7 +87,7 @@ using "./NameResolution.cod" { c_operation, c_handle_type };
 using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, builtin_u64, builtin_u32,
     builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
-    formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
+    formal_binding, local_binding, loop_index, exception_binding, find_enum_member, find_named_field,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
 };
@@ -114,7 +114,7 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFacts,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, InlineProductField }
+        InlineProductFormal, InlineProductField, LocalSumConstruction }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -4181,7 +4181,7 @@ func check_indexed_case_subject(nodes:const ExprNodes in N, facts:OperandFacts i
     };
     if (facts[array_site].kind != source_array_loan() || facts[array_site].reception != borrowed_ref() ||
         facts[array_site].owner != owner_site || facts[array_site].identity_module != 0u64 ||
-        facts[array_site].identity != declared_array || facts[array_site].target_readonly == 0u8)
+        facts[array_site].identity != declared_array || facts[array_site].target_presence != present_target())
         return unsupported_case_subject();
     val diagnostic <- require_typed_bits(nodes, facts, index, scalar_u64());
     if (diagnostic != 0u8) return diagnostic;
@@ -4222,13 +4222,18 @@ func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
     return 0u8
 }
 
-func check_slot_sum_transfer(facts:OperandFacts in F, at:u64, destination:u64, input:u64, sum:u64) -> u8
-    where {owner F} {
+func check_slot_sum_transfer(cases:const ConstructorCaseFacts in C, facts:OperandFacts in F,
+    at:u64, destination:u64, input:u64, sum:u64) -> u8 where {const owner C, owner F} {
     if (facts[destination].kind != source_sum_target() || facts[destination].selection != destination ||
         facts[destination].target_readonly != 0u8 || facts[destination].identity != sum ||
         facts[destination].identity_module != 0u64 || facts[input].kind != independent_sum_bits() ||
         facts[input].reception != independent_value() || facts[input].identity != sum ||
-        facts[input].identity_module != 0u64 || !facts[input].checks_array_bounds) return wrong_operand_type();
+        facts[input].identity_module != 0u64) return wrong_operand_type();
+    if (!facts[input].checks_array_bounds && (input >= intrinsic (len)(cases) ||
+        (case cases[input] of {
+            LocalSumConstruction { val transfer <-; } -> transfer != at;
+            _ -> true
+        }))) return unsupported_transfer_signature();
     if (facts[at].discarded_result == 0u8) return unsupported_transfer_signature();
     only_void(facts, at);
     return 0u8
@@ -4402,6 +4407,114 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
     return 0u8
 }
 
+func check_sum_field_value(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    input:u64, type:const DeclaredType in T) -> u8 where {const owner N, owner F, const owner T} {
+    val kind <- facts[input].kind;
+    if (type.kind == record_type() || type.kind == sum_type()) {
+        val matches <- if (type.kind == record_type()) {
+            kind == product_kind() || kind == received_product() || kind == source_product_loan()
+        } else { kind == source_sum_target() || kind == received_sum() };
+        if (!matches || facts[input].identity != type.identity ||
+            facts[input].identity_module != type.defining_module) return wrong_operand_type();
+        if (facts[input].target_presence != present_target() || facts[input].owner == no_node() ||
+            (facts[input].reception != borrowed_ref() && facts[input].reception != local_place()))
+            return unproved_nonnull_borrow();
+        return 0u8
+    };
+    if (type.kind == builtin_u32()) return require_source_u32(nodes, facts, input, true);
+    val result_kind <- declared_scalar(type.kind);
+    if (!compatible_operand_nominal(facts, input, result_kind, type.identity, type.defining_module))
+        return incompatible_enum_type();
+    return require_value_bits(nodes, facts, input, result_kind)
+}
+
+func check_sum_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, links:const NameWork in L, selected:const SelectedExports in E,
+    facts:OperandFacts in F, abrupt:bool in P, at:u64, fields:u64,
+    initializer:u64, used:u64, revision:u64) -> u8
+    where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner P} {
+    ref write = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    if (inspect_assignment(nodes, revision, at, initializer, write) != FieldTransfer ||
+        names[write.destination].kind != record_initializer_label()) return unsupported_product_layout();
+    val name <- ungrouped(nodes, revision, used, write.destination);
+    val field <- find_named_field(source, nodes, links, fields, name, revision, used);
+    if (field == no_node()) return unknown_product_field();
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (!record_field_binding(nodes, revision, used, field, binding)) return invalid_operand_tree();
+    val first <- facts[field].last_initializer != at;
+    if (!first && binding.readonly) return repeated_readonly_initializer();
+    if (facts[write.input].kind == never_result()) {
+        abrupt <- true;
+        return 0u8
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
+        ((type.kind == record_type() || type.kind == sum_type()) && names[initializer].kind != 0u8))
+        return unsupported_product_layout();
+    val diagnostic <- check_sum_field_value(nodes, facts, write.input, type);
+    if (diagnostic != 0u8) return diagnostic;
+    facts[field].last_initializer <- at;
+    return 0u8
+}
+
+func check_local_sum_construction(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, links:const NameWork in L, selected:const SelectedExports in E,
+    facts:OperandFacts in F, at:u64, transfer:u64, sum:u64, arm:u64, fields:u64, used:u64, revision:u64)
+    -> u8 where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F} {
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    if (transfer <= at || inspect_assignment(nodes, revision, used, transfer, assignment) != PlaceTransfer ||
+        assignment.input != at || inspect_construction(nodes, revision, used, at, syntax) != BracedConstruction ||
+        names[syntax.requested].kind != constructor_type() ||
+        names[syntax.requested].declaration != arm || links[arm].declaring_sum != sum) return invalid_operand_tree();
+    ref abrupt = make bool { false };
+    ref tail = make u64 { no_node() };
+    ref item = make u64 { no_node() };
+    if (!block_tail(nodes, revision, at, syntax.contents, tail) ||
+        !first_sequence_entry(nodes, revision, at, tail, BlockSequence, item)) return invalid_operand_tree();
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val diagnostic <- 0u8;
+    ref field = make u64 { no_node() };
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) {
+            if (abrupt) {
+                set_result(facts, at, never_result());
+                return 0u8
+            };
+            if (!first_sequence_entry(nodes, revision, used, fields, FormalSequence, field)) return invalid_operand_tree();
+            for (unchecked in 0u64 .. used) {
+                if (field == no_node()) {
+                    set_fact(facts, at, independent_sum_bits(), independent_value(), no_node(), sum, 0u8);
+                    return 0u8
+                };
+                if (facts[field].last_initializer != at) return missing_product_initializer();
+                if (field == fields) { (field <- no_node()):void }
+                else {
+                    if (links[field].next <= field || links[field].next > fields) return invalid_operand_tree();
+                    (field <- links[field].next):void
+                }
+            };
+            return invalid_operand_tree()
+        };
+        if (inspect_sequence_entry(nodes, revision, at, item, entry) != BlockSequence)
+            return invalid_operand_tree();
+        diagnostic <- check_sum_initializer(source, nodes, names, links, selected, facts, abrupt,
+            at, fields, entry.item, used, revision);
+        if (diagnostic != 0u8) return diagnostic;
+        if (item == tail) { (item <- no_node()):void }
+        else {
+            if (links[item].next <= item || links[item].next > tail) return invalid_operand_tree();
+            (item <- links[item].next):void
+        }
+    };
+    return invalid_operand_tree()
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
@@ -4437,6 +4550,11 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     if (at < intrinsic (len)(cases)) {
         case cases[at] of {
+            LocalSumConstruction { val transfer <-; val sum <-; val arm <-; val fields <-; } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_local_sum_construction(source, nodes, names, links, selected, facts,
+                    at, transfer, sum, arm, fields, used, revision)
+            };
             IndexedCaseSubject {
                 val expression <- expression; val array_site <- array_site; val index <- index;
                 val owner_site <- owner_site; val declared_array <- array_type; val schema <- value_type;
@@ -4654,7 +4772,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                             return 0u8
                         };
                         if (facts[target].byte_array) return check_transfer(nodes, facts, at, destination, input);
-                        return check_slot_sum_transfer(facts, at, destination, input, facts[target].array_sum)
+                        return check_slot_sum_transfer(cases, facts, at, destination, input, facts[target].array_sum)
                     }
                 };
                 _ -> {}
@@ -4830,6 +4948,21 @@ func inherit_result_use(facts:OperandFacts in F, parent:u64, child:u64) -> void 
     facts[child].arm_result <- facts[parent].arm_result;
     facts[child].discarded_result <- facts[parent].discarded_result;
     return;
+}
+
+func discard_sum_statement(nodes:const ExprNodes in N, cases:const ConstructorCaseFacts in C,
+    facts:OperandFacts in F, written:u64, used:u64, revision:u64) -> void
+    where {const owner N, const owner C, owner F} {
+    val at <- ungrouped(nodes, revision, used, written);
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer ||
+        assignment.input >= intrinsic (len)(cases)) return;
+    case cases[assignment.input] of {
+        LocalSumConstruction { val transfer <-; } -> {
+            if (transfer == at) { discard_result(facts, at, explicit_discard()) }
+        };
+        _ -> {}
+    }
 }
 
 # Carry discard through parentheses, a grouping block's tail and the
@@ -5095,8 +5228,27 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     };
     val at <- no_node();
     ref selection = make CaseSites { subject <- no_node(); items <- no_node(); };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref void_result_clause = make u64 { no_node() };
     for (offset in 0u64 .. tree.used) {
         at <- tree.used - 1u64 - offset;
+        if (source_only && intrinsic (len)(cases) != 0u64) {
+            if (links[at].next < tree.used &&
+                inspect_sequence_entry(nodes, tree.revision, tree.used, at, entry) == BlockSequence) {
+                discard_sum_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
+            };
+            if (facts[at].kind == void_result()) {
+                form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
+                if ((form == ModuleCallable || form == LexicalCallable) && !callable.function_form &&
+                    find_signature_clause(nodes, tree.revision, tree.used, callable.signature, ValueResultClause,
+                        void_result_clause) && void_result_clause != no_node() &&
+                    !is_scope_block(nodes, callable.body) &&
+                    block_tail(nodes, tree.revision, tree.used, callable.body, tail) &&
+                    inspect_sequence_entry(nodes, tree.revision, tree.used, tail, entry) == BlockSequence) {
+                    discard_sum_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
+                }
+            }
+        };
         prepare_result_use(nodes, facts, at, tree.used, tree.revision);
         prepare_text_receiver(nodes, names, facts, at, tree.used, tree.revision);
         if (needs_body_check(demand, at) && inspect_case(nodes, tree.revision, tree.used, at,
