@@ -926,22 +926,31 @@ public:
     }
     void then(const Selections &next, std::set<size_t> &known) {
       constrain(next);
-      auto before = *this;
-      for (const auto id : next.entry_nonnull) { before.refine(id, false); refine(id, false); }
-      const auto entries = before.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
-      entry_initialized.insert(entries.begin(), entries.end());
+      // Target updates and conditional readiness can read the incoming
+      // selection after the invalidations below have changed it.
+      std::optional<Selections> before;
+      if (!next.targets.empty() || !next.initialized_if.empty()) before.emplace(*this);
+      for (const auto id : next.entry_nonnull) {
+        if (before) before->refine(id, false);
+        refine(id, false);
+      }
+      if (!next.entry_initialized.empty()) {
+        const auto &incoming = before ? *before : *this;
+        const auto entries = incoming.substitute_entries(next.entry_initialized, next.entry_nonnull, known);
+        entry_initialized.insert(entries.begin(), entries.end());
+      }
       for (const auto id : next.invalidated) invalidate(id);
       for (const auto &[id, update] : next.targets) {
         if (std::all_of(update.entries.begin(), update.entries.end(), [&](size_t entry) {
-              return before.initialized.contains(entry) || next.entry_initialized.contains(entry);
+              return before->initialized.contains(entry) || next.entry_initialized.contains(entry);
             }) && std::all_of(update.places.begin(), update.places.end(), [&](size_t place) { return known.contains(place); }))
           initialized.insert(id);
-        if (const auto target = before.substitute(update)) targets[id] = *target;
+        if (const auto target = before->substitute(update)) targets[id] = *target;
       }
       for (const auto &[id, required] : next.initialized_if) {
         auto remaining = required;
         std::erase_if(remaining, [&](const auto &entry) { return !entry.physical && !entry.frame && next.entry_initialized.contains(entry.id); });
-        auto incoming = before.initialization_requirements(remaining);
+        auto incoming = before->initialization_requirements(remaining);
         if (incoming) {
           if (incoming->empty()) initialized.insert(id);
           else initialized_if[id] = std::move(*incoming);
@@ -954,11 +963,10 @@ public:
     void merge(const Selections &other) {
       if (!other.possible) return;
       if (!possible) { *this = other; return; }
-      const auto before = *this;
       auto affected = invalidated;
       affected.insert(other.invalidated.begin(), other.invalidated.end());
       for (const auto id : affected) {
-        auto left = before.initialization_requirements(id);
+        auto left = initialization_requirements(id);
         const auto right = other.initialization_requirements(id);
         initialized_if.erase(id);
         if (left && right) {
@@ -972,17 +980,19 @@ public:
       std::erase_if(entry_nonnull, [&](size_t id) { return !other.entry_nonnull.contains(id); });
       std::erase_if(null_inputs, [&](size_t id) { return !other.null_inputs.contains(id); });
       std::erase_if(nonnull_inputs, [&](size_t id) { return !other.nonnull_inputs.contains(id); });
-      invalidated.insert(other.invalidated.begin(), other.invalidated.end());
       for (auto it = targets.begin(); it != targets.end();) {
         if (const auto next = other.targets.find(it->first); next != other.targets.end()) {
           it->second.merge(next->second); ++it;
         } else if (other.invalidated.contains(it->first)) it = targets.erase(it);
         else { it->second.merge(Targets{{}, {}, {it->first}}); ++it; }
       }
-      for (const auto &[id, target] : other.targets) if (!before.targets.contains(id) && !before.invalidated.contains(id)) {
+      // The loop above keeps every left target also present on the right.
+      // Until invalidations are merged, an absent left target can mean entry.
+      for (const auto &[id, target] : other.targets) if (!targets.contains(id) && !invalidated.contains(id)) {
         auto merged = target; merged.merge(Targets{{}, {}, {id}});
         targets.emplace(id, std::move(merged));
       }
+      invalidated = std::move(affected);
     }
   };
   // Missing paths are necessary conditions: no entry means no write guarantee.
