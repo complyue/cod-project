@@ -1,8 +1,10 @@
 # Ranged for-loops and synchronous generators
 
-Design revision: 25 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
+Design revision: 26 · Recorded: 2026-11-26 · Status: selected generator/feedback syntax and checked forwarding; remaining scope, effect proofs and transport pending.
 
 ## Design authority
+
+At r26 [D-29-SELECTOR-LITERALS](DesignAuthorityRegistry.md#d-29-selector-literals) gives bounded progressions and open-axis requests concrete, typed ADT values before call selection. P-768/P-769 preserve the r25 progression, the scalar domain and library array policy. [Decision](../CHANGELOG.md#h-selector-literals-and-pack-dispatch-20261126)
 
 At r25 [D-29-STEPPED-RANGES](DesignAuthorityRegistry.md#d-29-stepped-ranges) confirms bounded integer ranges as values in loops and subscripts. P-764/P-765 preserve the old half-open loop, written evaluation order and empty-loop behavior. [User decision](../CHANGELOG.md#h-ranges-and-typed-subscripts-20261126)
 
@@ -57,6 +59,28 @@ samples[odd]
 ```
 
 Both uses request 1, 3 and 5. Endpoints and step remain available even for an empty progression. The same bounded range keeps its coordinates across uses and needs no materialized list. Omitting a bound inside brackets leaves it for the selected axis to supply. An absent bound has no standalone numeric value. [Axis-relative selectors and units](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
+
+### Concrete types of range and slice literals
+
+`AxisSelector` is the public nominal abstract parent of `Range` and `Slice`. A bounded progression conforms to `Range`. A request that needs an axis to supply a missing endpoint conforms to `Slice`. A library can dispatch on any of the three and use typed `case` arms on the common parent. A value-producing case on the open parent must also handle other admitted conformers or prove its input is narrowed.
+
+CoD defines two builtin ADT schemas. Each application of a schema to canonical field types identifies an ordinary concrete value ADT. In the table, brackets in type descriptions display the determining field types. They introduce no application syntax for user-defined generic types.
+
+| Expression | Concrete type of the selector | Observable content |
+| --- | --- | --- |
+| `1 ..= 6 by 2` | `RangeValue[i64, i64]` | Start 1, inclusive stop 6, step 2. Last visited value 5. |
+| `9u64 .. 1u64 by -2` | `RangeValue[u64, i64]` | Unsigned coordinates, signed step, exclusive stop. |
+| `m[.., j]` | `SliceValue[omitted, omitted, default]` on the first axis | No written bounds or step. |
+| `m[.. by -1, j]` | `SliceValue[omitted, omitted, i64]` on the first axis | Both bounds omitted, signed step −1. |
+| `m[lo .., j]` for `lo:u32(Row)` | `SliceValue[u32(Row), omitted, default]` on the first axis | The written start keeps its row unit. |
+
+For `RangeValue`, determine a common coordinate type for the endpoints using their established identities and ordinary whole-type lossless rules. Preserve named units. If that evidence does not identify a unique coordinate, the source must disambiguate it. Retain the explicit step's type and check that the domain supports that advance. For a bounded ordinary integer range the omitted step is the unitless forward count `1` of type `i64`. A measured coordinate needs an established default advance for that domain if the author omits the step. No physical displacement is inferred from the receiving collection. The observable members are `start`, `stop`, `step` and `stop_inclusive`. The flag describes the written limit even when the progression never reaches it.
+
+For `SliceValue`, type each supplied endpoint and step independently. The absent slots are represented by fieldless alternatives. An omitted step requests the axis default. Preserve the written endpoint policy. A library can inspect the alternatives before reading a present field. The full-axis selector needs no invented coordinate type, numeric sentinel or backing address. Its contact with an actual axis occurs in the selected library operation.
+
+Literal identity uses the canonical builtin schema and canonical field types, including UoM. Endpoint values, the inclusion flag, module-local aliases, import spelling, source site and receiving array do not enter that identity. Dynamic operands of established types produce the same ADT as literal operands of those types. Determine these facts before overload selection. Evaluate the supplied fields once in written order, then pass the result as one argument. The compiler can eliminate temporary storage while preserving the selected type, observations and effects. No general user-defined parametric ADT facility or erased storage representation is required by these two schemas.
+
+Acceptance distinguishes direct and forwarded occurrences, different arrays receiving the same range, half-open and inclusive limits with identical field types, signed descent and coordinate units. Exercise the common abstract formal and both typed case arms, including a library conformer taking the open fallback. A bare integer still binds an ordinary numeric subscript. [Nominal conformance](DomainLanguageDesign.md#abstract-types-and-data-declarations) · [Typed case](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) · [Per-axis arguments](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 ## Data and control directions
 

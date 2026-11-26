@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 225
+Discussion revision: 226
 
 Recorded: 2026-11-26
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r226 [D-29-SELECTOR-LITERALS](DesignAuthorityRegistry.md#d-29-selector-literals) uses ordinary nominal conformance and typed case on the public AxisSelector parent. The [indexed call](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) supplies the assigned operand before the index parameters. The r225 nominal type identity rules continue.
 
 At r225 [D-07-TYPE-SYNONYMS](DesignAuthorityRegistry.md#d-07-type-synonyms), P-762/P-763, adds an early transparent naming form, `type Name = ExistingType`. Synonyms preserve canonical identity, dispatch, permissions and ABI across module selections. Distinct signed and unsigned identities may share an LLVM representation. [Scalar spelling, examples and acceptance](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
@@ -1196,7 +1198,7 @@ H-133–H-138, H-148–H-150 and H-153–H-155/H-158/H-159 resolve the following
 | LI-07 | Reserved expression names | Reserve literal and control spellings that preclude lookup. The ten [ordinary names](SymbolicDynamicScope.md#ordinary-names-for-traversal-and-storage) use ordinary binding and dispatch. `touch @symbol` declares a symbolic dependency. |
 | LI-08 | Intrinsic/operator overloads | H-153–H-155: reserve ordinary keyword names and allow parenthesized operation methods of either callable kind. H-158: intrinsics use compiler-internal representation, separate from CoD symbols. H-159: a selected procedural operation uses current bindings, like `behave`. UoM conversions remain pure. |
 
-The run develops structured product values, named UoMs with these selection/conversion rules, Julia-style argument-type methods and parenthesized operator names, bounded numerical iteration, static SoA regional arrays and owner-tracked explicit-memory traversal. Regional references retain existing lifetime/relocation rules, including H-146’s accepted first-field self-reference-to-null limitation. [Local value shadowing](SymbolicDynamicScope.md#local-value-shadowing) follows H-149; symbolic writes still require `effect`. Compound-unit algebra, general GADT machinery, custom operator precedence and cross-region representation remain separate increments. H-161 reserves primary module-form words against ordinary declarations and aliases. H-162 selects the distinct `(=)` family; H-163/H-164 make indexed assignment call `([]=)(array, index, value)` while preserving nominal container/index types. Field writes use `record.field <- value` or `record.field = target` according to the destination. General computed field selectors remain open. The completed H-147 work period and H-160 review retain their historical scopes. No new SNN dynamics or learning rule enters this work.
+The run develops structured product values, named UoMs with these selection/conversion rules, Julia-style argument-type methods and parenthesized operator names, bounded numerical iteration, static SoA regional arrays and owner-tracked explicit-memory traversal. Regional references retain existing lifetime/relocation rules, including H-146’s accepted first-field self-reference-to-null limitation. [Local value shadowing](SymbolicDynamicScope.md#local-value-shadowing) follows H-149; symbolic writes still require `effect`. Compound-unit algebra, general GADT machinery, custom operator precedence and cross-region representation remain separate increments. H-161 reserves primary module-form words against ordinary declarations and aliases. H-162 selects the distinct `(=)` family; the [current indexed assignment signature](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads) is `([]=)(array, value, index)` while preserving nominal container/index types. Field writes use `record.field <- value` or `record.field = target` according to the destination. General computed field selectors remain open. The completed H-147 work period and H-160 review retain their historical scopes. No new SNN dynamics or learning rule enters this work.
 
 Validation uses CoD language/runtime component checks and arithmetic fixtures: strict versus convertible parameters, using-bundle selection, route preference/warnings, structured index conversion, rejected domain mismatches, nested alias-sensitive reads and writes, returned input references, and repeated numerical gather/A-B execution. Existing numeric failure behavior supplies a reference for invalid arithmetic; no new exception/recovery framework is required. Source-only compilation uses the repository's active build tree and normal build command; build configuration and toolchains remain unchanged.
 

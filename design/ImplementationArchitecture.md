@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r227 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues P-682/P-683 for method registration. [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) changes which combinations the published membership must permit. The r226 pipeline ownership and completion rules continue.
+
 At r226 the [post-rewrite cleanup decision](../CHANGELOG.md#h-post-rewrite-cleanup-20261126) applies P-682/P-683 to the complete seed and booter delivery surfaces. It continues r225’s structural rule through [retirement of the old compiler paths](#retiring-a-replaced-compiler-pipeline).
 
 At r225 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) makes the [interface rule](#restarting-a-pass-from-entry) explicit for every CoD compiler and applies it to the [booter pipeline rewrite](../applications/cod-booter/docs/CompilerPipeline.md#replacing-the-booter-pipeline). The [user’s clarification](../CHANGELOG.md#h-compiler-restart-mechanism-20261126) carries forward the phase and workqueue decisions under P-682/P-683. The checked-seed examples below describe the reference implementation wherever they retain its provisional summaries or scheduler.
@@ -431,13 +433,13 @@ In both seed modes, verify the direct local and the relay through an owning resu
 
 ### Registering a variadic method family
 
-Apply D-10's [standalone-method rule](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) to each actual family as it forms. In the seed, reuse local method registration and the composed receiver view. In the CoD booter, parse the exact final ordinary-formal suffix `...` with its span, retain that fact in the typed formal, and use it in local registration and checked module selection. Verify that `.`, `..` and other operator tokens retain their respective boundaries.
+Apply D-10's [one variadic method per family](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter) alongside its fixed methods. The bootstrap implementations of the earlier singleton rule require migration. Registration records method identities and pack shape. Call binding later consumes that membership and the source expansion marker. In the seed, reuse local method registration and the composed receiver view. In the CoD booter, parse the exact final ordinary-formal suffix `...` with its span, retain that fact in the typed formal, and use it in local registration and checked module selection. Verify that `.`, `..` and other operator tokens retain their respective boundaries.
 
 Track bodyless promises separately. Count distinct defining methods in the selected interpretation. Preserve existing conflicts between incompatible interpretations of one definition. Independent source-preserving views remain separate. A previously proved source interface can carry the defining module, method identity, implementation presence and variadic fact through re-export. Validate identities and graph row bounds before using them. A native body ordinal is unnecessary to check family membership.
 
 Report an unused local conflict at the declaration and an imported conflict at the combining directive. Preserve structural evidence from dependencies long enough to check the receiving composition. A valid standalone method can still encounter a located execution-profile stop. Do not publish executable coverage from structural evidence. Existing syntax, body checks, callable promises and fixed-only overload checks apply in their respective phases.
 
-Verify both registration orders, disjoint domains, differing prefixes, same-method diamonds, independent source views and authorized imported extensions in both frontends. Check the fixed implementation under a bodyless variadic promise and preserve its cleanup. Compare the normal compiler commands, earlier artifacts after rejection, and the supported command baseline. This clearance covers registration and checked interfaces. The [seed value-pack review](#preparing-a-by-value-variadic-call-in-the-seed) covers the first executable subset.
+Verify both registration orders for a fixed method plus its pack fallback, two distinct variadic methods conflicting, same-method diamonds and composed views. Check the fixed implementation under a bodyless variadic promise and preserve its cleanup. Compare the normal compiler commands, earlier artifacts after rejection, and the supported command baseline. This clearance covers registration and checked interfaces. The [seed value-pack review](#preparing-a-by-value-variadic-call-in-the-seed) covers the first executable subset.
 
 ### Checking rebinding of a borrowed handle local
 

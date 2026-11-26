@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r98 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues P-680/P-681 for structural publication. The [mixed-family decision](../../../CHANGELOG.md#h-selector-literals-and-pack-dispatch-20261126) changes the permitted membership from r97.
+
 At r97 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues P-680/P-681 and the single-build rule at r95. For a local change, exercise the affected caller, observable result and failure or publication boundary. A wider declaration/provider comparison serves a release decision when a shared interface changes across those inputs or a demonstrated corpus regression needs checking. The release baselines below remain available for that purpose. [Verification scope](../../../CHANGELOG.md#k-bootstrap-audit-acceptance-20261126)
 
 At r96 [D-20-MODULE-GRAPH](../../../design/DesignAuthorityRegistry.md#d-20-module-graph) continues P-680/P-681 for the native package probe. A by-value `u64` bound can receive an enum with that backing type under the [enum value decision](../../../CHANGELOG.md#h-enum-backing-coercion-20261125). The probe's array identities and owner requirements continue from r95.
@@ -396,8 +398,7 @@ Build the isolated executable with the current generated stubs, indexed-source, 
 A child can provide a checked method list even when the booter cannot execute its variadic
 body. Give that completed visit a distinct alternative in the graph's visit type. During the
 source and frame loan, validate the family, defining identities, interpretation and membership
-ranges. Distinguish a promise with zero methods, a nonempty fixed-only family and the defining
-identity of a sole variadic method. Keep the canonical key and original diagnostic coordinates
+ranges. Preserve the fixed members and the optional single variadic member of the same family, as well as a promise with zero methods. The bootstrap singleton check predates mixed-family admission. Keep the canonical key and original diagnostic coordinates
 in graph-owned storage. Commit the complete checked ranges and pending profile diagnostic
 together. This visit contributes no executable ordinal or unit.
 

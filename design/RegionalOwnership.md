@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 137 · Recorded: 2026-11-26 · Status: design draft with scoped confirmed requirements.
+Design revision: 138 · Recorded: 2026-11-26 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+At r138 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) places the assigned operand before the index parameters. P-766/P-767 preserve destination preparation, failure order, actual owner and access. [Setter call example](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 At r137 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) extends the indexed call to multiple positional axis values. The selected method retains the r136 owner, access, transfer and result rules. [Observable call and failure order](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
@@ -1249,7 +1251,7 @@ When an assignment is rejected because the reference would cross owners, the dia
 
 Assignment reads its source without modifying it under H-223/H-224. H-293 prevents an alias from obtaining write permission through a read-only source view; independently supplied writable access retains its own permission. The general overload-body protocol remains separate from ordinary ptr rebinding. Writes through an explicitly const destination are forbidden. A reference or region handle is not copyable bits because its native representation happens to be a machine word. Wrappers, scalar casts and byte-copy helpers must not bypass the semantic category or owner-bearing-container restriction.
 
-A val/unmodified scalar field and a dense numeric array slot use <- for their directly stored bits; = cannot manufacture a pointer slot or change their layout. A ref/ptr scalar field uses <- to write its target bits and = to rebind its stored edge. The indexed payload counterpart is `([]<-)(container, index, value)` under H-307, alongside the distinct `([]=)` family. It supports logical writes with void results as well as destination views; see the logical indexed transfer contract below. Current `(=)`/`([]=)` methods can implement arbitrary memory edits and must be reviewed before reusing their evidence for the new distinction. Typed overloads remain subject to const, owner and lifetime checks; method bodies cannot opt out of intrinsic ownership rules.
+A val/unmodified scalar field and a dense numeric array slot use <- for their directly stored bits; = cannot manufacture a pointer slot or change their layout. A ref/ptr scalar field uses <- to write its target bits and = to rebind its stored edge. The indexed payload counterpart is `([]<-)(container, value, index)` under H-307, alongside the distinct `([]=)` family. It supports logical writes with void results as well as destination views; see the logical indexed transfer contract below. Current `(=)`/`([]=)` methods can implement arbitrary memory edits and must be reviewed before reusing their evidence for the new distinction. Typed overloads remain subject to const, owner and lifetime checks; method bodies cannot opt out of intrinsic ownership rules.
 
 Symbolic bindings are separate from ordinary pointer destinations: `effect @x <- rhs` transfers bits/ownership, while `effect @x = rhs` rebinds a regional object reference. Bits symbols reject the `=` form. Both forms restore the preceding binding on scope exit. Its bits case installs a value; its owned-region case consumes an admitted owner into the dynamic scope. A previous binding/owner remains hidden and alive, then becomes reachable on scope exit. Ordinary bits stores are not rolled back on scope exit. Captured perform is a non-consuming replay path. Bare symbolic binding assignment remains forbidden. The proposed `@object <- rhs` edits its regional referent through an overload; it provides no second way to rebind @x.
 
@@ -1380,9 +1382,9 @@ The expected everyday use of `a <- b <- c` is bits transfer. Under H-308, a thir
 
 ### Logical indexed transfer
 
-For multiple axes, `container[row, col] <- source` selects `([]<-)(container, row, col, source)`. Each selector retains its source type, including units and explicit or omitted range bounds. The matching reference-binding family is `([]=)`. [Typed subscript overloads](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
+For multiple axes, `container[row, col] <- source` selects `([]<-)(container, source, row, col)`. Each selector retains its source type, including units and explicit or omitted range bounds. The matching reference-binding family is `([]=)`. [Typed subscript overloads](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
-`container[index] <- source` selects `([]<-)(container, index, source)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or getter. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
+`container[index] <- source` selects `([]<-)(container, source, index)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or getter. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
 
 Builtin indexed reads, writes and view selection follow [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): runtime bounds checks are enabled by default and failure raises unchecked IndexOutOfBoundsError. An explicit compiler option may disable those checks at the programmer's risk; it does not disable owner/access/initialization checks or grant writable storage. User-defined indexing keeps its selected method contract, including any builtin operations it invokes. Operand preparation and conversion order remain unchanged.
 
