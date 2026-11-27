@@ -18,7 +18,7 @@ using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identi
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_readonly_query,
     prepared_array_procedure, prepared_native_function,
-    prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
+    prepared_parser_writer, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits };
@@ -33,7 +33,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -568,7 +568,7 @@ func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) 
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
             prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
             prepared_array_procedure(views, at) ||
-            prepared_parser_writer(views, at) || prepared_record_inspector(views, at)) return true
+            prepared_parser_writer(views, at) || prepared_array_inspector(views, at)) return true
     };
     return false
 }
@@ -604,8 +604,8 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_record_inspector(views, at) && nonallocating) {
-            (views[at] <- make CheckedRecordInspector {
+        if (prepared_array_inspector(views, at) && nonallocating) {
+            (views[at] <- make CheckedArrayInspector {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void

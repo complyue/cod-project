@@ -1,5 +1,5 @@
 using "./ModuleExportStorage.cod" SourceWriter;
-using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, RecordInspector };
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector };
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
 using "./SourceAccess.cod" same_bytes;
 using "./SourceStorage.cod" SourceBytes;
@@ -908,16 +908,19 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
         val role <- names[binding.owner_name].declaration;
         val const_role <- owner_constraint_syntax(nodes, role) == ReadonlyOwnerConstraint;
         val kind <- names[marker].kind;
+        val scalar_place <- fixed_values && mode == ReferenceFormal && kind == builtin_u64();
         row.value_kind <- if (mode == HandleFormal) { c_handle_type() }
                           else {
-                              if (text_type(kind)) { kind }
+                              if (text_type(kind) || scalar_place) { kind }
                               else { if (fixed_values && (kind == record_type() ||
                                   imported_kind(names, selected, marker) == record_export())) {
                                   record_type()
                               } else { array_type() } }
                           };
-        row.type_module <- type_module(names, selected, marker, current_module);
-        row.type_identity <- type_identity(names, selected, marker);
+        if (!scalar_place) {
+            row.type_module <- type_module(names, selected, marker, current_module);
+            (row.type_identity <- type_identity(names, selected, marker)):void
+        };
         row.owner_role <- role;
         row.target_readonly <- if (binding.readonly || (mode == HandleFormal && provider && const_role)) { 1u8 } else { 0u8 };
         (row.owner_readonly <- if (const_role) { 1u8 } else { 0u8 }):void;
@@ -1510,8 +1513,8 @@ export data SuppliedView =
     PreparedProductWriter {} |
     PreparedAggregateWriter {} |
     CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
-    PreparedRecordInspector { inline_product:bool; } |
-    CheckedRecordInspector { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    PreparedArrayInspector { inline_product:bool; } |
+    CheckedArrayInspector { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedParserWriter {} |
     CheckedParserWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedProductWriterHelper {} |
@@ -2870,9 +2873,9 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-# Complete the AST loan and the initialized output record before admitting
+# Bind the readonly AST array and initialized output loan before checking
 # a body that returns an independent nominal classification.
-func prepare_record_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
+func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
     at:UInt64, used:UInt64, revision:UInt64) -> void
@@ -2906,17 +2909,21 @@ func prepare_record_inspector(nodes:const ExprNodes in N, names:const NameBindin
     };
     val output <- reference_formal_marker(nodes, names, input, output_owner, false, used, revision);
     if (output >= used || work[input].next != no_node()) return;
+    if (names[output].kind == builtin_u64()) {
+        (views[at] <- make PreparedArrayInspector { inline_product <- false }):void;
+        return
+    };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
         type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
     val storage <- aggregate[type.identity];
     if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
-        (views[at] <- make PreparedRecordInspector { inline_product <- storage == CoDBitsAggregate }):void
+        (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
     }
 }
 
-export func prepared_record_inspector(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
-    return site < intrinsic (len)(views) && (case views[site] of { PreparedRecordInspector -> true; _ -> false })
+export func prepared_array_inspector(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { PreparedArrayInspector -> true; _ -> false })
 }
 
 export func prepared_parser_writer(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
@@ -2936,7 +2943,7 @@ export func prepared_writable_product_formal(views:const SuppliedViews in V, sit
     return site < intrinsic (len)(views) && (case views[site] of {
         PreparedProductWriter -> true;
         PreparedProductWriterHelper -> true;
-        PreparedRecordInspector { val inline_product <-; } -> inline_product;
+        PreparedArrayInspector { val inline_product <-; } -> inline_product;
         _ -> false
     })
 }
@@ -2948,7 +2955,7 @@ export func first_source_call_profile(views:const SuppliedViews in V, used:UInt6
             prepared_scalar_predicate(views, site) || prepared_aggregate_writer(views, site) ||
             prepared_readonly_query(views, site) || prepared_array_procedure(views, site) ||
             prepared_parser_writer(views, site) ||
-            prepared_record_inspector(views, site)) return site;
+            prepared_array_inspector(views, site)) return site;
         if (case views[site] of {
             ImportedTextPredicateCandidate -> true;
             ImportedProductWriterCandidate -> true;
@@ -3028,7 +3035,7 @@ func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
         CheckedProductWriter { val completion <-; } -> completion;
         CheckedAggregateWriter { val completion <-; } -> completion;
         CheckedParserWriter { val completion <-; } -> completion;
-        CheckedRecordInspector { val completion <-; } -> completion;
+        CheckedArrayInspector { val completion <-; } -> completion;
         _ -> NoArrayRead
     }
 }
@@ -4447,7 +4454,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_readonly_array_query(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
-        prepare_record_inspector(nodes, names, selected, contracts, interface_count,
+        prepare_array_inspector(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
         if (case views[at] of { NoSuppliedView -> true; _ -> false }) {
             profile <- source_handle_signature(nodes, names, selected, work, at, used, revision, true);
@@ -4965,8 +4972,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
              next == count + 2u64 && work[parameter].next == no_node()) ||
             (source_writer == ProductWriter && work[parameter].next == no_node()) ||
             (source_writer == AggregateWriter && next == count + 2u64) ||
-            (source_writer == ParserWriter && next == count + owner_count) ||
-            (source_writer == RecordInspector && next == count + 5u64)) {
+            (source_writer == ParserWriter && next == count + owner_count)) {
             (contracts[next].value_kind <- record_type()):void
         };
         if (source_writer == AggregateWriter && owner_count == 3u64 && next == count + 5u64) {
@@ -4975,7 +4981,8 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (indexed_owners &&
             (contracts[next].value_kind == c_handle_type() ||
                 text_type(contracts[next].value_kind) || contracts[next].value_kind == array_type() ||
-                 contracts[next].value_kind == record_type() || contracts[next].value_kind == sum_type())) {
+                 contracts[next].value_kind == record_type() || contracts[next].value_kind == sum_type() ||
+                 (contracts[next].value_kind == builtin_u64() && contracts[next].field_mode == ReferenceFormal))) {
             if (inspect_signature(nodes, revision, used, contracts[next].owner_role, clause) != OwnerSignatureClause) return no_node();
             ordinal <- count_owner_clauses(nodes, clause.previous, used, revision);
             if (ordinal == no_node()) return no_node();
@@ -5225,7 +5232,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             CheckedProductWriter -> ProductWriter;
                             CheckedAggregateWriter -> AggregateWriter;
                             CheckedParserWriter -> ParserWriter;
-                            CheckedRecordInspector -> RecordInspector;
+                            CheckedArrayInspector -> ArrayInspector;
                             _ -> NoSourceWriter
                         };
                         scalar_predicate <- case views[at] of { CheckedScalarPredicate -> true; _ -> false };
@@ -5248,7 +5255,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                                 CheckedAggregateWriter { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedRecordInspector { val numeric_fault <-; } -> {
+                                CheckedArrayInspector { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
                                 CheckedParserWriter { val numeric_fault <-; } -> {
