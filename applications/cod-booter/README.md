@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 53 · Recorded: 2026-11-27 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 54 · Recorded: 2026-11-27 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r54 the [booter source ergonomics decision](../../CHANGELOG.md#h-booter-source-ergonomics-20261127) applies [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap), P-642/P-643, to the [next seed and library work](#booter-source-ergonomics). The trusted seed translates these author-facing forms for the booter. The r53 compiler roles and native interfaces continue.
 
 At r53 the [native package decision](../../CHANGELOG.md#h-native-package-toolchain-20261127) assigns the [production C, C++ and assembly toolset](docs/CompilerPipeline.md#codup-toolchain-for-native-packages) to the `codup` distribution under D-20-TARGET-TOOLCHAIN. The r52 repository roles, host/cross split and C implementation of the shared runtime continue.
 
@@ -97,6 +99,16 @@ Initial delivery requires the seed to reproducibly build and run the first CoD-w
 Representative source and invalid-input cases must behave as specified, and the booter source must pass the readability review. The booter's first self-build is a downstream milestone. DBMR persistence and broader LLVM binding coverage are separate from initial delivery.
 
 Build the initial booter with statically linked C providers generated from resolved CoD interface declarations. The seed and booter derive equivalent C contracts, including native handle constructor and destructor stubs. Separate handwritten C supplies the operations and their resource protocols. Calls in both directions use synchronous here semantics. CoD scopes the ownership of source, scratch and LLVM resources. The object writer can install the LLVM session as an owning effect for procedures that need it. See the [native handle and C record rules](docs/LLVMInterop.md#native-handles-and-c-records) for borrowed values and by-value records.
+
+### Booter source ergonomics
+
+**Return the package lookup result by value.** The first seed change supports an explicit independent finite-bits nominal result on an ordinary CoD call. In the [resolver](src/PackageModuleResolution.cod), write `-> val PackageResolution` and return the selected alternative. The [caller](src/PackageGraphPaths.cod) can then match the result of one invocation directly, retiring the one-element output array and its extra owner. Preserve the tag and its active fields, including both root indices on ambiguity. The caller receives the value on normal completion after cleanup. [Logical result destination](../../design/ConstructionAndAcquisition.md#caller-provided-result-destinations)
+
+**Deliver the generic linked deque in CoD.** The seed must compile the [whole deque library](../../design/CollectionsAndBuiltinContainers.md#bootstrap-linked-deque) and a booter client that uses it. The [source contract analysis](src/SourceContracts.cod) pushes and pops pending definition IDs at one end. The [completion checker](src/CompletionChecking.cod) appends pending IDs and consumes the oldest first, while its membership table needs indexed access by definition. The deque serves both end-access patterns. Keep indexed storage where the operation uses an ID as a subscript. Preserve the booter's bounded workspace when a client repeatedly reuses its work storage.
+
+**Schedule the generic growable vector after the regional allocator.** First provide a CoD-written root container that manages storage reuse inside its region. Build the generic vector on that facility. Whole-region acquisition, relocation and release retain their existing contracts. [Intra-region library policy](../../design/RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
+
+**Group related operands that share an owner.** In [`bind_graph_module`](src/ModuleGraph.cod), for example, the syntax nodes, name bindings and name work tables share `W`. An ordinary product in `W` can hold references to those tables and preserve readonly access to the nodes. If a callee must rebind a reference for its caller, give both access to the same field slot. Initializing a second reference field from the old slot gives the new field the current target and its own binding. [Reference binding and bits transfer](../../design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer)
 
 ### Bootstrap executable and entry names
 

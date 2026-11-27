@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 14 · 2026-11-27 · Source design draft
+Design revision 15 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r15 the [bootstrap collection decision](../CHANGELOG.md#h-booter-source-ergonomics-20261127) adds the [linked deque](#bootstrap-linked-deque) to D-30 for the real booter workloads under [D-20-BOOTSTRAP](DesignAuthorityRegistry.md#d-20-bootstrap), P-642/P-643. The r14 indexing rules and qualifications on other collection interfaces continue.
 
 At r14 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families), P-778/P-779, applies the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) to indexed read, indexed value transfer and indexed reference binding. Fixed methods precede variadic methods across the eligible receiver and free families. The r13 A/B outcomes and explicit expansion continue.
 
@@ -32,6 +34,10 @@ At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns 
 - Candidate P-589 derives from C-10/C-54/C-65. A caller can tell when it is inspecting an element and when it takes responsibility for that element. P-590 depends on CoD’s existing index domains, target access, owner and generator rules. [Charter §§3.3, 4.1, 4.3 and 8.1](RegionalSemanticPlatformCharter.md)
 - The confirmed instance is the exception aggregate’s independently owned members and read-only enumeration. Its confirmation covers that instance. General collection conformance, operation names, storage layout, native lowering and ABI remain unqualified. [H-DEFER-MEMBER-TAKE-20261118](../CHANGELOG.md#h-defer-member-take-20261118)
 - The visitor mutation rule applies to indirect calls. Acceptance checks owner identity after compaction. The wider visitor contract remains pending. [Engineering review](../CHANGELOG.md#k-collection-visitor-proof-20261118)
+
+## Bootstrap linked deque
+
+The first public generic linked collection for the booter is `deque<T>`, implemented in CoD. Its nodes are private. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public `list<T>`. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The notation `<T>` here identifies the element type parameter. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
 
 ## Builtin containers and related forms
 

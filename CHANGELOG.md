@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Prioritize source ergonomics in the bootstrap
+
+<a id="h-booter-source-ergonomics-20261127"></a>
+**H-BOOTER-SOURCE-ERGONOMICS-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user directed “应该先落实seed支持” for the independent nominal bits result and placed the generic CoD collection and its seed support ahead of the CoD-written regional storage manager and vector. The [previous resolver](https://github.com/complyue/cod-project/blob/eadfbd47806db457105204e49fba62e43ead830d/applications/cod-booter/src/PackageGraphPaths.cod#L200) receives its four-way result in a one-element array. The user identified ordinary products for related same-owner operands. Asked whether the first public linked collection should be a deque with private nodes and no separate list, the user confirmed “Yes, deque only for bootstrap”. [D-30 r15](design/CollectionsAndBuiltinContainers.md#bootstrap-linked-deque) records that choice. The [roadmap r53→54](applications/cod-booter/README.md#booter-source-ergonomics) continues the [booter-driven seed scope](#h-booter-driven-seed-20261119), the existing result-destination contract and whole-region ownership. D-20-BOOTSTRAP, P-642/P-643, registry r1367→1368.
+
 ## 2026-11-27 — Bootstrap recovery acceptance after seed retirement
 
 <a id="k-bootstrap-recovery-acceptance-20261127"></a>
