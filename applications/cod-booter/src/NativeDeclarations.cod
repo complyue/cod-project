@@ -2632,8 +2632,9 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
         bytes_owner <- preceding;
         (result <- inspect_signature(nodes, revision, used, clause.previous, clause)):void
     };
-    if (result != ValueResultClause || clause.annotation >= used ||
-        names[clause.annotation].kind != builtin_bool() ||
+    if (result != ValueResultClause || clause.annotation >= used) return;
+    val result_kind <- names[clause.annotation].kind;
+    if ((result_kind != builtin_bool() && result_kind != builtin_void()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
@@ -2651,13 +2652,21 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     val records <- readonly_formal_marker(nodes, names, input, input_owner, used, revision);
     if (records >= used ||
         !readonly_record_array(nodes, names, selected, contracts, published, aggregate, records, used, revision)) return;
-    val third <- work[input].next;
-    if (!aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, third, output_owner,
+    val output <- work[input].next;
+    if (!aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, output, output_owner,
         array_type(), false, used, revision)) return;
-    val fourth <- work[third].next;
-    if (!aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, fourth, record_owner,
-        record_type(), false, used, revision)) return;
-    val extent <- work[fourth].next;
+    val record <- work[output].next;
+    val record_marker <- reference_formal_marker(nodes, names, record, record_owner, false, used, revision);
+    ref record_type_info = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node(); };
+    if (record_marker >= used || !describe_type(nodes, names, selected, record_marker, 0u64, revision, used,
+        record_type_info) || record_type_info.kind != record_type()) return;
+    if (record_type_info.defining_module == 0u64) {
+        if (record_type_info.identity >= used || aggregate[record_type_info.identity] != CLayoutBitsRecord) return
+    } else {
+        if (checked_aggregate_storage(contracts, published, record_type_info.defining_module,
+            record_type_info.identity, record_type()) != CLayoutBitsRecord) return
+    };
+    val extent <- work[record].next;
     if (!independent_scalar_formal(nodes, names, extent, used, revision, builtin_u64())) return;
     val parameter <- work[extent].next;
     val type <- no_node();

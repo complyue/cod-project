@@ -2928,8 +2928,9 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
     val owners <- contracts[header].owner_count;
+    val result <- contracts[header].result_kind;
     if ((owners != 3u64 && owners != 4u64) || count <= owners || count >= published - header ||
-        contracts[header].source_writer != ParserWriter || contracts[header].result_kind != builtin_bool() ||
+        contracts[header].source_writer != ParserWriter || (result != builtin_bool() && result != builtin_void()) ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
@@ -2958,7 +2959,6 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
     if (!published_record_array(contracts, published, contracts[input].type_module, contracts[input].type_identity) ||
         output_array >= published || contracts[output_array].interface_kind != array_type() ||
         contracts[output_array].array_index_kind != builtin_u64() ||
-        contracts[record].type_module != contracts[header].defining_module ||
         checked_aggregate_storage(contracts, published, contracts[record].type_module,
             contracts[record].type_identity, record_type()) != CLayoutBitsRecord)
         return no_node();

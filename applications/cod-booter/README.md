@@ -311,7 +311,9 @@ The checked readonly byte-reader contract carries possible fatal arithmetic sepa
 
 Both source commands check the unchanged calls to `recover_syntax` and `recover_syntax_until`. The completed parser contract carries the readonly token array, the writable syntax array and initialized result record, and the independent value inputs. `recover_syntax` also receives the readonly source bytes. A by-value recovery role keeps the canonical identity of its enum. The call evaluates operands in written order, and a failed operand prevents entry.
 
-The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return. Both source routes reach the imported void-returning `parse_scoped_procedure_signature` call at `ExpressionParser.cod:1540:5`. Executable object checking has a separate admission path.
+The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return.
+
+Both source commands check calls to `parse_scoped_procedure_signature` and `parse_callable_signature` through their completed void parser-writer contracts. The writable `ParseResult` loan uses its defining module's published C-layout schema. The ordinary parameter-list parser also serves nested `here` signatures, with their existing restrictions on nested `here` and variadics. The unchanged `ExpressionParser`, `Frontend` and `__main__` first stop at the indexed `c_linkage` call in `ExpressionParser.cod:1607:25`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

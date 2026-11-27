@@ -14,7 +14,7 @@ using "./ParserInput.cod" {
 };
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, NodeId, syntax_first, syntax_past, exception_result_node, no_node, ref_result_node,
-    result_clause_node, throws_clause_node, BindingSites, inspect_binding, is_here_formal,
+    result_clause_node, throws_clause_node, BindingSites, inspect_binding,
     formal_variadic_at,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
@@ -154,36 +154,61 @@ export func parse_parameter(source:const SourceBytes in S, tokens:const Tokens i
     return result.diagnostic == 0u8;
 }
 
-func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
-                      nodes:ExprNodes in A, result:ParseResult in R,
-                      past:UInt64, allow_here:bool, multiple_here:bool, allow_variadic:bool) -> UInt64
-    where {const owner S, const owner T, owner A, owner R} {
-    val last <- no_node();
-    if (punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return last; # ')'
-    val at <- result.next;
+func parameter_delimiter(source:const SourceBytes in S, tokens:const Tokens in T, nodes:const ExprNodes in A,
+    result:ParseResult in R, past:UInt64, last:UInt64, allow_variadic:bool) -> UInt8
+    where {const owner S, const owner T, const owner A, owner R} {
+    val delimiter <- punct_at(source, tokens, result.next, past);
+    if ((formal_variadic_at(nodes, result.revision, result.used, last) != no_node() &&
+         (!allow_variadic || delimiter != RIGHT_PAREN)) ||
+        (delimiter != RIGHT_PAREN && delimiter != COMMA)) {
+        result.diagnostic <- expected_parameter_list();
+        return 0u8
+    };
+    if (delimiter == COMMA) { (result.next <- result.next + 1u64):void };
+    return delimiter
+}
+
+func parse_ordinary_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
+    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, preceding:UInt64, allow_variadic:bool)
+    -> UInt64 where {const owner S, const owner T, owner A, owner R} {
+    val last <- preceding;
+    if (last == no_node() && punct_at(source, tokens, result.next, past) == RIGHT_PAREN) return last;
     val delimiter <- 0u8;
     for (unused in result.next .. past) {
-        at <- result.next;
-        if (allow_here && (last == no_node() || (multiple_here && is_here_formal(nodes, result.used, last))) &&
-            at < past && here_word(source, tokens[at]) && punct_at(source, tokens, at + 1u64, past) != COLON) {
-            parse_here_parameter(source, tokens, nodes, result, past, last);
-            if (result.diagnostic != 0u8) return no_node();
-        } else {
-            if (!parse_parameter(source, tokens, nodes, result, past, last, false)) return no_node();
-        };
+        if (!parse_parameter(source, tokens, nodes, result, past, last, false)) return no_node();
         last <- result.root;
-        delimiter <- punct_at(source, tokens, result.next, past);
-        if (formal_variadic_at(nodes, result.revision, result.used, last) != no_node() &&
-            (!allow_variadic || delimiter != RIGHT_PAREN)) {
-            result.diagnostic <- expected_parameter_list();
-            return no_node()
-        };
-        if (delimiter == RIGHT_PAREN) return last; # ')'
-        if (delimiter != COMMA) { result.diagnostic <- expected_parameter_list(); return no_node(); } else {}; # ','
-        result.next <- result.next + 1u64;
+        delimiter <- parameter_delimiter(source, tokens, nodes, result, past, last, allow_variadic);
+        if (delimiter == RIGHT_PAREN) return last;
+        if (delimiter != COMMA) return no_node()
     };
     result.diagnostic <- expected_parameter_list();
-    return no_node();
+    return no_node()
+}
+
+func parse_parameters(source:const SourceBytes in S, tokens:const Tokens in T,
+    nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, multiple_here:bool, allow_variadic:bool)
+    -> UInt64 where {const owner S, const owner T, owner A, owner R} {
+    val last <- no_node();
+    val at <- result.next;
+    val delimiter <- 0u8;
+    # Only the leading run can contain here formals. Their nested lists are
+    # ordinary parameters and enter that parser directly.
+    for (unused in result.next .. past) {
+        at <- result.next;
+        if (at >= past || !here_word(source, tokens[at]) ||
+            punct_at(source, tokens, at + 1u64, past) == COLON)
+            return parse_ordinary_parameters(source, tokens, nodes, result, past, last, allow_variadic);
+        parse_here_parameter(source, tokens, nodes, result, past, last);
+        if (result.diagnostic != 0u8) return no_node();
+        last <- result.root;
+        delimiter <- parameter_delimiter(source, tokens, nodes, result, past, last, allow_variadic);
+        if (delimiter == RIGHT_PAREN) return last;
+        if (delimiter != COMMA) return no_node();
+        if (!multiple_here)
+            return parse_ordinary_parameters(source, tokens, nodes, result, past, last, allow_variadic)
+    };
+    result.diagnostic <- expected_parameter_list();
+    return no_node()
 }
 
 func start_parameter_list(source:const SourceBytes in S, tokens:const Tokens in T,
@@ -341,7 +366,7 @@ func parse_here_parameter(source:const SourceBytes in S, tokens:const Tokens in 
     val name <- start_parameter_list(source, tokens, nodes, result, past, true, false);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, false, false, false);
+    val parameters <- parse_ordinary_parameters(source, tokens, nodes, result, past, no_node(), false);
     if (result.diagnostic != 0u8) return;
     finish_callable_head(tokens, nodes, result, name, parameters, open);
     if (result.diagnostic != 0u8) return;
@@ -371,7 +396,7 @@ func parse_callable_head(source:const SourceBytes in S, tokens:const Tokens in T
     val name <- start_parameter_list(source, tokens, nodes, result, past, false, operators);
     if (name == no_node()) return;
     val open <- tokens[result.next - 1u64].first;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, !native, !native);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, !native, !native);
     if (result.diagnostic != 0u8) return;
     finish_callable_head(tokens, nodes, result, name, parameters, open);
 }
@@ -480,7 +505,7 @@ export func parse_scoped_procedure_signature(source:const SourceBytes in S, toke
     where {const owner S, const owner T, owner A, owner R} {
     val open <- result.next;
     result.next <- open + 1u64;
-    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, true, true);
+    val parameters <- parse_parameters(source, tokens, nodes, result, past, true, true);
     if (result.diagnostic != 0u8) return;
     val close <- result.next;
     ref entries = make NoLink {};
