@@ -1740,11 +1740,11 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
 
 func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in L,
     facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64,
-    allow_writable_array:bool, readonly_procedure:bool) -> bool
+    allow_writable_array:bool, scoped_procedure:bool, mixed_aggregate_loan:bool) -> bool
     where {const owner N, const owner L, const owner F} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
-        (!callable.function_form && !readonly_procedure) || callable.body == no_node()) return false;
+        (!callable.function_form && !scoped_procedure && !mixed_aggregate_loan) || callable.body == no_node()) return false;
     val procedure_call <- !callable.function_form;
     val result <- facts[definition].kind;
     if (result != void_result() && !scalar_kind(result) && result != source_u32()) return false;
@@ -1765,9 +1765,16 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
             if (kind == product_kind()) {
                 product <- facts[parameter].identity;
                 if (reception != borrowed_ref() || facts[parameter].identity_module != 0u64 ||
-                    product >= used || !facts[product].bits_product ||
-                    (procedure_call && (facts[parameter].target_readonly == 0u8 ||
-                        owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint))) return false
+                    product >= used || !facts[product].bits_product) return false;
+                if (procedure_call) {
+                    if (facts[parameter].target_readonly != 0u8) {
+                        if (owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
+                            return false
+                    } else {
+                        if (!mixed_aggregate_loan || owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
+                            return false
+                    }
+                }
             } else {
                 if (scalar_kind(kind) || kind == source_u32()) {
                     if (reception != local_place() && (procedure_call || reception != borrowed_ref())) return false
@@ -1775,11 +1782,13 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
                     if ((kind != source_array_loan() && kind != source_sum_target() &&
                          kind != source_product_loan() && kind != string_kind()) || reception != borrowed_ref())
                         return false;
-                    if (procedure_call && kind != source_array_loan() && kind != source_product_loan()) return false;
+                    if (procedure_call && kind != source_array_loan() && kind != source_product_loan() &&
+                        !(mixed_aggregate_loan && kind == source_sum_target() &&
+                          facts[parameter].target_readonly != 0u8)) return false;
                     if (facts[parameter].target_readonly == 0u8) {
-                        if (procedure_call) return false;
+                        if (procedure_call && !mixed_aggregate_loan) return false;
                         if (kind != source_product_loan() &&
-                            (!allow_writable_array || kind != source_array_loan() ||
+                            ((!allow_writable_array && !mixed_aggregate_loan) || kind != source_array_loan() ||
                              inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
                              syntax.mode != ReferenceFormal)) return false;
                         if (owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
@@ -1857,7 +1866,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L,
     facts:OperandFacts in F, owners:CallOwners in O, cases:const ConstructorCaseFacts in C, argument:UInt64, formal:UInt64,
     invocation:UInt64, used:UInt64, revision:UInt64, allow_owned_loan:bool,
-    definition:UInt64, first:UInt64, source_only:bool, scoped_product_call:bool, slot_call:bool) -> UInt8
+    definition:UInt64, first:UInt64, source_only:bool, scoped_product_call:bool, slot_call:bool, mixed_aggregate_loan:bool) -> UInt8
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O, const owner C} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
@@ -1878,7 +1887,8 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (operand < used &&
         (facts[operand].kind == received_sum() || facts[operand].kind == received_product())) {
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, false, false))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision,
+                false, false, mixed_aggregate_loan))
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
     };
@@ -1905,7 +1915,8 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         # against its own actual when that argument is prepared.
         val allow_writable_array <- scoped_product_call && (forwarded || indexed);
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, allow_writable_array, scoped_product_call))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision,
+                allow_writable_array, scoped_product_call, mixed_aggregate_loan))
             return unproved_owner();
         if ((kind != source_product_loan() && kind != product_kind()) ||
             facts[formal].reception != borrowed_ref() ||
@@ -1956,7 +1967,9 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (facts[actual].kind != kind || facts[actual].identity != facts[formal].identity ||
             facts[actual].identity_module != facts[formal].identity_module)
                 return wrong_operand_type();
-        if (facts[actual].reception != borrowed_ref()) return unproved_owner();
+        if (facts[actual].reception != borrowed_ref() ||
+            (mixed_aggregate_loan && (facts[actual].target_presence != present_target() || facts[actual].reservation != no_node())))
+            return unproved_owner();
         if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8)
             return expected_writable_place();
         val receives_slot <- false;
@@ -2437,7 +2450,7 @@ func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
 func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        selected:const SelectedExports in E, facts:OperandFacts in F,
                        owners:CallOwners in O, views:const SuppliedViews in H, cases:const ConstructorCaseFacts in C, at:UInt64, callee:UInt64,
-                           arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
+                           arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool, mixed_aggregate_loan:bool) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F, owner O,
         const owner H, const owner C} {
     if (names[callee].kind == ordinary_selection()) {
@@ -2512,12 +2525,12 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         (checks_slot_call <- prepared_array_slot_signature(nodes, links, views,
             callable.signature, used, revision)):void
     };
-    val checks_scoped_call <- source_only && at < intrinsic (len)(cases) &&
+    val checks_scoped_call <- mixed_aggregate_loan || (source_only && at < intrinsic (len)(cases) &&
         (case cases[at] of {
             FreshSumInvocation { val target <- definition; } -> target == definition;
             ProductLoanInvocation { val target <- definition; } -> target == definition;
             _ -> false
-        });
+        }));
     val can_enter <- true;
     val diagnostic <- 0u8;
     val input <- no_node();
@@ -2544,7 +2557,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (can_enter) {
             diagnostic <- check_argument(nodes, names, selected, links, facts, owners, cases, argument,
                 formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only,
-                checks_scoped_call, checks_slot_call);
+                checks_scoped_call, checks_slot_call, mixed_aggregate_loan);
             if (diagnostic != 0u8) return diagnostic;
             loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
             loans_scoped_aggregate <- loans_scoped_aggregate || facts[argument].loans_scoped_aggregate;
@@ -6027,7 +6040,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
                    cases:const ConstructorCaseFacts in C, interfaces:const ModuleInterfaces in I,
-                       source_only:bool,
+                       source_only:bool, mixed_aggregate_loan:bool,
                    at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
         owner O, const owner X, const owner H, const owner C, const owner I} {
@@ -6245,13 +6258,13 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                         !published_syntax_id(nodes, revision, used, arguments)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_direct_call(source, nodes, names, links, selected, facts, owners, views, cases,
-                        at, callee.index, arguments.index, used, revision, source_only);
+                        at, callee.index, arguments.index, used, revision, source_only, mixed_aggregate_loan);
                 };
                 (EmptyCall { val callee <- callee; }) -> {
                     if (!published_syntax_id(nodes, revision, used, callee)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_direct_call(source, nodes, names, links, selected, facts, owners, views, cases,
-                        at, callee.index, no_node(), used, revision, source_only);
+                        at, callee.index, no_node(), used, revision, source_only, false);
                 };
                 (HereInvocation { val call <- call; }) -> {
                     return check_native_here_value(nodes, links, facts, at, call, used, revision)
@@ -6527,7 +6540,8 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
                                 at, used, revision, context)) return false;
             } else {
                 diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners,
-                    fields, views, cases, interfaces, intrinsic (len)(demand) != 0u64, at, used, revision);
+                    fields, views, cases, interfaces, intrinsic (len)(demand) != 0u64,
+                    at < intrinsic (len)(demand) && demand[at].mixed_aggregate_loan, at, used, revision);
                 if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
             };
             complete_enum_backing(links, interfaces, published, facts, at, used);

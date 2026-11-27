@@ -22,7 +22,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -34,6 +34,7 @@ export data DeclarationDemand {
     declared_failure:UInt64;
     receipt_body:bool;
     product_body_dependency:bool;
+    mixed_aggregate_loan:bool;
     slot_body:bool;
     signature:bool;
     body:bool;
@@ -106,24 +107,35 @@ func family_needs_checked_operands(links:const NameWork in W, demand:const Decla
     return true
 }
 
-func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in W, cases:const ConstructorCaseFacts in C, tail:UInt64, used:UInt64,
-    revision:UInt64) -> bool where {const owner N, const owner B, const owner W, const owner C} {
+    revision:UInt64, mixed_aggregate:bool in P) -> bool
+    where {const owner N, const owner B, const owner W, const owner C, owner P} {
+    mixed_aggregate <- false;
     if (intrinsic (len)(cases) == 0u64) return false;
     ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, tail, ArgumentSequence, argument)) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val receipt <- no_node();
+    val needs_receipt <- false;
     for (unused in 0u64 .. used) {
         if (argument >= used || inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return false;
-        if (entry.item < intrinsic (len)(cases) && (case cases[entry.item] of {
-            # An imported array loan depends on its callee only when the
-            # caller already has a source body check.
-            IndexedProductLoan { val consumer <-; val array_module <-; } ->
-                consumer == argument && array_module == 0u64;
-            _ -> false
-        })) return true;
+        if (entry.item < intrinsic (len)(cases)) {
+            case cases[entry.item] of {
+                # Imported indexed loans keep their existing demand rule.
+                IndexedProductLoan { val consumer <-; val array_module <-; } -> {
+                    if (consumer == argument && array_module == 0u64) { (needs_receipt <- true):void }
+                };
+                InlineProductField { val type <- value_type; } -> {
+                    if (type.kind == record_type()) { (mixed_aggregate <- true):void }
+                };
+                CaseProductField { val type <- value_type; } -> {
+                    if (type.kind == record_type()) { (mixed_aggregate <- true):void }
+                };
+                _ -> {}
+            }
+        };
         if (names[entry.item].kind == formal_binding()) {
             receipt <- names[entry.item].declaration;
             if (receipt < intrinsic (len)(cases) &&
@@ -131,18 +143,23 @@ func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBi
                     InlineProductFormal { val readonly <-; val demand_on_use <-; } -> !readonly && demand_on_use;
                     _ -> false
                 }))
-                return true
+                { (needs_receipt <- true):void }
         };
         if (names[entry.item].kind == local_binding()) {
             receipt <- names[entry.item].declaration;
-            if (receipt < entry.item && receipt < intrinsic (len)(cases) &&
-                (case cases[receipt] of {
-                    CaseFieldReceipt { val type <- value_type; } ->
-                        { type.kind == record_type() || type.kind == sum_type() };
-                    _ -> false
-                })) return true
+            if (receipt < entry.item && receipt < intrinsic (len)(cases)) {
+                case cases[receipt] of {
+                    CaseFieldReceipt { val type <- value_type; } -> {
+                        if (type.kind == record_type() || type.kind == sum_type()) {
+                            mixed_aggregate <- true;
+                            (needs_receipt <- true):void
+                        }
+                    };
+                    _ -> {}
+                }
+            }
         };
-        if (argument == tail || links[argument].next <= argument) return false;
+        if (argument == tail || links[argument].next <= argument) return needs_receipt;
         (argument <- links[argument].next):void
     };
     return false
@@ -268,6 +285,8 @@ export func discover_declaration_demand(
     val callee <- no_node();
     val transfer <- InvalidAssignment;
     val aggregate_operation <- false;
+    val needs_receipt <- false;
+    ref mixed_aggregate = make bool { false };
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
@@ -312,15 +331,26 @@ export func discover_declaration_demand(
             };
             checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
                 prepared_byte_function(views, definition, true);
-            if (shape == DirectInvocationReady &&
-                ((site < intrinsic (len)(cases) &&
-                  (case cases[site] of { FreshSumInvocation { val selected <- definition; } -> selected == definition; _ -> false })) ||
-                 passes_scoped_aggregate_loan(nodes, names, links, cases, invocation.arguments, used, revision))) {
-                if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
-                    problem <- site;
-                    return false
+            if (shape == DirectInvocationReady) {
+                needs_receipt <- collect_aggregate_loan_demand(nodes, names, links, cases,
+                    invocation.arguments, used, revision, mixed_aggregate);
+                if (mixed_aggregate && links[definition].next_method == no_node() &&
+                    inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
+                    demand[site].mixed_aggregate_loan <- true;
+                    demand[site].product_body_dependency <- true;
+                    (checked_call <- true):void
                 };
-                (checked_call <- true):void
+                if (needs_receipt ||
+                    (site < intrinsic (len)(cases) && (case cases[site] of {
+                        FreshSumInvocation { val selected <- definition; } -> selected == definition;
+                        _ -> false
+                    }))) {
+                    if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
+                        problem <- site;
+                        return false
+                    };
+                    (checked_call <- true):void
+                }
             }
         };
         if (prepared_array_construction(views, site) &&

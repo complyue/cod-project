@@ -1136,9 +1136,9 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
     published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
-    used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
+    used:UInt64, revision:UInt64, first:UInt64 in P, report:DeclaredExpressionResult in R) -> bool
     where {const owner S, const owner N, const owner B, const owner E, const owner W,
-           const owner G, const owner A, owner F, owner R} {
+           const owner G, const owner A, owner F, owner P, owner R} {
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
@@ -1199,7 +1199,8 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     remember_indexed_product_loan(nodes, facts, site, loan, record, access == (WritableLexicalArray:LexicalArrayAccess) ||
                         (case facts[site] of { IndexedFieldDestination -> true; _ -> false }));
                     remember_inline_product_field(facts, site, selection.receiver,
-                        selection.field, ordinal, readonly, record, type)
+                        selection.field, ordinal, readonly, record, type);
+                    if (type.kind == record_type() && first == no_node()) { (first <- site):void }
                 }
             } else {};
             if (origin < site && describe_received_product(facts, origin, type)) {
@@ -1973,6 +1974,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
               inspect_field_selection(nodes, revision, used, choice.subject, projection)))) return true;
         if (inspect_sequence_entry(nodes, revision, used, at, argument) == ArgumentSequence &&
             (inspect_index_selection(nodes, revision, used, argument.item, indexed) ||
+             inspect_field_selection(nodes, revision, used, argument.item, projection) ||
              (inspect_construction(nodes, revision, used, argument.item, construction) == BracedConstruction &&
               construction.placement == no_node() && construction.queried_operand == no_node()))) return true
     };
@@ -2139,6 +2141,6 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             }
         }
     };
-    return first == no_node() || prepare_received_fields(source, nodes, names, selected, work,
-        spellings, spelling_used, interfaces, published, aggregate, facts, used, revision, report)
+    return prepare_received_fields(source, nodes, names, selected, work,
+        spellings, spelling_used, interfaces, published, aggregate, facts, used, revision, first, report)
 }
