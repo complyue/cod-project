@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Construct an empty deque through its initializer and distinguish sum payload forms
+
+<a id="h-deque-ctor-sum-braces-20261127"></a>
+**H-DEQUE-CTOR-SUM-BRACES-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user requested deque construction through a ctor, the shorthand `make Nothing in r`, and confirmed “positional 和 labeled 语法禁止互通” and “Maybe[T] 也是容器，它的 T 也应该仅 val 语义”. [D-30 r21→22](design/CollectionsAndBuiltinContainers.md#bootstrap-linked-deque) replaces caller-written deque initialization with its public zero-argument ctor and applies value-item storage to Maybe. [D-07 r233→234](design/DomainLanguageDesign.md#positional-and-labeled-sum-payloads) requires direct initialization and case reception to follow the alternative’s declared payload form. [D-22 r74→75](design/ConstructionAndAcquisition.md#typed-reservation-and-completed-construction) completes a bare fieldless alternative when it has zero visible initializer overloads. Constructor-backed reservation, ordinary owner/transfer rules and the [prior type-application grammar](https://github.com/complyue/cod-project/blob/6a9042c228f237a4720f227ba7353766e2d86ede/design/DomainLanguageDesign.md#brackets-in-generic-type-heads) continue. P-502/P-590/P-601/P-602/P-625/P-626, registry r1375→1376.
+
 ## 2026-11-27 — Use brackets in generic product and type-application heads
 
 <a id="h-generic-type-brackets-20261127"></a>
