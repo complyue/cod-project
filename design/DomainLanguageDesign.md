@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 230
+Discussion revision: 231
 
 Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r231 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies the [confirmed fixed-arity rule](CollectionsAndBuiltinContainers.md#fixed-arity-oo-indexed-reads) to OO indexed reads. Other operations in the r230 receiver model retain their rules.
 
 At r230 the [receiver dispatch model](#how-receiver-dispatch-works) brings together the confirmed receiver, storage inheritance, module lookup and indexing decisions. [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) and [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) continue their qualified scopes. The [named member fallback decision](../CHANGELOG.md#h-named-member-free-fallback-20261127) adds [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback), P-780/P-781. A dotted call can use the visible free callable. The production compiler reports that choice. Target identity, access, lifetime and ordinary call preparation continue from r229. Compiler delivery is tracked separately.
 
@@ -286,7 +288,7 @@ CoD’s OO model gives the receiver a part in selecting the method family. An OO
 | `x.id` | A stored field is selected through the receiver’s declared view. A computed accessor invokes the visible accessor for that member. Stored fields and computed accessors of the same spelling conflict when brought together. |
 | `x.quote(args)` | Try applicable members of the actual receiver, then defaults on its declared abstractions, then the visible free `quote` family with the receiver as its first argument. An explicit `super.quote(args)` starts at the lexical storage parent. |
 | `x(args)` for a data receiver | The selected type carries its own `(())` family. A forwarding `here` call retains the receiver and the supplying view. |
-| `x[i]`, `x[i] <- v`, `x[i] = target` | Indexed read, indexed value transfer and indexed reference binding each have their own receiver family. An applicable concrete method wins, followed by applicable defaults on declared abstractions, then the visible free operator family. |
+| `x[i]`, `x[i] <- v`, `x[i] = target` | Indexed read, indexed value transfer and indexed reference binding each have their own receiver family. For an ordinary indexed read, compare fixed-count and variadic OO candidates across receiver levels. See the [per-operation priority](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) for abstract defaults and free operators. |
 | `make T(args)` | The selected constructor initializes a destination under its owner. Constructor `super(args)` initializes the embedded direct parent. |
 
 Two calls on the same object illustrate the distinction. Given a `Child` with its own stored `id` and `score` method, a `Parent` reference reads the parent’s `id` but can invoke the child’s `score()`. An ancestor implementation reached by `super` can itself call an ordinary member on `self`, which again uses the actual child. Both references retain the same object throughout. Selecting a more specific body preserves readonly access. [Field shadowing](#product-storage-inheritance) · [Super-calls](#super-calls-in-oo-bodies)
@@ -299,7 +301,7 @@ Suppose a module can see a free `quote(x)` returning 9. For an actual receiver w
 
 The production compiler (`e-wrks/cod`) emits a **warning by default** at a dotted call site that can select a free implementation. A compile-time option lowers this finding to **info**. Identify the written member and the resolved free callable by its canonical name. At a generic site, say which receiver can reach the free callable. Rewriting that site as `quote(x)` would also change the receivers that currently use members. Suggest an explicit free call only where it preserves the intended behavior. When all admitted targets use members, there is no fallback to report. Both severities preserve the selected method and its execution. The diagnostic applies to named dotted calls. An intentional free call and an indexed write reaching its free operator have their own call forms. Seed and booter delivery carry no requirement to issue this production diagnostic.
 
-The storage-parent intersection remains open: if a child declares no indexed read method, its product parent accepts an integer pack and its declared abstraction supplies a fixed one-index default, which method receives `child[1]`? The existing [fixed and variadic examples](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) specify the case of a concrete type’s own method. Generalizing exact-count priority across families would change those examples and requires a separate decision.
+The [indexed read examples](CollectionsAndBuiltinContainers.md#fixed-arity-oo-indexed-reads) cover both an inherited pack and a pack declared directly on the child. An applicable fixed one-index abstract default wins in both cases.
 
 #### Constructor and call-operator method families
 

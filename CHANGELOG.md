@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Prefer the matching fixed OO method for an ordinary indexed read
+
+<a id="h-fixed-arity-oo-indexed-reads-20261127"></a>
+**H-FIXED-ARITY-OO-INDEXED-READS-20261127.** The project user [confirmed](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “确认A=2,B=2。 C的代码写出来看”. In the [two programs](design/CollectionsAndBuiltinContainers.md#fixed-arity-oo-indexed-reads), the fixed one-index abstract default wins whether the variadic indexed read belongs to the concrete child or its storage parent. This qualifies the [prior family priority](https://github.com/complyue/cod-project/blob/41dd59d7491cfbf9708e63518b5bc504805dd1e8/design/CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) for this operation. Explicit expansion still selects variadic methods. C compares a concrete pack with a free fixed method and awaits its own decision. D-30r13, D-07r231, P-778/P-779. Registry r1359→1360.
+
 ## 2026-11-27 — Interpret numeric literals in context and group before recognizing their sign
 
 <a id="h-numeric-literals-and-signs-20261127"></a>
