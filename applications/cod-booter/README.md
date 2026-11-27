@@ -313,7 +313,9 @@ Both source commands check the unchanged calls to `recover_syntax` and `recover_
 
 The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return.
 
-Both source commands check calls to `parse_scoped_procedure_signature` and `parse_callable_signature` through their completed void parser-writer contracts. The writable `ParseResult` loan uses its defining module's published C-layout schema. The ordinary parameter-list parser also serves nested `here` signatures, with their existing restrictions on nested `here` and variadics. The unchanged `ExpressionParser`, `Frontend` and `__main__` first stop at the indexed `c_linkage` call in `ExpressionParser.cod:1607:25`. Executable object checking has a separate admission path.
+Both source commands check calls to `parse_scoped_procedure_signature` and `parse_callable_signature` through their completed void parser-writer contracts. The writable `ParseResult` loan uses its defining module's published C-layout schema. The ordinary parameter-list parser also serves nested `here` signatures, with their existing restrictions on nested `here` and variadics.
+
+The readonly predicate contract covers `c_linkage` with the byte array and the exact indexed token loan. It records possible bounds failure and fatal numeric failure independently from completed body facts. A failure selecting the token precedes invocation. Both source commands accept the unchanged `ExpressionParser`. The unchanged `Frontend` and `__main__` first stop at `valid_module_path` in `ModuleParser.cod:231:10`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
