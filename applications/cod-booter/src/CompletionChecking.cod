@@ -21,6 +21,7 @@ using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
 using "./ExceptionTypes.cod" ExceptionType;
+using "./NativeDeclarations.cod" has_prepared_native_loans;
 using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, array_reader_result_kind, checked_literal_call };
 using "./ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction,
@@ -862,6 +863,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     if (inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation) {
+        if (facts[at].loans_scoped_aggregate && has_prepared_native_loans(views, at) &&
+            (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 ||
+             sites[at].in_supplied_body)) return unproved_deferred_error();
         if (prepared_array_length_call(views, at)) {
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
                 return unproved_deferred_error();

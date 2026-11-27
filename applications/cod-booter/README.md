@@ -329,7 +329,9 @@ Both source commands check named `UInt64` arrays with `UInt64` indices in the sa
 
 Both source commands also check a lexically allocated named array with `UInt64` indices and a finite-bits C-layout record element. The braced fill must initialize that exact record. The checker keeps the written length and fill order, and checks indexed scalar field reads and writes against the selected row, bounds and access. The ordering array, heap helpers and diagnostic row preparation pass in a reduction using the imported parser operations.
 
-The full CLI source commands first stop at the native `append_symbol_diagnostic` array argument in `NativeDiagnostics.cod:74:31`. The reduced row preparation supplies its positions directly and consumes the rows in CoD. Importing the original position writer and passing those rows to the native reporting function still have separate source-check limits.
+For a same-revision native function with readonly array loans and no callback or declared failure, both source commands check the ordered operands against the selected signature. The supported operands include handles, by-value scalars, existing formal views and direct lexical arrays of checked C-layout rows. Each array loan keeps its nominal type, prepared backing and actual owner. Repeated roles require the same actual owner. A failed operand prevents the call. The supported calls borrow synchronously.
+
+The full CLI source commands first stop at the imported `locate_source_position` call in `NativeDiagnostics.cod:69:5`. The ordered-report reduction supplies positions directly and passes the prepared rows to the original native reporting function. The symbol-report reduction checks the native call with its four readonly byte-array loans.
 
 ### Imported array length families
 

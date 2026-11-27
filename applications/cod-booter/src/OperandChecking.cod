@@ -130,10 +130,10 @@ using "./NativeDeclarations.cod" {
     prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array,
 };
 using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement } };
-using "./NativeDeclarations.cod" source_literal_kind;
+using "./NativeDeclarations.cod" { source_literal_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
-    SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ImportedNativeU64,
+    SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand, ImportedNativeU64,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, CheckedWriterCall, CheckedArrayReaderCall, ImportedProductWriter
 };
@@ -1978,6 +1978,19 @@ func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBind
     if (!readonly && facts[value].target_readonly != 0u8) return expected_writable_place();
     if (names[value].kind == formal_binding()) return 0u8;
     val binding <- names[value].declaration;
+    if (names[value].kind == local_binding() && binding < value && readonly &&
+        enclosing_callable(nodes, names, names[binding].scope) == enclosing_callable(nodes, names, names[call].scope)) {
+        ref local = make LocalBindingSites {
+            binding <- no_node(); initializer <- no_node(); mode <- ReferenceLocal; declaration_const <- false
+        };
+        if (inspect_local_binding(nodes, revision, used, binding, local) && local.mode == ReferenceLocal &&
+            local.initializer < binding && allocated_source_array(facts, local.initializer) &&
+            facts[local.initializer].owner == facts[value].owner &&
+            (case views[local.initializer] of {
+                PreparedArrayConstruction { val element <-; } -> element == (ProductArrayElement:ArraySlotElement);
+                _ -> false
+            })) return 0u8
+    };
     if (names[value].kind != here_receiver_binding() || binding >= used) return unproved_owner();
     return case views[binding] of {
         SuppliedArrayView { val body <- body; } -> {
@@ -1998,12 +2011,26 @@ func first_native_role(links:const NameWork in L, views:const SuppliedViews in H
     for (unused in 0u64 .. position) {
         if (previous >= argument) return no_node();
         if (case views[previous] of {
-            ImportedNativeOperand { val earlier <- owner_role; } -> earlier == role;
+            PreparedNativeOperand { val earlier <- owner_role; } -> earlier == role;
             _ -> false
         }) return previous;
         previous <- links[previous].next
     };
     return argument
+}
+
+func prepare_native_scalar_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    argument:UInt64, input:UInt64, kind:UInt8, module:UInt64, identity:UInt64) -> UInt8
+    where {const owner N, owner F} {
+    val expected <- source_scalar_kind(kind);
+    if (expected == 0u8) return wrong_operand_type();
+    if (!compatible_operand_nominal(facts, input, expected, identity, module)) return wrong_operand_type();
+    val diagnostic <- if (expected == source_u32()) { require_source_u32(nodes, facts, input, true) }
+        else { require_value_bits(nodes, facts, input, expected) };
+    if (diagnostic != 0u8) return diagnostic;
+    set_fact(facts, argument, expected, independent_value(), no_node(), identity, 0u8);
+    facts[argument].identity_module <- module;
+    return 0u8
 }
 
 func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2033,7 +2060,7 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
             set_result(facts, argument, scalar_u64());
             0u8
         };
-        ImportedNativeOperand {
+        PreparedNativeOperand {
             val expected_call <- call_site; val origin <- revision; val ordinal <- position;
             val expected_input <- input; val kind <- kind; val role <- owner_role;
             val owner <- owner_site; val module <- type_module; val identity <- type_identity;
@@ -2045,6 +2072,8 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
                 set_result(facts, argument, never_result());
                 return 0u8
             };
+            if (role == no_node())
+                return prepare_native_scalar_operand(nodes, facts, argument, input, kind, module, identity);
             if (kind == c_handle_type()) {
                 if (owner >= used) return unproved_owner();
                 set_fact(facts, argument, source_handle_loan(), borrowed_ref(), owner, identity, 0u8);
@@ -2106,7 +2135,7 @@ func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBin
     selected_module:UInt64, selected_definition:UInt64, at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner H} {
     return case views[at] of {
-        PreparedImportedNativeOperation {
+        PreparedNativeLoanCall {
             val module <- module; val definition <- definition;
             val origin <- revision; val activation <- activation; val arity <- arity;
         } -> {
@@ -2367,8 +2396,14 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (links[at].expects_here != 0u8)
             return check_prepared_here_call(nodes, links, facts, at, used, revision);
         val provider <- names[callee].declaration;
-        if (provider >= used || !prepared_native_operation(views, at,
-            provider)) return unproved_call_target();
+        if (provider >= used) return unproved_call_target();
+        if (source_only && has_prepared_native_loans(views, at)) {
+            val diagnostic <- check_prepared_native_loans(nodes, names, links, facts, views,
+                0u64, provider, at, arguments, used, revision);
+            if (diagnostic == 0u8 && facts[at].kind != never_result()) { (facts[at].loans_scoped_aggregate <- true):void };
+            return diagnostic
+        };
+        if (!prepared_native_operation(views, at, provider)) return unproved_call_target();
         return remember_native_result(facts, at, links[at].value_kind, links[at].value_module,
             links[at].value_identity)
     };
