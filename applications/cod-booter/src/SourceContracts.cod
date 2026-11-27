@@ -1,4 +1,4 @@
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction, LexicalSumReference, LexicalSumRebind } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
     InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal, ReferenceLocal }
@@ -319,6 +319,8 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
     facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
     at:UInt64, callee:UInt64) -> bool
     where {const owner N, const owner B, const owner F, const owner V, const owner C} {
+    if (at < intrinsic (len)(cases) &&
+        (case cases[at] of { LexicalSumReference -> true; LexicalSumRebind -> true; _ -> false })) return true;
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
             NameReference -> true;

@@ -283,7 +283,15 @@ A direct source-preserving selection prepares the array loan and operands in ord
 
 Both source commands check the unchanged resource-name and identifier calls from `CallableSyntax`. The same completed parser contract covers module-name recognition and block-separator recovery. The four ordered loans keep their exact nominal types and actual owners. An independent `UInt64` follows the loans. The signature may end there or declare further independent scalars, each with its declared type and position, including the `UInt8` diagnostic and the Boolean recovery control. Whole-type unsigned widening applies to by-value operands. Operand failure prevents parser entry.
 
-The linked parser verifies the exact spans of `++` and `<-`, the requested identifier diagnostic, the syntax-storage limit, and separator recovery that preserves an existing report. The unchanged frontend next reaches the imported `append_qualified_type` call at `CallableSyntax.cod:305:9`. Executable object checking has a separate admission path.
+The linked parser verifies the exact spans of `++` and `<-`, the requested identifier diagnostic, the syntax-storage limit, and separator recovery that preserves an existing report.
+
+### Imported syntax-row assembly
+
+Both source commands check `append_qualified_type`, `append_block_item`, `append_block`, `append_module_item`, and `append_module` through the completed writer contract. The void calls prepare an initialized writable array of finite-bits sum rows, an initialized writable record, and each independent scalar operand in written order. The two loans can share an actual owner. The defining visit checks each constructor and the conditional selection of a lexical sum target before publishing its completion facts. Storage exhaustion leaves the previous syntax prefix intact.
+
+The readonly query contract also checks `punct_pair_at`. It carries the two nominal array loans, the index and extent, and the two by-value bytes, including `ASCII` members with the exact backing type. The original short-circuit comparisons distinguish an absent token, a wrong first byte, and a wrong second byte.
+
+Both source commands accept unchanged `CallableSyntax`. The full frontend next stops at the writable imported enum formal at `ExpressionParser.cod:2514:50`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

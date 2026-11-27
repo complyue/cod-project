@@ -2860,6 +2860,38 @@ func checked_record_inspector_header(contracts:const ModuleInterfaces in I, publ
             contracts[record].type_identity, record_type()) == CLayoutBitsRecord
 }
 
+func checked_scalar_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
+    -> UInt64 where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val count <- contracts[header].entry_count;
+    if (count < 2u64 || count >= published - header ||
+        contracts[header].source_writer != AggregateWriter || contracts[header].result_kind != builtin_void() ||
+        contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
+        contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
+        contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
+        contracts[header].target_readonly != 0u8 || contracts[header].owner_count != 2u64 ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
+        contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead)
+        return no_node();
+    val array <- header + 1u64;
+    val record <- header + 2u64;
+    if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 0u8) ||
+        !source_aggregate_formal(contracts, record, record_type(), 1u64, 0u8) ||
+        !published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity) ||
+        contracts[record].type_module != contracts[header].defining_module ||
+        checked_aggregate_storage(contracts, published, contracts[record].type_module,
+            contracts[record].type_identity, record_type()) != CLayoutBitsRecord) return no_node();
+    val past <- header + 1u64 + count;
+    val kind <- 0u8;
+    for (row in record + 1u64 .. past) {
+        kind <- contracts[row].value_kind;
+        if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
+            return no_node()
+    };
+    return past
+}
+
 func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -2940,8 +2972,10 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val output <- contracts[header].result_kind;
     if (output != builtin_bool() && output != builtin_u8() && output != builtin_u64()) return no_node();
-    val parameters <- if (output == builtin_bool()) { 2u64 } else { 4u64 };
-    if (published - header <= parameters || contracts[header].entry_count != parameters ||
+    val parameters <- contracts[header].entry_count;
+    val text_predicate <- output == builtin_bool() && parameters == 2u64;
+    if (published - header <= parameters ||
+        (!text_predicate && (parameters < 4u64 || (output != builtin_bool() && parameters != 4u64))) ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
@@ -2959,7 +2993,7 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
         contracts[array].entry_count != 0u64 || contracts[array].array_index_kind != builtin_u64() ||
         contracts[array].element_kind != builtin_u8()) return no_node();
     val past <- header + 1u64 + parameters;
-    if (output == builtin_bool()) {
+    if (text_predicate) {
         if (!checked_readonly_loan_row(contracts[second], record_type(), 1u64) ||
             checked_aggregate_storage(contracts, published, contracts[second].type_module,
                 contracts[second].type_identity, record_type()) != CoDBitsAggregate) return no_node()
@@ -2967,9 +3001,13 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
         if (!checked_readonly_loan_row(contracts[second], array_type(), 1u64) ||
             !published_record_array(contracts, published, contracts[second].type_module,
                 contracts[second].type_identity)) return no_node();
-        for (row in second + 1u64 .. past) {
-            if (!source_scalar_value_row(contracts[row], builtin_u64()) || contracts[row].source_allocates ||
-                contracts[row].type_module != 0u64 || contracts[row].type_identity != 0u64) return no_node()
+        if (!source_aggregate_formal(contracts, second + 1u64, builtin_u64(), no_node(), 0u8) ||
+            !source_aggregate_formal(contracts, second + 2u64, builtin_u64(), no_node(), 0u8)) return no_node();
+        val kind <- 0u8;
+        for (row in second + 3u64 .. past) {
+            kind <- contracts[row].value_kind;
+            if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
+                return no_node()
         }
     };
     return past
@@ -3178,9 +3216,13 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (source_only && header != no_node() && contracts[header].source_writer == AggregateWriter) {
         val module <- selected[site].origin_module;
-        if (links[site].selected_aggregate_writer != header ||
+        val past <- if (links[site].selected_aggregate_writer == header) { header + 6u64 } else {
+            checked_scalar_writer_past(contracts, interface_count, header)
+        };
+        if (obligation || past == no_node() || selected[site].dependency_module != module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
             !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, header + 5u64, interface_count))
+            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
@@ -3247,10 +3289,12 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         }
     };
     val scalar_reader <- array_read && contracts[header].result_kind == builtin_u64();
-    val text_predicate <- array_read && contracts[header].result_kind == builtin_bool();
+    val boolean_reader <- array_read && contracts[header].result_kind == builtin_bool();
+    val text_predicate <- boolean_reader && contracts[header].entry_count == 2u64;
     val indexed_reader <- array_read &&
         (contracts[header].result_kind == builtin_u8() ||
-         (scalar_reader && contracts[header].entry_count == 4u64));
+         (scalar_reader && contracts[header].entry_count == 4u64) ||
+         (boolean_reader && contracts[header].entry_count >= 4u64));
     if (text_predicate || indexed_reader) {
         val past <- checked_readonly_reader_past(contracts, interface_count, header);
         if (obligation || past == no_node() ||
