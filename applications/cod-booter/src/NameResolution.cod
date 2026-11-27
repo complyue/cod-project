@@ -212,7 +212,7 @@ data NameState {
     source_only:bool;
     local_sum_input:UInt64;
     inline_field_input:UInt64;
-    lexical_array_initializer:UInt64;
+    lexical_reference_initializer:UInt64;
     runtime_floor:UInt64;
     transfer_binding:UInt64;
     transfer_resolved:bool;
@@ -1183,17 +1183,17 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
         selected_inline_sum(source, nodes, bindings, work, state, initializer.index, true)) {
         (state.inline_field_input <- initializer.index):void
     };
-    val previous_array <- state.lexical_array_initializer;
+    val previous_reference_initializer <- state.lexical_reference_initializer;
     if (state.source_only && mode == ReferenceLocal) {
         ref receiver = make BindingSites {
             name <- no_node(); annotation <- no_node(); target_type <- no_node();
             owner_name <- no_node(); readonly <- false
         };
         if (inspect_binding(nodes, state.syntax_revision, state.syntax_used, binding.index, receiver) != InvalidBindingSyntax &&
-            receiver.owner_name == no_node()) { (state.lexical_array_initializer <- initializer.index):void }
+            receiver.owner_name == no_node()) { (state.lexical_reference_initializer <- initializer.index):void }
     };
     resolve_expression(source, nodes, bindings, work, state, initializer.index);
-    state.lexical_array_initializer <- previous_array;
+    state.lexical_reference_initializer <- previous_reference_initializer;
     state.inline_field_input <- previous_inline;
     if (state.diagnostic != 0u8) return;
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, state.syntax_revision, state.syntax_used, binding.index), at, local_binding(), duplicate_binding());
@@ -1529,9 +1529,9 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         array_initializer <- state.source_only && shape == PositionalConstruction &&
             !text_initializer && !builder_initializer && !record_initializer &&
             ((kind == array_type() &&
-              (construction.placement != no_node() || state.lexical_array_initializer == at)) ||
+              (construction.placement != no_node() || state.lexical_reference_initializer == at)) ||
              (kind == ordinary_selection() &&
-              (((construction.placement != no_node() || state.lexical_array_initializer == at) &&
+              (((construction.placement != no_node() || state.lexical_reference_initializer == at) &&
                 bindings[definition].imported_kind == array_export()) ||
                (construction.placement != no_node() &&
                 bindings[requested].module_use == (SelectedType:ModuleNameUse)))));
@@ -1583,7 +1583,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
                     requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
                     initializer <- no_node(); contents <- no_node()
                 };
-                if (construction.placement == no_node() && state.lexical_array_initializer == at &&
+                if (construction.placement == no_node() && state.lexical_reference_initializer == at &&
                     inspect_construction(nodes, state.syntax_revision, at, fill.item, literal) == BracedConstruction &&
                     literal.requested < fill.item && work[literal.requested].selected_constructor) {
                     (state.inline_field_input <- fill.item):void
@@ -1599,7 +1599,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     if (record_initializer) {
         val inline_fields <- state.source_only && construction.queried_operand == no_node() &&
             shape == BracedConstruction && construction.placement == no_node() &&
-            state.inline_field_input == at;
+            (state.inline_field_input == at || state.lexical_reference_initializer == at);
         resolve_record_initializer(source, nodes, bindings, work, state, body, inline_fields);
     } else { resolve_expression(source, nodes, bindings, work, state, body); };
 }
@@ -3320,7 +3320,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
-        source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_array_initializer <- no_node();
+        source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
@@ -3825,7 +3825,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
-        source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_array_initializer <- no_node();
+        source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();
