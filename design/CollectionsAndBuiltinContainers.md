@@ -1,10 +1,12 @@
 # Collections and builtin containers
 
-Design revision 18 · 2026-11-27 · Source design draft
+Design revision 19 · 2026-11-27 · Source design draft
 
 ## Design authority
 
-At r18 the [user’s decision](../CHANGELOG.md#h-hash-width-and-pop-20261127) sets the [public hash result width](#public-hash-result) and narrows the r17 copy-to-retain advice to [map lookup](#container-pointer-results). D-30, P-589/P-590, continues the r17 nullable result and owner rules. Detached pop is proposed below.
+At r19 the [user’s clarification](../CHANGELOG.md#h-detached-pop-slot-20261127) confirms [shallow detachment on pop](#container-pointer-results) under D-30, P-589/P-590. The r18 rules for map lookup, actual owners and hash width continue.
+
+At r18 the [user’s decision](../CHANGELOG.md#h-hash-width-and-pop-20261127) sets the [public hash result width](#public-hash-result) and narrows the r17 copy-to-retain advice to [map lookup](#container-pointer-results). D-30, P-589/P-590, continues the r17 nullable result and owner rules.
 
 At r17 the [container pointer result decision](../CHANGELOG.md#h-container-pointer-results-20261127) qualifies bootstrap [pop and lookup results](#container-pointer-results) under [D-30](DesignAuthorityRegistry.md#d-30), P-590/P-162. It continues the r16 owner-only reference lifetime rule and leaves storage reuse policy to the regional library work.
 
@@ -51,7 +53,9 @@ Deque pop and map lookup return a nullable pointer. Empty or missing gives null.
 
 **Map lookup** borrows the selected value. Later map operations may change the contents observed through that pointer. To retain the value observed at lookup, copy the payload before an operation that can change it. Copying the pointer retains the same target. For a reference-bearing item, constructing an independent graph requires an admitted [graph transfer](CallableViewsAndCaptures.md#copying-moving-and-graph-transfer).
 
-**Deque pop** removes the item. The proposed detachment guarantee preserves the removed payload across subsequent deque operations. Push 7, pop it into `p`, then push and pop 13. While the owner lives, `p` still reads 7 unless someone explicitly writes the selected payload. A writable alias retains its access. The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
+**Deque pop** detaches the removed slot. Subsequent deque operations preserve the immediate value stored in that slot. For example, after popping 7, pushing and popping 13 leaves the first slot at 7. If the detached slot holds a reference to node `n`, it keeps that reference. Writing `n.count` through a writable alias changes the count seen through the popped result. The original owner and access permissions still apply.
+
+The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
 
 ## Public hash result
 

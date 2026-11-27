@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Deque pop preserves the detached slot’s immediate value
+
+<a id="h-detached-pop-slot-20261127"></a>
+**H-DETACHED-POP-SLOT-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user specified “只承诺该 ptr 的slot值不会再变，不要承诺深度对象不变哈”. [D-30 r18→19](design/CollectionsAndBuiltinContainers.md#container-pointer-results) confirms the scope of the [r18 proposal](https://github.com/complyue/cod-project/blob/798e07f56ba93b1dd6e55aef764c61bce76d307d/design/CollectionsAndBuiltinContainers.md#container-pointer-results). Later deque operations preserve the immediate slot value. A write through an alias to a referenced node remains observable. The map lookup contract, owner lifetime and deferred reuse policy continue under P-589/P-590/P-162. Registry r1371→1372.
+
 ## 2026-11-27 — Fix the public hash width and distinguish lookup from removal
 
 <a id="h-hash-width-and-pop-20261127"></a>
