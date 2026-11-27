@@ -1811,8 +1811,16 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             facts[operand].reception != borrowed_ref() || facts[operand].owner == no_node() ||
             facts[operand].target_presence != present_target()) return wrong_operand_type();
         if (facts[formal].target_readonly == 0u8) {
+            val local <- names[operand].declaration;
+            val lexical <- names[operand].kind == local_binding() && local < operand &&
+                local < intrinsic (len)(cases) &&
+                (case cases[local] of {
+                    LexicalProductReference { val owner_site <-; val readonly <-; } ->
+                        !readonly && owner_site == facts[operand].owner;
+                    _ -> false
+                });
             if (kind != source_product_loan() || facts[operand].target_readonly != 0u8 ||
-                names[operand].kind != formal_binding() ||
+                (names[operand].kind != formal_binding() && !lexical) ||
                 owner_constraint_syntax(nodes, facts[formal].owner) != WritableOwnerConstraint)
                 return expected_writable_place()
         } else {
@@ -2886,9 +2894,10 @@ func checked_record_inspector_header(contracts:const ModuleInterfaces in I, publ
     for (row in array + 1u64 .. record) {
         if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) return false
     };
+    val storage <- checked_aggregate_storage(contracts, published, contracts[record].type_module,
+        contracts[record].type_identity, record_type());
     return published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity) &&
-        checked_aggregate_storage(contracts, published, contracts[record].type_module,
-            contracts[record].type_identity, record_type()) == CLayoutBitsRecord
+        (storage == CLayoutBitsRecord || storage == CoDBitsAggregate)
 }
 
 func checked_scalar_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)

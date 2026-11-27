@@ -317,7 +317,9 @@ Both source commands check calls to `parse_scoped_procedure_signature` and `pars
 
 The readonly predicate contract covers `c_linkage` and `valid_module_path` with a byte array and an exact indexed token loan. Completion uses the checked operations and call dependencies, including the range and early return in path validation. It records possible bounds failure and fatal numeric failure independently. A failure selecting the token precedes invocation. The linked frontend accepts escaped quote and backslash paths and reports invalid escapes at the original token span.
 
-Both source commands accept the unchanged `ExpressionParser` and check the module path call in `ModuleParser`. The unchanged module parser, frontend and CLI first stop at the `FormalSites` construction in `ModuleParser.cod:322:18`. Executable object checking has a separate admission path.
+Both source commands accept the unchanged `ExpressionParser` and check the module path call in `ModuleParser`. They also check construction and synchronous writable loans of finite-bits CoD records, including the `FormalSites` record used by `inspect_formal`. The constructor uses its selected nominal schema and checks every initializer. A call uses the initialized target and its actual owner, and the returned classification and record fields keep their exact enum types. Delayed writable loans remain outside this profile.
+
+The unchanged module parser, frontend and CLI first stop at the `same_bytes` call comparing the written owner names in `ModuleParser.cod:618:10`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

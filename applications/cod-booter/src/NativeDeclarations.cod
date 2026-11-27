@@ -1490,7 +1490,7 @@ export data SuppliedView =
     PreparedProductWriter {} |
     PreparedAggregateWriter {} |
     CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
-    PreparedRecordInspector {} |
+    PreparedRecordInspector { inline_product:bool; } |
     CheckedRecordInspector { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedParserWriter {} |
     CheckedParserWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
@@ -2720,9 +2720,14 @@ func prepare_record_inspector(nodes:const ExprNodes in N, names:const NameBindin
         if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
         (input <- work[input].next):void
     };
-    if (aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, input, output_owner,
-        record_type(), false, used, revision) && work[input].next == no_node()) {
-        (views[at] <- make PreparedRecordInspector {}):void
+    val output <- reference_formal_marker(nodes, names, input, output_owner, false, used, revision);
+    if (output >= used || work[input].next != no_node()) return;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
+        type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
+    val storage <- aggregate[type.identity];
+    if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
+        (views[at] <- make PreparedRecordInspector { inline_product <- storage == CoDBitsAggregate }):void
     }
 }
 
@@ -2747,6 +2752,7 @@ export func prepared_writable_product_formal(views:const SuppliedViews in V, sit
     return site < intrinsic (len)(views) && (case views[site] of {
         PreparedProductWriter -> true;
         PreparedProductWriterHelper -> true;
+        PreparedRecordInspector { val inline_product <-; } -> inline_product;
         _ -> false
     })
 }
