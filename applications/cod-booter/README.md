@@ -279,7 +279,11 @@ Both source commands check the uses of `ParserStorage.is_here_formal` and `forma
 
 A direct source-preserving selection prepares the array loan and operands in order. An independent `UInt8` or `UInt32` can widen to a `UInt64` formal regardless of the query's return type. The completion contract keeps bounds and fatal arithmetic separate. The linked parser witness covers multiple `here` formals, a final variadic formal, a misplaced ellipsis, stale revisions, and indices beyond the permitted extent.
 
-The unchanged frontend next reaches the imported `parse_resource_name` call at `CallableSyntax.cod:197:14`. Executable object checking has a separate admission path.
+### Imported parser name and separator calls
+
+Both source commands check the unchanged resource-name and identifier calls from `CallableSyntax`. The same completed parser contract covers module-name recognition and block-separator recovery. The four ordered loans keep their exact nominal types and actual owners. An independent `UInt64` follows the loans. The signature may end there or declare further independent scalars, each with its declared type and position, including the `UInt8` diagnostic and the Boolean recovery control. Whole-type unsigned widening applies to by-value operands. Operand failure prevents parser entry.
+
+The linked parser verifies the exact spans of `++` and `<-`, the requested identifier diagnostic, the syntax-storage limit, and separator recovery that preserves an existing report. The unchanged frontend next reaches the imported `append_qualified_type` call at `CallableSyntax.cod:305:9`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

@@ -1,5 +1,5 @@
 using "./NameResolution.cod" source_aggregate_formal;
-using "./NativeDeclarations.cod" { checked_readonly_call, published_sum_array };
+using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, RecordInspector };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -2441,7 +2441,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     val result_owner <- links[at].imported_owner_argument;
     val returned_kind <- links[at].imported_kind;
     val widens_index_operand <- source_only && (returned_kind == scalar_u8() || returned_kind == void_result() ||
-        checked_readonly_call(views, at)) &&
+        checked_source_array_call(views, at)) &&
         links[at].imported_array_read_completion != NoArrayRead;
     ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
@@ -2864,7 +2864,7 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
-    if (count < 6u64 || count >= published - header ||
+    if (count < 5u64 || count >= published - header ||
         contracts[header].source_writer != ParserWriter || contracts[header].result_kind != builtin_bool() ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
@@ -2896,8 +2896,11 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
             contracts[record].type_identity, record_type()) != CLayoutBitsRecord)
         return no_node();
     val past <- header + 1u64 + count;
+    val kind <- 0u8;
     for (row in header + 6u64 .. past) {
-        if (!source_aggregate_formal(contracts, row, builtin_bool(), no_node(), 0u8)) return no_node()
+        kind <- contracts[row].value_kind;
+        if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
+            return no_node()
     };
     return past
 }

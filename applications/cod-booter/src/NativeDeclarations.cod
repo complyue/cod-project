@@ -1920,17 +1920,23 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
     };
 }
 
-func independent_scalar_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
-    formal:UInt64, used:UInt64, revision:UInt64, kind:UInt8) -> bool where {const owner N, const owner B} {
+func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
+    formal:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B} {
     ref shape = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
         owner_name <- no_node(); readonly <- false
     };
-    return formal_variadic_at(nodes, revision, used, formal) == no_node() &&
-        typed_formal(nodes, revision, used, formal, shape, binding) &&
-        (shape.mode == ValueFormal || shape.mode == ExplicitValueFormal) &&
-        binding.owner_name == no_node() && names[binding.target_type].kind == kind
+    if (formal_variadic_at(nodes, revision, used, formal) != no_node() ||
+        !typed_formal(nodes, revision, used, formal, shape, binding) ||
+        (shape.mode != ValueFormal && shape.mode != ExplicitValueFormal) ||
+        binding.owner_name != no_node()) return 0u8;
+    return (names[binding.target_type].kind)
+}
+
+func independent_scalar_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+    formal:UInt64, used:UInt64, revision:UInt64, kind:UInt8) -> bool where {const owner N, const owner B} {
+    return independent_formal_kind(nodes, names, formal, used, revision) == kind
 }
 
 func single_return_value(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
@@ -2405,11 +2411,6 @@ export func prepared_readonly_query(views:const SuppliedViews in V, site:UInt64)
         (case views[site] of { PreparedReadonlyQuery -> true; _ -> false })
 }
 
-export func checked_readonly_call(views:const SuppliedViews in V, site:UInt64) -> bool
-    where {const owner V} {
-    return site < intrinsic (len)(views) && (case views[site] of { CheckedReadonlyCall -> true; _ -> false })
-}
-
 export func checked_source_array_call(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
     return site < intrinsic (len)(views) && (case views[site] of {
@@ -2608,15 +2609,14 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
         record_type(), false, used, revision)) return;
     val extent <- work[fourth].next;
     if (!independent_scalar_formal(nodes, names, extent, used, revision, builtin_u64())) return;
-    val flag <- work[extent].next;
-    if (flag == no_node()) return;
+    val parameter <- work[extent].next;
     for (unused in 0u64 .. used) {
-        if (!independent_scalar_formal(nodes, names, flag, used, revision, builtin_bool())) return;
-        flag <- work[flag].next;
-        if (flag == no_node()) {
+        if (parameter == no_node()) {
             (views[at] <- make PreparedParserWriter {}):void;
             return
-        }
+        };
+        if (!source_call_scalar(independent_formal_kind(nodes, names, parameter, used, revision))) return;
+        (parameter <- work[parameter].next):void
     }
 }
 
