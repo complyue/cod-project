@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — A reference may never outlive its actual owner
+
+<a id="h-ref-outlives-owner-20261127"></a>
+**H-REF-OUTLIVES-OWNER-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user clarified “CoD 只考虑 ref 是否 outlive  owner ，没有其它outlive要检查阻止。” This continues [H-190](#h-190) and the [previous typed-slot rules](https://github.com/complyue/cod-project/blob/5d33e907b2e28f814df7c76dab5e3e2ba1d91671/design/RegionalOwnership.md#reuse-is-not-whole-region-release). A retained reference permits reuse of live typed storage. A library’s by-value result retains the value delivered at removal. [D-14 r140→141](design/RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy), [D-30 r15→16](design/CollectionsAndBuiltinContainers.md#bootstrap-linked-deque), P-162, registry r1368→1369.
+
 ## 2026-11-27 — Prioritize source ergonomics in the bootstrap
 
 <a id="h-booter-source-ergonomics-20261127"></a>
