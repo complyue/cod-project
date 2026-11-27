@@ -2,7 +2,7 @@
 
 ## Design authority
 
-Revision 1, 2026-11-27. [Contextual numeric literals](DesignAuthorityRegistry.md#d-11-literal-defaults) covers typing, defaults and diagnostics. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) covers syntax and formatting. The [project user's decisions](../CHANGELOG.md#h-numeric-literals-and-signs-20261127) add these scopes to the [scalar](ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening) and [operator grouping](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) contracts. Ordinary numbers can be written once while their interpretation stays reproducible from the source and selected vocabulary. P-782–P-785 record the value and dependency edges. The examples below give the acceptance cases. Existing typed arithmetic, nominal identities and checked failures continue. General untyped constant arithmetic and implementation scheduling have separate scope.
+Revision 2, 2026-11-27. The [perfect-match decision](../CHANGELOG.md#h-perfect-numeric-overload-matches-20261127) revises r1’s overload tie example. Standalone literals keep source-ordered defaults. At a call, otherwise tied lossless matches remain ambiguous. [Contextual numeric literals](DesignAuthorityRegistry.md#d-11-literal-defaults) covers typing, defaults and diagnostics. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) covers syntax and formatting. The [project user's decisions](../CHANGELOG.md#h-numeric-literals-and-signs-20261127) add these scopes to the [scalar](ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening) and [operator grouping](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) contracts. Ordinary numbers can be written once while their interpretation stays reproducible from the source and selected vocabulary. P-782–P-785 record the value and dependency edges. The examples below give the acceptance cases. Existing typed arithmetic, nominal identities and checked failures continue. General untyped constant arithmetic and implementation scheduling have separate scope.
 
 ## Write the number the program means
 
@@ -25,9 +25,34 @@ val c <- 255 + 1
 
 Read the bindings independently. `a` has type `UInt8` and `b` has type `UInt64`. Both operands of the ordinary checked addition in `c` fit `UInt8`. The expression has type `UInt8` and raises overflow when evaluated. A future enhanced diagnostic should warn that overflow is certain and suggest `255u64 + 1` when 256 is intended. Constant folding must preserve the selected operation and failure. Report an unresolved numeric ambiguity as an error with the competing choices. For a permitted interpretation with material precision risk, explain the source value and the chosen representation.
 
-**Overload ties.** Apply numeric preferences to the eligible methods of an otherwise unresolved call. If `send` accepts either `UInt32` or `UInt64`, `default UInt32` settles `send(7)` in favor of the exact `UInt32` choice. With only `UInt8` and `UInt64` overloads the same directive gives neither an exact preference: report ambiguity. With only the `UInt8` overload, `7` takes `UInt8` immediately.
+**Lossless matches during overload selection.** Compare a bare numeral’s mathematical value with each candidate’s independently known numeric formal. Every admissible type that can represent the value losslessly is a perfect match for that literal, regardless of its position or presence in the default list. Ordinary applicability and specificity still apply to the methods and the other arguments. If otherwise equally good methods both match the unresolved literals perfectly, diagnose ambiguity at the call. This comparison never consults the module’s numeric defaults.
 
-Score the match across **all** arguments. For `default UInt32, UInt64` and `f(1, 2)`, the signatures `(UInt32, UInt64)` and `(UInt64, UInt32)` have the same total score. Reject the tie. Swapping the argument positions together with their formals preserves every candidate's score. `f(1u32, 2)` can express the first choice. The numeric preference is considered within the eligible dispatch level. The symmetric tie and independence from argument order are specified here. The relative weights for other competing multi-argument matches remain open where different scoring rules would select different bodies.
+```cod
+func tag(x:Int64)  -> Int64 { 1 }
+func tag(x:UInt64) -> Int64 { 2 }
+
+default Int64
+tag(7)                 # Ambiguous: 7 fits both formals exactly.
+val value <- 7         # Standalone literal takes Int64.
+tag(value)             # Returns 1: the argument already has type Int64.
+
+default Int64, UInt64
+tag(7)                 # Still ambiguous.
+tag(7u64)              # Returns 2.
+```
+
+A sole `send(x:UInt8)` gives `send(7)` a unique numeric context. Adding `send(x:UInt64)` makes this call ambiguous even under `default UInt8`, assuming no other evidence distinguishes the methods.
+
+Compare the unresolved numeric positions across all arguments within the eligible dispatch group. For `default UInt32, UInt64` and `f(1, 2)`, the signatures `(UInt32, UInt64)` and `(UInt64, UInt32)` tie. Swapping the argument positions together with their formals preserves the outcome. A suffix can supply the missing type evidence.
+
+```cod
+default UInt8, UInt32, UInt64, Int64
+func choose(x:UInt8,  y:Int64)  -> Int64 { 14 }
+func choose(x:UInt32, y:UInt32) -> Int64 { 22 }
+choose(1, 2)    # Static error at the call: both methods match perfectly.
+```
+
+Here both literals fit exactly into each method’s respective parameter types. Removing the directive gives the same ambiguity. The first method uses positions 1 and 4 of the list and the second uses positions 2 and 2. Both are perfect matches. A sum of ranks or a count of first-choice matches would incorrectly pick a body. Both signatures are valid. With `choose(1, 2i64)` only the first method can receive the typed second argument. The call `choose(1u32, 2)` selects the second. A standalone literal still uses the source list in order once other type evidence is exhausted.
 
 **Scope.** The written site owns the numeric policy. An earlier function retains its defaults when called after a later directive or from another module. In a formal default expression `width = 7`, the `7` follows the defining site even when argument preparation runs at the caller. A caller writing `draw(7)` supplies a new literal under its own policy. Where `import` adapts a callable family, normal selection still uses that view, with each literal's source policy intact.
 
