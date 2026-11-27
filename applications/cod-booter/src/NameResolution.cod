@@ -173,6 +173,7 @@ export data NameWorkSlot {
     imported_kind:UInt8;
     imported_callable_kind:InterfaceCallableKind;
     imported_array_read_completion:ArrayReadCompletion;
+    imported_numeric_fault:bool;
     imported_reception:UInt8;
     imported_target_readonly:UInt8;
     imported_owner_readonly:UInt8;
@@ -3624,6 +3625,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         work[at].enum_members <- no_node();
         work[at].enum_backing <- 0u8;
         work[at].imported_array_read_completion <- NoArrayRead;
+        work[at].imported_numeric_fault <- false;
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;
     ref state = make NameState {

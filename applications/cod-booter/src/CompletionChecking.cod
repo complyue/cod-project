@@ -8,8 +8,9 @@ using "./ParserStorage.cod" ExprPayload {
     ArrayLength, IndexSelection, NameReference, IntegerLiteral, BooleanLiteral, ComparisonExpression,
     ReturningCondition, Conditional, Disjunction, Conjunction, Parenthesized, FieldSelection, EmptyCall,
     CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, BlockSyntax, BlockItem, ReturnValue,
+    Call, ArgumentItem, RangeHeader, RangeLoop, LocalBinding, ArithmeticExpression,
 };
-using "./NameResolution.cod" builtin_u64;
+using "./NameResolution.cod" { builtin_u8, builtin_u64 };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
 using "./ParserStorage.cod" ArithmeticOperation { Addition };
 using "./ParserStorage.cod" ComparisonRelation { Equal };
@@ -20,7 +21,7 @@ using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
 using "./ExceptionTypes.cod" ExceptionType;
-using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, is_array_reader_leaf };
+using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, is_array_reader_leaf, readonly_text_predicate_leaf };
 using "./ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction,
     HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake },
@@ -65,13 +66,13 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, has_value_tail, has_slot_array,
+    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, scalar_bool, has_value_tail, has_slot_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
     out_of_memory_identity, region_capacity_identity, invalid_capacity_identity, index_out_of_bounds_identity,
-    type_assertion_failed_identity, assertion_failed_identity, text_byte_export,
+    type_assertion_failed_identity, assertion_failed_identity, text_byte_export, text_size_export,
 };
 using "./ExceptionTypes.cod" exception_type_covers;
 using "./ModuleExportStorage.cod" ByteArrayFailures;
@@ -90,6 +91,7 @@ export data CompletionSite {
     in_delayed_body:UInt8;
     in_supplied_body:bool;
     array_read_completion:ArrayReadCompletion;
+    numeric_fault:bool;
     slot_summary:bool;
     array_failures:ByteArrayFailures;
     case_break:UInt8;
@@ -134,6 +136,7 @@ func unproved_nonnull_argument() -> UInt8 { return 12u8; }
 func unproved_nonnull_binding() -> UInt8 { return 16u8; }
 export func unsupported_case_transfer() -> UInt8 { return 18u8; }
 func unproved_byte_completion() -> UInt8 { return 20u8; }
+func unproved_numeric_fault_route() -> UInt8 { return 21u8; }
 
 func initialize_site(sites:CompletionSites in X, at:UInt64) -> void where {owner X} {
     sites[at].event <- 0u8;
@@ -145,6 +148,7 @@ func initialize_site(sites:CompletionSites in X, at:UInt64) -> void where {owner
     sites[at].in_delayed_body <- 0u8;
     sites[at].in_supplied_body <- false;
     sites[at].array_read_completion <- NoArrayRead;
+    sites[at].numeric_fault <- false;
     sites[at].slot_summary <- false;
     sites[at].array_failures.bounds <- false;
     sites[at].array_failures.out_of_memory <- false;
@@ -781,6 +785,25 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
     return invalid_completion_tree();
 }
 
+# A terminal numeric fault does not enter a language catch. This source
+# profile can let it leave an activation when no protected or delayed
+# cleanup plan has to represent it.
+func numeric_fault_can_escape(nodes:const ExprNodes in N, names:const NameBindings in B,
+    sites:const CompletionSites in X, at:UInt64, used:UInt64) -> bool
+    where {const owner N, const owner B, const owner X} {
+    if (sites[at].guarded_by != no_node() || sites[at].incoming_handler != no_node() ||
+        sites[at].replacing_try != no_node() || sites[at].in_supplied_body ||
+        names[at].finalizer != no_node()) return false;
+    val scope <- names[at].scope;
+    for (unused in 0u64 .. used) {
+        if (scope == no_node()) return true;
+        if (scope >= used || sites[scope].last_defer != no_node()) return false;
+        if (!is_scope_block(nodes, scope)) return true;
+        scope <- names[scope].scope
+    };
+    return false
+}
+
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
                  sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
@@ -852,6 +875,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
+            if (links[at].imported_numeric_fault && !numeric_fault_can_escape(nodes, names, sites, at, used))
+                return unproved_numeric_fault_route();
             if (links[at].imported_array_read_completion == ArrayReadMayFailBounds)
                 return route_failure(nodes, names, links, facts, sites, at, used, revision,
                     index_out_of_bounds_identity(), 0u8, possible_failure());
@@ -975,13 +1000,14 @@ func record_array_read_completion(nodes:const ExprNodes in N, names:const NameBi
     return 0u8
 }
 
-# The leaf collector reads only checked operations. The returned UInt64
-# may be a sentinel value. Bounds are the sole admitted abrupt completion.
+# These leaf summaries only cover known primitive operations and exact literal
+# or length callees. Numeric faults bypass the catchable exception channel.
 func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    views:const SuppliedViews in H, at:UInt64) -> bool
+    views:const SuppliedViews in H, at:UInt64, text_reader:bool) -> bool
     where {const owner N, const owner F, const owner H} {
     val target <- facts[at].call_definition;
-    if (target != no_node() && source_literal_kind(views, target) != builtin_u64()) return false;
+    val literal_kind <- if (text_reader) { builtin_u8() } else { builtin_u64() };
+    if (target != no_node() && source_literal_kind(views, target) != literal_kind) return false;
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
             NameReference -> true;
@@ -995,6 +1021,13 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
             Parenthesized -> true;
             FieldSelection -> true;
             ArrayLength -> true;
+            ArithmeticExpression -> text_reader && (facts[at].kind == scalar_u64() || facts[at].kind == never_result());
+            Call -> text_reader && (prepared_array_length_call(views, at) ||
+                facts[at].text_intrinsic == text_size_export() || facts[at].text_intrinsic == text_byte_export());
+            ArgumentItem -> text_reader;
+            RangeHeader -> text_reader;
+            RangeLoop -> text_reader;
+            LocalBinding { val mode <-; } -> text_reader && mode == ValueLocal;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             EmptyCall -> target != no_node();
             CaseExpression -> true;
@@ -1011,13 +1044,21 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
 }
 
 func record_array_reader_completion(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    views:const SuppliedViews in H, sites:CompletionSites in X, definition:UInt64, at:UInt64)
+    views:const SuppliedViews in H, sites:CompletionSites in X, definition:UInt64, at:UInt64, text_reader:bool, used:UInt64, revision:UInt64)
     -> void where {const owner N, const owner F, const owner H, owner X} {
     if (sites[definition].array_read_completion == NoArrayRead || sites[at].event == skipped_operand())
         return;
-    if (!array_reader_operation(nodes, facts, views, at)) {
+    if (!array_reader_operation(nodes, facts, views, at, text_reader)) {
         sites[definition].array_read_completion <- NoArrayRead;
         return
+    };
+    if (text_reader && can_continue(sites, at)) {
+        ref binary = make BinarySites {
+            left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64; arithmetic <- Addition; relation <- Equal
+        };
+        if (inspect_binary(nodes, revision, used, at, binary) == ArithmeticBinary) {
+            (sites[definition].numeric_fault <- true):void
+        };
     };
     if (sites[at].event == possible_failure() || sites[at].event == definite_failure()) {
         if (sites[at].category_module == 0u64 && sites[at].category == index_out_of_bounds_identity() &&
@@ -1341,7 +1382,8 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     val form <- InvalidCallable;
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
-        if (needs_body_check(demand, at) && is_array_reader_leaf(views, at)) {
+        if (needs_body_check(demand, at) &&
+            (is_array_reader_leaf(views, at) || readonly_text_predicate_leaf(views, at))) {
             (sites[at].array_read_completion <- CheckedArrayRead):void
         };
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
@@ -1362,6 +1404,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     };
     val slot_bodies <- false;
     val definition <- no_node();
+    val text_reader <- false;
     for (at in 0u64 .. tree.used) {
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
@@ -1374,12 +1417,17 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
             if (definition < tree.used && definition != at &&
-                sites[definition].array_read_completion != NoArrayRead && is_array_reader_leaf(views, definition)) {
-                record_array_reader_completion(nodes, facts, views, sites, definition, at)
+                sites[definition].array_read_completion != NoArrayRead) {
+                text_reader <- readonly_text_predicate_leaf(views, definition);
+                if (text_reader || is_array_reader_leaf(views, definition)) {
+                    record_array_reader_completion(nodes, facts, views, sites, definition, at,
+                        text_reader, tree.used, tree.revision)
+                }
             };
-            if (is_array_reader_leaf(views, at) &&
+            text_reader <- readonly_text_predicate_leaf(views, at);
+            if ((text_reader || is_array_reader_leaf(views, at)) &&
                 (can_miss_return(nodes, facts, sites, at, tree.revision, tree.used) ||
-                facts[at].kind != scalar_u64())) {
+                 facts[at].kind != (if (text_reader) { scalar_bool() } else { scalar_u64() }))) {
                 (sites[at].array_read_completion <- NoArrayRead):void
             }
         }

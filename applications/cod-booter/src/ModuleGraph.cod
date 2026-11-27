@@ -84,7 +84,8 @@ using "./NameResolution.cod" {
     NameBinding, NameBindings, NameWorkSlot, NameWork, ProductTypeRecovery, record_type, project_module_selection_candidates,
     ModuleNameUse { LexicalName }, first_module_variadic_formal
 };
-using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_forward };
+using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_forward, readonly_text_predicate_leaf };
+using "./NativeDeclarations.cod" SuppliedView { ReadonlyTextPredicateForward, CheckedTextPredicate };
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
     publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
@@ -279,7 +280,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, require
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -782,6 +783,19 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         if (callee < used && sites[callee].array_read_completion != NoArrayRead) {
             finish_array_reader_forward(views, at, sites[callee].array_read_completion)
         };
+        case views[at] of {
+            ReadonlyTextPredicateForward { val target <- callee; val invocation <-; } -> {
+                if (invocation < at && target < used && facts[invocation].call_definition == target &&
+                    readonly_text_predicate_leaf(views, target) &&
+                    sites[target].array_read_completion != NoArrayRead) {
+                    (views[at] <- make CheckedTextPredicate {
+                        completion <- sites[target].array_read_completion;
+                        numeric_fault <- sites[target].numeric_fault
+                    }):void
+                }
+            };
+            _ -> {}
+        };
         if (sites[at].array_read_completion != NoArrayRead) {
             finish_byte_function(views, at, sites[at].array_read_completion)
         };
@@ -1020,7 +1034,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     ref required = make UInt64 { no_node() };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_imported_calls(nodes, names, selected, work, published_interfaces, interface_count,
-        catalog_exports, callable_uses, views, visits, visit_count, used, revision, !native, required, operands)) {
+        catalog_exports, callable_uses, views, aggregate_facts, cases, visits, visit_count, used, revision, !native, required, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
@@ -1414,7 +1428,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
             imported_failure_module <- 0u64;
             imported_kind <- 0u8; imported_callable_kind <- NoCallableKind;
-            imported_array_read_completion <- NoArrayRead;
+            imported_array_read_completion <- NoArrayRead; imported_numeric_fault <- false;
             imported_reception <- 0u8;
             imported_target_readonly <- 0u8; imported_owner_readonly <- 0u8;
             imported_passes_owner <- 0u8; imported_failure_checked <- 0u8;
@@ -1444,7 +1458,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         });
         ref sites = make CompletionSites(capacity, make CompletionSite {
             event <- 0u8; presence <- 0u8; can_continue <- 0u8; local_return <- 0u8; retains_caught <- 0u8;
-            array_read_completion <- NoArrayRead; slot_summary <- false; array_failures <- make ByteArrayFailures {
+            array_read_completion <- NoArrayRead; numeric_fault <- false; slot_summary <- false; array_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
             };
             forwarded_operand <- 0u8; in_delayed_body <- 0u8; in_supplied_body <- false;
@@ -1597,7 +1611,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_passes_owner <- 0u8; membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false

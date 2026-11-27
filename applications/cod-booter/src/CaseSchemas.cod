@@ -188,6 +188,28 @@ func case_bits_type(type:const DeclaredType in T, aggregate:const AggregateFacts
     return storage == (CoDBitsAggregate:AggregateStorage) || storage == (CLayoutBitsRecord:AggregateStorage)
 }
 
+# The caller has already selected a completed readonly product formal.
+# The actual indexed place still comes from the caller's array and owner.
+export func prepare_imported_product_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, argument:UInt64,
+    used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner I, const owner A, owner F} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence ||
+        entry.item >= intrinsic (len)(facts)) return;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node();
+    };
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
+        record_type(), loan, record) && case_bits_type(record, aggregate, interfaces, published)) {
+        remember_indexed_product_read(nodes, facts, argument, loan, record)
+    };
+    return
+}
+
 func remember_sum_formal(facts:ConstructorCaseFacts in F, formal:UInt64, definition:UInt64,
     owner_site:UInt64, readonly:bool, type:const DeclaredType in T) -> void
     where {owner F, const owner T} {

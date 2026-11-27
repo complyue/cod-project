@@ -1044,7 +1044,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -1477,7 +1477,9 @@ export data SuppliedView =
     PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
     PreparedScalarLiteral { kind:UInt8; } |
     ReadonlyTextPredicate {} |
-    ReadonlyTextPredicateForward { callee:UInt64; } |
+    ReadonlyTextPredicateForward { callee:UInt64; invocation:UInt64; } |
+    CheckedTextPredicate { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    ImportedTextPredicateCandidate {} |
     PreparedArrayReaderLeaf { declared_array:UInt64; } |
     PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
     CheckedArrayReaderForward { completion:ArrayReadCompletion; } |
@@ -1975,9 +1977,8 @@ export func prepared_array_length_call(views:const SuppliedViews in V, at:UInt64
 # The forwarding body contributes no operation except ordinary preparation
 # of its exact formals and one literal, then return of the result.
 func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, body:UInt64, first:UInt64, text:bool, used:UInt64, revision:UInt64)
+    work:const NameWork in W, value:UInt64, first:UInt64, text:bool, used:UInt64, revision:UInt64)
     -> UInt64 where {const owner N, const owner B, const owner W} {
-    val value <- single_return_value(nodes, body, used, revision);
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
     if (direct_invocation(nodes, revision, used, value, call) != DirectInvocationReady ||
         names[call.callee].kind != callable_binding()) return no_node();
@@ -2037,7 +2038,8 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
         return;
     val fourth <- work[third].next;
     if (fourth == no_node()) {
-        val callee <- forwarded_read(nodes, names, work, callable.body, first, false, used, revision);
+        val callee <- forwarded_read(nodes, names, work,
+            single_return_value(nodes, callable.body, used, revision), first, false, used, revision);
         if (callee < used) {
             (views[at] <- make PreparedArrayReaderForward { declared_array <- declared_array; callee <- callee }):void
         };
@@ -2136,12 +2138,18 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     if (third_owner) {
         (views[at] <- make ReadonlyTextPredicate {}):void
     } else {
-        val callee <- forwarded_read(nodes, names, work, callable.body, first, true, used, revision);
+        val invocation <- single_return_value(nodes, callable.body, used, revision);
+        val callee <- forwarded_read(nodes, names, work, invocation, first, true, used, revision);
         if (callee < used) {
-            (views[at] <- make ReadonlyTextPredicateForward { callee <- callee }):void
+            (views[at] <- make ReadonlyTextPredicateForward { callee <- callee; invocation <- invocation }):void
         }
     };
     return
+}
+
+export func readonly_text_predicate_leaf(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { ReadonlyTextPredicate -> true; _ -> false })
 }
 
 export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64) -> bool
@@ -2150,8 +2158,7 @@ export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64)
     return case views[site] of {
         ReadonlyTextPredicate -> true;
         ReadonlyTextPredicateForward { val callee <-; } -> {
-            if (callee >= intrinsic (len)(views)) return false;
-            return case views[callee] of { ReadonlyTextPredicate -> true; _ -> false }
+            return readonly_text_predicate_leaf(views, callee)
         };
         _ -> false
     }
@@ -2160,7 +2167,8 @@ export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64)
 export func first_readonly_text_predicate(views:const SuppliedViews in V, used:UInt64) -> UInt64
     where {const owner V} {
     for (site in 0u64 .. used) {
-        if (readonly_text_predicate(views, site)) return site
+        if (readonly_text_predicate(views, site)) return site;
+        if (case views[site] of { ImportedTextPredicateCandidate -> true; _ -> false }) return site
     };
     return no_node()
 }
@@ -2228,6 +2236,7 @@ func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
     return case views[at] of {
         PreparedByteFunction { val completion <-; } -> completion;
         CheckedArrayReaderForward { val completion <-; } -> completion;
+        CheckedTextPredicate { val completion <-; } -> completion;
         _ -> NoArrayRead
     }
 }
@@ -2465,7 +2474,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3267,7 +3276,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3469,6 +3478,11 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                 !check_callable_permissions(nodes, names, at, contracts[head].callable_kind,
                     report)) return false;
             if (head != no_node()) {
+                # Allocate product plans before binding the imported operands.
+                if (contracts[head].array_read_completion != NoArrayRead &&
+                    contracts[head].result_kind == builtin_bool()) {
+                    (views[at] <- make ImportedTextPredicateCandidate {}):void
+                };
                 work[at].value_kind <- contracts[head].result_kind;
                 work[at].value_module <- contracts[head].type_module;
                 work[at].value_identity <- contracts[head].type_identity;
@@ -3855,9 +3869,13 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                 kind == c_operation(),
                                 contracts[next], used, revision))
             return no_node();
+        if (source_array_reader && result_kind == builtin_bool() && next == count + 2u64) {
+            (contracts[next].value_kind <- record_type()):void
+        };
         if (indexed_owners &&
             (contracts[next].value_kind == c_handle_type() ||
-                text_type(contracts[next].value_kind) || contracts[next].value_kind == array_type())) {
+                text_type(contracts[next].value_kind) || contracts[next].value_kind == array_type() ||
+                 contracts[next].value_kind == record_type())) {
             if (inspect_signature(nodes, revision, used, contracts[next].owner_role, clause) != OwnerSignatureClause) return no_node();
             ordinal <- count_owner_clauses(nodes, clause.previous, used, revision);
             if (ordinal == no_node()) return no_node();
@@ -4103,6 +4121,14 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                         };
                         (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
                                                    at, at, kind, callback, array_read_completion, used, revision)):void;
+                        if (count != no_node()) {
+                            case views[at] of {
+                                CheckedTextPredicate { val numeric_fault <-; } -> {
+                                    (contracts[first].source_numeric_fault <- numeric_fault):void
+                                };
+                                _ -> {}
+                            }
+                        };
                         if (callback != no_node() && (count == no_node() ||
                             !stage_checked_here_contract(nodes, names, selected, views,
                                 contracts[first],
