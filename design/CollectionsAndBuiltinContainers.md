@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 16 · 2026-11-27 · Source design draft
+Design revision 17 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r17 the [container pointer result decision](../CHANGELOG.md#h-container-pointer-results-20261127) qualifies bootstrap [pop and lookup results](#container-pointer-results) under [D-30](DesignAuthorityRegistry.md#d-30), P-590/P-162. It continues the r16 owner-only reference lifetime rule and leaves storage reuse policy to the regional library work.
 
 At r16 the [reference lifetime clarification](../CHANGELOG.md#h-ref-outlives-owner-20261127) applies [D-14](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy), P-162, to [deque node reuse](#bootstrap-linked-deque). The r15 public collection scope continues.
 
@@ -39,9 +41,15 @@ At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns 
 
 ## Bootstrap linked deque
 
-The first public generic linked collection for the booter is `deque<T>`, implemented in CoD. Its nodes are private. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public `list<T>`. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The notation `<T>` here identifies the element type parameter. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
+The first public generic linked collection for the booter is a deque parameterized by its element type, implemented in CoD with private nodes. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public list. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
 
-Node reuse follows the [ordinary reference lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy). Unlinking a node changes deque membership. Reusing a live typed slot can change what a reference to that slot reads. A pop returning an independent value delivers the value at removal, so later reuse leaves that result intact. The pop signature determines which result the caller receives.
+### Container pointer results
+
+Deque pop and map lookup return a nullable pointer. Empty or missing gives null. On success the pointer selects typed storage with its actual owner and access. A caller can handle either outcome by matching the result once in a [`case`](DomainLanguageDesign.md#case-expressions-and-branch-local-variables). Subsequent container operations may change the contents at the selected location. The pointer remains subject to the [ordinary owner lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy).
+
+A caller that needs the observed value later copies it before the next operation that could change it. For example, pop 7, save its integer payload, and then push 13. The saved integer still reads 7. Reading through the original pointer can yield 7 if the implementation kept the payload, or 13 if it reused that slot. Copying the pointer itself retains the same target. For a reference-bearing item, retaining an independent graph requires the type's admitted [graph transfer](CallableViewsAndCaptures.md#copying-moving-and-graph-transfer).
+
+The initial implementation may allocate fresh typed storage or reuse suitable slots. The later intra-region memory management interface and library work will establish optimization criteria.
 
 ## Builtin containers and related forms
 

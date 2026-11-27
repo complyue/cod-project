@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Copy a container result when its observed value must be retained
+
+<a id="h-container-pointer-results-20261127"></a>
+**H-CONTAINER-POINTER-RESULTS-20261127.** The project user proposed pointer results for pop and lookup, then clarified in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) “容器返回的ptr不要承诺后续不会变，让caller形成想长期用就要复制的心智模型” and assigned reuse optimization criteria to the later regional memory management design. [D-30 r16→17](design/CollectionsAndBuiltinContainers.md#container-pointer-results) selects the nullable pointer result under the [existing owner rule](https://github.com/complyue/cod-project/blob/c391cc0d94416eb5348895a9c2487cc5aed0161e/design/CollectionsAndBuiltinContainers.md#bootstrap-linked-deque). A saved independent payload survives subsequent reuse. The first implementation can also retain its storage. P-590/P-162, registry r1369→1370.
+
 ## 2026-11-27 — A reference may never outlive its actual owner
 
 <a id="h-ref-outlives-owner-20261127"></a>
