@@ -1,8 +1,10 @@
 # Scalar units, strict brands and array index domains
 
-Discussion revision: 43 · Recorded: 2026-11-27 · Status: alternatives under discussion.
+Discussion revision: 44 · Recorded: 2026-11-27 · Status: alternatives under discussion.
 
 ## Design authority
+
+At r44 [numeric literals and module defaults](NumericLiterals.md) govern the choice of a literal’s initial scalar type. Once typed, r43’s nominal unit and whole-type lossless conversion rules continue. [User decision](../CHANGELOG.md#h-numeric-literals-and-signs-20261127)
 
 At r43 the [indexing terminology](CollectionsAndBuiltinContainers.md#indexing-terminology) names the existing bracket operations. The [D-11](DesignAuthorityRegistry.md#d-11) rules and acceptance at r42 continue.
 

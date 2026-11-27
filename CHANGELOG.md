@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Interpret numeric literals in context and group before recognizing their sign
+
+<a id="h-numeric-literals-and-signs-20261127"></a>
+**H-NUMERIC-LITERALS-AND-SIGNS-20261127.** In the [numeric-literals side discussion](codex://threads/01a21c7c-229d-7fb0-8c33-ade7ab502d7b), the project user directed “确实应该是类型推断不能唯一决定类型后才参考default指令” and “不按参数顺序短路决定匹配程度，而是看所有参数匹配程度的总得分去判断”. The user confirmed `UInt8` addition with future certain-overflow advice, floating defaults and written-site scope. After distinguishing `-1` from `- 1`, the user supplied Julia’s `e=2; -2^e` result −4 and approved grouping first, with that example in parser comments. [D-11-LITERAL-DEFAULTS](design/DesignAuthorityRegistry.md#d-11-literal-defaults) and [D-10-LITERAL-SIGN](design/DesignAuthorityRegistry.md#d-10-literal-sign), P-782–P-785, govern the [contract and acceptance](design/NumericLiterals.md). D-11r44 and idioms guide r20 continue the [baseline typed conversion and unit rules](https://github.com/complyue/cod-project/blob/586dacf8ce29658534c0026ca2a8e849bff9eefb/design/ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening). Parser comments record the model for the bootstrap subsets. Runtime and diagnostic delivery are separate. Registry r1358→1359.
+
 ## 2026-11-27 — Allow a dotted named call to reach the visible free callable
 
 <a id="h-named-member-free-fallback-20261127"></a>
