@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 17 · 2026-11-27 · Source design draft
+Design revision 18 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r18 the [user’s decision](../CHANGELOG.md#h-hash-width-and-pop-20261127) sets the [public hash result width](#public-hash-result) and narrows the r17 copy-to-retain advice to [map lookup](#container-pointer-results). D-30, P-589/P-590, continues the r17 nullable result and owner rules. Detached pop is proposed below.
 
 At r17 the [container pointer result decision](../CHANGELOG.md#h-container-pointer-results-20261127) qualifies bootstrap [pop and lookup results](#container-pointer-results) under [D-30](DesignAuthorityRegistry.md#d-30), P-590/P-162. It continues the r16 owner-only reference lifetime rule and leaves storage reuse policy to the regional library work.
 
@@ -45,11 +47,15 @@ The first public generic linked collection for the booter is a deque parameteriz
 
 ### Container pointer results
 
-Deque pop and map lookup return a nullable pointer. Empty or missing gives null. On success the pointer selects typed storage with its actual owner and access. A caller can handle either outcome by matching the result once in a [`case`](DomainLanguageDesign.md#case-expressions-and-branch-local-variables). Subsequent container operations may change the contents at the selected location. The pointer remains subject to the [ordinary owner lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy).
+Deque pop and map lookup return a nullable pointer. Empty or missing gives null. On success the pointer selects typed storage with its actual owner and access. A caller can handle either outcome by matching the result once in a [`case`](DomainLanguageDesign.md#case-expressions-and-branch-local-variables). Both operations follow the [ordinary reference lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy).
 
-A caller that needs the observed value later copies it before the next operation that could change it. For example, pop 7, save its integer payload, and then push 13. The saved integer still reads 7. Reading through the original pointer can yield 7 if the implementation kept the payload, or 13 if it reused that slot. Copying the pointer itself retains the same target. For a reference-bearing item, retaining an independent graph requires the type's admitted [graph transfer](CallableViewsAndCaptures.md#copying-moving-and-graph-transfer).
+**Map lookup** borrows the selected value. Later map operations may change the contents observed through that pointer. To retain the value observed at lookup, copy the payload before an operation that can change it. Copying the pointer retains the same target. For a reference-bearing item, constructing an independent graph requires an admitted [graph transfer](CallableViewsAndCaptures.md#copying-moving-and-graph-transfer).
 
-The initial implementation may allocate fresh typed storage or reuse suitable slots. The later intra-region memory management interface and library work will establish optimization criteria.
+**Deque pop** removes the item. The proposed detachment guarantee preserves the removed payload across subsequent deque operations. Push 7, pop it into `p`, then push and pop 13. While the owner lives, `p` still reads 7 unless someone explicitly writes the selected payload. A writable alias retains its access. The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
+
+## Public hash result
+
+A key type’s public `hash` overload returns `UInt64` on every target. A map may use fewer bits for its bucket index or cached fingerprint. Colliding hashes require key equality to distinguish entries. The width decision leaves the hash algorithm and any cross-version persistence guarantee to their own contracts.
 
 ## Builtin containers and related forms
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Fix the public hash width and distinguish lookup from removal
+
+<a id="h-hash-width-and-pop-20261127"></a>
+**H-HASH-WIDTH-AND-POP-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user decided “那就决定用 UInt64 hash 值” and clarified “我前面说的不承诺不会变主要针对lookup语义哈”. [D-30 r17→18](design/CollectionsAndBuiltinContainers.md#public-hash-result) fixes the public hash result independently of a table’s storage width. The [container result contract](design/CollectionsAndBuiltinContainers.md#container-pointer-results) narrows the [previous reuse example](https://github.com/complyue/cod-project/blob/f12c7e14b9ca69737a0158033c8b06039bc00442/design/CollectionsAndBuiltinContainers.md#container-pointer-results) to lookup and records the user’s proposal for a detached pop. Actual owner, access and deferred regional allocation policy continue under P-162/P-589/P-590. Registry r1370→1371.
+
 ## 2026-11-27 — Copy a container result when its observed value must be retained
 
 <a id="h-container-pointer-results-20261127"></a>
