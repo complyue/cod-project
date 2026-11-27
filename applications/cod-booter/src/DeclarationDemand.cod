@@ -17,7 +17,7 @@ using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayProcedureCall, CheckedReadonlyCall }, read_acquisition_failure,
     native_loan_requires_body, source_handle_callable, prepared_array_procedure,
     prepared_source_here_relay, SourceArrayFormals { NoSourceArrayFormal, ArrayReferenceSlotFormal },
-    prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_array_inspector
+    prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_scalar_function, checked_scalar_function_call, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_array_inspector
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
@@ -250,7 +250,7 @@ export func discover_declaration_demand(
                 }
             };
             if ((prepared_product_writer(views, site) || prepared_scalar_predicate(views, site) ||
-                prepared_aggregate_writer(views, site) || prepared_readonly_query(views, site) ||
+                prepared_scalar_function(views, site) || prepared_aggregate_writer(views, site) || prepared_readonly_query(views, site) ||
                 prepared_array_procedure(views, site) ||
                 prepared_parser_writer(views, site) || prepared_array_inspector(views, site)) &&
                 !require_receipt_body(demand, site, count, receipt_count, used)) {
@@ -301,6 +301,7 @@ export func discover_declaration_demand(
         };
         checked_call <- links[site].imported_interface != no_node() &&
             (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
+             checked_scalar_function_call(views, site) ||
              (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
              (site < intrinsic (len)(views) && (case views[site] of {
                  ImportedProductWriter -> true; CheckedArrayProcedureCall -> true; CheckedImportedArraySlotCall -> true;

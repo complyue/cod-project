@@ -16,9 +16,9 @@ using "./ParserStorage.cod" ExprPayload {
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity };
 using "./NativeDeclarations.cod" {
-    prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_readonly_query,
+    prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_readonly_query,
     prepared_array_procedure, prepared_native_function,
-    prepared_parser_writer, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
+    prepared_parser_writer, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, checked_scalar_function_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits };
@@ -33,7 +33,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -451,6 +451,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val ordinary <- false;
     val stops_before_entry <- false;
     val checked_call <- false;
+    val imported_effects <- false;
     for (at in 0u64 .. used) {
         definition <- demand[at].scope;
         if (definition < used && definition != at && local[definition].available &&
@@ -459,7 +460,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             ordinary <- inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation;
             stops_before_entry <- ordinary &&
                 (!can_continue(sites, call.callee) || !can_continue(sites, call.arguments));
-            checked_call <- ordinary && (checked_source_array_call(views, at) ||
+            imported_effects <- checked_source_array_call(views, at) || checked_scalar_function_call(views, at);
+            checked_call <- ordinary && (imported_effects ||
                 prepared_native_function(views, at, revision) ||
                 (work[at].imported_interface != no_node() &&
                  (work[at].imported_array_read_completion != NoArrayRead ||
@@ -486,7 +488,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     (local[definition].allocates <- true):void
                 };
                 if (can_continue(sites, at)) {
-                    if ((checked_source_array_call(views, at) && work[at].imported_numeric_fault) ||
+                    if ((imported_effects && work[at].imported_numeric_fault) ||
                         (checked_unsigned_arithmetic_kind(facts[at].kind) &&
                          (case nodes[at] of {
                             Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -566,7 +568,7 @@ func propagate_function_effect(calls:const FunctionCallGraph in P, local:const F
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
-            prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
+            prepared_scalar_function(views, at) || prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
             prepared_array_procedure(views, at) ||
             prepared_parser_writer(views, at) || prepared_array_inspector(views, at)) return true
     };
@@ -632,6 +634,9 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
                 }
             };
             _ -> {}
+        };
+        if (prepared_scalar_function(views, at) && nonallocating && !outcomes[at].bounds) {
+            (views[at] <- make CheckedScalarFunction { numeric_fault <- outcomes[at].numeric }):void
         };
         if (prepared_scalar_predicate(views, at) && nonallocating &&
             !outcomes[at].bounds && !outcomes[at].numeric) {

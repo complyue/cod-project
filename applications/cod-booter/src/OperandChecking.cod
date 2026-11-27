@@ -138,7 +138,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
-    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
+    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, CheckedScalarFunctionCall,
     CheckedWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
@@ -3158,23 +3158,31 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
     return if (array && (handle || (output && result == builtin_void()))) { past } else { no_node() }
 }
 
-func checked_scalar_predicate_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
-    -> bool where {const owner I} {
-    if (header >= published || published > intrinsic (len)(contracts) || published - header <= 1u64 ||
-        contracts[header].entry_count != 1u64 || !contracts[header].scalar_source_body ||
+func checked_parameterized_scalar_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
+    -> UInt64 where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val arity <- contracts[header].entry_count;
+    val result <- contracts[header].result_kind;
+    val predicate <- result == builtin_bool();
+    if (arity == 0u64 || arity >= published - header || !contracts[header].scalar_source_body ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
-        contracts[header].result_kind != builtin_bool() || contracts[header].type_module != 0u64 ||
-        contracts[header].type_identity != 0u64 || contracts[header].target_readonly != 0u8 ||
-        contracts[header].owner_count != 0u64 || contracts[header].owner_role != no_node() ||
-        contracts[header].has_here != 0u8 || contracts[header].failure_identity != no_node() ||
-        contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8 ||
-        contracts[header].array_read_completion != NoArrayRead || contracts[header].source_numeric_fault ||
-        contracts[header].source_writer != NoSourceWriter) return false;
-    val input <- header + 1u64;
-    return source_scalar_value_row(contracts[input], builtin_u8()) &&
-        !contracts[input].source_allocates && contracts[input].type_module == 0u64 &&
-        contracts[input].type_identity == 0u64
+        (!predicate && result != builtin_u64()) ||
+        (predicate && (arity != 1u64 || contracts[header].source_numeric_fault)) ||
+        contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
+        contracts[header].target_readonly != 0u8 || contracts[header].owner_count != 0u64 ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
+        contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion != NoArrayRead ||
+        contracts[header].source_writer != NoSourceWriter) return no_node();
+    val input <- if (predicate) { builtin_u8() } else { builtin_u64() };
+    val first <- header + 1u64;
+    val past <- first + arity;
+    for (row in first .. past) {
+        if (!source_scalar_value_row(contracts[row], input) || contracts[row].source_allocates ||
+            contracts[row].type_module != 0u64 || contracts[row].type_identity != 0u64) return no_node();
+    };
+    return past
 }
 
 func checked_product_writer_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
@@ -3737,17 +3745,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     val handles <- source_only && source_handle_call(contracts, interface_count, header);
     val array_read <- source_only && header != no_node() && contracts[header].array_read_completion != NoArrayRead;
     if (source_only && header != no_node() && contracts[header].scalar_source_body &&
-        contracts[header].result_kind == builtin_bool()) {
-        if (obligation || !checked_scalar_predicate_header(contracts, interface_count, header) ||
-            selected[site].dependency_module != selected[site].origin_module ||
+        (contracts[header].entry_count != 0u64 || contracts[header].result_kind == builtin_bool())) {
+        val module <- selected[site].origin_module;
+        val past <- checked_parameterized_scalar_past(contracts, interface_count, header);
+        if (obligation || past == no_node() || selected[site].dependency_module != module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header + 1u64, interface_count))
+            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
-        # This contract is available to already demanded bodies.
         remember_imported_call(links, contracts, at, header, true);
+        if (contracts[header].result_kind == builtin_u64()) {
+            links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+            supplied[at] <- make CheckedScalarFunctionCall {};
+            if (required == no_node()) { (required <- at):void }
+        };
         return true
     };
     if (source_only && header != no_node() && contracts[header].scalar_source_body) {
