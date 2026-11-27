@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 232
+Discussion revision: 233
 
 Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r233 the [generic bracket decision](../CHANGELOG.md#h-generic-type-brackets-20261127) confirms [nominal type parameters and applications](#brackets-in-generic-type-heads) for the linked deque. P-18/P-229 continue for readable type syntax and existing generic callable declarations. P-590 continues the D-30r21 item, owner and transfer rules. Expression assertions followed by brackets and positional sum fields remain separate questions.
 
 At r232 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) distinguishes the outer lookup group for a dotted name from that for indexing. [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback) retains the production diagnostic and [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) retains the three operation identities, argument order and access rules.
 
@@ -366,6 +368,22 @@ func const Leaf.score() -> u64 { return super(Base).score() + self.attempt }
 For a leaf whose `code`, `detail` and `attempt` fields hold 10, 3 and 1 respectively, an ordinary call through a borrowed `Base` returns 11. Replacing only `super(Base)` with `super` in the leaf body gives 14. Inside `Sub.score`, `super` continues to start at `Base` even on a leaf. An assertion such as `(leaf:Base).score()` uses [ordinary concrete-type dispatch](#concrete-data-dispatch-through-abstract-parameters) and gives the same result as `leaf.score()`.
 
 A super-call requires the implicit receiver of an OO member method, field accessor or functor call-operator body. An ordinary helper taking the same reference cannot perform that call. Neither an unrelated type nor a `<:` conformance supplies the required storage ancestry. The named form rejects the declaring type itself, a sibling or a descendant. There is no first-class `super` reference to store or pass. Check receiver access and ownership, other arguments in written order, checked failures, and normal cleanup just as for the selected ordinary signature. A readonly `self` cannot invoke a writable-only ancestor method. The restriction on receiver selection ends with the call.
+
+#### Brackets in generic type heads
+
+A generic product declares its type parameters in square brackets after its name. In a declared type, brackets after a nominal type name supply its ordered type arguments. This applies to fields, lexical bindings, parameters and results, including nested applications. A construction head can supply those arguments before its ordinary initializer and optional placement.
+
+```cod
+data Link[T] { item:T; ptr next:Link[T] }
+data Pair[A, B] { first:A; second:B }
+
+# r is a live writable owner.
+ref link:Link[UInt64] in r = make Link[UInt64] in r { item <- 7; next = null }
+```
+
+Here the field and the call site select the same concrete `Link[UInt64]`. The declaration supplies the field modes. `Link[ptr UInt64]` cannot select a different mode for `item`. The same grammar admits `deque[UInt64]`, `map[K,V]` and a lexical construction such as `make deque[UInt64] { ... }` with its required initialization. A type application must resolve a generic declaration and supply its declared arity.
+
+Brackets are delimiters. Parsing these positions needs no change to symbolic operator runs. A value expression such as `q[i]` uses indexing. A named array declaration still introduces its index domain after the array name, and allocating a named array still takes its length and fill through the existing construction form. The existing `where {T, owner R}` method binders keep their meaning. The choice for an unparenthesized expression such as `x:T[i]` lies outside these declared-type and construction positions. [Value-only generic items](CollectionsAndBuiltinContainers.md#container-pointer-results) · [Operator tokens](SymbolicDynamicScope.md#symbolic-operator-tokens)
 
 #### Typed enums
 

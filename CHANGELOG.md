@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Use brackets in generic product and type-application heads
+
+<a id="h-generic-type-brackets-20261127"></a>
+**H-GENERIC-TYPE-BRACKETS-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user selected the proposed bracket grammar subject to identifying a material conflict: “选项1如果是唯一合理语法就这样定，如果还有quirks需要考虑不同的语法，你再跟我讨论。” [D-07 r232→233](design/DomainLanguageDesign.md#brackets-in-generic-type-heads) confirms `data Link[T]`, applied nominal types in declarations and explicit applied construction heads. Named arrays, value indexing, method owner binders and the [value-only item rule](https://github.com/complyue/cod-project/blob/d1cb3373a3bb6ebdbe354a197f47d5a04b94f2d8/design/CollectionsAndBuiltinContainers.md#container-pointer-results) continue. Expression-level `x:T[i]` and positional sum payload syntax are outside the decision. P-18/P-229/P-590, registry r1374→1375.
+
 ## 2026-11-27 — Generic containers store items by value
 
 <a id="h-value-only-container-items-20261127"></a>
