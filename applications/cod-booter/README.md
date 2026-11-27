@@ -353,7 +353,11 @@ Each borrower retains its actual owner and target access. The two readonly looku
 
 Both source commands check the defining body of `NativeSourceUse.with_source` and publish its ordinary callback signature. The relay forwards readonly source bytes and line rows in their declared positions under the same actual revision owner. A renamed direct import binds the same two offers. The caller checks the supplied body and its nominal `CompilerStatus` feedback. The linked seed witness verifies the extents, distinct contents, ordinary feedback and an abrupt callback with its original payload.
 
-The unchanged full CLI now checks through the `with_source` handoff and stops at the borrowed `importer` operand of `append_package_diagnostic` in `PackageDiagnostics.cod:33:49`.
+### Mixed native diagnostic arguments
+
+Both source commands check immediate calls to the imported C function `append_package_diagnostic`, including renamed selections. The ordered native argument checker consumes the published signature. It checks the writable diagnostic handle, exact diagnostic enum, independent scalar values, and four readonly array loans under their actual owners. A repeated role must use the same actual owner. The checker rejects deferred use of this loan profile. On successful preparation and native completion the call returns an independent `UInt8`. [Native operand preparation](docs/ModuleGraph.md#checking-handles-and-readonly-array-loans-in-one-native-call)
+
+The unchanged `PackageDiagnostics`, `ModuleGraph` and CLI source checks get past native argument binding for this call. Their first remaining stop is the ordinary imported `diagnostic_budget_full` at `PackageDiagnostics.cod:24:9`, which needs completed evidence for its indexed reads.
 
 ### Imported array length families
 

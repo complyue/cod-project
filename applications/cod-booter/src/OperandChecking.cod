@@ -2126,6 +2126,7 @@ func check_prepared_native_arguments(nodes:const ExprNodes in N, names:const Nam
         first)) return invalid_operand_tree();
     val argument <- first;
     val diagnostic <- 0u8;
+    val borrows_array <- false;
     for (position in 0u64 .. arity) {
         if (argument >= at) return invalid_operand_tree();
         diagnostic <- check_prepared_native_operand(nodes, names, links, facts, views, at,
@@ -2135,11 +2136,14 @@ func check_prepared_native_arguments(nodes:const ExprNodes in N, names:const Nam
             set_result(facts, at, never_result());
             return 0u8
         };
+        borrows_array <- borrows_array || facts[argument].kind == source_array_loan();
         argument <- links[argument].next
     };
     if (argument != no_node()) return invalid_operand_tree();
-    return remember_native_result(facts, at, links[at].value_kind,
-                                  links[at].value_module, links[at].value_identity)
+    diagnostic <- remember_native_result(facts, at, links[at].value_kind,
+        links[at].value_module, links[at].value_identity);
+    facts[at].loans_scoped_aggregate <- borrows_array;
+    return diagnostic
 }
 
 func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBindings in B,

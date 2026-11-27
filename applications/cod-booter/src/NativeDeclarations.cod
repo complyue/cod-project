@@ -3748,6 +3748,12 @@ func imported_native_loan_profile(contracts:const ModuleInterfaces in C, publish
             contracts[head + 1u64].value_kind == array_type() &&
             contracts[head + 4u64].value_kind == array_type()
     };
+    if (contracts[head].callable_kind == CheckedFunction && contracts[head].result_kind == builtin_u8()) {
+        for (row in head + 1u64 .. head + 1u64 + arity) {
+            if (contracts[row].value_kind == array_type()) return true
+        };
+        return false
+    };
     if (contracts[head].callable_kind != CheckedProcedure) return false;
     if (contracts[head].result_kind == builtin_u8() && arity == 2u64) {
         val second <- contracts[head + 2u64].value_kind;
@@ -3768,7 +3774,8 @@ func checked_native_loan_row(row:const ModuleInterfaceRow in R, roles:UInt64) ->
         row.owner_readonly > 1u8 || row.native_reception != 0u8 || row.native_passes_owner != 0u8)
         return false;
     if (row.value_kind == c_handle_type())
-        return row.type_module != 0u64 && row.type_identity != no_node();
+        return row.field_mode == HandleFormal && row.type_module != 0u64 &&
+            row.type_identity != no_node();
     if (row.value_kind == array_type())
         return row.type_module != 0u64 && row.type_identity != no_node() && row.field_mode == ReferenceFormal &&
             row.target_readonly == 1u8 && row.owner_readonly == 1u8;
@@ -3776,12 +3783,14 @@ func checked_native_loan_row(row:const ModuleInterfaceRow in R, roles:UInt64) ->
         row.owner_readonly == 1u8
 }
 
-func checked_native_u64_row(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
-    return row.interface_kind == 0u8 && row.value_kind == builtin_u64() &&
-        (row.field_mode == ValueFormal || row.field_mode == ExplicitValueFormal) &&
-        row.type_module == 0u64 && row.type_identity == 0u64 && row.owner_role == no_node() &&
-        row.target_readonly == 0u8 && row.owner_readonly == 0u8 &&
-        row.native_reception == 0u8 && row.native_passes_owner == 0u8
+func checked_native_value_row(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
+    if (row.interface_kind != 0u8 ||
+        (row.field_mode != ValueFormal && row.field_mode != ExplicitValueFormal) ||
+        row.owner_role != no_node() || row.target_readonly != 0u8 || row.owner_readonly != 0u8 ||
+        row.native_reception != 0u8 || row.native_passes_owner != 0u8) return false;
+    if (row.value_kind == enum_type())
+        return row.type_module != 0u64 && row.type_identity != no_node();
+    return source_call_scalar(row.value_kind) && row.type_module == 0u64 && row.type_identity == 0u64
 }
 
 func checked_native_loan_result(contracts:const ModuleInterfaces in C, published:UInt64,
@@ -3867,6 +3876,8 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
     val roles <- contracts[head].owner_count;
     val arity <- contracts[head].entry_count;
     val byte_probe <- contracts[head].result_kind == builtin_u64();
+    val mixed_function <- contracts[head].callable_kind == CheckedFunction &&
+        contracts[head].result_kind == builtin_u8();
     if (contracts[head].failure_module != 0u64 || contracts[head].failure_identity != 0u64 ||
         contracts[head].failure_checked != 0u8 || roles == 0u64 || roles > arity ||
         contracts[head].owner_role != no_node() ||
@@ -3895,7 +3906,7 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
             return false;
         };
         if (byte_probe && position != 0u64 && position != 3u64) {
-            if (!checked_native_u64_row(contracts[row])) {
+            if (contracts[row].value_kind != builtin_u64() || !checked_native_value_row(contracts[row])) {
                 reject_declaration(report, entry.item, invalid_native_parameter());
                 return false
             };
@@ -3903,7 +3914,8 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
                 call_site <- at; revision <- revision; position <- position; input <- entry.item
             }
         } else {
-            if (!checked_native_loan_row(contracts[row], roles)) {
+            if (!(mixed_function && checked_native_value_row(contracts[row])) &&
+                !checked_native_loan_row(contracts[row], roles)) {
                 reject_declaration(report, entry.item, invalid_native_parameter());
                 return false
             };
