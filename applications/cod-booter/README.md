@@ -321,7 +321,9 @@ Both source commands accept the unchanged `ExpressionParser` and check the modul
 
 Both source commands check the unchanged `same_bytes` call comparing written owner names. Each span keeps its nominal byte-array loan, actual owner and two independent bounds. The two roles can borrow the same backing or different backings. The completed body records bounds failure separately from fatal arithmetic. The linked frontend recognizes a matching owner and reports a mismatch while retaining the following declaration.
 
-The unchanged module parser, frontend and CLI first stop at `parse_enum_integer_literal` in `ModuleParser.cod:684:9`. Executable object checking has a separate admission path.
+Both source commands check the original `parse_enum_integer_literal` call. The completed writer contract includes checked `UInt8` decimal arithmetic and carries its possible fatal outcome through the digit helper. The reader preserves the sign, magnitude and written width for the backing-type check. An overflowing literal reports its original span and leaves the following declaration available to recovery.
+
+The unchanged module parser, frontend and CLI first stop at `parse_callable` in `ModuleParser.cod:776:9`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

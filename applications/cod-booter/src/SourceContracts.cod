@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
     prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u64, completed_lexical_bits_target, borrowed_ref, void_result, never_result };
+using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -315,6 +315,10 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
 data FunctionEffects { available:bool; bounds:bool; numeric:bool; }
 array FunctionEffectRows[UInt64]:FunctionEffects;
 
+func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
+    return kind == scalar_u8() || kind == scalar_u64()
+}
+
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
     at:UInt64, callee:UInt64) -> bool
@@ -337,7 +341,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             Parenthesized -> true;
             Transfer -> names[at].kind == 0u8;
             ComparisonExpression -> true;
-            ArithmeticExpression -> facts[at].kind == scalar_u64() || facts[at].kind == never_result();
+            ArithmeticExpression -> checked_unsigned_arithmetic_kind(facts[at].kind) || facts[at].kind == never_result();
             DiscardedExpression -> true;
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
@@ -431,7 +435,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                 };
                 if (can_continue(sites, at)) {
                     if ((checked_source_array_call(views, at) && work[at].imported_numeric_fault) ||
-                        (facts[at].kind == scalar_u64() &&
+                        (checked_unsigned_arithmetic_kind(facts[at].kind) &&
                          (case nodes[at] of {
                             Occupied { val syntax <- node; } -> case syntax.payload of {
                                 ArithmeticExpression -> true; _ -> false
