@@ -8,7 +8,7 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" { NameBindings, NameWork };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedTextPredicate }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -282,7 +282,7 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
     for (at in 0u64 .. used) {
         if ((outcomes[at].can_true || outcomes[at].can_false) &&
             (case views[at] of { ReadonlyTextPredicateBody -> true; _ -> false })) {
-            (views[at] <- make CheckedTextPredicate {
+            (views[at] <- make CheckedReadonlyReader {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void

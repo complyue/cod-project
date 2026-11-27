@@ -89,8 +89,8 @@ using "./PredicateContracts.cod" finish_text_predicates;
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
     publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
-    finish_array_slot_body, first_readonly_text_predicate,
-    publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView },
+    finish_array_slot_body, first_readonly_reader, readonly_indexed_byte_reader,
+    publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView, CheckedReadonlyReader },
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
 using "./DeclarationTypes.cod" {
@@ -785,7 +785,13 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
             finish_array_reader_forward(views, at, sites[callee].array_read_completion)
         };
         if (sites[at].array_read_completion != NoArrayRead) {
-            finish_byte_function(views, at, sites[at].array_read_completion)
+            if (!executable && readonly_indexed_byte_reader(views, at)) {
+                (views[at] <- make CheckedReadonlyReader {
+                    completion <- sites[at].array_read_completion; numeric_fault <- sites[at].numeric_fault
+                }):void
+            } else {
+                finish_byte_function(views, at, sites[at].array_read_completion)
+            }
         };
         if (!executable && demand[at].slot_body &&
             !finish_array_slot_body(views, at, sites[at].array_failures)) {
@@ -979,11 +985,11 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected;
     } else {};
-    val readonly_predicate <- if (native) { no_node() } else { first_readonly_text_predicate(views, used) };
-    val case_capacity <- if (!native && (readonly_predicate != no_node() ||
+    val readonly_reader <- if (native) { no_node() } else { first_readonly_reader(views, used) };
+    val case_capacity <- if (!native && (readonly_reader != no_node() ||
         needs_constructor_case_plan(nodes, used, revision))) { used } else { 0u64 };
     ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
-    ref first_case = make UInt64 { readonly_predicate };
+    ref first_case = make UInt64 { readonly_reader };
     if (!native && !prepare_graph_source_operands(source, nodes, names, selected, work,
         spellings, spelling_size, published_interfaces, interface_count, aggregate_facts, cases, first_case, result)) {
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,

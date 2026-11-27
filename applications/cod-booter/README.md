@@ -227,7 +227,13 @@ Both source commands accept the complete, unchanged `ParserInput.cod`. These pre
 
 The source commands check `TokenBuffer.mark_delimiter` in the unchanged module prefix. They select the imported `Token` constructor and the writable `Tokens` element using their defining schemas, including through renamed selections. In a discarded builtin transfer, the destination index and bounds check precede the written initializers. The token's scalar fields come from checked reads, and its delimiter field copies the bits of the readable sum under its actual owner. Only a completed fresh value replaces the destination row.
 
-The complete `TokenBuffer.cod` and the application entry reach the imported `punct_at` call in `TokenBuffer.cod:46:13`. The indexed construction check carries no object lowering evidence.
+The indexed construction check carries no object lowering evidence.
+
+### Imported indexed byte readers
+
+Both source commands check the unchanged `ParserInput.punct_at` body and its use in `TokenBuffer.close_delimiter`. The defining visit completes the readonly byte-array reader with a second readonly loan of a finite-bits record array, two independent `UInt64` values and an independent `UInt8` result. A checked literal import can supply the token-kind code. At a source-preserving import, the two nominal arrays and their actual owners remain independent. A writable actual can supply a readonly loan. An independent `UInt8` or `UInt32` can widen to either `UInt64` formal. A failed later operand prevents entry.
+
+The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. Protected, supplied-body and active delayed cleanup uses still require a route for a possible fatal outcome. The complete TokenBuffer and application entry reach the imported writable `scan_token` use at `TokenBuffer.cod:84:9`.
 
 ### Imported array length families
 

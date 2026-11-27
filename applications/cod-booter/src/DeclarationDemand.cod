@@ -13,7 +13,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_text_predicate
+    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
@@ -213,7 +213,7 @@ export func discover_declaration_demand(
                 }
             };
             if ((clause != no_node() || links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
-                 readonly_text_predicate(views, site) ||
+                 readonly_reader_needs_body(views, site) ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
                 !require_body(demand, site, count, used, true)) {
                 problem <- site;

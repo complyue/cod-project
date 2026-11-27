@@ -10,7 +10,7 @@ using "./ParserStorage.cod" ExprPayload {
     CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, BlockSyntax, BlockItem, ReturnValue,
     Call, ArgumentItem, RangeHeader, RangeLoop, LocalBinding, ArithmeticExpression,
 };
-using "./NameResolution.cod" { builtin_u8, builtin_u64 };
+using "./NameResolution.cod" { builtin_u8, builtin_u64, builtin_bool };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
 using "./ParserStorage.cod" ArithmeticOperation { Addition };
 using "./ParserStorage.cod" ComparisonRelation { Equal };
@@ -21,7 +21,7 @@ using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
 using "./ExceptionTypes.cod" ExceptionType;
-using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, is_array_reader_leaf, readonly_text_predicate_leaf };
+using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, array_reader_result_kind, checked_literal_call };
 using "./ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction,
     HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake },
@@ -66,7 +66,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, scalar_bool, has_value_tail, has_slot_array,
+    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, declared_scalar, has_value_tail, has_slot_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
@@ -1003,10 +1003,12 @@ func record_array_read_completion(nodes:const ExprNodes in N, names:const NameBi
 # These leaf summaries only cover known primitive operations and exact literal
 # or length callees. Numeric faults bypass the catchable exception channel.
 func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    views:const SuppliedViews in H, at:UInt64, text_reader:bool) -> bool
+    views:const SuppliedViews in H, at:UInt64, result:UInt8) -> bool
     where {const owner N, const owner F, const owner H} {
     val target <- facts[at].call_definition;
-    val literal_kind <- if (text_reader) { builtin_u8() } else { builtin_u64() };
+    val numeric_reader <- result == builtin_u8() || result == builtin_bool();
+    val literal_kind <- if (numeric_reader) { builtin_u8() } else { builtin_u64() };
+    val literal_call <- result == builtin_u8() && checked_literal_call(views, at);
     if (target != no_node() && source_literal_kind(views, target) != literal_kind) return false;
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -1021,15 +1023,15 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
             Parenthesized -> true;
             FieldSelection -> true;
             ArrayLength -> true;
-            ArithmeticExpression -> text_reader && (facts[at].kind == scalar_u64() || facts[at].kind == never_result());
-            Call -> text_reader && (prepared_array_length_call(views, at) ||
-                facts[at].text_intrinsic == text_size_export() || facts[at].text_intrinsic == text_byte_export());
-            ArgumentItem -> text_reader;
-            RangeHeader -> text_reader;
-            RangeLoop -> text_reader;
-            LocalBinding { val mode <-; } -> text_reader && mode == ValueLocal;
+            ArithmeticExpression -> numeric_reader && (facts[at].kind == scalar_u64() || facts[at].kind == never_result());
+            Call -> literal_call || (result == builtin_bool() && (prepared_array_length_call(views, at) ||
+                facts[at].text_intrinsic == text_size_export() || facts[at].text_intrinsic == text_byte_export()));
+            ArgumentItem -> result == builtin_bool();
+            RangeHeader -> result == builtin_bool();
+            RangeLoop -> result == builtin_bool();
+            LocalBinding { val mode <-; } -> numeric_reader && mode == ValueLocal;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
-            EmptyCall -> target != no_node();
+            EmptyCall -> literal_call || target != no_node();
             CaseExpression -> true;
             CaseArm -> true;
             ConstructorCasePattern -> true;
@@ -1044,15 +1046,15 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
 }
 
 func record_array_reader_completion(nodes:const ExprNodes in N, facts:const OperandFacts in F,
-    views:const SuppliedViews in H, sites:CompletionSites in X, definition:UInt64, at:UInt64, text_reader:bool, used:UInt64, revision:UInt64)
+    views:const SuppliedViews in H, sites:CompletionSites in X, definition:UInt64, at:UInt64, result:UInt8, used:UInt64, revision:UInt64)
     -> void where {const owner N, const owner F, const owner H, owner X} {
     if (sites[definition].array_read_completion == NoArrayRead || sites[at].event == skipped_operand())
         return;
-    if (!array_reader_operation(nodes, facts, views, at, text_reader)) {
+    if (!array_reader_operation(nodes, facts, views, at, result)) {
         sites[definition].array_read_completion <- NoArrayRead;
         return
     };
-    if (text_reader && can_continue(sites, at)) {
+    if ((result == builtin_u8() || result == builtin_bool()) && can_continue(sites, at)) {
         ref binary = make BinarySites {
             left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64; arithmetic <- Addition; relation <- Equal
         };
@@ -1383,7 +1385,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
         if (needs_body_check(demand, at) &&
-            (is_array_reader_leaf(views, at) || readonly_text_predicate_leaf(views, at))) {
+            array_reader_result_kind(views, at) != 0u8) {
             (sites[at].array_read_completion <- CheckedArrayRead):void
         };
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
@@ -1404,7 +1406,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     };
     val slot_bodies <- false;
     val definition <- no_node();
-    val text_reader <- false;
+    val reader_result <- 0u8;
     for (at in 0u64 .. tree.used) {
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
@@ -1418,17 +1420,18 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
             if (definition < tree.used && definition != at &&
                 sites[definition].array_read_completion != NoArrayRead) {
-                text_reader <- readonly_text_predicate_leaf(views, definition);
-                if (text_reader || is_array_reader_leaf(views, definition)) {
+                reader_result <- array_reader_result_kind(views, definition);
+                if (reader_result != 0u8) {
                     record_array_reader_completion(nodes, facts, views, sites, definition, at,
-                        text_reader, tree.used, tree.revision)
+                        reader_result, tree.used, tree.revision)
                 }
             };
-            text_reader <- readonly_text_predicate_leaf(views, at);
-            if ((text_reader || is_array_reader_leaf(views, at)) &&
-                (can_miss_return(nodes, facts, sites, at, tree.revision, tree.used) ||
-                 facts[at].kind != (if (text_reader) { scalar_bool() } else { scalar_u64() }))) {
-                (sites[at].array_read_completion <- NoArrayRead):void
+            reader_result <- array_reader_result_kind(views, at);
+            if (reader_result != 0u8) {
+                if (facts[at].kind != declared_scalar(reader_result) ||
+                    can_miss_return(nodes, facts, sites, at, tree.revision, tree.used)) {
+                    (sites[at].array_read_completion <- NoArrayRead):void
+                }
             }
         }
     };

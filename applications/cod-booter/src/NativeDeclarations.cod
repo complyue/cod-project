@@ -90,7 +90,7 @@ using "./ModuleExportStorage.cod" ExceptionSchema { OrdinarySchema };
 using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
-    ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
+    ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
     array_length_family_interface,
     SumInterfacePayload { NoSumInterface }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
@@ -1479,7 +1479,9 @@ export data SuppliedView =
     PreparedScalarLiteral { kind:UInt8; } |
     ReadonlyTextPredicate {} |
     ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
-    CheckedTextPredicate { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    ReadonlyIndexedByteReader {} |
+    CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    CheckedLiteralCall {} |
     ImportedTextPredicateCandidate {} |
     PreparedArrayReaderLeaf { declared_array:UInt64; } |
     PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
@@ -1549,6 +1551,37 @@ func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in
     proof.type_identity <- declaration;
     proof.element_sum <- no_node();
     return true
+}
+
+export func published_record_array(contracts:const ModuleInterfaces in C, published:UInt64,
+    module:UInt64, declaration:UInt64) -> bool where {const owner C} {
+    val header <- find_interface(contracts, published, module, declaration);
+    return header < published && contracts[header].interface_kind == array_type() &&
+        contracts[header].entry_count == 0u64 && contracts[header].array_index_kind == builtin_u64() &&
+        contracts[header].element_kind == record_type() &&
+        checked_aggregate_storage(contracts, published, contracts[header].type_module,
+            contracts[header].type_identity, record_type()) == CoDBitsAggregate
+}
+
+func readonly_record_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    if (names[marker].kind == array_type()) {
+        ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+        if (!describe_local_u64_array_element(nodes, names, selected, names[marker].declaration,
+            used, revision, element) || element.kind != record_type()) return false;
+        return if (element.defining_module == 0u64) {
+            element.identity < used && aggregate[element.identity] == CoDBitsAggregate
+        } else {
+            checked_aggregate_storage(contracts, published, element.defining_module,
+                element.identity, record_type()) == CoDBitsAggregate
+        }
+    };
+    val selection <- names[marker].declaration;
+    return names[marker].kind == ordinary_selection() && selection < used &&
+        selected[selection].kind == array_export() && published_record_array(contracts, published,
+            selected[selection].origin_module, selected[selection].identity)
 }
 
 func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2048,12 +2081,6 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
     return
 }
 
-export func is_array_reader_leaf(views:const SuppliedViews in V, definition:UInt64) -> bool where {const owner V} {
-    return definition < intrinsic (len)(views) && (case views[definition] of {
-        PreparedArrayReaderLeaf -> true;
-        _ -> false
-    })
-}
 
 export func forwarded_array_reader(views:const SuppliedViews in V, definition:UInt64) -> UInt64 where {const owner V} {
     return case views[definition] of {
@@ -2143,9 +2170,9 @@ func mark_text_predicate_body(nodes:const ExprNodes in N, names:const NameBindin
     }):void;
 }
 
-# This source profile covers an immediate byte-array and bits-product
-# predicate with one immutable String loan. It supplies body demand only.
-func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const NameBindings in B,
+# Recognize the readonly byte-array profiles before checking their bodies.
+# Only completed operand and exit evidence can publish a reader.
+func prepare_readonly_reader(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
     at:UInt64, used:UInt64, revision:UInt64) -> void
@@ -2166,7 +2193,9 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     if (third_owner && !clause.readonly) return;
     val result <- if (third_owner) { (clause.previous) } else { first_owner };
     if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
-        names[clause.annotation].kind != builtin_bool()) return;
+        clause.annotation >= used) return;
+    val output <- names[clause.annotation].kind;
+    if (output != builtin_bool() && (output != builtin_u8() || third_owner)) return;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     val first <- no_node();
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
@@ -2174,6 +2203,23 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     val second <- work[first].next;
     if (second >= used) return;
     val third <- work[second].next;
+    val record_owner <- if (third_owner) { previous_owner } else { last_owner };
+    val array_owner <- if (third_owner) { first_owner } else { previous_owner };
+    val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
+    if (record >= used) return;
+    val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
+    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
+    if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
+    if (output == builtin_u8()) {
+        if (!independent_scalar_formal(nodes, names, third, used, revision, builtin_u64())) return;
+        val fourth <- work[third].next;
+        if (!independent_scalar_formal(nodes, names, fourth, used, revision, builtin_u64()) ||
+            work[fourth].next != no_node() ||
+            !readonly_record_array(nodes, names, selected, contracts, published, aggregate, record, used, revision))
+            return;
+        (views[at] <- make ReadonlyIndexedByteReader {}):void;
+        return
+    };
     if (third_owner) {
         if (third >= used || work[third].next != no_node()) return;
         val text <- readonly_formal_marker(nodes, names, third, last_owner, used, revision);
@@ -2181,10 +2227,6 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     } else {
         if (third != no_node()) return
     };
-    val record_owner <- if (third_owner) { previous_owner } else { last_owner };
-    val array_owner <- if (third_owner) { first_owner } else { previous_owner };
-    val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
-    if (record >= used) return;
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_type(nodes, names, selected, record, 0u64, revision, used, type) || type.kind != record_type())
         return;
@@ -2196,9 +2238,6 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
             contracts[header].aggregate_storage == CoDBitsAggregate
     };
     if (!bits) return;
-    val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
-    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
-    if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
     if (third_owner) {
         (views[at] <- make ReadonlyTextPredicate {}):void
     } else {
@@ -2207,25 +2246,42 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     return
 }
 
-export func readonly_text_predicate_leaf(views:const SuppliedViews in V, site:UInt64) -> bool
+export func array_reader_result_kind(views:const SuppliedViews in V, site:UInt64) -> UInt8
     where {const owner V} {
-    return site < intrinsic (len)(views) && (case views[site] of { ReadonlyTextPredicate -> true; _ -> false })
+    if (site >= intrinsic (len)(views)) return 0u8;
+    return case views[site] of {
+        PreparedArrayReaderLeaf -> builtin_u64();
+        ReadonlyTextPredicate -> builtin_bool();
+        ReadonlyIndexedByteReader -> builtin_u8();
+        _ -> 0u8
+    }
 }
 
-export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64) -> bool
+export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { ReadonlyIndexedByteReader -> true; _ -> false })
+}
+
+export func checked_literal_call(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { CheckedLiteralCall -> true; _ -> false })
+}
+
+export func readonly_reader_needs_body(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
     if (site >= intrinsic (len)(views)) return false;
     return case views[site] of {
         ReadonlyTextPredicate -> true;
         ReadonlyTextPredicateBody -> true;
+        ReadonlyIndexedByteReader -> true;
         _ -> false
     }
 }
 
-export func first_readonly_text_predicate(views:const SuppliedViews in V, used:UInt64) -> UInt64
+export func first_readonly_reader(views:const SuppliedViews in V, used:UInt64) -> UInt64
     where {const owner V} {
     for (site in 0u64 .. used) {
-        if (readonly_text_predicate(views, site)) return site;
+        if (readonly_reader_needs_body(views, site)) return site;
         if (case views[site] of { ImportedTextPredicateCandidate -> true; _ -> false }) return site
     };
     return no_node()
@@ -2294,7 +2350,7 @@ func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
     return case views[at] of {
         PreparedByteFunction { val completion <-; } -> completion;
         CheckedArrayReaderForward { val completion <-; } -> completion;
-        CheckedTextPredicate { val completion <-; } -> completion;
+        CheckedReadonlyReader { val completion <-; } -> completion;
         _ -> NoArrayRead
     }
 }
@@ -3512,7 +3568,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         };
         prepare_array_length_method(nodes, names, selected, work, views, at, used, revision);
         prepare_array_reader(nodes, names, selected, work, views, at, used, revision);
-        prepare_readonly_text_predicate(nodes, names, selected, contracts, interface_count,
+        prepare_readonly_reader(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);
@@ -4181,7 +4237,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                                                    at, at, kind, callback, array_read_completion, used, revision)):void;
                         if (count != no_node()) {
                             case views[at] of {
-                                CheckedTextPredicate { val numeric_fault <-; } -> {
+                                CheckedReadonlyReader { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
                                 _ -> {}
