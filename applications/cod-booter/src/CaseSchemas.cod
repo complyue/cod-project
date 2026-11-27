@@ -1,6 +1,6 @@
 using "./NativeDeclarations.cod" {
     SuppliedViews, prepared_writable_product_formal,
-    SuppliedView { PreparedArrayConstruction }, ArraySlotElement { ProductArrayElement }
+    SuppliedView { PreparedArrayConstruction }, ArraySlotElement { ProductArrayElement, SumArrayElement }
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
@@ -65,8 +65,8 @@ export data ConstructorCaseFact =
     } |
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalProductReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
-    LexicalProductArray {
-        owner_site:UInt64; array_module:UInt64; array_type:UInt64; record:DeclaredType; readonly:bool;
+    LexicalBitsArray {
+        owner_site:UInt64; array_module:UInt64; array_type:UInt64; element:DeclaredType; readonly:bool;
     } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
@@ -82,6 +82,8 @@ export data ConstructorCaseFact =
         readonly:bool; repeated:bool; binds_storage:bool;
     };
 export array ConstructorCaseFacts[UInt64]:ConstructorCaseFact;
+
+enum LexicalArrayAccess:UInt8 { NoLexicalArray; ReadonlyLexicalArray; WritableLexicalArray; }
 
 data IndexedCaseLoan {
     expression:UInt64;
@@ -584,34 +586,6 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
     return case_problem(report, choice, 94u8)
 }
 
-func prepare_indexed_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
-    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
-    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
-    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
-    at:UInt64, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner W,
-           const owner G, const owner A, owner F, owner R} {
-    if (at >= intrinsic (len)(facts)) return false;
-    ref subject = make CaseSites { subject <- no_node(); items <- no_node() };
-    if (!inspect_case(nodes, revision, used, at, subject)) return false;
-    ref loan = make IndexedCaseLoan {
-        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
-        array_module <- 0u64; array_type <- no_node()
-    };
-    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
-    if (!describe_indexed_case_loan(nodes, names, selected, interfaces, published, subject.subject, used, revision,
-        sum_type(), loan, type) || !case_bits_type(type, aggregate, interfaces, published))
-        return case_problem(report, subject.subject, unproved_sum_subject());
-    ref count = make UInt64 { 0u64 };
-    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
-        interfaces, published, aggregate, facts, at, subject.subject, subject.items, type,
-        used, revision, count, report))
-        return false;
-    if (count == 0u64) return case_problem(report, at, unproved_sum_subject());
-    remember_case_subject(facts, at, loan, type, count);
-    return true
-}
-
 func prepare_direct_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
@@ -887,13 +861,21 @@ func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
         array_module <- 0u64; array_type <- no_node()
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
-    if (has_case_head(nodes, work, choice.items, used, revision, true) ||
-        (describe_indexed_case_loan(nodes, names, selected, interfaces, published, choice.subject, used, revision, sum_type(), loan, type) &&
-         has_case_head(nodes, work, choice.items, used, revision, false))) {
-        if (!prepare_indexed_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
-            interfaces, published, aggregate, facts, at, used, revision, report)) return false;
-        (work[at].case_schema_prepared <- true):void
-    };
+    val described <- describe_lexical_bits_element(nodes, names, facts, choice.subject, used, revision,
+        sum_type(), loan, type) != (NoLexicalArray:LexicalArrayAccess) ||
+        describe_indexed_case_loan(nodes, names, selected, interfaces, published, choice.subject,
+            used, revision, sum_type(), loan, type);
+    if (!has_case_head(nodes, work, choice.items, used, revision, true) &&
+        (!described || !has_case_head(nodes, work, choice.items, used, revision, false))) return true;
+    if (!described || !case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, choice.subject, unproved_sum_subject());
+    ref count = make UInt64 { 0u64 };
+    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, choice.subject, choice.items, type,
+        used, revision, count, report)) return false;
+    if (count == 0u64) return case_problem(report, at, unproved_sum_subject());
+    remember_case_subject(facts, at, loan, type, count);
+    work[at].case_schema_prepared <- true;
     return true
 }
 
@@ -968,7 +950,7 @@ func remember_inline_product_field(facts:ConstructorCaseFacts in F, site:UInt64,
     return
 }
 
-func prepare_lexical_product_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+func prepare_lexical_bits_array(nodes:const ExprNodes in N, names:const NameBindings in B,
     views:const SuppliedViews in V, facts:ConstructorCaseFacts in F, at:UInt64,
     local:const LocalBindingSites in L, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, const owner V, owner F, const owner L} {
@@ -978,18 +960,23 @@ func prepare_lexical_product_array(nodes:const ExprNodes in N, names:const NameB
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
         owner_name <- no_node(); readonly <- false
     };
+    val sum <- false;
     return case views[input] of {
         PreparedArrayConstruction {
             val placement <-; val owner_site <-; val type_module <-; val type_identity <-;
             val kind <- element; val module <- element_module; val identity <- element_identity;
         } -> {
-            if (kind != ProductArrayElement ||
+            sum <- kind == SumArrayElement && module != 0u64;
+            if ((kind != ProductArrayElement && !sum) ||
                 (placement == no_node() && owner_site != names[at].scope) ||
                 inspect_binding(nodes, revision, used, local.binding, binding) == InvalidBindingSyntax)
                 return false;
-            facts[at] <- make LexicalProductArray {
+            facts[at] <- make LexicalBitsArray {
                 owner_site <- owner_site; array_module <- type_module; array_type <- type_identity;
-                record <- make DeclaredType { kind <- record_type(); defining_module <- module; identity <- identity };
+                element <- make DeclaredType {
+                    kind <- if (sum) { sum_type() } else { record_type() };
+                    defining_module <- module; identity <- identity
+                };
                 readonly <- binding.readonly
             };
             true
@@ -998,30 +985,30 @@ func prepare_lexical_product_array(nodes:const ExprNodes in N, names:const NameB
     }
 }
 
-func describe_lexical_product_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+func describe_lexical_bits_element(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const ConstructorCaseFacts in F, expression:UInt64, used:UInt64, revision:UInt64,
-    loan:IndexedCaseLoan in L, element:DeclaredType in L, writable:bool in L) -> bool
-    where {const owner N, const owner B, const owner F, owner L} {
+    expected_kind:UInt8, loan:IndexedCaseLoan in L, element:DeclaredType in L)
+    -> LexicalArrayAccess where {const owner N, const owner B, const owner F, owner L} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     if (!inspect_index_selection(nodes, revision, used, expression, indexed) ||
-        names[indexed.target].kind != local_binding()) return false;
+        names[indexed.target].kind != local_binding()) return (NoLexicalArray:LexicalArrayAccess);
     val origin <- names[indexed.target].declaration;
-    if (origin >= indexed.target) return false;
+    if (origin >= indexed.target) return (NoLexicalArray:LexicalArrayAccess);
     return case facts[origin] of {
-        LexicalProductArray { val owner_site <-; val array_module <-; val array_type <-; val record <-; val readonly <-; } -> {
+        LexicalBitsArray { val owner_site <-; val array_module <-; val array_type <-; val schema <- element; val readonly <-; } -> {
+            if (schema.kind != expected_kind) return (NoLexicalArray:LexicalArrayAccess);
             loan.expression <- expression;
             loan.array <- indexed.target;
             loan.index <- indexed.index;
             loan.owner_site <- owner_site;
             loan.array_module <- array_module;
             loan.array_type <- array_type;
-            element.kind <- record.kind;
-            element.defining_module <- record.defining_module;
-            element.identity <- record.identity;
-            writable <- !readonly;
-            true
+            element.kind <- schema.kind;
+            element.defining_module <- schema.defining_module;
+            element.identity <- schema.identity;
+            if (readonly) { (ReadonlyLexicalArray:LexicalArrayAccess) } else { (WritableLexicalArray:LexicalArrayAccess) }
         };
-        _ -> false
+        _ -> (NoLexicalArray:LexicalArrayAccess)
     }
 }
 
@@ -1042,7 +1029,8 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
         array_module <- 0u64; array_type <- no_node();
     };
     val origin <- no_node();
-    val writable <- false;
+    val access <- (NoLexicalArray:LexicalArrayAccess);
+    val described <- false;
     for (site in 0u64 .. used) {
         if (inspect_field_selection(nodes, revision, used, site, selection) &&
             (case facts[site] of { CaseSumProjection -> false; InlineProductField -> false; _ -> true })) {
@@ -1051,12 +1039,16 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
             loan.expression <- no_node();
-            writable <- false;
-            if (origin < site && (describe_inline_product(facts, origin, type) ||
-                ((describe_lexical_product_element(nodes, names, facts, selection.receiver,
-                     used, revision, loan, type, writable) ||
-                  describe_indexed_case_loan(nodes, names, selected, interfaces, published, selection.receiver, used,
-                      revision, record_type(), loan, type)) && case_bits_type(type, aggregate, interfaces, published)))) {
+            access <- (NoLexicalArray:LexicalArrayAccess);
+            described <- origin < site && describe_inline_product(facts, origin, type);
+            if (origin < site && !described) {
+                access <- describe_lexical_bits_element(nodes, names, facts, selection.receiver,
+                    used, revision, record_type(), loan, type);
+                (described <- (access != (NoLexicalArray:LexicalArrayAccess) ||
+                    describe_indexed_case_loan(nodes, names, selected, interfaces, published, selection.receiver, used,
+                        revision, record_type(), loan, type)) && case_bits_type(type, aggregate, interfaces, published)):void
+            };
+            if (described) {
                 record.kind <- type.kind;
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
@@ -1065,7 +1057,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     interfaces, published, selection.field, used, revision, true, type, ordinal, readonly) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
-                    remember_indexed_product_loan(nodes, facts, site, loan, record, writable ||
+                    remember_indexed_product_loan(nodes, facts, site, loan, record, access == (WritableLexicalArray:LexicalArrayAccess) ||
                         (case facts[site] of { IndexedFieldDestination -> true; _ -> false }));
                     remember_inline_product_field(facts, site, selection.receiver,
                         selection.field, ordinal, readonly, record, type)
@@ -1813,12 +1805,15 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     val transfer <- PlaceTransfer;
     ref element = make DeclaredType { kind <- record_type(); defining_module <- 0u64; identity <- no_node() };
+    val sum <- false;
     for (at in 0u64 .. used) {
         case views[at] of {
             PreparedArrayConstruction {
                 val fill <-; val kind <- element; val module <- element_module; val identity <- element_identity;
             } -> {
-                if (kind == ProductArrayElement) {
+                sum <- kind == SumArrayElement && module != 0u64;
+                if (kind == ProductArrayElement || sum) {
+                    element.kind <- if (sum) { sum_type() } else { record_type() };
                     element.defining_module <- module;
                     element.identity <- identity;
                     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
@@ -1838,7 +1833,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
                         aggregate, facts, at, local, used, revision, report)) return false;
                     if (first == no_node()) { (first <- at):void }
                 } else {
-                    if (!prepare_lexical_product_array(nodes, names, views, facts, at, local, used, revision) &&
+                    if (!prepare_lexical_bits_array(nodes, names, views, facts, at, local, used, revision) &&
                         !prepare_lexical_product_reference(nodes, names, selected, work, interfaces, published,
                         aggregate, facts, at, local, used, revision, report)) return false;
                     if (first == no_node() &&

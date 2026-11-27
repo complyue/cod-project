@@ -1540,19 +1540,33 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         } else {};
         work[at].array_construction <- array_initializer;
         val previous_input <- state.local_sum_input;
-        if (array_initializer && bindings[requested].kind == array_type()) {
+        val previous_inline <- state.inline_field_input;
+        if (array_initializer) {
             ref fill = make SequenceEntry { previous <- no_node(); item <- no_node() };
             if (inspect_sequence_entry(nodes, state.syntax_revision, at, tail, fill) != ArgumentSequence ||
                 fill.previous != first) {
                 reject_name(state, tail, invalid_module_tree());
                 return
             };
-            # Bind the constructor name in its own argument. The array
-            # schema and the fill's actual parent are checked after binding.
-            (state.local_sum_input <- fill.item):void
+            # Bind the constructor at the written fill expression. A later
+            # phase compares its selected parent to the array element.
+            if (bindings[requested].kind == array_type()) {
+                (state.local_sum_input <- fill.item):void
+            } else {
+                ref literal = make ConstructionSites {
+                    requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+                    initializer <- no_node(); contents <- no_node()
+                };
+                if (construction.placement == no_node() && state.lexical_array_initializer == at &&
+                    inspect_construction(nodes, state.syntax_revision, at, fill.item, literal) == BracedConstruction &&
+                    literal.requested < fill.item && work[literal.requested].selected_constructor) {
+                    (state.inline_field_input <- fill.item):void
+                }
+            }
         };
         resolve_list(source, nodes, bindings, work, state, tail, false);
         state.local_sum_input <- previous_input;
+        state.inline_field_input <- previous_inline;
         return;
     } else {};
     val body <- construction.contents;

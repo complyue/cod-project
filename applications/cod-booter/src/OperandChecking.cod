@@ -1058,8 +1058,9 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
         return invalid_operand_tree();
     val element_kind <- slot_scalar_kind(element);
     val product <- element == (ProductArrayElement:ArraySlotElement);
+    val imported_sum <- element == (SumArrayElement:ArraySlotElement) && element_module != 0u64;
     if (placement == no_node()) {
-        if ((!product && element_kind == 0u8) || names[at].scope != owner_site) return unproved_owner()
+        if ((!product && !imported_sum && element_kind == 0u8) || names[at].scope != owner_site) return unproved_owner()
     } else {
         if (placement >= at || owner_site >= at || names[placement].declaration != owner_site ||
             owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint)
@@ -1090,7 +1091,7 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
     set_fact(facts, at, source_array_loan(), borrowed_ref(), owner_site, type_identity_id, 0u8);
     facts[at].identity_module <- type_module_id;
     facts[at].array_scalar <- element_kind;
-    facts[at].array_sum <- if (product) { no_node() } else { element_identity };
+    facts[at].array_sum <- if (product || imported_sum) { no_node() } else { element_identity };
     facts[at].allocation_owner <- owner_site;
     # An explicit owner role carries an allocator requirement to its caller.
     if (placement != no_node()) { (facts[owner_site].owner_chain <- 0u64):void };
@@ -5785,7 +5786,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 val module <- type_module; val identity <- type_identity; val element <-;
                 val element_module <-; val declared_element <- element_identity;
             } -> {
-                if (element == (ProductArrayElement:ArraySlotElement)) {
+                if (element == (ProductArrayElement:ArraySlotElement) ||
+                    (element == (SumArrayElement:ArraySlotElement) && element_module != 0u64)) {
                     if (declared_element == no_node() || (element_module == 0u64 && declared_element >= used))
                         return invalid_operand_tree()
                 } else {
