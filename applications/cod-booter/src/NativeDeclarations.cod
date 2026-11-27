@@ -13,7 +13,7 @@ using "./ParserStorage.cod" {
     SequenceEntry, inspect_sequence_entry, first_sequence_entry, is_scope_block, completion_syntax, completion_operand,
     checked_ref_argument,
     ungrouped, ConditionalSites, inspect_conditional, LogicalSites, inspect_logical,
-    LogicalSyntax { LogicalAnd, LogicalOr }, RhsEvaluation { ConditionalRhs },
+    LogicalSyntax { LogicalOr }, RhsEvaluation { ConditionalRhs },
     is_function, ConstructionSites, inspect_construction, AssignmentSites, inspect_assignment,
     AssignmentSyntax { PlaceTransfer },
     ConstructionSyntax { PositionalConstruction, BracedConstruction }, local_resource_name, IndexSites, inspect_index_selection,
@@ -2242,8 +2242,9 @@ export func forwarded_predicate_call(nodes:const ExprNodes in N, names:const Nam
     return names[call.callee].declaration
 }
 
-# Classify a predicate over the checked byte and record loan signature.
-# A forwarding body may include one leading conditional return of a literal.
+# A predicate over the checked loan signature needs a completed normal result
+# and escaping failures. Use the specialized Boolean equations for forwarding
+# bodies with at most one leading conditional return of a literal.
 func prepare_two_loan_predicate(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:SuppliedViews in V, definition:UInt64, body:UInt64,
     first:UInt64, used:UInt64, revision:UInt64) -> void
@@ -2255,18 +2256,12 @@ func prepare_two_loan_predicate(nodes:const ExprNodes in N, names:const NameBind
         inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
         completion_syntax(nodes, item.item) != ReturnCompletion ||
         !completion_operand(nodes, revision, used, item.item, value) || value >= item.item) return;
+    (views[definition] <- make PreparedReadonlyQuery {}):void;
     ref logical = make LogicalSites {
         left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs
     };
-    val operation <- inspect_logical(nodes, revision, used, value, logical);
-    if (item.previous == no_node() && operation == LogicalAnd) {
-        # A directly returned conjunction needs the ordinary checked exits.
-        # Collect its reached calls, numeric faults and bounds failures there.
-        (views[definition] <- make PreparedReadonlyQuery {}):void;
-        return
-    };
     if (forwarded_predicate_call(nodes, names, work, value, first, used, revision) >= used &&
-        operation != LogicalOr) return;
+        inspect_logical(nodes, revision, used, value, logical) != LogicalOr) return;
     val test <- no_node();
     val returns_true <- false;
     if (item.previous != no_node()) {

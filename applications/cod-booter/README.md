@@ -315,7 +315,9 @@ The readonly array-query contract covers `closing_token` with the published fini
 
 Both source commands check calls to `parse_scoped_procedure_signature` and `parse_callable_signature` through their completed void parser-writer contracts. The writable `ParseResult` loan uses its defining module's published C-layout schema. The ordinary parameter-list parser also serves nested `here` signatures, with their existing restrictions on nested `here` and variadics.
 
-The readonly predicate contract covers `c_linkage` with the byte array and the exact indexed token loan. It records possible bounds failure and fatal numeric failure independently from completed body facts. A failure selecting the token precedes invocation. Both source commands accept the unchanged `ExpressionParser`. The unchanged `Frontend` and `__main__` first stop at `valid_module_path` in `ModuleParser.cod:231:10`. Executable object checking has a separate admission path.
+The readonly predicate contract covers `c_linkage` and `valid_module_path` with a byte array and an exact indexed token loan. Completion uses the checked operations and call dependencies, including the range and early return in path validation. It records possible bounds failure and fatal numeric failure independently. A failure selecting the token precedes invocation. The linked frontend accepts escaped quote and backslash paths and reports invalid escapes at the original token span.
+
+Both source commands accept the unchanged `ExpressionParser` and check the module path call in `ModuleParser`. The unchanged module parser, frontend and CLI first stop at the `FormalSites` construction in `ModuleParser.cod:322:18`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
