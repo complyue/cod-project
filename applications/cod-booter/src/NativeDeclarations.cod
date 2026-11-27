@@ -1486,6 +1486,7 @@ export data SuppliedView =
     ReadonlyTextPredicate {} |
     ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
     ReadonlyIndexedByteReader {} |
+    PreparedIndexedUInt64Reader {} |
     PreparedProductWriter {} |
     PreparedAggregateWriter {} |
     CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
@@ -1493,6 +1494,7 @@ export data SuppliedView =
     CheckedProductWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedLiteralCall {} |
+    CheckedReadonlyCall {} |
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
     ImportedAggregateWriterCandidate {} |
@@ -2248,7 +2250,8 @@ func prepare_readonly_reader(nodes:const ExprNodes in N, names:const NameBinding
     if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
         clause.annotation >= used) return;
     val output <- names[clause.annotation].kind;
-    if (output != builtin_bool() && (output != builtin_u8() || third_owner)) return;
+    if (output != builtin_bool() &&
+        ((output != builtin_u8() && output != builtin_u64()) || third_owner)) return;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     val first <- no_node();
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
@@ -2263,14 +2266,18 @@ func prepare_readonly_reader(nodes:const ExprNodes in N, names:const NameBinding
     val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
     ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
     if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
-    if (output == builtin_u8()) {
+    if (output != builtin_bool()) {
         if (!independent_scalar_formal(nodes, names, third, used, revision, builtin_u64())) return;
         val fourth <- work[third].next;
         if (!independent_scalar_formal(nodes, names, fourth, used, revision, builtin_u64()) ||
             work[fourth].next != no_node() ||
             !readonly_record_array(nodes, names, selected, contracts, published, aggregate, record, used, revision))
             return;
-        (views[at] <- make ReadonlyIndexedByteReader {}):void;
+        if (output == builtin_u8()) {
+            (views[at] <- make ReadonlyIndexedByteReader {}):void
+        } else {
+            (views[at] <- make PreparedIndexedUInt64Reader {}):void
+        };
         return
     };
     if (third_owner) {
@@ -2313,6 +2320,17 @@ export func array_reader_result_kind(views:const SuppliedViews in V, site:UInt64
 export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
     return site < intrinsic (len)(views) && (case views[site] of { ReadonlyIndexedByteReader -> true; _ -> false })
+}
+
+export func prepared_indexed_u64_reader(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    return site < intrinsic (len)(views) &&
+        (case views[site] of { PreparedIndexedUInt64Reader -> true; _ -> false })
+}
+
+export func checked_readonly_call(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { CheckedReadonlyCall -> true; _ -> false })
 }
 
 export func checked_literal_call(views:const SuppliedViews in V, site:UInt64) -> bool
@@ -2479,7 +2497,8 @@ export func first_source_call_profile(views:const SuppliedViews in V, used:UInt6
     where {const owner V} {
     for (site in 0u64 .. used) {
         if (readonly_reader_needs_body(views, site) || prepared_product_writer(views, site) ||
-            prepared_scalar_predicate(views, site) || prepared_aggregate_writer(views, site)) return site;
+            prepared_scalar_predicate(views, site) || prepared_aggregate_writer(views, site) ||
+            prepared_indexed_u64_reader(views, site)) return site;
         if (case views[site] of {
             ImportedTextPredicateCandidate -> true;
             ImportedProductWriterCandidate -> true;

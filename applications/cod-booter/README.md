@@ -229,9 +229,11 @@ The source commands check `TokenBuffer.mark_delimiter` in the unchanged module p
 
 The indexed construction check carries no object lowering evidence.
 
-### Imported indexed byte readers
+### Imported indexed readers
 
 Both source commands check the unchanged `ParserInput.punct_at` body and its use in `TokenBuffer.close_delimiter`. The defining visit completes the readonly byte-array reader with a second readonly loan of a finite-bits record array, two independent `UInt64` values and an independent `UInt8` result. A checked literal import can supply the token-kind code. At a source-preserving import, the two nominal arrays and their actual owners remain independent. A writable actual can supply a readonly loan. An independent `UInt8` or `UInt32` can widen to either `UInt64` formal. A failed later operand prevents entry.
+
+The same checked signature can publish an independent `UInt64` result. In `ParserInput.exception_binder_width`, the defining visit uses the completed imported Lexer predicates and the same-module byte reader. It combines their recorded completions with its own operations after operand checking. A short-circuited operand contributes no execution effects.
 
 The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. Protected, supplied-body and active delayed cleanup uses still require a route for a possible fatal outcome.
 
@@ -255,7 +257,7 @@ The source checker can use the completed `ParserInput.append_syntax_node` contra
 
 Both source commands accept the reduced call to unchanged `append_syntax_node`. They also bind an imported finite scalar-layout record to its writable ordinary reference formal before reading any operands. In an already demanded caller, a direct same-module function can receive that initialized record alongside ordinary array loans. The source checker follows the recorded call edge to check the receiving body and preserves the caller's actual target and owner. A readonly reference cannot supply the writable formal, and separate declared owner roles do not imply separate actual owners.
 
-The full frontend now checks the `ParseResult` formal of `parse_parameters` and reaches the call to `exception_binder_width` at `CallableSyntax.cod:62:18`. Executable object checking has a separate admission path.
+The full frontend checks the `ParseResult` formal and the call to `exception_binder_width`. It now reaches the imported `parse_binding_name` call at `CallableSyntax.cod:107:10`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

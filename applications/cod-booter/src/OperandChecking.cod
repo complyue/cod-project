@@ -1,3 +1,4 @@
+using "./NativeDeclarations.cod" checked_readonly_call;
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -133,7 +134,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ImportedNativeU64,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
-    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, ImportedProductWriter
+    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, ImportedProductWriter
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -2280,7 +2281,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
                 return check_prepared_native_loans(nodes, names, links, facts, views,
                     selected[site].origin_module, selected[site].identity, at, arguments, used,
                     revision);
-            return check_imported_call(nodes, names, links, facts, cases, at, arguments, used, revision, source_only)
+            return check_imported_call(nodes, names, links, facts, cases, views, at, arguments, used, revision, source_only)
         };
         return check_text_intrinsic(nodes, links, facts, at, arguments, selected[site].kind, used, revision);
     };
@@ -2396,8 +2397,9 @@ func lend_imported_fresh_sum(names:const NameBindings in B, facts:OperandFacts i
 }
 
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-                         facts:OperandFacts in F, cases:const ConstructorCaseFacts in C, at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
-    where {const owner N, const owner B, const owner L, owner F, const owner C} {
+                         facts:OperandFacts in F, cases:const ConstructorCaseFacts in C, views:const SuppliedViews in H,
+    at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
+    where {const owner N, const owner B, const owner L, owner F, const owner C, const owner H} {
     if (links[at].imported_interface == no_node() || links[at].imported_callable_kind ==
         NoCallableKind)
         return unsupported_imported_call();
@@ -2406,7 +2408,8 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
         return procedure_call_in_function();
     val result_owner <- links[at].imported_owner_argument;
     val returned_kind <- links[at].imported_kind;
-    val widens_index_operand <- source_only && (returned_kind == scalar_u8() || returned_kind == void_result()) &&
+    val widens_index_operand <- source_only && (returned_kind == scalar_u8() || returned_kind == void_result() ||
+        (returned_kind == scalar_u64() && checked_readonly_call(views, at))) &&
         links[at].imported_array_read_completion != NoArrayRead;
     ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
@@ -2808,7 +2811,7 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val output <- contracts[header].result_kind;
-    if (output != builtin_bool() && output != builtin_u8()) return no_node();
+    if (output != builtin_bool() && output != builtin_u8() && output != builtin_u64()) return no_node();
     val parameters <- if (output == builtin_bool()) { 2u64 } else { 4u64 };
     if (published - header <= parameters || contracts[header].entry_count != parameters ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
@@ -3065,7 +3068,10 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     val scalar_reader <- array_read && contracts[header].result_kind == builtin_u64();
     val text_predicate <- array_read && contracts[header].result_kind == builtin_bool();
-    if (text_predicate || (array_read && contracts[header].result_kind == builtin_u8())) {
+    val indexed_reader <- array_read &&
+        (contracts[header].result_kind == builtin_u8() ||
+         (scalar_reader && contracts[header].entry_count == 4u64));
+    if (text_predicate || indexed_reader) {
         val past <- checked_readonly_reader_past(contracts, interface_count, header);
         if (obligation || past == no_node() ||
             selected[site].dependency_module != selected[site].origin_module ||
@@ -3085,6 +3091,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+        (supplied[at] <- make CheckedReadonlyCall {}):void;
         return true
     };
     if (array_read && (obligation || !checked_array_reader_header(contracts, interface_count, header) ||

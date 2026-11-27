@@ -13,7 +13,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer
+    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_indexed_u64_reader
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
@@ -223,7 +223,7 @@ export func discover_declaration_demand(
                 }
             };
             if ((prepared_product_writer(views, site) || prepared_scalar_predicate(views, site) ||
-                prepared_aggregate_writer(views, site)) &&
+                prepared_aggregate_writer(views, site) || prepared_indexed_u64_reader(views, site)) &&
                 !require_receipt_body(demand, site, count, receipt_count, used)) {
                 problem <- site;
                 return false

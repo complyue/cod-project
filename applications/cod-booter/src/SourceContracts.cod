@@ -7,12 +7,15 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
-    ArrayLength, Conditional, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
+    ArrayLength, Conditional, ReturningCondition, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
-using "./NativeDeclarations.cod" { prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_array_length_call, checked_literal_call };
+using "./NativeDeclarations.cod" {
+    prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_indexed_u64_reader,
+    prepared_array_length_call, checked_literal_call, checked_readonly_call, readonly_indexed_byte_reader
+};
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u64, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
@@ -329,7 +332,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ArithmeticExpression -> facts[at].kind == scalar_u64() || facts[at].kind == never_result();
             DiscardedExpression -> true;
             FieldSelection -> true;
-            IndexSelection -> facts[at].checks_array_bounds;
+            IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
             NamedConstruction -> aggregate_writer && at < intrinsic (len)(cases) &&
                 facts[at].allocation_owner == no_node() &&
@@ -337,6 +340,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             BracedInitializer -> aggregate_writer;
             InitializerTransfer -> aggregate_writer && names[at].kind == 0u8;
             Conditional -> true;
+            ReturningCondition -> true;
             BlockSyntax -> true;
             BlockItem -> true;
             ArgumentItem -> true;
@@ -347,7 +351,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             RangeHeader -> true;
             RangeLoop -> true;
             Call -> callee != no_node() || facts[at].kind == never_result() ||
-                checked_literal_call(views, at) || prepared_array_length_call(views, at);
+                checked_literal_call(views, at) || prepared_array_length_call(views, at) || checked_readonly_call(views, at);
             EmptyCall -> callee != no_node() || checked_literal_call(views, at);
             _ -> false
         };
@@ -375,8 +379,18 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             result <- facts[definition].kind;
             if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64()) &&
                 !can_miss_return(nodes, facts, sites, definition, revision, used)) {
-                local[definition].available <- true;
-                (operations[definition].kind <- (FunctionBody:ContractOperationKind)):void
+                if (readonly_indexed_byte_reader(views, definition)) {
+                    # The earlier completion pass already proved this leaf.
+                    if (sites[definition].array_read_completion != NoArrayRead) {
+                        local[definition].available <- true;
+                        local[definition].bounds <- sites[definition].array_read_completion == ArrayReadMayFailBounds;
+                        local[definition].numeric <- sites[definition].numeric_fault;
+                        (operations[definition].kind <- (CheckedLeaf:ContractOperationKind)):void
+                    }
+                } else {
+                    local[definition].available <- true;
+                    (operations[definition].kind <- (FunctionBody:ContractOperationKind)):void
+                }
             }
         }
     };
@@ -386,7 +400,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val event <- 0u8;
     for (at in 0u64 .. used) {
         definition <- demand[at].scope;
-        if (definition < used && definition != at && local[definition].available && sites[at].event != skipped_operand()) {
+        if (definition < used && definition != at && local[definition].available &&
+            operations[definition].kind == (FunctionBody:ContractOperationKind) && sites[at].event != skipped_operand()) {
             callee <- facts[at].call_definition;
             if ((callee != no_node() && (callee != demand[at].callee ||
                  inspect_invocation(nodes, revision, used, at, call) != OrdinaryInvocation)) ||
@@ -402,13 +417,14 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     } else { (local[definition].available <- false):void }
                 };
                 if (can_continue(sites, at)) {
-                    if (facts[at].kind == scalar_u64() &&
-                        (case nodes[at] of {
+                    if ((checked_readonly_call(views, at) && work[at].imported_numeric_fault) ||
+                        (facts[at].kind == scalar_u64() &&
+                         (case nodes[at] of {
                             Occupied { val syntax <- node; } -> case syntax.payload of {
                                 ArithmeticExpression -> true; _ -> false
                             };
                             Vacant -> false
-                        })) {
+                         }))) {
                         (local[definition].numeric <- true):void
                     };
                     if (callee != no_node()) {
@@ -425,7 +441,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
 
 func apply_function_operation(operations:const ContractOperations in P, local:const FunctionEffectRows in L,
     outcomes:FunctionEffectRows in O, at:UInt64) -> void where {const owner P, const owner L, owner O} {
-    val body <- operations[at].kind == (FunctionBody:ContractOperationKind);
+    val kind <- operations[at].kind;
+    val body <- kind == (FunctionBody:ContractOperationKind) || kind == (CheckedLeaf:ContractOperationKind);
     if (body && !local[at].available) return;
     val first <- operations[at].first;
     val second <- operations[at].second;
@@ -441,7 +458,7 @@ func apply_function_operation(operations:const ContractOperations in P, local:co
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
-            prepared_aggregate_writer(views, at)) return true
+            prepared_aggregate_writer(views, at) || prepared_indexed_u64_reader(views, at)) return true
     };
     return false
 }
@@ -474,6 +491,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         };
         if (prepared_aggregate_writer(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedAggregateWriter {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        };
+        if (prepared_indexed_u64_reader(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedReadonlyReader {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
