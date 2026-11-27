@@ -227,7 +227,7 @@ func scalar_enum() -> UInt8 { return 7u8; }
 export func product_kind() -> UInt8 { return 8u8; }
 func string_kind() -> UInt8 { return 9u8; }
 func c_string_kind() -> UInt8 { return 10u8; }
-func scalar_u8() -> UInt8 { return 11u8; }
+export func scalar_u8() -> UInt8 { return 11u8; }
 func source_array_loan() -> UInt8 { return 12u8 }
 func source_handle_loan() -> UInt8 { return 13u8 }
 func source_u32() -> UInt8 { return 14u8 }
@@ -957,7 +957,11 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
             facts[at].reservation <- initializer;
             return 0u8;
         } else {};
-        val diagnostic <- require_value_bits(nodes, facts, initializer, value_kind);
+        val initializer_kind <- facts[initializer].kind;
+        val widen <- source_only && value_kind == scalar_u64() &&
+            (initializer_kind == scalar_u8() || initializer_kind == source_u32());
+        val diagnostic <- if (widen) { require_widening_u64(nodes, facts, initializer) }
+            else { require_value_bits(nodes, facts, initializer, value_kind) };
         if (diagnostic != 0u8) return diagnostic;
         set_fact(facts, at, value_kind, local_place(), names[at].scope, identity, 0u8);
         if (value_kind == scalar_enum()) { (facts[at].identity_module <- module):void };
@@ -1004,13 +1008,13 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     return 0u8;
 }
 
-func require_array_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64) -> UInt8
+func require_widening_u64(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
     if (binds_local_storage(nodes, operand)) return unproved_operand();
-    return require_prepared_array_u64(facts, operand)
+    return require_prepared_widening_u64(facts, operand)
 }
 
-func require_prepared_array_u64(facts:OperandFacts in F, operand:UInt64) -> UInt8 where {owner F} {
+func require_prepared_widening_u64(facts:OperandFacts in F, operand:UInt64) -> UInt8 where {owner F} {
     val kind <- facts[operand].kind;
     if (kind == source_u32()) return require_prepared_source_u32(facts, operand, false);
     return require_prepared_typed_bits(facts, operand, if (kind == scalar_u8()) { scalar_u8() } else { scalar_u64() })
@@ -1048,7 +1052,7 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
     if (type_identity_id == no_node() || type_identity(names, selected, requested) != type_identity_id ||
         type_module(names, selected, requested, 0u64) != type_module_id) return unproved_operand();
     if (facts[length].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
-    val diagnostic <- require_array_u64(nodes, facts, length);
+    val diagnostic <- require_widening_u64(nodes, facts, length);
     if (diagnostic != 0u8) return diagnostic;
     if (facts[fill].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
     if (sum == no_node()) {
@@ -1991,7 +1995,7 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
             };
             # Keep the original operand's type and record the prepared value separately.
             diagnostic <- if (facts[input].kind == scalar_enum()) { require_value_bits(nodes, facts, input, scalar_u64()) }
-                else { require_array_u64(nodes, facts, input) };
+                else { require_widening_u64(nodes, facts, input) };
             if (diagnostic != 0u8) return diagnostic;
             set_result(facts, argument, scalar_u64());
             0u8
@@ -2521,7 +2525,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
             if (widens_index_operand && expected == scalar_u64() &&
                 (facts[value].kind == scalar_u8() || facts[value].kind == source_u32())) {
                 if (checked_ref_argument(nodes, argument)) return checked_selection_requires_ref();
-                diagnostic <- require_array_u64(nodes, facts, value);
+                diagnostic <- require_widening_u64(nodes, facts, value);
                 if (diagnostic != 0u8) return diagnostic;
                 set_fact(facts, argument, expected, independent_value(), no_node(), 0u64, 0u8)
             } else {
@@ -4661,18 +4665,26 @@ func check_group(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64,
     return 0u8;
 }
 
-func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, binary:const BinarySites in B) -> UInt8
+func check_numeric_expression(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64,
+    binary:const BinarySites in B, source_only:bool) -> UInt8
     where {const owner N, owner F, const owner B} {
     val left <- binary.left_operand;
     val right <- binary.right_operand;
     val left_completes <- facts[left].kind != never_result();
     val right_completes <- facts[right].kind != never_result();
-    val left_diagnostic <- if (left_completes) { require_bits(nodes, facts, left) } else { 0u8 };
+    val left_kind <- if (source_only && facts[left].kind == scalar_u8()) { scalar_u8() } else { scalar_u64() };
+    val right_kind <- if (source_only && facts[right].kind == scalar_u8()) { scalar_u8() } else { scalar_u64() };
+    val left_diagnostic <- if (left_completes) { require_typed_bits(nodes, facts, left, left_kind) } else { 0u8 };
     if (left_diagnostic != 0u8) return left_diagnostic;
-    val right_diagnostic <- if (right_completes) { require_bits(nodes, facts, right) } else { 0u8 };
+    val right_diagnostic <- if (right_completes) { require_typed_bits(nodes, facts, right, right_kind) } else { 0u8 };
     if (right_diagnostic != 0u8) return right_diagnostic;
     if (!left_completes || !right_completes) { set_result(facts, at, never_result()); }
-    else { scalar_fact(facts, at, independent_value(), no_node()); };
+    else {
+        # The operands select the arithmetic width. A destination may widen
+        # the completed result without changing where overflow is checked.
+        val kind <- if (left_kind == right_kind) { left_kind } else { scalar_u64() };
+        set_result(facts, at, kind)
+    };
     return 0u8;
 }
 
@@ -4929,7 +4941,7 @@ func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
         return unproved_nonnull_borrow();
     val sum <- facts[target].array_sum;
     val diagnostic <- if (sum == no_node()) { require_bits(nodes, facts, index) }
-        else { require_array_u64(nodes, facts, index) };
+        else { require_widening_u64(nodes, facts, index) };
     if (diagnostic != 0u8) return diagnostic;
     if (destination) {
         if (facts[target].target_readonly != 0u8) return expected_writable_place();
@@ -5275,7 +5287,7 @@ func check_indexed_aggregate_element(facts:OperandFacts in F, at:UInt64, array:U
         return unproved_nonnull_borrow();
     if (writable && facts[array].target_readonly != 0u8) return expected_writable_place();
     if (index_binds_storage) return unproved_operand();
-    val diagnostic <- require_prepared_array_u64(facts, index);
+    val diagnostic <- require_prepared_widening_u64(facts, index);
     if (diagnostic != 0u8) return diagnostic;
     val kind <- if (element.kind == sum_type()) { source_sum_target() } else { source_product_loan() };
     set_fact(facts, at, kind, borrowed_ref(), owner_site, element.identity, 0u8);
@@ -5801,7 +5813,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     val operator <- inspect_binary(nodes, revision, used, at, binary);
     if (operator == InvalidBinary) return invalid_operand_tree();
-    if (operator == ArithmeticBinary) return check_numeric_expression(nodes, facts, at, binary);
+    if (operator == ArithmeticBinary) return check_numeric_expression(nodes, facts, at, binary, source_only);
     if (operator == ComparisonBinary) return check_comparison(nodes, facts, at, binary, source_only);
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     val invocation <- inspect_invocation(nodes, revision, used, at, call);

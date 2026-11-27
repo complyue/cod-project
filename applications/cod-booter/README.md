@@ -295,7 +295,13 @@ The readonly query contract also checks `punct_pair_at`. It carries the two nomi
 
 Both source commands check ordinary owner-qualified enum reference formals and initialized typed reference locals, including renamed type selections. The reference keeps the enum's defining module and declaration identity, its target access, and its actual owner. A by-value use can read the exact backing scalar. A reference loan or write must match the nominal enum, and a readonly target cannot supply a writable loan.
 
-The linked parser recognizes all five augmented transfers and preserves the operator and operand spans. Both source commands accept unchanged `CallableSyntax` and reach the byte subtraction in `append_decimal_digit` at `ExpressionParser.cod:124:25` when checking the full frontend. Executable object checking has a separate admission path.
+The linked parser recognizes all five augmented transfers and preserves the operator and operand spans. Both source commands accept unchanged `CallableSyntax`.
+
+### Checked byte arithmetic in source bodies
+
+Both source commands check the unchanged decimal-digit arithmetic in `ExpressionParser`. The builtin arithmetic on two `UInt8` operands keeps the `UInt8` result and its checked failure semantics. Mixed `UInt8` and `UInt64` arithmetic uses `UInt64`. An initialized `UInt64` value local can widen a completed `UInt8` or `UInt32` value. That adaptation leaves the arithmetic width and reference-target types intact.
+
+The checked readonly byte-reader contract carries possible fatal arithmetic separately from bounds failure. The linked decimal parser preserves the written width, magnitude and sign and reports an out-of-range literal before publishing a node. The full frontend source routes next stop at the indexed-token argument to `integer_width` at `ExpressionParser.cod:169:18`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

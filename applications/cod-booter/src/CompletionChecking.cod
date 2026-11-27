@@ -66,7 +66,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, declared_scalar, has_value_tail, has_slot_array,
+    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, scalar_u8, declared_scalar, has_value_tail, has_slot_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
@@ -1023,7 +1023,8 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
             Parenthesized -> true;
             FieldSelection -> true;
             ArrayLength -> true;
-            ArithmeticExpression -> numeric_reader && (facts[at].kind == scalar_u64() || facts[at].kind == never_result());
+            ArithmeticExpression -> numeric_reader &&
+                (facts[at].kind == scalar_u64() || facts[at].kind == scalar_u8() || facts[at].kind == never_result());
             Call -> literal_call || (result == builtin_bool() && (prepared_array_length_call(views, at) ||
                 facts[at].text_intrinsic == text_size_export() || facts[at].text_intrinsic == text_byte_export()));
             ArgumentItem -> result == builtin_bool();
