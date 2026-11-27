@@ -2198,8 +2198,9 @@ class BodyExtraction {
           (subject.view || direct_value_call(*expr.children.front()));
       const bool enumeration = subject.type.kind == Type::enumeration;
       const bool borrowed = subject.view && (declarations().bits_payload(subject.type) ||
-          (extraction_.reference_product(subject.type) && subject.owners.size() == 1 &&
-           product_placement(*subject.owners.begin()).has_value()));
+          (subject.owners.size() == 1 && (subject.type.kind == Type::array ||
+            (extraction_.reference_product(subject.type) &&
+             product_placement(*subject.owners.begin()).has_value()))));
       expect((sum || enumeration || subject.type == Type::boolean || borrowed) && !expr.case_resumes,
              expr.at, "seed needs a Boolean, enum, bits sum or an admitted borrowed case subject");
       std::set<std::uint64_t> covered;
