@@ -125,6 +125,7 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 ## Documentation and repository hygiene
 
 - Keep the primary worktree checked out on `main` at all times. Use named linked worktrees for other branches and Git revision queries for read-only inspection. Check the primary branch during worktree hygiene and handoff.
+- Keep generated binary outputs out of Git, including executables, libraries, object files, bitcode, binary images and packaged builds. Write them to ignored build or scratch locations and use the release distribution channel for release binaries. Review staged files before committing.
 - Outside changelogs, describe current contracts, implementation, evidence, limits and open questions. Keep current alternatives and relevant evidence where useful. Use brief changelog records with stable IDs and immutable commit/path locators for history. Keep journals and obsolete snapshots out of the repository.
 - After an authorized hygiene inspection, correct and self-review the inspected scope, then stage precise hunks, commit and publish the maintenance work through the authorized route. Preserve concurrent edits and keep source and test changes out of documentation-only work.
 

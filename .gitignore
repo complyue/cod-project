@@ -14,6 +14,10 @@
 /build
 /build-*
 
+# Local build output from the retired test trees
+/tests/cod/build
+/tests/shilos/build
+
 # llvm repo checkout as a build-time dependency
 /llvm-project
 
