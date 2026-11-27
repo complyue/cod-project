@@ -60,6 +60,7 @@ export data ConstructorCaseFact =
         element:DeclaredType; index_binds_storage:bool;
     } |
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
+    LexicalProductReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
     ForwardedProductInvocation { definition:UInt64; } |
@@ -914,6 +915,17 @@ func describe_inline_product(facts:const ConstructorCaseFacts in F, site:UInt64,
             type.identity <- product.identity;
             return true
         };
+        LexicalProductReference { val construction <-; } -> {
+            return case facts[construction] of {
+                BitsConstruction { val product <- value_type; } -> {
+                    type.kind <- product.kind;
+                    type.defining_module <- product.defining_module;
+                    type.identity <- product.identity;
+                    true
+                };
+                _ -> false
+            }
+        };
         InlineProductField { val product <- value_type; } -> {
             if (product.kind != record_type()) return false;
             type.kind <- product.kind;
@@ -1401,6 +1413,46 @@ func prepare_lexical_sum_reference(nodes:const ExprNodes in N, names:const NameB
     return true
 }
 
+# Describe the constructor in the view selected by its written name. The
+# annotation can restrict that target but cannot select a different type.
+func prepare_lexical_product_reference(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
+    published:UInt64, facts:ConstructorCaseFacts in F, at:UInt64, local:const LocalBindingSites in L,
+    used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, const owner G, owner F, const owner L, owner R} {
+    val input <- local.initializer;
+    val lexical_owner <- names[at].scope;
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    if (input >= at || lexical_owner >= used || names[input].scope != lexical_owner ||
+        inspect_construction(nodes, revision, used, input, syntax) != BracedConstruction ||
+        syntax.placement != no_node() || syntax.queried_operand != no_node())
+        return true;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, syntax.requested, 0u64, revision, used, type) ||
+        type.kind != record_type() || type.defining_module == 0u64 ||
+        checked_aggregate_storage(interfaces, published, type.defining_module, type.identity, record_type()) != CLayoutBitsRecord)
+        return true;
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    val shape <- inspect_binding(nodes, revision, at, local.binding, binding);
+    if ((shape != BareBinding && shape != TypedBinding) || binding.owner_name != no_node()) return true;
+    if (shape == TypedBinding) {
+        ref annotation = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+        if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, annotation) ||
+            annotation.kind != type.kind || annotation.defining_module != type.defining_module ||
+            annotation.identity != type.identity)
+            return case_problem(report, binding.annotation, wrong_construction_type())
+    };
+    if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+        input, at, type, used, revision, report)) return false;
+    facts[at] <- make LexicalProductReference { construction <- input; owner_site <- lexical_owner; readonly <- binding.readonly };
+    return true
+}
+
 func prepare_lexical_sum_rebind(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
     published:UInt64, facts:ConstructorCaseFacts in F, at:UInt64, assignment:const AssignmentSites in A,
@@ -1635,10 +1687,17 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
         if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
         if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
-            local.initializer < at && work[local.initializer].inline_sum_initializer) {
-            if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
-                aggregate, facts, at, local, used, revision, report)) return false;
-            if (first == no_node()) { (first <- at):void }
+            local.initializer < at) {
+            if (work[local.initializer].inline_sum_initializer) {
+                if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
+                    aggregate, facts, at, local, used, revision, report)) return false;
+                if (first == no_node()) { (first <- at):void }
+            } else {
+                if (!prepare_lexical_product_reference(nodes, names, selected, work, interfaces, published,
+                    facts, at, local, used, revision, report)) return false;
+                if (first == no_node() &&
+                    (case facts[at] of { LexicalProductReference -> true; _ -> false })) { (first <- at):void }
+            }
         };
         if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction)) {
             if (names[construction.requested].kind == constructor_type() &&

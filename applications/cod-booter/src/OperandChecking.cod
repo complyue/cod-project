@@ -118,7 +118,7 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, InlineProductField, LocalSumConstruction,
-        IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalSumRebind,
+        IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ForwardedProductInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
@@ -5103,16 +5103,16 @@ func check_indexed_aggregate_element(facts:OperandFacts in F, at:UInt64, array:U
     return 0u8
 }
 
-func check_lexical_sum_reference(facts:OperandFacts in F, at:UInt64, input:UInt64,
-    owner_site:UInt64, readonly:bool) -> UInt8 where {owner F} {
+func check_lexical_bits_reference(facts:OperandFacts in F, at:UInt64, input:UInt64,
+    owner_site:UInt64, readonly:bool, value_kind:UInt8, loan_kind:UInt8) -> UInt8 where {owner F} {
     if (input >= at || owner_site == no_node()) return invalid_operand_tree();
     if (facts[input].kind == never_result()) {
         set_result(facts, at, never_result());
         return 0u8
     };
-    if (facts[input].kind != independent_sum_bits() || facts[input].reception != independent_value())
+    if (facts[input].kind != value_kind || facts[input].reception != independent_value())
         return wrong_operand_type();
-    set_fact(facts, at, source_sum_target(), borrowed_ref(), owner_site, facts[input].identity, 0u8);
+    set_fact(facts, at, loan_kind, borrowed_ref(), owner_site, facts[input].identity, 0u8);
     facts[at].identity_module <- facts[input].identity_module;
     facts[at].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
     return 0u8
@@ -5286,7 +5286,13 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             };
             LexicalSumReference { val construction <-; val owner_site <-; val readonly <-; } -> {
                 if (!source_only) return unsupported_product_layout();
-                return check_lexical_sum_reference(facts, at, construction, owner_site, readonly)
+                return check_lexical_bits_reference(facts, at, construction, owner_site, readonly,
+                    independent_sum_bits(), source_sum_target())
+            };
+            LexicalProductReference { val construction <-; val owner_site <-; val readonly <-; } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_lexical_bits_reference(facts, at, construction, owner_site, readonly,
+                    independent_product_bits(), source_product_loan())
             };
             LexicalSumRebind { val destination <-; val construction <-; val owner_site <-; } -> {
                 if (!source_only) return unsupported_product_layout();

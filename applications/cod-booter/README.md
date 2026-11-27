@@ -263,7 +263,11 @@ Both source commands now check the imported call to `ParserInput.parse_binding_n
 
 A direct source-preserving selection prepares the two readonly array loans, the writable syntax array, the initialized writable `ParseResult`, and the scalar operands in written order. The borrowed targets keep their exact nominal types, access and actual owners. A failed operand prevents entry. Successful stores remain visible if a later operation fails. The linked seed witness checks a qualified binding, a missing type, a full syntax array and local binding recovery.
 
-The full frontend first stops at the following `BindingSites` construction at `CallableSyntax.cod:110:17`. Executable object checking has a separate admission path.
+### Imported lexical record construction
+
+In a body that needs operand checking, both source commands check an unplaced braced construction of an imported record with a completed finite-bits C layout. The selected type supplies the initializer fields, including through a rename. The checker verifies each field in written order. A writable field can receive another initializer. A readonly field is initialized exactly once. The local reference selects the completed target under the lexical owner and can restrict its access. A scalar member read or write uses the field of that exact target.
+
+The unchanged frontend now checks the `BindingSites` construction in `CallableSyntax`. Its first remaining stop is the imported `inspect_binding` call at `CallableSyntax.cod:113:9`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
