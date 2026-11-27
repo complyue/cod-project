@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 15 · 2026-11-27 · Source design draft
+Design revision 16 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r16 the [reference lifetime clarification](../CHANGELOG.md#h-ref-outlives-owner-20261127) applies [D-14](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy), P-162, to [deque node reuse](#bootstrap-linked-deque). The r15 public collection scope continues.
 
 At r15 the [bootstrap collection decision](../CHANGELOG.md#h-booter-source-ergonomics-20261127) adds the [linked deque](#bootstrap-linked-deque) to D-30 for the real booter workloads under [D-20-BOOTSTRAP](DesignAuthorityRegistry.md#d-20-bootstrap), P-642/P-643. The r14 indexing rules and qualifications on other collection interfaces continue.
 
@@ -38,6 +40,8 @@ At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns 
 ## Bootstrap linked deque
 
 The first public generic linked collection for the booter is `deque<T>`, implemented in CoD. Its nodes are private. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public `list<T>`. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The notation `<T>` here identifies the element type parameter. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
+
+Node reuse follows the [ordinary reference lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy). Unlinking a node changes deque membership. Reusing a live typed slot can change what a reference to that slot reads. A pop returning an independent value delivers the value at removal, so later reuse leaves that result intact. The pop signature determines which result the caller receives.
 
 ## Builtin containers and related forms
 
@@ -176,7 +180,7 @@ for val remaining <- drain(samples) {
 
 ### Observation and owner scope
 
-A visit passes the callback as the first parameter under the ordinary trailing-callback rules. Each callback call that borrows an owning element binds the actual owner of that element for that call. This permits one visit to inspect objects from several regions. A reference derived from the callback argument requires a live, statically provable owner at every later use. Conflicting structural mutation during a visit rejects. A callback failure preserves completed user effects. [Trailing callback arguments](SymbolicDynamicScope.md#trailing-callback-arguments)
+A visit passes the callback as the first parameter under the ordinary trailing-callback rules. Each callback call that borrows an owning element binds the actual owner of that element for that call. This permits one visit to inspect objects from several regions. A reference derived from the callback argument requires a live, statically provable owner at every later use. The proposed visitation contract excludes conflicting structural mutation during the traversal. Retaining a reference to an item adds no outlives check at a later mutation. A callback failure preserves completed user effects. [Trailing callback arguments](SymbolicDynamicScope.md#trailing-callback-arguments)
 
 For this draft, `visit` and each observer invocation finish void. Assume `is_noise`, `report` and `requires_attention` accept a readonly member. The caller can express filtering and short-circuiting without adding a stop flag to the collection API:
 

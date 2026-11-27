@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 140 · Recorded: 2026-11-27 · Status: design draft with scoped confirmed requirements.
+Design revision: 141 · Recorded: 2026-11-27 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+At r141 the [project user’s clarification](../CHANGELOG.md#h-ref-outlives-owner-20261127) makes the [reference lifetime rule](#intrinsic-region-ownership-versus-intra-region-library-policy) explicit under [D-14](DesignAuthorityRegistry.md#d-14), P-162. The r140 owner and access rules continue. The slot-reuse example distinguishes reference lifetime from the contract of a library operation.
 
 At r140 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) limits root-schema constraints to intrinsic structural regions. R139 actual-owner, lifetime and access rules continue. [Exact-match acceptance](GraphGrainedMemoryManagement.md#opaque-nominal-region-types)
 
@@ -700,7 +702,9 @@ Here **ownership responsibility** means responsibility for retaining, releasing 
 
 ## Intrinsic region ownership versus intra-region library policy
 
-H-190 makes the boundary explicit. CoD must know when a whole region is created, held, transferred or released, and whether a reference still has a live region. Inside that region, user programs choose graph membership, free-list links, pool capacity classes, slot selection and reuse policy. Those choices do not become language ownership primitives merely because a library calls an operation `allocate`, `release` or `free`.
+**CoD checks a reference’s lifetime only against its actual owner. A reference to an item may outlive the item’s membership in a collection.** The owner can be a region or a lexical scope.
+
+[H-190](../CHANGELOG.md#h-190) sets the division of responsibility. CoD must know when a whole region is created, held, transferred or released, and whether a reference still has a live region. Inside that region, user programs choose graph membership, free-list links, pool capacity classes, slot selection and reuse policy. Those choices do not become language ownership primitives merely because a library calls an operation `allocate`, `release` or `free`.
 
 | Layer | Responsibility | What it does not imply |
 | --- | --- | --- |
@@ -717,7 +721,7 @@ A minimal typed pool can allocate stable slots once, then update their fields or
 There are two different validity questions:
 
 - **Region validity:** after the whole region is released or successfully transferred out, its old references must not remain usable under the sender's access context. This is an intrinsic concern even when the reference was obtained from a pool.
-- **Library item validity:** after slot A is returned and reused for B while the region remains live, an old reference may still reach valid typed slot storage. Whether it is allowed to act on B is a library contract. CoD's region-lifetime proof does not establish logical item identity. A library may prohibit retaining such references or use checked handles if that requirement exists; this review does not mandate generations, counters or a new per-slot table.
+- **Library item validity:** a pool stores 7 in a typed slot. A caller retains a reference to it. The pool can return that slot to its free list and reuse it for 13 while the owner lives. Reading the slot through the reference now yields 13. A library that promises to detect obsolete logical handles can implement that policy itself.
 
 Updating a stable, initialized typed slot is sufficient for a first pool example. Reinterpreting overlapping storage as unrelated types, exposing uninitialized storage or ending/restarting typed object lifetimes is a separate lower-level contract. H-190 leaves the allocator policy to user code; it does not automatically authorize unchecked pointer fabrication or C++ object-lifetime behavior. Introduce a further storage primitive only if a concrete library cannot be expressed with existing typed storage.
 
