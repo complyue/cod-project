@@ -932,7 +932,7 @@ export func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindi
 # Lists link forward in the temporary workspace. Traversing a wide block or
 # parameter list does not recurse through its preceding siblings.
 func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                   work:NameWork in W, state:NameState in R, tail:UInt64) -> void
+                   work:NameWork in W, state:NameState in R, tail:UInt64, inline_actuals:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     if (tail == no_node()) return;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
@@ -943,13 +943,25 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         reject_name(state, tail, invalid_module_tree());
         return;
     };
+    val saved_inline <- state.inline_field_input;
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node();
+    };
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, item, entry) != kind) {
             reject_name(state, tail, invalid_module_tree());
             return;
         };
         bindings[item].scope <- state.scope_node;
+        if (inline_actuals && kind == ArgumentSequence &&
+            inspect_construction(nodes, state.syntax_revision, item, entry.item, construction) == BracedConstruction &&
+            construction.placement == no_node() && construction.queried_operand == no_node() &&
+            work[construction.requested].selected_constructor) {
+            (state.inline_field_input <- entry.item):void
+        };
         resolve_expression(source, nodes, bindings, work, state, entry.item);
+        state.inline_field_input <- saved_inline;
         if (state.diagnostic != 0u8 || item == tail) return;
         item <- work[item].next;
     };
@@ -967,7 +979,7 @@ func resolve_expression_links(source:const SourceBytes in S, nodes:const ExprNod
                 reject_name(state, at, invalid_module_tree());
                 return;
             };
-            resolve_list(source, nodes, bindings, work, state, tail.index);
+            resolve_list(source, nodes, bindings, work, state, tail.index, false);
         };
     };
 }
@@ -999,7 +1011,7 @@ func resolve_full_scope(source:const SourceBytes in S, nodes:const ExprNodes in 
     state.case_arm <- attached_arm;
     ref tail = make UInt64 { no_node() };
     if (block_tail(nodes, state.syntax_revision, state.syntax_used, scope, tail)) {
-        resolve_list(source, nodes, bindings, work, state, tail);
+        resolve_list(source, nodes, bindings, work, state, tail, false);
     } else { reject_name(state, scope, invalid_module_tree()); };
     state.used <- used;
     state.first <- first;
@@ -1227,7 +1239,7 @@ func resolve_handle_construction(source:const SourceBytes in S, nodes:const Expr
         resolve_handle_owner(source, nodes, bindings, work, state, constructor.actual_owner, true);
         if (state.diagnostic != 0u8) return;
     };
-    resolve_list(source, nodes, bindings, work, state, constructor.arguments);
+    resolve_list(source, nodes, bindings, work, state, constructor.arguments, false);
 }
 
 func resolve_effect_initializer(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -1509,7 +1521,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             # schema and the fill's actual parent are checked after binding.
             (state.local_sum_input <- fill.item):void
         };
-        resolve_list(source, nodes, bindings, work, state, tail);
+        resolve_list(source, nodes, bindings, work, state, tail, false);
         state.local_sum_input <- previous_input;
         return;
     } else {};
@@ -1667,7 +1679,7 @@ func resolve_case(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
     state.case_target <- at;
     state.case_arm <- no_node();
     state.guard <- at;
-    resolve_list(source, nodes, bindings, work, state, choice.items);
+    resolve_list(source, nodes, bindings, work, state, choice.items, false);
     state.handoff <- handoff;
     state.case_target <- target;
     state.case_arm <- arm;
@@ -2170,7 +2182,8 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_expression(source, nodes, bindings, work, state, callee.index);
                     reject_noncallable_shadow(nodes, bindings, work, state, callee.index);
                     if (state.diagnostic != 0u8) return;
-                    resolve_list(source, nodes, bindings, work, state, arguments.index);
+                    resolve_list(source, nodes, bindings, work, state, arguments.index,
+                        state.source_only && bindings[callee.index].kind == callable_binding());
                     return;
                 };
                 (EmptyCall { val callee <- callee; }) -> {

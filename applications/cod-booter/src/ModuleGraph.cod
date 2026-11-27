@@ -1401,7 +1401,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                 target_readonly <- 0u8; needs_target <- 0u8;
             reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
             byte_array <- false; array_sum <- no_node(); loans_array_slot <- false; array_slot <- no_node();
-            loans_case_receipt <- false; case_receipt <- no_node();
+            loans_scoped_aggregate <- false; case_receipt <- no_node();
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;
             case_end <- 0u8; case_presence <- 0u8; case_selection <- no_node(); case_context <- no_node();

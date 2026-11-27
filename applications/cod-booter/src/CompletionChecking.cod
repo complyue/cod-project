@@ -851,7 +851,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (facts[at].text_intrinsic != 0u8) return 0u8;
     };
     if (facts[at].call_definition != no_node()) {
-        if ((facts[at].loans_owning_handle || facts[at].loans_case_receipt || facts[at].loans_array_slot) && (sites[at].in_supplied_body ||
+        if ((facts[at].loans_owning_handle || facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && (sites[at].in_supplied_body ||
             sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;

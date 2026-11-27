@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" sum_type;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedAggregateDestination, IndexedProductRead } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedAggregateDestination, IndexedProductRead, FreshSumInvocation } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -267,7 +267,9 @@ export func discover_declaration_demand(
             checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
                 prepared_byte_function(views, definition, true);
             if (shape == DirectInvocationReady &&
-                passes_scoped_aggregate_loan(nodes, names, links, cases, invocation.arguments, used, revision)) {
+                ((site < intrinsic (len)(cases) &&
+                  (case cases[site] of { FreshSumInvocation { val selected <- definition; } -> selected == definition; _ -> false })) ||
+                 passes_scoped_aggregate_loan(nodes, names, links, cases, invocation.arguments, used, revision))) {
                 if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
                     problem <- site;
                     return false
