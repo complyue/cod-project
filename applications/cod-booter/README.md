@@ -273,7 +273,13 @@ Both source commands check the call to `ParserStorage.inspect_binding` in unchan
 
 A direct source-preserving selection can use an initialized product formal or a checked reference to a fresh record in the calling lexical scope. The call prepares its operands in order, respects the selected target's access, and can update the caller's live record. The result carries no initialization promise. Linked seed coverage observes the exact fields for typed, bare and recovered bindings and preserves the record on an invalid index.
 
-The unchanged frontend next reaches the imported `is_here_formal` call at `CallableSyntax.cod:167:67`. Executable object checking has a separate admission path.
+### Readonly AST queries
+
+Both source commands check the uses of `ParserStorage.is_here_formal` and `formal_variadic_at` in unchanged `CallableSyntax`. The defining visit completes the case operations and the dependencies that validate the formal's revision, binding, and ellipsis extent. The published signature identifies the readonly `UInt64`-indexed finite-bits sum array, the independent index operands, and the exact result type. That result can be a Boolean, integer, or nominal enum in this source profile. A local scratch record used by a helper keeps its own lexical owner.
+
+A direct source-preserving selection prepares the array loan and operands in order. An independent `UInt8` or `UInt32` can widen to a `UInt64` formal regardless of the query's return type. The completion contract keeps bounds and fatal arithmetic separate. The linked parser witness covers multiple `here` formals, a final variadic formal, a misplaced ellipsis, stale revisions, and indices beyond the permitted extent.
+
+The unchanged frontend next reaches the imported `parse_resource_name` call at `CallableSyntax.cod:197:14`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

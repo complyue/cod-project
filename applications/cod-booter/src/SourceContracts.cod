@@ -14,11 +14,11 @@ using "./ParserStorage.cod" ExprPayload {
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
 using "./NativeDeclarations.cod" {
-    prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_indexed_u64_reader,
+    prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_readonly_query,
     prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u64, scalar_kind, borrowed_ref, void_result, never_result };
+using "./OperandChecking.cod" { declared_scalar, scalar_u64, completed_lexical_bits_target, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -337,8 +337,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ArrayLength -> true;
             NamedConstruction -> facts[at].allocation_owner == no_node() &&
                 ((at < intrinsic (len)(cases) && (case cases[at] of { BitsConstruction -> true; _ -> false })) ||
-                 (scalar_kind(facts[at].kind) && facts[at].reception == borrowed_ref() &&
-                  facts[at].owner == names[at].scope && facts[at].reservation == no_node()));
+                 completed_lexical_bits_target(facts, at, names[at].scope));
             CheckedTypeAssertion -> facts[at].kind == declared_scalar(enum_type());
             BracedInitializer -> true;
             InitializerTransfer -> names[at].kind == 0u8;
@@ -354,7 +353,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ReturnVoid -> true;
             ReturnValue -> true;
             LocalBinding { val mode <-; } -> mode == ValueLocal ||
-                (mode == ReferenceLocal && scalar_kind(facts[at].kind) && facts[at].owner == names[at].scope);
+                (mode == ReferenceLocal && completed_lexical_bits_target(facts, at, names[at].scope));
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
@@ -465,7 +464,7 @@ func apply_function_operation(operations:const ContractOperations in P, local:co
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
-            prepared_aggregate_writer(views, at) || prepared_indexed_u64_reader(views, at) ||
+            prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
             prepared_parser_writer(views, at) || prepared_record_inspector(views, at)) return true
     };
     return false
@@ -515,7 +514,7 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_indexed_u64_reader(views, at) && outcomes[at].available) {
+        if (prepared_readonly_query(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedReadonlyReader {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
