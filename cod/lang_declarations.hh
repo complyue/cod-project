@@ -318,15 +318,18 @@ class ModuleBinder {
       if (bound && *bound != actual) return false;
       bound = actual; return true;
     }
-    if (pattern.kind == Type::procedure && actual.kind == Type::procedure) {
-      if (pattern.parameters.size() != actual.parameters.size() || !pattern.target || !actual.target) return false;
+    const bool callable = pattern.kind == Type::procedure && actual.kind == Type::procedure;
+    const bool application = pattern.kind == Type::product_application && actual.kind == Type::product_application;
+    if (callable || application) {
+      if (pattern.parameters.size() != actual.parameters.size() ||
+          (callable && (!pattern.target || !actual.target))) return false;
       auto constructor = pattern, other = actual;
       constructor.parameters.clear(); constructor.target.reset();
       other.parameters.clear(); other.target.reset();
       if (constructor != other) return false;
       for (size_t i = 0; i < pattern.parameters.size(); ++i)
         if (!bind_type(method, pattern.parameters[i], actual.parameters[i], substitutions)) return false;
-      return bind_type(method, *pattern.target, *actual.target, substitutions);
+      return !callable || bind_type(method, *pattern.target, *actual.target, substitutions);
     }
     return pattern == actual || (parameter && !swap_operation(method.operation) &&
                                   accepts_exception(actual, pattern));
@@ -369,7 +372,7 @@ class ModuleBinder {
   static Type rigid_type(const CheckedMethod &method, const Type &type) {
     if (const auto index = binder(method, type)) return {Type::parameter, {}, *index + 1};
     auto rigid = type;
-    if (type.kind == Type::procedure) {
+    if (type.kind == Type::procedure || type.kind == Type::product_application) {
       for (auto &parameter : rigid.parameters) parameter = rigid_type(method, parameter);
       if (type.target) rigid.target = std::make_shared<Type>(rigid_type(method, *type.target));
     }
