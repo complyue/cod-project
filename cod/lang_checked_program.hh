@@ -128,9 +128,8 @@ struct CheckedOperation {
   std::optional<size_t> exception_owner;
   bool owns_exception_result = false;
   std::optional<size_t> region_holder;
-  // Regional product rows contain relative field locators. The lexical
-  // controller identifies the actual live region used for projection.
-  std::optional<size_t> regional_product_holder;
+  // Interpret the selected owner's word as a region controller for this product.
+  bool regional_product = false;
   std::optional<size_t> regional_sum_holder;
   bool allocates_scalar_field = false;
   std::vector<size_t> region_initializers;
@@ -328,6 +327,8 @@ struct CheckedFrame {
   std::vector<CheckedInput> inputs;
   // One incoming identity per input-bound owner, independent of target carriers.
   std::map<size_t, size_t> owners;
+  // Lexical owning region declarations store the live controller in this place.
+  std::map<size_t, size_t> region_controllers;
   bool operator==(const CheckedFrame &) const = default;
 };
 struct CheckedInstance {

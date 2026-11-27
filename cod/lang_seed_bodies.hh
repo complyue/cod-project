@@ -166,8 +166,12 @@ class BodyExtraction {
     const Expression *site;
     Type type;
   };
+  enum class ProductPlacement { lexical, region };
+  using ProductPlacements = std::map<size_t, ProductPlacement>;
+
   struct BoundBody {
     CheckedInstance instance;
+    ProductPlacements input_products;
     std::set<size_t> allocations;
     std::vector<BoundCall> calls;
     std::vector<ReplayCall> replay_calls;
@@ -331,12 +335,17 @@ class BodyExtraction {
     return op;
   }
 
-  size_t select_body(size_t method_id, const Location &at, bool allow_omitted_void = false) {
+  bool reference_product(const Type &type) const {
+    const auto &program = declarations_.declarations_;
+    return type.kind == Type::product && !program.bits_payload(type) && !program.builder_type(type);
+  }
+
+  void require_callable_body(size_t method_id, const Location &at, bool allow_omitted_void) const {
     const auto &method = declarations_.method(method_id);
     const auto &source = *method.source;
     const bool borrowed_result = method.result.borrowed() && !method.result.native_borrow() &&
         !source.c_linkage && method.here.empty() && method.result.type &&
-        declarations_.declarations_.bits_payload(*method.result.type);
+        (declarations_.declarations_.bits_payload(*method.result.type) || reference_product(*method.result.type));
     expect(source.body && !source.implicit_scope && !source.supplied_scope && !source.supplied_group &&
            !source.case_scan_scope && !source.symbolic && !method.interpretation &&
            !method.regional_initializer && method.operation.empty() &&
@@ -346,13 +355,33 @@ class BodyExtraction {
               (declarations_.declarations_.bits_payload(*method.result.type) || method.result.type == Type::void_type)) :
             allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
            at, "seed needs a fixed ordinary callable body");
+  }
+
+  size_t demand_body(size_t method_id, const Location &at, ProductPlacements placements = {}) {
+    const auto &method = declarations_.method(method_id);
+    if (method.result.borrowed() && reference_product(*method.result.type)) {
+      const auto &owners = method.input_owners();
+      const auto owner = std::ranges::find(owners, method.result.owner, &OwnerParameter::name);
+      expect(owner != owners.end() && placements.contains(input_owner(owner - owners.begin())),
+             at, "seed needs a prepared product placement for the borrowed result");
+    }
+
     const auto [row, first] = selected_.try_emplace(method_id, bodies_.size());
     if (first) {
-      auto &instance = bodies_.emplace_back().instance;
-      instance.method = method_id;
-      instance.result = method.result;
+      auto &body = bodies_.emplace_back();
+      body.instance.method = method_id;
+      body.instance.result = method.result;
+      body.input_products = std::move(placements);
+    } else {
+      expect(bodies_[row->second].input_products == placements, at,
+             "seed needs one product placement per owner role of an ordinary body");
     }
     return row->second;
+  }
+
+  size_t select_body(size_t method, const Location &at, bool allow_omitted_void = false) {
+    require_callable_body(method, at, allow_omitted_void);
+    return demand_body(method, at);
   }
 
   void add_outline(Outline outline, std::optional<Type> result) {
@@ -407,7 +436,6 @@ class BodyExtraction {
     struct ActiveCatch { size_t place, protected_depth; };
     std::vector<ActiveCatch> catches_;
     size_t protected_depth_ = 0;
-    std::map<size_t, size_t> region_controllers_;
     bool in_iteration_ = false;
     using Kind = Expression::Kind;
 
@@ -484,9 +512,24 @@ class BodyExtraction {
     }
 
     std::optional<size_t> region_controller(size_t owner) const {
-      const auto found = region_controllers_.find(owner);
-      if (found == region_controllers_.end()) return {};
+      const auto &controllers = body_.instance.frame.region_controllers;
+      const auto found = controllers.find(owner);
+      if (found == controllers.end()) return {};
       return found->second;
+    }
+
+    std::optional<ProductPlacement> product_placement(size_t owner) const {
+      if (!owner) return ProductPlacement::lexical;
+      if (region_controller(owner)) return ProductPlacement::region;
+      const auto found = body_.input_products.find(owner);
+      if (found == body_.input_products.end()) return {};
+      return found->second;
+    }
+
+    bool product_allocation_permitted(size_t owner) const {
+      if (const auto place = region_controller(owner))
+        return !body_.instance.storage.at(*place).read_only;
+      return !const_input_owner(owner);
     }
 
     std::optional<Allocator> allocator_for(size_t owner) const {
@@ -547,6 +590,11 @@ class BodyExtraction {
               mode == ArgumentMode::borrowed_ptr) &&
              (type.kind == Type::array || scalar_type(type) ||
               (inline_aggregate_type(type) && declarations().bits_payload(type)));
+    }
+
+    bool reference_product_loan(const Parameter &parameter, ArgumentMode mode, const Type &type) const {
+      return extraction_.reference_product(type) && !parameter.selects_caller_place() &&
+          (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_ptr);
     }
 
     void takes_payload(const CheckedOperation &value, const Type &to, const Location &at) const {
@@ -611,12 +659,14 @@ class BodyExtraction {
       const auto mode = argument_mode(parameter);
       const bool slot = parameter.selects_caller_ref_slot();
       const bool native_handle = mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle;
+      const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
+      const bool product_loan = body_.input_products.contains(owner) && reference_product_loan(parameter, mode, type);
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
-             (mode == ArgumentMode::value ? scalar_type(type) : native_handle || ordinary_loan(parameter, mode, type)),
-             parameter.at, "seed needs a fixed scalar, array, bits aggregate, text or native handle formal");
+             (mode == ArgumentMode::value ? scalar_type(type) :
+                native_handle || product_loan || ordinary_loan(parameter, mode, type)),
+             parameter.at, "seed needs an admitted scalar, array, product, text or native handle formal");
       auto &frame = body_.instance.frame;
-      const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
       const bool value = mode != ArgumentMode::borrowed_ref && mode != ArgumentMode::borrowed_ptr && !native_handle;
       const auto local = declare(parameter.at, parameter.name, type, value,
@@ -1183,12 +1233,13 @@ class BodyExtraction {
         fail(expr.at, "a function cannot invoke a procedure");
       const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
           !region_receiver && !expr.has_here_body();
-      const auto callee = extraction_.select_body(method_id, expr.at, allow_omitted_void);
+      extraction_.require_callable_body(method_id, expr.at, allow_omitted_void);
       const auto parameters = target.input_parameters();
       expect(target.here.size() == size_t{expr.has_here_body()} &&
              parameters.size() + expr.has_here_body() == expr.children.size(),
              expr.at, "ordinary call arguments do not match the selected declaration");
       std::map<size_t, size_t> actual_owners;
+      ProductPlacements product_inputs;
       for (size_t i = 0; i < parameters.size(); ++i) {
         const auto &parameter = parameters[i];
         const auto mode = argument_mode(parameter);
@@ -1206,9 +1257,11 @@ class BodyExtraction {
           const auto &roles = target.input_owners();
           const auto role = std::ranges::find(roles, parameter.owner, &OwnerParameter::name);
           const bool native_handle = mode == ArgumentMode::borrowed_handle && formal.kind == Type::native_handle;
+          const bool product_loan = selected->methods.size() == 1 && !target.source->c_linkage &&
+              target.here.empty() && reference_product_loan(parameter, mode, formal);
           expect(role != roles.end() && !role->root && !role->explicit_parameter &&
                  !parameter.not_init_ref && (!parameter.selects_caller_place() || parameter.selects_caller_ref_slot()) &&
-                 (native_handle || ordinary_loan(parameter, mode, formal)) &&
+                 (native_handle || product_loan || ordinary_loan(parameter, mode, formal)) &&
                  (arg.type == formal || (mode == ArgumentMode::borrowed_ptr && arg.type == Type::null_ref)) &&
                  (parameter.read_only || !arg.read_only),
                  at, "seed needs the declared ordinary borrow and access");
@@ -1220,13 +1273,22 @@ class BodyExtraction {
             fail(at, "const owner cannot supply a writable native handle owner");
           if (declarations().builder_type(formal) && !role->read_only && const_input_owner(owner))
             fail(at, "const owner cannot supply a writable builder owner");
-          const auto [first, inserted] = actual_owners.emplace(static_cast<size_t>(role - roles.begin()), owner);
+          const auto ordinal = static_cast<size_t>(role - roles.begin());
+          if (product_loan) {
+            const auto placement = product_placement(owner);
+            expect(placement.has_value(), at, "seed needs a prepared lexical or regional placement for a product loan");
+            if (!role->read_only && !product_allocation_permitted(owner))
+              fail(at, "const owner cannot supply a writable product owner");
+            product_inputs.emplace(input_owner(ordinal), *placement);
+          }
+          const auto [first, inserted] = actual_owners.emplace(ordinal, owner);
           expect(inserted || (!current_symbol && !is_symbol_owner(first->second, declarations().symbols.size())),
                  at, "seed needs a separate ordinary owner role for a current reference symbol");
           expect(inserted || first->second == owner, at, "one formal owner needs the same actual owner");
         }
         op.arguments.push_back({mode, formal, parameter.selects_caller_ref_slot(), current_symbol});
       }
+      const auto callee = extraction_.demand_body(method_id, expr.at, std::move(product_inputs));
       BoundCall edge{&expr, callee, {}};
       edge.supplied = supplied_;
       if (selected->methods.size() != 1) edge.family = selected;
@@ -1404,7 +1466,7 @@ class BodyExtraction {
       CheckedOperation op;
       const auto owner = body_.instance.bindings.size() + 1;
       op.region_holder = declare(expr.at, expr.text, value.type, true, expr.read_only, true, owner).place;
-      region_controllers_.emplace(owner, *op.region_holder);
+      body_.instance.frame.region_controllers.emplace(owner, *op.region_holder);
       return op;
     }
 
@@ -1531,12 +1593,14 @@ class BodyExtraction {
              expr.initializer_block && resolve_annotation(*expr.annotation, expr.at) == type,
              expr.at, "seed needs a complete braced product initializer");
       const auto owner = named_owner(expr.owner_name, expr.at);
-      const auto controller = region_controller(owner);
+      const bool regional = product_placement(owner) == ProductPlacement::region;
       if (owner) {
-        expect(local_storage && controller && !body_.instance.storage.at(*controller).read_only,
-               expr.at, "seed needs a writable lexical region for product construction");
+        expect(local_storage && regional && product_allocation_permitted(owner),
+               expr.at, "seed needs a writable regional owner for placed product construction");
       } else {
-        expect(declarations().bits_payload(type), expr.at, "seed needs a complete inline bits product initializer");
+        expect(declarations().bits_payload(type) ||
+               (local_storage && !in_iteration_ && extraction_.reference_product(type)),
+               expr.at, "seed needs a complete braced product with an admitted allocation owner");
       }
       const auto &schema = declarations().schemas.at(type.identity);
       const auto order = product_initializers(schema, expr);
@@ -1544,8 +1608,8 @@ class BodyExtraction {
              "seed needs an initializer for each product field");
       CheckedOperation op;
       op.type = op.operand_type = type;
-      if (controller) op.regional_product_holder = controller;
-      else if (local_storage) op.place = storage("$product", type, 0, false, false);
+      op.regional_product = regional;
+      if (!regional && local_storage) op.place = storage("$product", type, 0, false, false);
       op.view = true;
       op.owners.insert(owner);
       for (size_t i = 0; i < order.size(); ++i) {
@@ -1698,12 +1762,12 @@ class BodyExtraction {
       op.owners = target.owners;
       if (expr.kind == Kind::rebind) {
         const auto &destination = body_.instance.operations.at(&ungrouped_expression(*expr.children.front()));
-        if (destination.regional_product_holder && destination.product_field) {
+        if (destination.operand_type.kind == Type::product && destination.product_field) {
           const auto &field = declarations().schemas.at(destination.operand_type.identity)
               .fields.at(*destination.product_field);
           expect(field.storage != PlaceKind::value && !destination.fixed_binding,
-                 expr.at, "seed needs a writable regional reference field slot");
-          op.regional_product_holder = destination.regional_product_holder;
+                 expr.at, "seed needs a writable stored reference field slot");
+          op.regional_product = destination.regional_product;
         } else check_slot(target, expr.at);
         expect(admits_reference(source, target.type, single_owner(target, expr.at),
                                 target.targets.contains(null_target), target.read_only, expr.at),
@@ -1939,9 +2003,10 @@ class BodyExtraction {
       op.product_field = index;
       if (region_root) op.region_holder = base.place;
       else if (!declarations().bits_payload(type)) {
-        op.regional_product_holder = region_controller(single_owner(base, expr.at));
-        expect(op.regional_product_holder && !member.direct_text_place(),
-               expr.at, "seed needs the lexical region for this reference-bearing product field");
+        const auto placement = product_placement(single_owner(base, expr.at));
+        expect(placement.has_value() && extraction_.reference_product(type) && !member.direct_text_place(),
+               expr.at, "seed needs an established placement for this reference-bearing product field");
+        op.regional_product = *placement == ProductPlacement::region;
       }
       op.view = op.indexed_target = true;
       op.read_only = base.read_only || (member.stores_target() ? member.readonly_target() : readonly_field(member));
@@ -1957,8 +2022,8 @@ class BodyExtraction {
           (subject.view || direct_value_call(*expr.children.front()));
       const bool enumeration = subject.type.kind == Type::enumeration;
       const bool borrowed = subject.view && (declarations().bits_payload(subject.type) ||
-          (subject.type.kind == Type::product && subject.owners.size() == 1 &&
-           region_controller(*subject.owners.begin())));
+          (extraction_.reference_product(subject.type) && subject.owners.size() == 1 &&
+           product_placement(*subject.owners.begin()).has_value()));
       expect((sum || enumeration || subject.type == Type::boolean || borrowed) && !expr.case_resumes,
              expr.at, "seed needs a Boolean, enum, bits sum or an admitted borrowed case subject");
       std::set<std::uint64_t> covered;

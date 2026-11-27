@@ -123,6 +123,7 @@ class LLVMEmission {
   };
   std::vector<EmissionBinding> bindings_;
   std::map<size_t, llvm::Value *> owner_identities_;
+  const std::map<size_t, size_t> *region_controllers_ = nullptr;
   std::map<size_t, llvm::Value *> array_capabilities_;
   llvm::AllocaInst *lexical_allocations_ = nullptr;
   bool owns_lexical_allocations_ = false;
@@ -853,6 +854,10 @@ class LLVMEmission {
     // carries its allocation head to calls with a proved lexical destination.
     if (owner == 0 && owns_lexical_allocations_) return lexical_allocation_owner();
     if (const auto found = owner_identities_.find(owner); found != owner_identities_.end()) return found->second;
+    if (region_controllers_) {
+      const auto controller = region_controllers_->find(owner);
+      if (controller != region_controllers_->end()) return load(storage_.at(controller->second));
+    }
     if (is_symbol_owner(owner, program_->symbols.size())) {
       // A selected incoming view can survive a shadow in this activation.
       auto *binding = symbols_.at(owner - first_symbol_owner);
@@ -2014,12 +2019,10 @@ class LLVMEmission {
       return destination;
     }
     auto *target = view_address(arguments[1]);
-    {
-      const std::optional<size_t> holder = checked_.at(&expr).regional_product_holder;
-      if (holder) b_.CreateStore(regional_locator(load(storage_.at(*holder)), target), destination);
-      else b_.CreateStore(target, destination);
-      return target;
-    }
+    if (checked_.at(&expr).regional_product)
+      b_.CreateStore(regional_locator(selected_owner(expr), target), destination);
+    else b_.CreateStore(target, destination);
+    return target;
   }
   template <typename Construct>
   llvm::Value *initialize_reference_target(const Expression &source, llvm::Value *storage, const Construct &initialize) {
@@ -2917,14 +2920,13 @@ class LLVMEmission {
         address = checked_address(address, parent, expr.at);
         const auto schema = fact.operand_type.identity;
         const auto number = *fact.product_field;
-        const auto holder = fact.regional_product_holder;
-        auto *layout = holder ? regional_product_layout(schema) : product_layout(schema);
+        auto *layout = fact.regional_product ? regional_product_layout(schema) : product_layout(schema);
         auto *slot = b_.CreateStructGEP(layout, address, number);
         const auto &description = program_->schemas[schema].fields[number];
         llvm::Value *field = slot;
         if (projection != Projection::slot && description.stores_target()) {
-          if (holder) {
-            auto *owner = load(storage_.at(*holder));
+          if (fact.regional_product) {
+            auto *owner = selected_owner(expr);
             auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
             auto *target_layout = description.type.kind == Type::product
                 ? regional_product_layout(description.type.identity) : inline_layout(description.type);
@@ -3023,8 +3025,8 @@ class LLVMEmission {
         b_.SetInsertPoint(ready);
         return discard ? empty_scalar() : value;
       }
-      if (fact.regional_product_holder) {
-        auto *owner = load(storage_.at(*fact.regional_product_holder));
+      if (fact.regional_product) {
+        auto *owner = selected_owner(expr);
         auto *address = reserve_regional_row(owner, regional_product_layout(fact.operand_type.identity), expr.at);
         emit_product_initializers(expr, address, owner);
         if (!reachable()) return nullptr;
@@ -3200,6 +3202,7 @@ class LLVMEmission {
     for (size_t i = 0; i < frame.inputs.size(); ++i) arguments_.push_back(function->getArg(i));
     b_.SetInsertPoint(block("entry")); finish_ = block("completion"); scope_ = nullptr; control_ = nullptr;
     owner_identities_.clear();
+    region_controllers_ = frame.region_controllers.empty() ? nullptr : &frame.region_controllers;
     exception_holder_slots_.clear();
     exception_parameter_slots_.clear();
     exception_result_destination_ = pending_exception_result_ = nullptr;
