@@ -177,6 +177,7 @@ export data NameWorkSlot {
     imported_array_read_completion:ArrayReadCompletion;
     imported_numeric_fault:bool;
     imported_reception:UInt8;
+    imported_ref_slot:bool;
     imported_target_readonly:UInt8;
     imported_owner_readonly:UInt8;
     imported_passes_owner:UInt8;
@@ -851,6 +852,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:UInt6
         work[at].imported_kind <- 0u8;
         work[at].imported_callable_kind <- NoCallableKind;
         work[at].imported_reception <- 0u8;
+        work[at].imported_ref_slot <- false;
         work[at].imported_target_readonly <- 0u8;
         work[at].imported_owner_readonly <- 0u8;
         work[at].imported_passes_owner <- 0u8;

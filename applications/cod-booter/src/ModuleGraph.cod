@@ -282,7 +282,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, require
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-        array_slot_checked <- false; source_allocates <- false;
+        array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
         }
@@ -1429,7 +1429,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             imported_array_read_completion <- NoArrayRead; imported_numeric_fault <- false;
             imported_reception <- 0u8;
             imported_target_readonly <- 0u8; imported_owner_readonly <- 0u8;
-            imported_passes_owner <- 0u8; imported_failure_checked <- 0u8;
+            imported_passes_owner <- 0u8; imported_failure_checked <- 0u8; imported_ref_slot <- false;
             enum_code <- 0u64; enum_members <- no_node(); enum_assertion <- NoEnumAssertion; enum_backing <- 0u8;
             value_module <- 0u64; value_identity <- 0u64; value_kind <- 0u8; expects_here <- 0u8;
         });
@@ -1610,7 +1610,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
             scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-            array_slot_checked <- false; source_allocates <- false;
+            array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
             }

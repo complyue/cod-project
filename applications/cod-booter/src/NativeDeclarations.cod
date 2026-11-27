@@ -1049,7 +1049,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-        array_slot_checked <- false; source_allocates <- false;
+        array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
         }
@@ -1473,6 +1473,7 @@ export data SuppliedView =
         type_module:UInt64; type_identity:UInt64; } |
     ArraySlotFormal { owner_site:UInt64; type_module:UInt64; type_identity:UInt64; slot:bool; element:ArraySlotElement; element_sum:UInt64; } |
     CheckedArraySlotBody { failures:ByteArrayFailures; } |
+    CheckedImportedArraySlotCall { failures:ByteArrayFailures; } |
     IndexedArrayDestination { assignment:UInt64; target:UInt64; index:UInt64; } |
     IndexedArraySource { assignment:UInt64; target:UInt64; index:UInt64; } |
     PreparedArrayConstruction { requested:UInt64; placement:UInt64; length:UInt64; fill:UInt64;
@@ -3220,7 +3221,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-        array_slot_checked <- false; source_allocates <- false;
+        array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
         }
@@ -4160,7 +4161,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
             scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-            array_slot_checked <- false; source_allocates <- false;
+            array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
             }

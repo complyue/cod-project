@@ -136,7 +136,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
-    CheckedWriterCall, CheckedHandleArrayCall, CheckedArrayReaderCall, ImportedProductWriter
+    CheckedWriterCall, CheckedHandleArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -2374,11 +2374,13 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (selected[site].kind == callable_export()) {
             if (links[at].expects_here != 0u8)
                 return check_prepared_here_call(nodes, links, facts, at, used, revision);
-            if (source_only && selected[site].shape != ordinary_callable_shape())
+            if (source_only && selected[site].shape != ordinary_callable_shape() &&
+                selected[site].shape != array_slot_callable_shape())
                 return check_prepared_native_loans(nodes, names, links, facts, views,
                     selected[site].origin_module, selected[site].identity, at, arguments, used,
                     revision);
-            return check_imported_call(nodes, names, links, facts, cases, views, at, arguments, used, revision, source_only)
+            return check_imported_call(nodes, names, links, facts, cases, views, at, arguments, used, revision,
+                source_only, selected[site].shape == array_slot_callable_shape())
         };
         return check_text_intrinsic(nodes, links, facts, at, arguments, selected[site].kind, used, revision);
     };
@@ -2521,7 +2523,7 @@ func scoped_imported_product_actual(names:const NameBindings in B, facts:const O
 
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                          facts:OperandFacts in F, cases:const ConstructorCaseFacts in C, views:const SuppliedViews in H,
-    at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
+    at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool, slot_call:bool) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner C, const owner H} {
     if (links[at].imported_interface == no_node() || links[at].imported_callable_kind ==
         NoCallableKind)
@@ -2543,6 +2545,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     val expected <- 0u8;
     val source_aggregate_loan <- false;
     val scoped_call <- false;
+    val slot <- no_node();
     for (unused in 0u64 .. used) {
         if (argument == no_node()) {
             diagnostic <- 0u8;
@@ -2558,6 +2561,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                 } else { set_result(facts, at, returned_kind) };
             };
             facts[at].loans_scoped_aggregate <- scoped_call;
+            facts[at].loans_array_slot <- slot_call;
             return diagnostic;
         };
         value <- ordinary_argument_value(nodes, used, revision, argument);
@@ -2592,6 +2596,15 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                 !scoped_imported_product_actual(names, facts, cases, at, value, argument,
                     links[argument].imported_target_readonly == 0u8)) return unproved_owner();
             if (value != argument) { copy_fact(facts, argument, value) };
+            if (links[argument].imported_ref_slot) {
+                slot <- bound_array_slot(nodes, names, links, facts, value, at, used, revision);
+                if (slot == no_node() ||
+                    facts[value].selection != no_node() || facts[value].case_receipt != no_node())
+                    return expected_writable_place();
+                # The declaration carries only invariant array and owner facts.
+                # The actual receipt is a slot; other loans keep their earlier backing.
+                (facts[argument].array_slot <- slot):void
+            };
             if (source_aggregate_loan) {
                 facts[argument].target_readonly <- links[argument].imported_target_readonly;
                 (scoped_call <- scoped_call || links[at].imported_array_read_completion == NoArrayRead):void
@@ -2615,6 +2628,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
         witness <- links[argument].imported_owner_argument;
         if (witness != no_node()) {
             actual <- facts[argument].owner;
+            if (slot_call && (actual >= used || facts[argument].reservation != no_node())) return unproved_owner();
             diagnostic <- check_owner_access(nodes, actual, links[argument].imported_owner_readonly == 0u8);
             if (diagnostic != 0u8) return diagnostic;
             if (argument != witness && facts[witness].owner != actual)
@@ -2677,6 +2691,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     val array_loan <- false;
     val product_loan <- false;
     val sum_loan <- false;
+    val slot_signature <- contracts[header].array_slot_checked;
     val role <- no_node();
     val kind <- 0u8;
     for (index in 0u64 .. contracts[header].entry_count) {
@@ -2695,14 +2710,18 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
                 }
             }
         };
-        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles) {
+        links[argument].imported_ref_slot <- slot_signature && contracts[row].slot_target_invariant;
+        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles ||
+            (slot_signature && contracts[row].field_mode == ReferenceFormal)) {
             borrowed_ref()
         } else {
             if (source_handles || source_declared_signature) { local_place() } else { (contracts[row].native_reception) }
         };
         links[argument].imported_target_readonly <- contracts[row].target_readonly;
         links[argument].imported_owner_readonly <- contracts[row].owner_readonly;
-        links[argument].imported_passes_owner <- contracts[row].native_passes_owner;
+        links[argument].imported_passes_owner <- if (slot_signature && contracts[row].source_allocates) {
+            1u8
+        } else { (contracts[row].native_passes_owner) };
         role <- contracts[row].owner_role;
         if (handles || array_loan || product_loan || sum_loan ||
             (source_declared_signature && kind == enum_type()) ||
@@ -2712,8 +2731,10 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
             (links[argument].imported_type_identity <- contracts[row].type_identity):void
         };
         links[argument].imported_owner_argument <- argument_at_position(links, first,
-            if (source_declared_signature) { first_source_loan_formal(contracts, header, role) } else {
-                if (handles) { first_handle_formal(contracts, header, role) } else { role }
+            if (slot_signature) { role } else {
+                if (source_declared_signature) { first_source_loan_formal(contracts, header, role) } else {
+                    if (handles) { first_handle_formal(contracts, header, role) } else { role }
+                }
             });
         argument <- links[argument].next;
         (row <- row + 1u64):void;
@@ -3321,6 +3342,73 @@ func array_length_family_past(contracts:const ModuleInterfaces in I, published:U
     return past
 }
 
+# Slot-interface roles name the first borrowed formal of each owner. A ref var
+# row promises the same non-null nominal target contract on every exit, allowing
+# any prepared slot to rebind. There is no promise of an unchanged backing.
+func checked_array_slot_call_past(contracts:const ModuleInterfaces in I, published:UInt64,
+    header:UInt64, module:UInt64, definition:UInt64) -> UInt64 where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val arity <- contracts[header].entry_count;
+    val result <- contracts[header].result_kind;
+    if (!contracts[header].array_slot_checked || contracts[header].defining_module != module ||
+        contracts[header].declaration != definition || contracts[header].interface_kind != callable_binding() ||
+        contracts[header].native_function != no_node() || contracts[header].membership != FixedMethods ||
+        contracts[header].callable_kind == NoCallableKind || arity == 0u64 || arity >= published - header ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].target_readonly != 0u8) return no_node();
+    if (result == enum_type()) {
+        if (!published_enum_domain(contracts, published, header)) return no_node()
+    } else {
+        if (result != builtin_void() && !source_call_scalar(result)) return no_node()
+    };
+    val count <- 0u64;
+    val has_slot <- false;
+    val first <- header + 1u64;
+    val row <- first;
+    val mode <- ValueFormal;
+    val role <- no_node();
+    val kind <- 0u8;
+    for (position in 0u64 .. arity) {
+        row <- first + position;
+        mode <- contracts[row].field_mode;
+        role <- contracts[row].owner_role;
+        kind <- contracts[row].value_kind;
+        if (contracts[row].defining_module != module || contracts[row].declaration != definition ||
+            contracts[row].interface_kind != 0u8 || contracts[row].entry_count != 0u64 ||
+            contracts[row].native_passes_owner != 0u8 || contracts[row].native_reception != 0u8 ||
+            contracts[row].target_readonly > 1u8 || contracts[row].owner_readonly > 1u8 ||
+            contracts[row].slot_target_invariant != (mode == ReferenceSlotFormal)) return no_node();
+        if (mode == ValueFormal || mode == ExplicitValueFormal) {
+            if (!source_call_scalar(kind) || !source_scalar_value_row(contracts[row], kind) ||
+                contracts[row].source_allocates) return no_node()
+        } else {
+            if (role > position || contracts[first + role].owner_role != role ||
+                contracts[first + role].owner_readonly != contracts[row].owner_readonly ||
+                contracts[first + role].source_allocates != contracts[row].source_allocates ||
+                (contracts[row].source_allocates && contracts[row].owner_readonly != 0u8)) return no_node();
+            if (position == role) { (count <- count + 1u64):void };
+            if (mode == ReferenceSlotFormal) {
+                if (kind != array_type() || contracts[row].target_readonly != 0u8 ||
+                    !has_nominal_identity(contracts[row])) return no_node();
+                (has_slot <- true):void
+            } else {
+                if (mode == HandleFormal) {
+                    if (kind != c_handle_type() || !has_nominal_identity(contracts[row])) return no_node()
+                } else {
+                    if (mode != ReferenceFormal) return no_node();
+                    if (kind == array_type()) {
+                        if (!has_nominal_identity(contracts[row])) return no_node()
+                    } else {
+                        if (kind != builtin_u64() && kind != builtin_u8() && kind != builtin_bool())
+                            return no_node()
+                    }
+                }
+            }
+        }
+    };
+    return if (has_slot && count == contracts[header].owner_count) { first + arity } else { no_node() }
+}
+
 func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, links:NameWork in L,
                             contracts:const ModuleInterfaces in I, interface_count:UInt64,
@@ -3336,12 +3424,35 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     if (names[callee].kind != ordinary_selection()) return true;
     val site <- names[callee].declaration;
     if (selected[site].kind != callable_export()) return true;
-    if (selected[site].shape == array_slot_callable_shape())
-        return operand_problem(report, at, unsupported_imported_slot_call());
-    if (selected[site].shape != ordinary_callable_shape()) return true;
+    val slot_call <- selected[site].shape == array_slot_callable_shape();
+    if (!slot_call && selected[site].shape != ordinary_callable_shape()) return true;
     val obligation <- selected[site].checked != 0u8;
-    val header <- find_interface(contracts, interface_count, selected[site].origin_module,
-        selected[site].identity);
+    val header <- find_interface(contracts, interface_count, selected[site].origin_module, selected[site].identity);
+    if (slot_call) {
+        val module <- selected[site].origin_module;
+        if (!source_only || selected[site].dependency_module != module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision))
+            return operand_problem(report, at, unsupported_imported_slot_call());
+        val past <- checked_array_slot_call_past(contracts, interface_count, header, module, selected[site].identity);
+        if (past == no_node() || !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count) ||
+            obligation != (contracts[header].failure_identity != no_node()))
+            return operand_problem(report, at, unsupported_imported_slot_call());
+        if (obligation && !valid_imported_failure(contracts, interface_count, catalog,
+            contracts[header].failure_module, contracts[header].failure_identity,
+            contracts[header].failure_checked))
+            return operand_problem(report, at, unsupported_imported_slot_call());
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, true, true))
+            return operand_problem(report, at, wrong_argument_count());
+        remember_imported_call(links, contracts, at, header, true);
+        if (contracts[header].result_kind == enum_type()) {
+            links[at].imported_type_module <- contracts[header].type_module;
+            (links[at].imported_type_identity <- contracts[header].type_identity):void
+        };
+        supplied[at] <- make CheckedImportedArraySlotCall { failures <- contracts[header].array_slot_failures };
+        if (required == no_node()) { (required <- at):void };
+        return true
+    };
     if (source_only && header != no_node() &&
         contracts[header].interface_kind == array_length_family_interface()) {
         val module <- selected[site].origin_module;
@@ -3751,6 +3862,9 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
                         (syntax.mode == ReferenceSlotFormal && facts[formal].target_readonly != 0u8)) return no_node();
                     contracts[row].value_kind <- array_type();
                     publish_nominal_identity(facts, formal, module, contracts[row]);
+                    # The completed slot-body proof checks each rebind or forward against
+                    # this formal's invariant, including changes before an escaping failure.
+                    contracts[row].slot_target_invariant <- syntax.mode == ReferenceSlotFormal;
                     (has_slot <- has_slot || syntax.mode == ReferenceSlotFormal):void
                 } else {
                     if (kind == 0u8 || kind == builtin_u32() || syntax.mode != ReferenceFormal) return no_node();

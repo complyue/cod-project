@@ -81,6 +81,7 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion {
     NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds
 };
 using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
+using "./NativeDeclarations.cod" SuppliedView { CheckedImportedArraySlotCall };
 
 export data CompletionSite {
     event:UInt8;
@@ -877,7 +878,11 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 ||
-                (facts[at].loans_scoped_aggregate && sites[at].in_supplied_body)) return unproved_deferred_error();
+                ((facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && sites[at].in_supplied_body))
+                return unproved_deferred_error();
+            # Keep the declared exit in the ordinary completion row. For a
+            # slot call the distinct unchecked escapes use the published
+            # category set and this site's existing handler/cleanup context.
             if (links[at].imported_numeric_fault && !supports_immediate_numeric_exit(nodes, names, sites, at, used))
                 return unproved_numeric_fault_route();
             if (links[at].imported_array_read_completion == ArrayReadMayFailBounds)
@@ -1202,11 +1207,23 @@ func in_slot_summary(demand:const DeclarationDemands in D, sites:const Completio
     return definition < used && sites[definition].slot_summary
 }
 
+func imported_slot_escapes(views:const SuppliedViews in H, at:UInt64, category:UInt64)
+    -> bool where {const owner H} {
+    return case views[at] of {
+        CheckedImportedArraySlotCall { val failures <-; } ->
+            (category == index_out_of_bounds_identity() && failures.bounds) ||
+            (category == out_of_memory_identity() && failures.out_of_memory) ||
+            (category == region_capacity_identity() && failures.region_capacity) ||
+            (category == invalid_capacity_identity() && failures.invalid_capacity);
+        _ -> false
+    }
+}
+
 func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                            facts:const OperandFacts in F, sites:const CompletionSites in X,
-                           demand:const DeclarationDemands in D, reached:ReachedFailures in W,
+                           views:const SuppliedViews in H, demand:const DeclarationDemands in D, reached:ReachedFailures in W,
                            used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> UInt64
-    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner D, owner W} {
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner H, const owner D, owner W} {
     val count <- 0u64;
     val definition <- no_node();
     val form <- InvalidCallable;
@@ -1237,8 +1254,9 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
             } else {};
             imported <- links[at].imported_interface != no_node() &&
                 (if (array_summary) {
-                    links[at].imported_array_read_completion == NoArrayRead &&
-                        invocation_reached(nodes, sites, at, used, revision)
+                    invocation_reached(nodes, sites, at, used, revision) &&
+                        (if (facts[at].loans_array_slot) { imported_slot_escapes(views, at, category) }
+                            else { links[at].imported_array_read_completion == NoArrayRead })
                 } else { can_continue(sites, at) });
             allocation <- array_summary && category != index_out_of_bounds_identity() &&
                 allocated_source_array(facts, at) && can_continue(sites, at);
@@ -1336,11 +1354,11 @@ func check_delayed_failures(edges:const EscapingFailureEdges in E, reached:const
 
 func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                                  facts:const OperandFacts in F, sites:CompletionSites in X,
-                                 demand:const DeclarationDemands in D, report:CompletionCheckResult in R,
+                                 views:const SuppliedViews in H, demand:const DeclarationDemands in D, report:CompletionCheckResult in R,
                                  used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> bool
-    where {const owner N, const owner B, const owner L, const owner F, owner X, const owner D, owner R} {
+    where {const owner N, const owner B, const owner L, const owner F, owner X, const owner H, const owner D, owner R} {
     ref reached = make ReachedFailures(used, make ReachedFailure { seen <- false; order <- no_node() });
-    val roots <- collect_failure_roots(nodes, names, links, facts, sites, demand, reached, used, revision, category, array_summary);
+    val roots <- collect_failure_roots(nodes, names, links, facts, sites, views, demand, reached, used, revision, category, array_summary);
     if (roots == 0u64) return true;
     ref edges = make EscapingFailureEdges(used, make EscapingFailureEdge {
         first_use <- no_node(); next_use <- no_node(); caller <- no_node(); delayed_use <- no_node()
@@ -1439,18 +1457,18 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
             }
         }
     };
-    return check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,
+    return check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
         tree.used, tree.revision, missing_return_identity(), false) &&
-        check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report, tree.used,
+        check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report, tree.used,
             tree.revision, unexpected_case_identity(), false) &&
         (!slot_bodies || (mark_slot_summary_dependencies(nodes, facts, demand, sites,
             tree.used, tree.revision, report) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
                 tree.used, tree.revision, index_out_of_bounds_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
                 tree.used, tree.revision, out_of_memory_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
                 tree.used, tree.revision, invalid_capacity_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
                 tree.used, tree.revision, region_capacity_identity(), true)))
 }
