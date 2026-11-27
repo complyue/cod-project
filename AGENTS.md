@@ -126,3 +126,8 @@ Use **function value** for `func …` and **functor value** for receiver-bound `
 
 - Outside changelogs, describe current contracts, implementation, evidence, limits and open questions. Keep current alternatives and relevant evidence where useful. Use brief changelog records with stable IDs and immutable commit/path locators for history. Keep journals and obsolete snapshots out of the repository.
 - After an authorized hygiene inspection, correct and self-review the inspected scope, then stage precise hunks, commit and publish the maintenance work through the authorized route. Preserve concurrent edits and keep source and test changes out of documentation-only work.
+
+### Temporary side chats
+
+- Plan for closure at any point. Use existing sources for read-only work and a linked checkout when edits need isolation. Before creating a worktree or output path that could outlive the chat, record its path, purpose and cleanup trigger where a surviving parent or hygiene owner can see them. Confirm that owner has accepted custody. An existing standing assignment can cover this.
+- Save meaningful progress as a reachable commit or a scoped patch with any required untracked inputs. Before reporting completion, handing off or yielding, remove verified disposable paths within the existing cleanup authority, or have the surviving owner accept the remaining state and its next cleanup trigger. Act without waiting for a user cleanup instruction. If the chat closes abruptly, the surviving owner carries out the closeout. Build and install trees remain subject to their explicit authorization rules.
