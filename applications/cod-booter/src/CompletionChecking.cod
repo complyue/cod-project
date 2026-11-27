@@ -786,15 +786,13 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
     return invalid_completion_tree();
 }
 
-# A terminal numeric fault does not enter a language catch. This source
-# profile can let it leave an activation when no protected or delayed
-# cleanup plan has to represent it.
-func numeric_fault_can_escape(nodes:const ExprNodes in N, names:const NameBindings in B,
+# Immediate calls use the abrupt exit, which bypasses catches and runs
+# lexical cleanup and finally. Delayed and supplied calls have separate
+# completion boundaries; an active defer also still needs its own proof.
+func supports_immediate_numeric_exit(nodes:const ExprNodes in N, names:const NameBindings in B,
     sites:const CompletionSites in X, at:UInt64, used:UInt64) -> bool
     where {const owner N, const owner B, const owner X} {
-    if (sites[at].guarded_by != no_node() || sites[at].incoming_handler != no_node() ||
-        sites[at].replacing_try != no_node() || sites[at].in_supplied_body ||
-        names[at].finalizer != no_node()) return false;
+    if (sites[at].in_supplied_body) return false;
     val scope <- names[at].scope;
     for (unused in 0u64 .. used) {
         if (scope == no_node()) return true;
@@ -879,7 +877,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
-            if (links[at].imported_numeric_fault && !numeric_fault_can_escape(nodes, names, sites, at, used))
+            if (links[at].imported_numeric_fault && !supports_immediate_numeric_exit(nodes, names, sites, at, used))
                 return unproved_numeric_fault_route();
             if (links[at].imported_array_read_completion == ArrayReadMayFailBounds)
                 return route_failure(nodes, names, links, facts, sites, at, used, revision,

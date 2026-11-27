@@ -223,7 +223,7 @@ Both commands check the original `OwnerQualifiedType` argument in `ParserInput.a
 
 The source commands check `Lexer.word_is`, its direct wrappers and the composed predicates used by `ParserInput.parse_binding`. Ordinary operand checking prepares the readonly byte-array and token loans and the optional immutable String literal. The defining visit records direct calls to the selected same-revision functions and the short-circuit continuations. It completes the recorded dependencies leaf first, including forward references and shared leaves. An early return ends that path. A skipped branch contributes no failure. Dependencies outside the represented call shapes and cyclic dependencies leave the profile unavailable.
 
-The published interface supplies the Boolean result, the possible catchable bounds outcome and the separate possibility of a fatal numeric fault. A direct imported call applies the signature to the live loans. The indexed token operand keeps its selected array, index and actual owner. Its bounds check precedes callee entry. A fatal numeric outcome can leave an unprotected activation. A protected, supplied-body or active delayed cleanup use still needs a route for that outcome.
+The published interface supplies the Boolean result, the possible catchable bounds outcome and the separate possibility of a fatal numeric fault. A direct imported call applies the signature to the live loans. The indexed token operand keeps its selected array, index and actual owner. Its bounds check precedes callee entry. An immediate imported call can propagate fatal arithmetic through lexical cleanup and `finally` while bypassing language catches. Supplied bodies, delayed calls and scopes with an active defer retain their separate completion limits.
 
 Both source commands accept the complete, unchanged `ParserInput.cod`. These predicate interfaces are for declaration checking and provider generation. Executable object support has its own admission checks.
 
@@ -239,7 +239,7 @@ Both source commands check the unchanged `ParserInput.punct_at` body and its use
 
 The same checked signature can publish an independent `UInt64` result. In `ParserInput.exception_binder_width`, the defining visit uses the completed imported Lexer predicates and the same-module byte reader. It combines their recorded completions with its own operations after operand checking. A short-circuited operand contributes no execution effects.
 
-The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. Protected, supplied-body and active delayed cleanup uses still require a route for a possible fatal outcome.
+The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. The immediate call uses the same fatal exit in a protected body, a handler or a finalizer, subject to the active-defer limit.
 
 ### Initialized writable token loans
 
@@ -339,7 +339,7 @@ For a builtin bits transfer to an indexed record field, the selected array must 
 
 In a demanded body, both source commands check synchronous calls to a same-revision procedure with readonly finite-bits product loans and an independent result or no result. The actual can be an initialized product formal or a checked lexical product reference. The checker prepares each operand in written order and checks its nominal type, access and actual owner. The procedure can also take checked handle loans, readonly arrays and by-value scalars in this profile. A failed operand prevents entry. Both source commands check the original `write_single_report` and its caller in the stored-rejection reduction.
 
-The full CLI source commands first stop at `NativeDiagnostics.cod:182:13`. The position writer is called from a protected body, and this profile cannot route its possible fatal arithmetic.
+Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`. The unchanged full CLI first stops at the reference-slot formal of the two-slot `insert_visit` in `ModuleIndex.cod:145:26`.
 
 ### Imported array length families
 
