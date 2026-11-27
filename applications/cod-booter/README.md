@@ -301,7 +301,13 @@ The linked parser recognizes all five augmented transfers and preserves the oper
 
 Both source commands check the unchanged decimal-digit arithmetic in `ExpressionParser`. The builtin arithmetic on two `UInt8` operands keeps the `UInt8` result and its checked failure semantics. Mixed `UInt8` and `UInt64` arithmetic uses `UInt64`. An initialized `UInt64` value local can widen a completed `UInt8` or `UInt32` value. That adaptation leaves the arithmetic width and reference-target types intact.
 
-The checked readonly byte-reader contract carries possible fatal arithmetic separately from bounds failure. The linked decimal parser preserves the written width, magnitude and sign and reports an out-of-range literal before publishing a node. Both source routes check the indexed-token arguments in the unchanged calls to `integer_width` and `parse_integer_magnitude`. They reach the imported `recover_syntax` call at `ExpressionParser.cod:265:14`. Executable object checking has a separate admission path.
+The checked readonly byte-reader contract carries possible fatal arithmetic separately from bounds failure. The linked decimal parser preserves the written width, magnitude and sign and reports an out-of-range literal before publishing a node. Both source routes check the indexed-token arguments in the unchanged calls to `integer_width` and `parse_integer_magnitude`.
+
+### Imported parser recovery
+
+Both source commands check the unchanged calls to `recover_syntax` and `recover_syntax_until`. The completed parser contract carries the readonly token array, the writable syntax array and initialized result record, and the independent value inputs. `recover_syntax` also receives the readonly source bytes. A by-value recovery role keeps the canonical identity of its enum. The call evaluates operands in written order, and a failed operand prevents entry.
+
+The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return. Both source routes reach the call to `append_case_pattern` in `ExpressionParser.cod:1296:17`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

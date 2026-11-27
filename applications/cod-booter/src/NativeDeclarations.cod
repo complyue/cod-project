@@ -1920,8 +1920,8 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
     };
 }
 
-func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
-    formal:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B} {
+func independent_formal_type(nodes:const ExprNodes in N, formal:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N} {
     ref shape = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
@@ -1930,8 +1930,14 @@ func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBinding
     if (formal_variadic_at(nodes, revision, used, formal) != no_node() ||
         !typed_formal(nodes, revision, used, formal, shape, binding) ||
         (shape.mode != ValueFormal && shape.mode != ExplicitValueFormal) ||
-        binding.owner_name != no_node()) return 0u8;
-    return (names[binding.target_type].kind)
+        binding.owner_name != no_node()) return no_node();
+    return (binding.target_type)
+}
+
+func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
+    formal:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B} {
+    val type <- independent_formal_type(nodes, formal, used, revision);
+    return if (type < used) { (names[type].kind) } else { 0u8 }
 }
 
 func independent_scalar_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2379,7 +2385,7 @@ export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UI
 
 # A readonly query receives an exact array and independent index words.
 # Its definition still needs a completed body and dependency proof.
-func prepare_readonly_sum_query(nodes:const ExprNodes in N, names:const NameBindings in B,
+func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
     at:UInt64, used:UInt64, revision:UInt64) -> void
@@ -2404,7 +2410,11 @@ func prepare_readonly_sum_query(nodes:const ExprNodes in N, names:const NameBind
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
         first >= used) return;
     val marker <- readonly_formal_marker(nodes, names, first, owner_site, used, revision);
-    if (!checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
+    if (marker >= used) return;
+    val valid_array <- checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
+        marker, used, revision) || (result == builtin_u64() &&
+        readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision));
+    if (!valid_array) return;
     val input <- work[first].next;
     for (position in 0u64 .. 3u64) {
         if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
@@ -2593,8 +2603,8 @@ func prepare_aggregate_writer(nodes:const ExprNodes in N, names:const NameBindin
     }
 }
 
-# The parser receiver has two initialized writable targets after its two
-# readonly arrays. Its remaining inputs and its result are independent values.
+# The parser receiver has an optional readonly byte array, a readonly
+# token array and two initialized outputs. Its remaining inputs are values.
 func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -2614,22 +2624,34 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     if (inspect_signature(nodes, revision, used, output_owner, clause) != OwnerSignatureClause || clause.readonly) return;
     val input_owner <- clause.previous;
     if (inspect_signature(nodes, revision, used, input_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
-    val bytes_owner <- clause.previous;
-    if (inspect_signature(nodes, revision, used, bytes_owner, clause) != OwnerSignatureClause || !clause.readonly ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
-        clause.annotation >= used || names[clause.annotation].kind != builtin_bool() ||
+    val preceding <- clause.previous;
+    val bytes_owner <- no_node();
+    val result <- inspect_signature(nodes, revision, used, preceding, clause);
+    if (result == OwnerSignatureClause) {
+        if (!clause.readonly) return;
+        bytes_owner <- preceding;
+        (result <- inspect_signature(nodes, revision, used, clause.previous, clause)):void
+    };
+    if (result != ValueResultClause || clause.annotation >= used ||
+        names[clause.annotation].kind != builtin_bool() ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
         return;
-    val marker <- readonly_formal_marker(nodes, names, first, bytes_owner, used, revision);
-    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
-    if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
-    val second <- work[first].next;
-    val records <- readonly_formal_marker(nodes, names, second, input_owner, used, revision);
+    val input <- first;
+    if (bytes_owner != no_node()) {
+        val marker <- readonly_formal_marker(nodes, names, first, bytes_owner, used, revision);
+        ref bytes = make ArraySlotType {
+            owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node();
+        };
+        if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
+        (input <- work[first].next):void
+    };
+    if (input >= used) return;
+    val records <- readonly_formal_marker(nodes, names, input, input_owner, used, revision);
     if (records >= used ||
         !readonly_record_array(nodes, names, selected, contracts, published, aggregate, records, used, revision)) return;
-    val third <- work[second].next;
+    val third <- work[input].next;
     if (!aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, third, output_owner,
         array_type(), false, used, revision)) return;
     val fourth <- work[third].next;
@@ -2637,8 +2659,19 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
         record_type(), false, used, revision)) return;
     val extent <- work[fourth].next;
     if (!independent_scalar_formal(nodes, names, extent, used, revision, builtin_u64())) return;
-    if (independent_scalar_tail(nodes, names, work, work[extent].next, used, revision)) {
-        (views[at] <- make PreparedParserWriter {}):void
+    val parameter <- work[extent].next;
+    val type <- no_node();
+    val kind <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node()) {
+            (views[at] <- make PreparedParserWriter {}):void;
+            return
+        };
+        type <- independent_formal_type(nodes, parameter, used, revision);
+        if (type >= used) return;
+        kind <- native_value_kind(names, selected, type);
+        if (!source_call_scalar(kind) && kind != enum_type()) return;
+        (parameter <- work[parameter].next):void
     }
 }
 
@@ -4018,7 +4051,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_parser_writer(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
-        prepare_readonly_sum_query(nodes, names, selected, contracts, interface_count,
+        prepare_readonly_array_query(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
         prepare_record_inspector(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
@@ -4454,7 +4487,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
              next == count + 2u64 && work[parameter].next == no_node()) ||
             (source_writer == ProductWriter && next == count + 3u64) ||
             (source_writer == AggregateWriter && next == count + 2u64) ||
-            (source_writer == ParserWriter && next == count + 4u64) ||
+            (source_writer == ParserWriter && next == count + owner_count) ||
             (source_writer == RecordInspector && next == count + 5u64)) {
             (contracts[next].value_kind <- record_type()):void
         };
