@@ -2929,8 +2929,8 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-# Bind the readonly AST array and initialized output loan before checking
-# a body that returns an independent nominal classification.
+# Bind the readonly AST array, independent operands and initialized output
+# before checking the body that supplies the scalar result.
 func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -2949,8 +2949,9 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
     val input_owner <- clause.previous;
     if (inspect_signature(nodes, revision, used, input_owner, clause) != OwnerSignatureClause || !clause.readonly ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
-        clause.annotation >= used ||
-        (names[clause.annotation].kind != enum_type() && imported_kind(names, selected, clause.annotation) != enum_export()) ||
+        clause.annotation >= used) return;
+    val result <- native_value_kind(names, selected, clause.annotation);
+    if ((result != builtin_bool() && result != builtin_u8() && result != builtin_u64() && result != enum_type()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
@@ -2959,22 +2960,33 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
     if (!checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision))
         return;
     val input <- work[first].next;
-    for (position in 0u64 .. 3u64) {
-        if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
-        (input <- work[input].next):void
-    };
-    val output <- reference_formal_marker(nodes, names, input, output_owner, false, used, revision);
-    if (output >= used || work[input].next != no_node()) return;
-    if (names[output].kind == builtin_u64()) {
-        (views[at] <- make PreparedArrayInspector { inline_product <- false }):void;
-        return
-    };
+    val output <- no_node();
+    val annotation <- no_node();
+    val kind <- 0u8;
+    val storage <- UnprovedAggregate;
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
-        type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
-    val storage <- aggregate[type.identity];
-    if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
-        (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
+    for (unused in 0u64 .. used) {
+        if (input >= used) return;
+        if (work[input].next == no_node()) {
+            output <- reference_formal_marker(nodes, names, input, output_owner, false, used, revision);
+            if (output >= used) return;
+            if (names[output].kind == builtin_u64()) {
+                (views[at] <- make PreparedArrayInspector { inline_product <- false }):void;
+                return
+            };
+            if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
+                type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
+            storage <- aggregate[type.identity];
+            if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
+                (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
+            };
+            return
+        };
+        annotation <- independent_formal_type(nodes, input, used, revision);
+        if (annotation >= used) return;
+        kind <- native_value_kind(names, selected, annotation);
+        if (!source_call_scalar(kind) && kind != enum_type()) return;
+        (input <- work[input].next):void
     }
 }
 
