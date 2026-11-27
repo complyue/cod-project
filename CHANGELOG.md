@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-27 — Allow a dotted named call to reach the visible free callable
+
+<a id="h-named-member-free-fallback-20261127"></a>
+**H-NAMED-MEMBER-FREE-FALLBACK-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user chose the option where `x.quote()` returns 9 through the free `quote(x)` and added “选2但是正式编译器的诊断要给出warning，编译时通过开关可降为info”. [D-07-NAMED-FALLBACK](design/DesignAuthorityRegistry.md#d-07-named-fallback), P-780/P-781, extends the [indexing priority precedent](#h-index-defaults-and-free-methods-20261126) to named dotted calls. The [scope and acceptance](design/DomainLanguageDesign.md#when-a-dotted-call-uses-a-free-callable) cover the explicit free call, concrete and abstract methods, the selected module view and production diagnostic. Indexing and data call-operator diagnostics keep their previous scope.
+
+## 2026-11-27 — Explain receiver dispatch across CoD operations
+
+<a id="k-oo-dispatch-model-20261127"></a>
+**K-OO-DISPATCH-MODEL-20261127.** **Continued** from the [r229 language scope](https://github.com/complyue/cod-project/blob/c2a1edec79a45c7c692eba2d1b8433983b74f45b/design/DomainLanguageDesign.md#receivers-in-field-accessors-and-member-methods). The project user requested a review of OO family priority and its interaction with receiver notation. [The consolidated model](design/DomainLanguageDesign.md#how-receiver-dispatch-works) applies [member and owner rules](#h-member-names-and-owner-20261124), [super-calls](#h-product-extends-super-20261125), the [OO call operator](#h-oo-call-operator-head-20261125) and [indexing priority](#h-index-defaults-and-free-methods-20261126). D-07r230, D-15r87, D-30r12, portability study r6 and idioms guide r19 distinguish type-carried publication from ordinary callable names. At the user’s request, “下标访问应该确立专属沟通词汇”, the [indexing terminology](design/CollectionsAndBuiltinContainers.md#indexing-terminology) names all three bracket operations. The related D-10r277, D-11r43, D-14r139 and D-ARCH-REVIEWr228 edits carry forward their preceding operation and acceptance rules. The named-call fallback is recorded in the separate human decision above. The interaction of storage-parent and abstract indexing defaults is tracked with the receiver design. Registry r1357→1358.
+
 ## 2026-11-26 — Check inline record construction at its indexed destination
 
 <a id="k-booter-indexed-inline-record-20261126"></a>

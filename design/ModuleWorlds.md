@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 86 · Recorded: 2026-11-26 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 87 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r87 [D-15](DesignAuthorityRegistry.md#d-15) continues r86’s publication rules. The [family merge](#merging-type-owned-method-families) accounts for indexing alongside construction and data calls. [Receiver dispatch](DomainLanguageDesign.md#how-receiver-dispatch-works) distinguishes these operations from ordinary callable name lookup. [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback) uses ordinary lookup for the free tier of a dotted call.
 
 At r86 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies r85’s receiver publication and ordinary callable lookup to [automatic abstract defaults and visible free indexing operators](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators). The two extension grants retain their existing scope.
 
@@ -183,17 +185,19 @@ proc use(x:Node in O) -> u64 where {owner O} {
 }
 ```
 
+A dotted named call can reach this namespace after the receiver and its declared abstractions have supplied no applicable member. The call’s selected interpretation then resolves the free name once. For instance, a local `quote` that shadows an associated callable is the free family considered for `x.quote()`. A rename preserves the chosen callable’s identity. [Named member fallback and its diagnostic](DomainLanguageDesign.md#when-a-dotted-call-uses-a-free-callable)
+
 To extend a source family, explicitly select that callable with import under the intended local alias, then use the established extension rules. Importing a type still grants its existing type-level permissions; this name rule does not remove permitted explicit conformance declarations. Explicit callable import, using's preserved implementation context, import's receiving interpretation, mixin body redefinition and explicit same-alias unions remain separate operations. Local shadowing alone is not explicit overload-conflict arbitration inside a composed family.
 
 ### Merging type-owned method families
 
-When several `using` or `import` declarations select views of the same nominal data type, the receiving module merges the published contributions to each of its two method families. All names for that type in the receiving world see the merged information. A definition reached by multiple paths with the same interpretation contributes once. Compatible overloads coexist. Conflicting contributions reject the module composition even when no expression uses the disputed method. The diagnostic identifies both definitions. Import order gives neither definition precedence. A separate world retains its own selections.
+When several `using` or `import` declarations select views of the same nominal data type, the receiving module merges the published contributions by family identity for its constructors, data call operator and the indexing operations it provides. All names for that type in the receiving world see the merged information. A definition reached by multiple paths with the same interpretation contributes once. Compatible overloads coexist. Conflicting contributions reject the module composition even when no expression uses the disputed method. The diagnostic identifies both definitions. Import order gives neither definition precedence. A separate world retains its own selections.
 
 The constructor overload family belongs to the nominal type. Its dctors are methods of that family. For a sum, `export Receipt;` publishes every dctor and its visible initializer overloads. A constructor selector makes the named dctors explicit, and importing a dctor permits extending it. In the merged family, the overloads for the dctor named at the `make` site determine whether braced initialization is available. See the [constructor selectors and combined-world example](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
 
-### Publication of type-carried call operators
+For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic indexed value transfer in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. A declared conformer receives visible abstract indexing defaults. An unprefixed operator declaration belongs to the ordinary local or explicitly imported free family. Indexing can reach that family after both OO levels lack an applicable implementation. [Dispatch order and a two-world test](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators)
 
-For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic setter in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. A declared conformer receives visible abstract indexing defaults. An unprefixed operator declaration belongs to the ordinary local or explicitly imported free family. Indexing can reach that family after both OO levels lack an applicable implementation. [Dispatch order and a two-world test](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators)
+### Publication of type-carried call operators
 
 Exporting a nominal data type also publishes the `(())` family visible on that type in the exporting world. Re-export of a selected type view carries its family. Plain `using` selects the family with the type. An `import` of the type also permits local extension. A standalone `export`, `using` or `import` of `(())` is invalid. Calls use [type-level lookup](DomainLanguageDesign.md#type-level-call-operator-lookup).
 

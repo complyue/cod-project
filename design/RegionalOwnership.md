@@ -1,10 +1,12 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 138 · Recorded: 2026-11-26 · Status: design draft with scoped confirmed requirements.
+Design revision: 139 · Recorded: 2026-11-27 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
 
-At r138 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) places the assigned operand before the index parameters. P-766/P-767 preserve destination preparation, failure order, actual owner and access. [Setter call example](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
+At r139 the [indexing terminology](CollectionsAndBuiltinContainers.md#indexing-terminology) names the existing bracket operations. The [D-14](DesignAuthorityRegistry.md#d-14) rules and acceptance at r138 continue.
+
+At r138 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) places the assigned operand before the index parameters. P-766/P-767 preserve destination preparation, failure order, actual owner and access. [Indexed value transfer example](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
 At r137 [D-30-TYPED-SUBSCRIPTS](DesignAuthorityRegistry.md#d-30-typed-subscripts) extends the indexed call to multiple positional axis values. The selected method retains the r136 owner, access, transfer and result rules. [Observable call and failure order](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
@@ -1384,7 +1386,7 @@ The expected everyday use of `a <- b <- c` is bits transfer. Under H-308, a thir
 
 For multiple axes, `container[row, col] <- source` selects `([]<-)(container, source, row, col)`. Each selector retains its source type, including units and explicit or omitted range bounds. The matching reference-binding family is `([]=)`. [Typed subscript overloads](CollectionsAndBuiltinContainers.md#multidimensional-subscript-overloads)
 
-`container[index] <- source` selects `([]<-)(container, source, index)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or getter. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
+`container[index] <- source` selects `([]<-)(container, source, index)` before assuming any addressable element. The container and index retain their types for dispatch. A packed representation can implement the write and return void without exposing an element reference or indexed read method. The native array fallback writes the actual element and returns its readonly view; `intrinsic ([]<-)(...)` explicitly selects that checked fallback.
 
 Builtin indexed reads, writes and view selection follow [D-17-BOUNDS](ExceptionControl.md#unchecked-bounds-exceptions-and-optional-checks): runtime bounds checks are enabled by default and failure raises unchecked IndexOutOfBoundsError. An explicit compiler option may disable those checks at the programmer's risk; it does not disable owner/access/initialization checks or grant writable storage. User-defined indexing keeps its selected method contract, including any builtin operations it invokes. Operand preparation and conversion order remain unchanged.
 
