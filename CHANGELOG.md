@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Lookup and pop of a ref element select its current target
+
+<a id="h-container-selected-ref-target-20261127"></a>
+**H-CONTAINER-SELECTED-REF-TARGET-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user confirmed “ref 元素的 lookup 和 pop 都返回当时选中的 target”. [D-30 r19→20](design/CollectionsAndBuiltinContainers.md#container-pointer-results) specifies that after a map entry rebinds from A to B, the earlier result still selects A and a new lookup selects B. The [prior shallow pop rule](https://github.com/complyue/cod-project/blob/5650020e153a89d52e9eabf2a70c10d70c303b9b/design/CollectionsAndBuiltinContainers.md#container-pointer-results), nullable result, actual owner and access continue under P-590/P-162. Registry r1372→1373.
+
 ## 2026-11-27 — Deque pop preserves the detached slot’s immediate value
 
 <a id="h-detached-pop-slot-20261127"></a>
