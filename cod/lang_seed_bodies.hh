@@ -2,6 +2,7 @@
 #pragma once
 
 #include "lang_declarations.hh"
+#include "lang_product_layouts.hh"
 
 #include <numeric>
 #include <variant>
@@ -187,6 +188,7 @@ class BodyExtraction {
   };
 
   const Declarations &declarations_;
+  ProductLayouts product_layouts_;
   const std::map<size_t, Type> reference_targets_;
   std::map<size_t, size_t> selected_;
   struct Specialization {
@@ -196,13 +198,15 @@ class BodyExtraction {
   using TypeKey = std::pair<Type::Kind, size_t>;
   std::map<std::pair<size_t, std::vector<TypeKey>>, size_t> specialization_ids_;
   std::map<size_t, Specialization> specializations_;
+  std::map<std::pair<size_t, ProductPlacement>, size_t> product_initializers_;
   std::deque<BoundBody> bodies_;
   std::vector<LocalDefinition> local_definitions_;
   std::set<size_t> handler_layouts_;
   size_t generated_methods_ = 0;
 
-  explicit BodyExtraction(const Declarations &declarations)
-      : declarations_(declarations), reference_targets_(singleton_reference_targets(declarations.declarations_)) {}
+  explicit BodyExtraction(Declarations &declarations)
+      : declarations_(declarations), product_layouts_(declarations.declarations_),
+        reference_targets_(singleton_reference_targets(declarations.declarations_)) {}
 
   static std::map<size_t, Type> singleton_reference_targets(const CheckedProgram &program) {
     std::map<size_t, Type> targets;
@@ -357,18 +361,50 @@ class BodyExtraction {
   // Body extraction subsequently consumes this record and never revises it.
   size_t specialize(size_t base, std::span<const Type> actuals, const Location &at) {
     const auto &source = declarations_.method(base);
-    auto arguments = Declarations::infer_direct_types(source, actuals, at);
+    auto arguments = declarations_.infer_direct_types(source, source.parameters, actuals, at);
     std::vector<TypeKey> keys;
     keys.reserve(arguments.size());
     for (const auto &type : arguments) keys.emplace_back(type.kind, type.identity);
     const auto next = declarations_.declarations_.methods.size() + generated_methods_;
     auto [id, first] = specialization_ids_.try_emplace(std::pair{base, std::move(keys)}, next);
     if (first) {
-      auto completed = Declarations::complete_direct_signature(source, arguments);
+      auto completed = Declarations::complete_direct_signature(source, arguments, [&](const Type &type) {
+        return product_layouts_.resolve(type, at);
+      });
       specializations_.emplace(next, Specialization{std::move(completed), std::move(arguments)});
       ++generated_methods_;
     }
     return id->second;
+  }
+
+  size_t product_initializer(size_t base, const Type &type, ProductPlacement placement, const Location &at) {
+    const auto next = declarations_.declarations_.methods.size() + generated_methods_;
+    const auto [id, first] = product_initializers_.try_emplace(std::pair{type.identity, placement}, next);
+    if (first) {
+      const auto &base_method = declarations_.method(base);
+      auto arguments = declarations_.infer_direct_types(base_method, std::span{&*base_method.result.type, 1},
+                                                        std::span{&type, 1}, at);
+      auto completed = base_method;
+      completed.type_parameters.clear();
+      completed.result = ResultContract{Type{Type::void_type}};
+      auto &inputs = completed.scope_inputs.emplace();
+      inputs.owners = base_method.input_owners();
+      const auto &schema = declarations_.declarations_.schemas.at(type.identity);
+      expect(!schema.fields.empty(), at, "seed needs explicit pointer fields for this generic product initializer");
+      for (const auto &field : schema.fields) {
+        expect(field.storage == PlaceKind::pointer && !field.source->fixed_binding && !field.source->read_only,
+               field.source->at, "seed needs a writable pointer field for this generic product initializer");
+        auto &parameter = inputs.parameters.emplace_back(*field.source);
+        parameter.type = field.type;
+        parameter.owner = inputs.owners.front().name;
+        parameter.declaration_kind = "ptr";
+        parameter.caller_place = Parameter::CallerPlace::reference_slot;
+        completed.parameters.push_back(field.type);
+      }
+      specializations_.emplace(next, Specialization{std::move(completed), std::move(arguments)});
+      ++generated_methods_;
+    }
+    return demand_body(id->second, at, {{input_owner(0), placement}});
   }
 
   void require_callable_body(size_t method_id, const Location &at, bool allow_omitted_void) const {
@@ -701,7 +737,8 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) :
-                native_handle || product_loan || ordinary_loan(parameter, mode, type)),
+                native_handle || product_loan || (method_ && method_->product_initializer) ||
+                ordinary_loan(parameter, mode, type)),
              parameter.at, "seed needs an admitted scalar, array, product, text or native handle formal");
       auto &frame = body_.instance.frame;
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
@@ -709,7 +746,8 @@ class BodyExtraction {
       const auto local = declare(parameter.at, parameter.name, type, value,
                                  parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
                                  parameter.fixed_binding || native_handle || type == Type::string, owner, true, capture);
-      body_.instance.bindings.at(local.binding).nullable = mode == ArgumentMode::borrowed_ptr;
+      body_.instance.bindings.at(local.binding).nullable =
+          mode == ArgumentMode::borrowed_ptr || (method_ && method_->product_initializer);
       frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
     }
 
@@ -1272,7 +1310,9 @@ class BodyExtraction {
         fail(expr.at, "a function cannot invoke a procedure");
       const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
           !region_receiver && !expr.has_here_body();
-      if (!definition.type_parameters.empty()) {
+      const auto application = [](const Type &type) { return type.kind == Type::product_application; };
+      if (!definition.type_parameters.empty() || std::ranges::any_of(definition.parameters, application) ||
+          (definition.result.type && application(*definition.result.type))) {
         const auto parameters = definition.input_parameters();
         expect(definition.result.type && !definition.source->c_linkage && !expr.has_here_body() &&
                definition.here.empty() && expr.children.size() == parameters.size() &&
@@ -1392,7 +1432,16 @@ class BodyExtraction {
       }
       const auto found = names().types.find(annotation.name);
       if (found == names().types.end()) fail(at, "unknown type '" + annotation.name + "'");
-      return found->second;
+      auto selected = found->second;
+      if (selected.kind == Type::product_template) {
+        const auto &form = *declarations().product_templates.at(selected.identity).source;
+        if (annotation.parameters.size() != form.type_parameters.size())
+          fail(at, "wrong number of type arguments for '" + annotation.name + "' (canonical " +
+                   form.at.filename() + "::" + form.name + ")");
+        selected.kind = Type::product_application;
+        for (const auto &argument : annotation.parameters) selected.parameters.push_back(resolve_annotation(argument, at));
+      } else if (!annotation.parameters.empty()) fail(at, "type '" + annotation.name + "' does not take type arguments");
+      return extraction_.product_layouts_.resolve(selected, at);
     }
 
     void bind_independent_parameters(Outline &outlined) {
@@ -1758,12 +1807,28 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation make_initialized_product(const Expression &expr, const Type &type, size_t initializer) {
+      expect(expr.constructor_arguments && expr.children.empty(), expr.at,
+             "seed needs the niladic initializer for this generic product");
+      const auto owner = named_owner(expr.owner_name, expr.at);
+      auto op = aggregate_construction(type, owner, true, expr.at);
+      const auto placement = op.regional_storage ? ProductPlacement::region : ProductPlacement::lexical;
+      op.callee = extraction_.product_initializer(initializer, type, placement, expr.at);
+      op.scope_owners.push_back(owner);
+      BoundCall edge{&expr, *op.callee, {}};
+      if (const auto allocator = allocator_for(owner)) edge.owners.emplace(0, *allocator);
+      edge.supplied = supplied_;
+      body_.calls.push_back(std::move(edge));
+      return op;
+    }
+
     CheckedOperation make(const Expression &expr) {
       expect(!expr.construction_type_query && expr.annotation,
              expr.at, "seed needs a declared construction type");
       CheckedOperation op;
       const auto &spelling = expr.annotation->name;
-      const auto found = expr.annotation->kind == Type::named ? names().constructors.find(spelling) : names().constructors.end();
+      const auto found = expr.annotation->kind == Type::named && expr.annotation->parameters.empty()
+          ? names().constructors.find(spelling) : names().constructors.end();
       if (found != names().constructors.end()) {
         const auto selected = found->second;
         const auto &sum = declarations().sums.at(selected.sum);
@@ -1794,7 +1859,13 @@ class BodyExtraction {
       if (scalar_type(type)) return make_scalar(expr, type);
       const bool builder = declarations().builder_type(type);
       if (builder || type == Type::string) return make_lexical_text(expr, type, builder);
-      if (type.kind == Type::product) return make_product(expr, type, true);
+      if (type.kind == Type::product) {
+        const auto &schema = declarations().schemas.at(type.identity);
+        if (schema.application)
+          if (const auto initializer = declarations().product_templates.at(schema.application->identity).initializer)
+            return make_initialized_product(expr, type, *initializer);
+        return make_product(expr, type, true);
+      }
       expect(type.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
              expr.at, "seed needs an ordinary array constructor");
@@ -2441,6 +2512,27 @@ class BodyExtraction {
           form_(method_ ? *method_->source : *body_.outline->source),
           module_(method_ ? method_->module : body_.outline->module) {}
 
+    const CheckedOperation &extract_pointer_field_initializers() {
+      const auto &body = *form_.body;
+      expect(body.kind == Kind::block, body.at, "seed needs a block of pointer field initializers");
+      std::set<std::string> written;
+      for (const auto &item : body.children) {
+        const auto &statement = item->kind == Kind::return_tail ? *item->children.front() : *item;
+        expect(statement.kind == Kind::typed_expression && statement.annotation == Type::void_type,
+               item->at, "seed needs a discarded pointer field initializer");
+        const auto &write = ungrouped_expression(*statement.children.front());
+        expect(write.kind == Kind::rebind && write.children[0]->kind == Kind::name &&
+               write.children[1]->kind == Kind::null_ref &&
+               std::ranges::find(method_->input_parameters(), write.children[0]->text, &Parameter::name) !=
+                   method_->input_parameters().end() && written.insert(write.children[0]->text).second,
+               item->at, "seed needs one null initialization per pointer field");
+        extract(*item);
+      }
+      expect(written.size() == method_->input_parameters().size(), body.at,
+             "seed needs an initializer for every pointer field");
+      return remember(body, CheckedOperation{});
+    }
+
     void extract_body() {
       if (method_) {
         const auto parameters = method_->input_parameters();
@@ -2457,7 +2549,8 @@ class BodyExtraction {
       } else {
         for (const auto &offered : body_.outline->parameters) bind_input(offered, offered.type);
       }
-      const auto &end = extract(*form_.body);
+      const auto &end = method_ && method_->product_initializer ? extract_pointer_field_initializers()
+                                                               : extract(*form_.body);
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
              "seed needs an input for every formal owner");
       if (body_.instance.result.type) {

@@ -2461,6 +2461,27 @@ class LLVMEmission {
       return destination;
     }
   }
+  void emit_product_initializer(const Expression &expr, llvm::Value *destination,
+                                llvm::StructType *layout, llvm::Value *region) {
+    const auto &fact = checked_.at(&expr);
+    const auto &fields = program_->schemas.at(fact.type.identity).fields;
+    std::vector<llvm::AllocaInst *> slots;
+    std::vector<llvm::Value *> arguments;
+    for (const auto &field : fields) {
+      auto *selection = slot(b_.getPtrTy(), "initializer.reference");
+      slots.push_back(selection);
+      auto *carrier = b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(selection, b_.getInt64Ty()), 0);
+      arguments.push_back(b_.CreateInsertValue(carrier, b_.getInt32(tag(field.type)), 1));
+    }
+    const auto method = program_->instances.at(*fact.callee).method;
+    propagate(native_call(expr, methods_.at(method), method, std::move(arguments)));
+    for (size_t i = 0; i < slots.size(); ++i) {
+      auto *target = load(slots[i]);
+      auto *value = region ? regional_locator(region, target) : target;
+      b_.CreateStore(value, b_.CreateStructGEP(layout, destination, i));
+    }
+  }
+
   llvm::Value *emit_checked_expression(const Expression &expr, Projection projection, bool discard) {
     const bool read = carries_value(projection);
     using K = Expression::Kind;
@@ -3055,7 +3076,8 @@ class LLVMEmission {
         auto *owner = fact.regional_storage ? selected_owner(expr) : nullptr;
         auto *layout = owner ? regional_product_layout(schema) : product_layout(schema);
         auto *address = allocate_aggregate(expr, layout, owner);
-        emit_product_initializers(expr, address, owner);
+        if (fact.callee) emit_product_initializer(expr, address, layout, owner);
+        else emit_product_initializers(expr, address, owner);
         if (!reachable()) return nullptr;
         return discard ? empty_scalar() : address;
       }
@@ -3630,7 +3652,7 @@ public:
       }
       auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name;
       if (i != method.definition) {
-        prefix += method.source->type_parameters.empty() ? ".interpretation." : ".instance.";
+        prefix += method.interpretation ? ".interpretation." : ".instance.";
         prefix += std::to_string(i);
       }
       if (!method.instance || !method.type_parameters.empty())

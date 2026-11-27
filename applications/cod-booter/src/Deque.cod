@@ -1,0 +1,63 @@
+data Link[T] {
+    item:T;
+    ptr previous:Link[T];
+    ptr next:Link[T];
+}
+
+export data deque[T] {
+    ptr first:Link[T];
+    ptr last:Link[T];
+}
+
+func deque() -> ref deque[T] in R where {T, owner R} {
+    (first = null in R):void;
+    (last = null in R):void;
+}
+
+export func push_front(queue:deque[T] in O, item:const T in I) -> void
+    where {T, owner O, const owner I} {
+    ref added = make Link[T] in O { item <- item; previous = null; next = queue.first; };
+    case queue.first of {
+        (null) -> { (queue.last = added):void; };
+        (ref first:Link[T] in O) -> { (first.previous = added):void; };
+    };
+    (queue.first = added):void;
+}
+
+export func push_back(queue:deque[T] in O, item:const T in I) -> void
+    where {T, owner O, const owner I} {
+    ref added = make Link[T] in O { item <- item; previous = queue.last; next = null; };
+    case queue.last of {
+        (null) -> { (queue.first = added):void; };
+        (ref last:Link[T] in O) -> { (last.next = added):void; };
+    };
+    (queue.last = added):void;
+}
+
+export func pop_front(queue:deque[T] in O) -> ptr T in O where {T, const owner O} {
+    case queue.first of {
+        (null) -> { return null in O };
+        (ref first:Link[T] in O) -> {
+            queue.first = first.next;
+            case queue.first of {
+                (null) -> { (queue.last = null):void; };
+                (ref next:Link[T] in O) -> { (next.previous = null):void; };
+            };
+            return first.item
+        };
+    };
+}
+
+export func pop_back(queue:deque[T] in O) -> ptr T in O where {T, const owner O} {
+    case queue.last of {
+        (null) -> { return null in O };
+        (ref last:Link[T] in O) -> {
+            queue.last = last.previous;
+            case queue.last of {
+                (null) -> { (queue.first = null):void; };
+                (ref previous:Link[T] in O) -> { (previous.next = null):void; };
+            };
+            return last.item
+        };
+    };
+}

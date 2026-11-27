@@ -252,6 +252,16 @@ struct CheckedSchema {
   bool lexical_builder = false;
   bool has_sum_storage = false;
   bool layout_checked = false;
+  // For realized generic products this records the defining template and canonical arguments.
+  std::optional<Type> application = {};
+};
+
+// A bound recipe names parameter ordinals and templates. It has no storage layout.
+struct ProductTemplate {
+  const Form *source;
+  size_t module;
+  std::vector<CheckedSchema::Field> fields;
+  std::optional<size_t> initializer = {};
 };
 
 struct CheckedSum {
@@ -385,6 +395,7 @@ struct CheckedMethod {
   std::string operation; // Semantic operation identity, independent of the local alias.
   size_t module = 0, interpretation = 0, definition = null_target;
   std::optional<SumConstructor> regional_initializer;
+  bool product_initializer = false;
   std::optional<size_t> family;
   std::optional<size_t> instance;
   std::vector<Type> parameters;
@@ -500,7 +511,8 @@ struct CheckedProgram {
     schemas.push_back({&source, {}, false});
     return exception_type(category);
   }
-  std::vector<CheckedSchema> schemas;
+  std::deque<CheckedSchema> schemas;
+  std::vector<ProductTemplate> product_templates;
   std::vector<CheckedSum> sums;
   std::vector<CheckedAbstractType> abstract_types;
   std::vector<CheckedArray> arrays;

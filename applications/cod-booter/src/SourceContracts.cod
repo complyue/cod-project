@@ -1,3 +1,4 @@
+using "./Deque.cod" { deque, push_back, pop_back };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction, LocalSumConstruction, LexicalProductReference, LexicalSumReference, LexicalSumRebind } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
@@ -319,7 +320,6 @@ array FunctionEffectRows[UInt64]:FunctionEffects;
 
 data FunctionCallNode { first_caller:UInt64; caller:UInt64; next_caller:UInt64; }
 array FunctionCallGraph[UInt64]:FunctionCallNode;
-array FunctionEffectStack[UInt64]:UInt64;
 enum FunctionEffect:UInt8 { UnavailableBody; EscapingBounds; FatalArithmetic; LexicalArrayAllocation; }
 
 func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
@@ -530,15 +530,14 @@ func remember_function_effect(row:FunctionEffects in R, category:FunctionEffect)
 # Close one possible outcome over the frozen graph. A function enters the
 # stack at most once. Components without a local origin add no outcome.
 func propagate_function_effect(calls:const FunctionCallGraph in P, local:const FunctionEffectRows in L,
-    outcomes:FunctionEffectRows in O, stack:FunctionEffectStack in S, used:UInt64, category:FunctionEffect)
-    -> void where {const owner P, const owner L, owner O, owner S} {
-    val depth <- 0u64;
+    outcomes:FunctionEffectRows in O, used:UInt64, category:FunctionEffect)
+    -> void where {const owner P, const owner L, owner O} {
+    ref stack = make deque[UInt64]();
     for (at in 0u64 .. used) {
         if (has_function_effect(local[at], category)) {
             remember_function_effect(outcomes[at], category);
             if (calls[at].first_caller != no_node()) {
-                stack[depth] <- at;
-                (depth <- depth + 1u64):void
+                push_back(stack, at)
             }
         }
     };
@@ -547,16 +546,16 @@ func propagate_function_effect(calls:const FunctionCallGraph in P, local:const F
     # Each step takes a stack entry or visits a call site.
     for (step in 0u64 .. used + used) {
         if (edge == no_node()) {
-            if (depth == 0u64) return;
-            depth <- depth - 1u64;
-            (edge <- calls[stack[depth]].first_caller):void
+            case pop_back(stack) of {
+                (null) -> { return; };
+                (ref item:UInt64 in here) -> { (edge <- calls[item].first_caller):void; };
+            }
         } else {
             caller <- calls[edge].caller;
             if (!has_function_effect(outcomes[caller], category)) {
                 remember_function_effect(outcomes[caller], category);
                 if (calls[caller].first_caller != no_node()) {
-                    stack[depth] <- caller;
-                    (depth <- depth + 1u64):void
+                    push_back(stack, caller)
                 }
             };
             (edge <- calls[edge].next_caller):void
@@ -585,12 +584,11 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
     });
     ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false; allocates <- false });
     collect_function_operations(nodes, names, work, views, facts, demand, sites, cases, calls, local, used, revision);
-    ref stack = make FunctionEffectStack(used, no_node());
     ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- true; bounds <- false; numeric <- false; allocates <- false });
-    propagate_function_effect(calls, local, outcomes, stack, used, UnavailableBody:FunctionEffect);
-    propagate_function_effect(calls, local, outcomes, stack, used, EscapingBounds:FunctionEffect);
-    propagate_function_effect(calls, local, outcomes, stack, used, FatalArithmetic:FunctionEffect);
-    propagate_function_effect(calls, local, outcomes, stack, used, LexicalArrayAllocation:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, used, UnavailableBody:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, used, EscapingBounds:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, used, FatalArithmetic:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, used, LexicalArrayAllocation:FunctionEffect);
     val nonallocating <- false;
     for (at in 0u64 .. used) {
         nonallocating <- outcomes[at].available && !outcomes[at].allocates;

@@ -187,8 +187,18 @@ class ModuleBinder {
   Type resolve_type(Type type, const CheckedMethod *method = nullptr) const {
     const ModuleLookup lookup(module_, method ? method->module : module_);
     if (method && binder(*method, type)) return type;
-    if (type.kind == Type::named && !type.target)
-      if (const auto found = module_names().types.find(type.name); found != module_names().types.end()) return found->second;
+    if (type.kind == Type::named && !type.target) {
+      if (const auto found = module_names().types.find(type.name); found != module_names().types.end()) {
+        if (type.parameters.empty()) return found->second;
+        if (found->second.kind == Type::product_template) {
+          auto application = found->second;
+          application.kind = Type::product_application;
+          for (auto &argument : type.parameters)
+            application.parameters.push_back(resolve_type(std::move(argument), method));
+          return application;
+        }
+      }
+    }
     if (type.kind == Type::procedure) {
       for (auto &parameter : type.parameters) parameter = resolve_type(std::move(parameter), method);
       // Throws declarations are resolved independently of argument inference.
@@ -205,7 +215,7 @@ class ModuleBinder {
   }
 
   static std::optional<size_t> binder(const CheckedMethod &method, const Type &type) {
-    if (type.kind != Type::named) return {};
+    if (type.kind != Type::named || !type.parameters.empty() || type.target) return {};
     for (size_t i = 0; i < method.type_parameters.size(); ++i)
       if (method.type_parameters[i] == type.name) return i;
     return {};
@@ -220,7 +230,7 @@ class ModuleBinder {
     reject_c_type_payload(type, at);
     if (owning_exception(type)) implementation_gap(at, "owned exception arguments and results require an owner-aware signature");
     if (bits_type(type) || binder(method, type) || (result && type == Type::void_type)) return;
-    if (borrowed_target && (type.kind == Type::product || text_type(type) ||
+    if (borrowed_target && (type.kind == Type::product || type.kind == Type::product_application || text_type(type) ||
                             (!result && (type.kind == Type::array || type.kind == Type::sum ||
                                          type.kind == Type::abstract_type)))) return;
     if (type.kind == Type::array)
@@ -1005,10 +1015,63 @@ class ModuleBinder {
 
   using UnavailableLayouts = std::set<std::pair<Type::Kind, size_t>>;
 
+  Type product_recipe_type(Type type, const Form &definition, const Location &at) const {
+    if (type.kind != Type::named) return type;
+    if (!type.target) {
+      const auto parameter = std::ranges::find(definition.type_parameters, type.name, &TypeParameter::name);
+      if (parameter != definition.type_parameters.end()) {
+        if (!type.parameters.empty()) fail(at, "a type parameter cannot take type arguments");
+        return {Type::parameter, parameter->name, static_cast<size_t>(parameter - definition.type_parameters.begin())};
+      }
+    }
+    const auto found = module_names().types.find(type.name);
+    if (type.target || found == module_names().types.end())
+      fail(at, "unknown generic product field type '" + type.name + "'");
+    const auto &selected = found->second;
+    if (selected.kind != Type::product_template) {
+      if (!type.parameters.empty()) fail(at, "type '" + type.name + "' does not take type arguments");
+      return selected;
+    }
+    const auto &target = program_.product_templates.at(selected.identity);
+    if (type.parameters.size() != target.source->type_parameters.size()) {
+      const auto canonical = target.source->at.filename() + "::" + target.source->name;
+      fail(at, "wrong number of type arguments for '" + type.name + "' (canonical " + canonical + ")");
+    }
+    Type application{Type::product_application, selected.name, selected.identity};
+    for (auto &argument : type.parameters)
+      application.parameters.push_back(product_recipe_type(std::move(argument), definition, at));
+    return application;
+  }
+
+  bool bind_product_template(ProductTemplate &recipe, CompilationDiagnostics *diagnostics) const {
+    const auto &definition = *recipe.source;
+    std::set<std::string> names;
+    std::vector<CheckedSchema::Field> fields;
+    bool valid = true;
+    for (const auto &field : definition.parameters) {
+      valid &= check_schema_part(diagnostics, [&] {
+        if (!names.insert(field.name).second)
+          fail(field.at, "duplicate field '" + field.name + "' of '" + definition.name + "'");
+        auto type = product_recipe_type(field.type, definition, field.at);
+        const auto mode = place_kind(field.declaration_kind.empty() || field.declaration_kind == "val",
+                                     field.declaration_kind == "ref");
+        if (type.kind != Type::parameter && type.kind != Type::product_application &&
+            !scalar_type(type) && type.kind != Type::product && type.kind != Type::sum &&
+            !(type.kind == Type::array && mode != PlaceKind::value))
+          implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
+        fields.push_back({&field, std::move(type), mode});
+      });
+      if (diagnostics && !diagnostics->complete()) return false;
+    }
+    if (valid) recipe.fields = std::move(fields);
+    return valid;
+  }
+
   bool register_nominal_types(const SourceModule &source, CompilationDiagnostics *diagnostics) {
     const auto synonyms = complete_type_synonym_targets(source);
     register_abstract_types(source, synonyms);
     const auto first = program_.schemas.size();
+    const auto first_template = program_.product_templates.size();
     const auto first_array = program_.arrays.size();
     const auto first_sum = program_.sums.size();
     for (const auto &form : source.forms()) {
@@ -1026,6 +1089,13 @@ class ModuleBinder {
       }
       const bool marker = form->kind == Form::Kind::native_handle_type;
       if (!product && !array && !marker && form->kind != Form::Kind::region_definition) continue;
+      if (product && !form->type_parameters.empty()) {
+        const Type type{Type::product_template, form->name, program_.product_templates.size()};
+        if (!module_names().types.emplace(form->name, type).second)
+          fail(form->at, "duplicate type binding '" + form->name + "'");
+        program_.product_templates.push_back({form.get(), module_, {}});
+        continue;
+      }
       const auto kind = array ? Type::array : marker ? Type::c_type_marker : product ? Type::product : Type::region_schema;
       if (form->parent_type && (!product || form->c_data))
         implementation_gap(form->at, "a parent type on this data layout");
@@ -1062,6 +1132,8 @@ class ModuleBinder {
       if (!module_names().types.emplace(form->name, canonical).second)
         fail(form->at, "duplicate type binding '" + form->name + "'");
     }
+    for (size_t id = first_template; id < program_.product_templates.size(); ++id)
+      if (!bind_product_template(program_.product_templates[id], diagnostics)) return false;
     UnavailableLayouts unavailable;
     for (size_t id = first_sum; id < program_.sums.size(); ++id) {
       auto staged = program_.sums[id];
@@ -1753,7 +1825,9 @@ class ModuleBinder {
       const bool aggregate_value_result = ordinary_bits_aggregate && form->result_kind == "val" &&
           prepared.result.owner.empty();
       const bool aggregate_borrowed_result = ordinary_bits_aggregate && prepared.result.borrowed();
-      const bool generic_value_result = prepared.result.type && binder(prepared, *prepared.result.type) &&
+      const bool generic_value_result = prepared.result.type &&
+          (binder(prepared, *prepared.result.type) ||
+           (prepared.result.type->kind == Type::product_application && form->result_kind == "val")) &&
           prepared.result.mode == ResultMode::value && !form->c_linkage && !form->symbolic &&
           !form->implicit_scope && operation.empty() && !here && !constructor;
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type) &&
@@ -1865,6 +1939,25 @@ class ModuleBinder {
       check_aggregate_owner_roles(prepared, prepared.parameters);
       for (const auto &parameter : form->type_parameters)
         if (parameter.bound) implementation_gap(parameter.at, "bounded type parameters");
+      const auto nominal = module_names().types.find(form->name);
+      if (nominal != module_names().types.end() && nominal->second.kind == Type::product_template) {
+        auto &product = program_.product_templates.at(nominal->second.identity);
+        if (product.initializer) fail(form->at, "duplicate generic product initializer");
+        if (product.module != module_ || !form->body || form->exporting ||
+            form->c_linkage || form->symbolic || form->operation ||
+            form->kind != Form::Kind::function || !form->parameters.empty() ||
+            form->owner_parameters.size() != 1 || form->owner_parameters.front().read_only ||
+            prepared.result.mode != ResultMode::borrowed_ref || prepared.result.read_only || !prepared.result.type ||
+            prepared.result.type->kind != Type::product_application ||
+            prepared.result.type->identity != nominal->second.identity ||
+            prepared.result.owner != form->owner_parameters.front().name)
+          implementation_gap(form->at, "generic product initializer outside the local niladic destination profile");
+        prepared.definition = program_.methods.size();
+        prepared.product_initializer = true;
+        product.initializer = prepared.definition;
+        program_.methods.push_back(std::move(prepared));
+        continue;
+      }
       std::optional<size_t> symbol;
       if (form->symbolic) {
         if (here) implementation_gap(here->at, "here signatures of symbolic callable families");
@@ -2056,14 +2149,31 @@ public:
     const SourceProgram &source() const { return source_; }
     const CheckedMethod &method(size_t id) const { return declarations_.methods.at(id); }
 
-    static std::vector<Type> infer_direct_types(const CheckedMethod &method, std::span<const Type> actuals,
-                                                const Location &at) {
+    std::vector<Type> infer_direct_types(const CheckedMethod &method, std::span<const Type> patterns,
+                                         std::span<const Type> actuals, const Location &at) const {
       Substitutions substitutions(method.type_parameters.size());
+      const auto bind = [&](auto &&self, const Type &pattern, const Type &actual) -> void {
+        if (binder(method, pattern)) {
+          if (!bind_type(method, pattern, actual, substitutions))
+            fail(at, "repeated generic type parameter '" + pattern.name + "' requires the same type");
+          return;
+        }
+        if (pattern.kind != Type::product_application) {
+          if (pattern != actual) fail(at, "generic product argument requires the exact nominal type");
+          return;
+        }
+        const auto application = actual.kind == Type::product ? declarations_.schemas.at(actual.identity).application
+                                                              : std::optional<Type>{};
+        if (!application || application->identity != pattern.identity ||
+            application->parameters.size() != pattern.parameters.size())
+          fail(at, "generic product argument does not match '" + type_name(pattern) + "'");
+        for (size_t i = 0; i < pattern.parameters.size(); ++i)
+          self(self, pattern.parameters[i], application->parameters[i]);
+      };
       for (size_t i = 0; i < actuals.size(); ++i) {
-        const auto &pattern = method.parameters.at(i);
-        if (actuals[i] != Type::null_ref && binder(method, pattern) &&
-            !bind_type(method, pattern, actuals[i], substitutions))
-          fail(at, "repeated generic type parameter '" + pattern.name + "' requires the same type");
+        const auto &pattern = patterns[i];
+        if (actuals[i] != Type::null_ref && (binder(method, pattern) || pattern.kind == Type::product_application))
+          bind(bind, pattern, actuals[i]);
       }
       std::vector<Type> types;
       types.reserve(substitutions.size());
@@ -2079,13 +2189,18 @@ public:
 
     static Type apply_direct_types(const CheckedMethod &method, const Type &type, std::span<const Type> arguments) {
       if (const auto index = binder(method, type)) return arguments[*index];
-      return type;
+      if (type.kind != Type::product_application) return type;
+      auto resolved = type;
+      for (auto &argument : resolved.parameters) argument = apply_direct_types(method, argument, arguments);
+      return resolved;
     }
 
-    static CheckedMethod complete_direct_signature(const CheckedMethod &method, std::span<const Type> arguments) {
+    template <typename CompleteType>
+    static CheckedMethod complete_direct_signature(const CheckedMethod &method, std::span<const Type> arguments,
+                                                    CompleteType complete) {
       auto completed = method;
-      for (auto &type : completed.parameters) type = apply_direct_types(method, type, arguments);
-      completed.result.type = apply_direct_types(method, *method.result.type, arguments);
+      for (auto &type : completed.parameters) type = complete(apply_direct_types(method, type, arguments));
+      completed.result.type = complete(apply_direct_types(method, *method.result.type, arguments));
       completed.type_parameters.clear();
       const auto &result = *completed.result.type;
       if (!completed.result.borrowed() && inline_aggregate_type(result) && method.source->result_kind != "val")

@@ -211,7 +211,7 @@ struct Type {
   enum Kind { integer, uint8, uint32, uint64, boolean, void_type, procedure, float32, float64,
               named, unit, quantity, product, region_schema, region, regional, array, reference, null_ref, abstract_type, arguments, parameter,
               exception, never, c_type_marker, native_handle, exception_holder, enumeration, string, c_string, builder_storage,
-              sum };
+              sum, product_template, product_application };
   Kind kind;
   std::string name;
   size_t identity = 0;
@@ -328,6 +328,15 @@ inline std::string type_name(const Type &type) {
   case Type::float64: return "Float64";
   case Type::quantity: return type_name(*type.target) + "(" + type.name + ")";
   case Type::unit: return type.name;
+  case Type::product_application: {
+    auto name = type.name + "[";
+    for (size_t i = 0; i < type.parameters.size(); ++i) {
+      if (i) name += ", ";
+      name += type_name(type.parameters[i]);
+    }
+    return name + "]";
+  }
+  case Type::product_template:
   case Type::named: case Type::product: case Type::sum: case Type::region_schema: case Type::regional: case Type::array:
   case Type::abstract_type: case Type::c_type_marker: case Type::enumeration: case Type::builder_storage: return type.name;
   case Type::region: return std::string(type.owned ? "own " : "") + "region" +
@@ -1101,16 +1110,23 @@ class Parser {
     expect("}");
     return members;
   }
-  Type parse_type(Parameter *parameter = nullptr) {
+  Type parse_type(Parameter *parameter = nullptr, bool nominal_arguments = true) {
     const auto at = peek().at;
     const ParseEntry entry(recursion_, at, "a type");
-    auto type = parse_type_impl(parameter);
+    auto type = parse_type_impl(parameter, nominal_arguments);
     type_depth(type, at);
     return type;
   }
-  Type parse_type_impl(Parameter *parameter) {
+  void parse_nominal_arguments(Type &type) {
+    if (!take("[")) return;
+    if (type.kind != Type::named)
+      fail(peek().at, "type arguments require a nominal type name");
+    do { type.parameters.push_back(parse_type()); } while (take(","));
+    expect("]");
+  }
+  Type parse_type_impl(Parameter *parameter, bool nominal_arguments) {
     if (take("(")) {
-      auto type = parse_type(parameter);
+      auto type = parse_type(parameter, nominal_arguments);
       expect(")");
       return type;
     }
@@ -1164,6 +1180,7 @@ class Parser {
     if (token.text == "ref" || token.text == "ptr" || token.text == "val")
       fail(token.at, "ref/ptr/val are declaration modifiers, not type constructors; name the target type directly");
     auto type = simple_type(token);
+    if (nominal_arguments) parse_nominal_arguments(type);
     if (take("(")) {
       auto unit = name(TokenKind::identifier);
       if (parameter) {
@@ -2064,7 +2081,11 @@ class Parser {
           expr->construction_type_query = true;
           expr->children.push_back(expression());
           expect(")");
-        } else expr->annotation = simple_type(constructed);
+        } else {
+          expr->annotation = simple_type(constructed);
+          parse_nominal_arguments(*expr->annotation);
+          type_depth(*expr->annotation, constructed.at);
+        }
         if (!expr->construction_type_query && is("(")) {
           expr->constructor_arguments = true;
           arguments(*expr, false);
@@ -2344,7 +2365,8 @@ class Parser {
     operand = finish(std::move(operand));
     auto typed = make(Expression::Kind::typed_expression, expect(":"));
     typed->children.push_back(std::move(operand));
-    typed->annotation = parse_type();
+    // Bracket applications are qualified in declared types and make heads.
+    typed->annotation = parse_type(nullptr, false);
     return finish(std::move(typed));
   }
   Expr compose_processors(Expr first, bool owner_projection, bool reversed) {
@@ -3061,6 +3083,17 @@ public:
           form->c_data = true;
         }
         form->name = ordinary_name().text;
+        if (data && !region && !form->c_data && take("[")) {
+          std::set<std::string> names;
+          do {
+            auto parameter = ordinary_name();
+            if (!names.insert(parameter.text).second)
+              fail(parameter.at, "duplicate type parameter '" + parameter.text + "'");
+            form->type_parameters.push_back({std::move(parameter.text), {}, parameter.at});
+          } while (take(","));
+          expect("]");
+          if (!is("{")) fail(peek().at, "a generic product head requires a field block");
+        }
         if (!data && take("=")) {
           form->kind = Form::Kind::type_synonym;
           form->result_type = parse_type();
