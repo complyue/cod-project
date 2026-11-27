@@ -22,7 +22,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -149,6 +149,7 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
             receipt <- names[entry.item].declaration;
             if (receipt < entry.item && receipt < intrinsic (len)(cases)) {
                 case cases[receipt] of {
+                    LexicalProductReference -> { (mixed_aggregate <- true):void };
                     CaseFieldReceipt { val type <- value_type; } -> {
                         if (type.kind == record_type() || type.kind == sum_type()) {
                             mixed_aggregate <- true;

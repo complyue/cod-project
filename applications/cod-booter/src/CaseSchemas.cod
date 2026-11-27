@@ -1258,6 +1258,17 @@ func prepared_readonly_product_actual(names:const NameBindings in B, facts:const
         (case facts[origin] of { LexicalProductReference -> true; _ -> false })
 }
 
+func describe_indexed_product_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
+    facts:const ConstructorCaseFacts in F, input:UInt64, used:UInt64, revision:UInt64,
+    loan:IndexedCaseLoan in L, record:DeclaredType in L) -> bool
+    where {const owner N, const owner B, const owner E, const owner G, const owner F, owner L} {
+    return describe_indexed_case_loan(nodes, names, selected, interfaces, published, input,
+        used, revision, record_type(), loan, record) ||
+        describe_lexical_bits_element(nodes, names, facts, input, used, revision, record_type(),
+            loan, record) != (NoLexicalArray:LexicalArrayAccess)
+}
+
 func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W,
     interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
@@ -1288,8 +1299,8 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
             case facts[formal] of {
                 IndexedOutputFormal { val bound <- definition; val owner_site <-; val expected <- value_type; } -> {
                     if (bound == definition &&
-                        describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used,
-                            revision, record_type(), loan, record) && loan.array_module == 0u64 &&
+                        describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
+                            entry.item, used, revision, loan, record) && loan.array_module == 0u64 &&
                         record.identity == expected.identity && record.defining_module == expected.defining_module &&
                         case_bits_type(record, aggregate, interfaces, published)) {
                         remember_inline_product_formal(facts, formal, definition, owner_site, false, false, expected);
@@ -1298,19 +1309,22 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                     }
                 };
                 InlineProductFormal { val readonly <-; } -> {
-                    # Imported arrays provide a completed nominal element schema.
-                    # The argument checker still validates the actual loan.
-                    if (describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
-                            record_type(), loan, record) && (loan.array_module == 0u64 || readonly) &&
+                    # The selected array schema identifies the element. The
+                    # operand check still validates its actual view and index.
+                    if (describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
+                            entry.item, used, revision, loan, record) && (loan.array_module == 0u64 || readonly) &&
                         case_bits_type(record, aggregate, interfaces, published)) {
                         remember_indexed_product_loan(nodes, facts, argument, loan, record, !readonly);
-                        if (first == no_node()) { (first <- call):void };
-                        if (readonly && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                            (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
-                        }
+                        if (first == no_node()) { (first <- call):void }
                     }
                 };
                 _ -> {}
+            };
+            if ((case facts[entry.item] of {
+                IndexedProductLoan { val consumer <-; } -> consumer == argument;
+                _ -> false
+            }) && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
             };
             if (names[entry.item].kind == formal_binding()) {
                 actual <- names[entry.item].declaration;
