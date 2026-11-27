@@ -2890,6 +2890,45 @@ func aggregate_writer_loan(nodes:const ExprNodes in N, names:const NameBindings 
     return checked_bits_sum(contracts, published, aggregate, type)
 }
 
+# An exported product writer with only one owner has a single initialized
+# writable output followed by independent scalar inputs.
+func prepare_published_product_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
+    definition:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, const owner W, owner V} {
+    if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
+        work[definition].next_method != no_node() || work[definition].active != no_node() ||
+        !(case views[definition] of { NoSuppliedView -> true; _ -> false })) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable || !callable.function_form) return;
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val role <- callable.signature;
+    if (inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || clause.readonly ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+        clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    ref first = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used) return;
+    val marker <- reference_formal_marker(nodes, names, first, role, false, used, revision);
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (marker >= used || work[first].next == no_node() ||
+        !describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
+        type.kind != record_type() ||
+        !independent_scalar_tail(nodes, names, work, work[first].next, used, revision)) return;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= used) return;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+    };
+    if (storage == CoDBitsAggregate || storage == CLayoutBitsRecord) {
+        (views[definition] <- make PreparedProductWriter {}):void
+    }
+}
+
 func independent_scalar_tail(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, first:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, const owner W} {
@@ -4604,6 +4643,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
     };
     val head <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    ref public_item = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref sites = make HereSites {
         call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
     };
@@ -4647,6 +4687,11 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_product_writer(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
+        if (module_item_publication(nodes, used, at) &&
+            inspect_sequence_entry(nodes, revision, used, at, public_item) == ModuleSequence) {
+            prepare_published_product_writer(nodes, names, selected, contracts, interface_count,
+                aggregate, work, views, public_item.item, used, revision)
+        };
         prepare_aggregate_writer(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
         prepare_parser_writer(nodes, names, selected, contracts, interface_count,
@@ -5166,7 +5211,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                 kind == c_operation(), kind == callable_binding(),
                                 contracts[next], used, revision))
             return no_node();
-        if ((source_writer == ProductWriter && work[parameter].next == no_node()) ||
+        if ((source_writer == ProductWriter && work[parameter].next == no_node() && contracts[next].field_mode == ReferenceFormal) ||
             (source_writer == AggregateWriter && next == count + 2u64 && contracts[next].field_mode == ReferenceFormal) ||
             (source_writer == ParserWriter && next == count + owner_count)) {
             (contracts[next].value_kind <- record_type()):void

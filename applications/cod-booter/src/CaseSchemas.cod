@@ -59,7 +59,7 @@ export data ConstructorCaseFact =
         fixed:bool; target_readonly:bool;
     } |
     IndexedOutputFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
-    IndexedFieldDestination {} |
+    WritableFieldDestination {} |
     InlineProductField {
         receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType;
         readonly:bool; writable:bool;
@@ -1203,7 +1203,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     interfaces, published, selection.field, used, revision, true, type, ordinal, readonly) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
-                    writable <- case facts[site] of { IndexedFieldDestination -> true; _ -> false };
+                    writable <- case facts[site] of { WritableFieldDestination -> true; _ -> false };
                     remember_indexed_aggregate_loan(nodes, facts, site, loan, record,
                         access == (WritableLexicalArray:LexicalArrayAccess) || writable);
                     remember_inline_product_field(facts, site, selection.receiver,
@@ -1474,6 +1474,28 @@ func indexed_field_destination(nodes:const ExprNodes in N, at:UInt64, revision:U
             return false;
         if (inspect_index_selection(nodes, revision, at, field.receiver, index)) return true;
         (projection <- field.receiver):void
+    };
+    return false
+}
+
+func borrowed_product_field_destination(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:const ConstructorCaseFacts in F, at:UInt64, revision:UInt64, destination:UInt64,
+    field:FieldSelectionSites in S) -> bool where {const owner N, const owner B, const owner F, owner S} {
+    val projection <- destination;
+    val receiver <- no_node();
+    val binding <- no_node();
+    for (unused in 0u64 .. at) {
+        if (!inspect_field_selection(nodes, revision, at, projection, field) || field.receiver >= projection)
+            return false;
+        receiver <- field.receiver;
+        if (names[receiver].kind == formal_binding()) {
+            binding <- names[receiver].declaration;
+            return projection != destination && binding < receiver && (case facts[binding] of {
+                InlineProductFormal { val demand_on_use <-; } -> demand_on_use;
+                _ -> false
+            })
+        };
+        (projection <- receiver):void
     };
     return false
 }
@@ -2188,8 +2210,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         };
         transfer <- inspect_assignment(nodes, revision, used, at, assignment);
         if (transfer == PlaceTransfer && names[at].kind == 0u8 &&
-            indexed_field_destination(nodes, at, revision, assignment.destination, field, indexed)) {
-            facts[assignment.destination] <- make IndexedFieldDestination {};
+            (indexed_field_destination(nodes, at, revision, assignment.destination, field, indexed) ||
+             borrowed_product_field_destination(nodes, names, facts, at, revision, assignment.destination, field))) {
+            facts[assignment.destination] <- make WritableFieldDestination {};
             if (first == no_node()) { (first <- at):void }
         };
         if (transfer == PlaceTransfer &&
@@ -2226,12 +2249,12 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     val receiver <- no_node();
     for (offset in 0u64 .. used) {
         site <- used - 1u64 - offset;
-        # Carry a builtin indexed write through its enclosing inline projections.
-        if ((case facts[site] of { IndexedFieldDestination -> true; _ -> false }) &&
+        # Carry a builtin field write through its enclosing inline projections.
+        if ((case facts[site] of { WritableFieldDestination -> true; _ -> false }) &&
             inspect_field_selection(nodes, revision, used, site, field)) {
             receiver <- field.receiver;
             if (receiver < site && inspect_field_selection(nodes, revision, used, receiver, field)) {
-                (facts[receiver] <- make IndexedFieldDestination {}):void
+                (facts[receiver] <- make WritableFieldDestination {}):void
             }
         };
         if (inspect_assignment(nodes, revision, used, site, assignment) == PlaceRebind &&

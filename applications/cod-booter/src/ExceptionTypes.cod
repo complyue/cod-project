@@ -4,7 +4,7 @@ using "./ModuleExports.cod" {
         error_root_identity,
 };
 using "./ModuleExportStorage.cod" ExceptionSchema {
-    CheckedExceptionSchema, UncheckedExceptionSchema
+    OrdinarySchema, CheckedExceptionSchema, UncheckedExceptionSchema
 };
 using "./ParserStorage.cod" {
     ExprNodes, DeclarationSites, inspect_declaration, no_node, DeclarationSyntax { NominalRecord },
@@ -19,6 +19,21 @@ export func exception_schema(type:const ExceptionType in T) -> ExceptionSchema w
     return if (type.checked) { CheckedExceptionSchema } else { UncheckedExceptionSchema };
 }
 
+# The declaration supplies its parent site. Classify the completed binding
+# by canonical builtin identity, including a renamed selection.
+export func selected_exception_parent(names:const NameBindings in B, selected:const SelectedExports in E,
+    parent_site:UInt64) -> ExceptionSchema where {const owner B, const owner E} {
+    if (parent_site >= intrinsic (len)(names) || names[parent_site].kind != ordinary_selection())
+        return OrdinarySchema;
+    val parent <- names[parent_site].declaration;
+    if (parent >= intrinsic (len)(selected) || selected[parent].kind != exception_type_export() ||
+        selected[parent].origin_module != 0u64) return OrdinarySchema;
+    val root <- selected[parent].identity;
+    if (root == exception_root_identity()) return CheckedExceptionSchema;
+    if (root == error_root_identity()) return UncheckedExceptionSchema;
+    return OrdinarySchema
+}
+
 func inspect_local_exception(nodes:const ExprNodes in N, names:const NameBindings in B,
                              selected:const SelectedExports in E, record:UInt64, defining_module:UInt64,
                              used:UInt64, revision:UInt64, result:ExceptionType in R) -> bool
@@ -28,17 +43,12 @@ func inspect_local_exception(nodes:const ExprNodes in N, names:const NameBinding
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
-    if (inspect_declaration(nodes, revision, used, record, schema) != NominalRecord ||
-        schema.parent_type == no_node() || names[schema.parent_type].kind != ordinary_selection())
-            return false;
-    val parent <- names[schema.parent_type].declaration;
-    if (parent >= intrinsic (len)(selected) || selected[parent].kind != exception_type_export() ||
-        selected[parent].origin_module != 0u64) return false;
-    val root <- selected[parent].identity;
-    if (root != exception_root_identity() && root != error_root_identity()) return false;
+    if (inspect_declaration(nodes, revision, used, record, schema) != NominalRecord) return false;
+    val classification <- selected_exception_parent(names, selected, schema.parent_type);
+    if (classification == OrdinarySchema) return false;
     result.defining_module <- defining_module;
     result.declaration <- record;
-    result.checked <- root == exception_root_identity();
+    result.checked <- classification == CheckedExceptionSchema;
     return true;
 }
 

@@ -55,11 +55,12 @@ using "./ModuleExports.cod" {
 };
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, write_interface_header, write_sum_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
+    ExceptionSchema { OrdinarySchema },
     SumInterfacePayload { SumInterface, ConstructorReference, ConstructorInterface, ConstructorField },
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, NonBitsAggregate },
 };
 using "./AggregateSchemas.cod" AggregateFacts;
-using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type, exception_schema };
+using "./ExceptionTypes.cod" selected_exception_parent;
 
 export func type_module(names:const NameBindings in B, selected:const SelectedExports in E,
                         marker:UInt64, current_module:UInt64) -> UInt64 where {const owner B, const owner E} {
@@ -854,7 +855,8 @@ func describe_schema_field(nodes:const ExprNodes in N, names:const NameBindings 
 
 func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                   work:const NameWork in W, record:UInt64, defining_module:UInt64, count:UInt64, revision:UInt64, used:UInt64,
-                  storage:AggregateStorage, declaration:const DeclarationSites in D, interfaces:ModuleInterfaces in I)
+                  storage:AggregateStorage, shape:DeclarationSyntax,
+                  declaration:const DeclarationSites in D, interfaces:ModuleInterfaces in I)
     -> UInt64 where {const owner N, const owner B, const owner E, const owner W, const owner D, owner I} {
     if (lexical_builder_record(nodes, names, record, revision, used)) return count;
     val limit <- intrinsic (len)(interfaces);
@@ -868,18 +870,18 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
     val next <- count + 1u64;
     val name <- declaration.name;
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
-    ref failure = make ExceptionType { defining_module <- 0u64; declaration <- no_node(); checked <-
-        false; };
-    val nominal_failure <- resolve_exception_type(nodes, names, selected, name, defining_module,
-        used, revision, failure);
+    val classification <- if (shape == NominalRecord && defining_module != 0u64 && defining_module != no_node() &&
+        name < used && used <= intrinsic (len)(names) &&
+        names[name].kind == record_type() && names[name].declaration == record) {
+        selected_exception_parent(names, selected, declaration.parent_type)
+    } else { OrdinarySchema };
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (field == no_node()) {
             write_interface_header(interfaces[count], defining_module, record, record_type(), 0u8, next - count - 1u64);
             interfaces[count].name_first <- syntax_first(nodes, used, name);
             interfaces[count].name_past <- syntax_past(nodes, used, name);
             interfaces[count].aggregate_storage <- storage;
-            if (nominal_failure) { (interfaces[count].exception_schema <-
-                exception_schema(failure)):void; };
+            interfaces[count].exception_schema <- classification;
             return next;
         } else {};
         if (next >= limit || inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
@@ -1044,7 +1046,7 @@ export func publish_type_interfaces(nodes:const ExprNodes in N, names:const Name
         shape <- inspect_declaration(nodes, revision, used, at, declaration);
         if (shape == NominalRecord || shape == NativeRecord) {
             (count <- stage_record(nodes, names, selected, work, at, defining_module, count,
-                                  revision, used, facts[at], declaration, interfaces)):void;
+                                  revision, used, facts[at], shape, declaration, interfaces)):void;
         } else {
             if (shape == EnumTypeDeclaration) {
                 (count <- stage_enum(nodes, names, work, at, defining_module, count,
