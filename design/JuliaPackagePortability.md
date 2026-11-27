@@ -1,10 +1,12 @@
 # Porting Julia packages to CoD with `julia.cod`
 
-Research WIP · revision 5 · 2026-11-26
+Research WIP · revision 6 · 2026-11-27
 
 An agent porting a one-sample t-test should be able to recognize the sample, compute the same statistic and ask for the same tail probability in CoD. A second agent porting a distance function should be able to reuse those array operations without learning which C library supplies a probability. These two ports test whether a small CoD package can make important Julia algorithms economical to bring over and maintain.
 
 ## Design authority
+
+At r6 the array port uses the [confirmed receiver-family order](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators). The [research scope](DesignAuthorityRegistry.md#d-julia-pkg-research) and its two workloads continue from r5 under P-756/P-757.
 
 At r5 [D-07-SCALAR-NAMES](DesignAuthorityRegistry.md#d-07-scalar-names) makes Julia’s fixed-width names directly available in CoD and frees numbered identifiers for local use. P-776/P-777 supersede the r2 default spelling. Transparent synonyms, signedness, conversion and native layout continue through this change. [Decision](../CHANGELOG.md#h-builtin-numeric-names-20261126) · [Names and migration acceptance](#scalar-names-and-transparent-type-synonyms)
 
@@ -43,6 +45,8 @@ An array type's library specifies its index domains and origins, rank, logical t
 Publish the bundled native-interoperability array vocabulary in `CArray.cod`, under the name `CArray`, with explicit module selection. A project with no such selection gets no implicit `CArray`. The core and bundled defaults leave `Array` available for `julia.cod` to export under ordinary module scope. The initial C-facing workload needs a zero-based contiguous span with its extent, element representation and existing borrow/owner contract. A two-dimensional C array laid out as arrays of rows and a Julia dense matrix laid out by columns can describe the same logical shape with different strides. Crossing a C boundary requires the layout, stride, mutability and lifetime promised by that particular declaration. A strided column can go straight to a stride-aware provider. A contiguous-only provider needs a compatible view or an explicit copy with defined mutation behavior.
 
 The booter's named regional arrays and native byte loans use the existing bootstrap representation. Migrate these as actual C-facing or internal consumers require. Preserve distinct nominal arrays, half-open source spans, generated C interfaces, bounds failures and cleanup across the cutover. A universal replacement of `Visits` and `SourceBytes` by one type would lose overload and access information. Acceptance must distinguish a program importing neither library, either one, and both. With both selected, write through a Julia view, mutate a detached numeric slice and hand a compatible C span to a real provider. [Booter’s current array use](https://github.com/complyue/cod-project/blob/5b0c4c5fb88d8857c16d82b12fd79a83f51cf238/applications/cod-booter/src/ModuleIndex.cod#L54-L65)
+
+For a port of an array indexing method, first identify its intended callers. A `julia.cod` matrix that must control `m[i]` can publish its own indexed read method. A free operator with an exact matrix parameter can still lose that call to a default on a declared abstraction. For a ported algorithm written as a named free call, keeping that form preserves lexical family lookup. Changing it mechanically to a dotted call can select an adapter’s receiver method. [OO lookup by call form](DomainLanguageDesign.md#how-receiver-dispatch-works)
 
 ### Stepped subscripts
 

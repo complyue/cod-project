@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 229
+Discussion revision: 230
 
-Recorded: 2026-11-26
+Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r230 the [receiver dispatch model](#how-receiver-dispatch-works) brings together the confirmed receiver, storage inheritance, module lookup and indexing decisions. [D-07-MEMBER-RECEIVER](DesignAuthorityRegistry.md#d-07-member-receiver) and [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) continue their qualified scopes. The [named member fallback decision](../CHANGELOG.md#h-named-member-free-fallback-20261127) adds [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback), P-780/P-781. A dotted call can use the visible free callable. The production compiler reports that choice. Target identity, access, lifetime and ordinary call preparation continue from r229. Compiler delivery is tracked separately.
 
 At r229 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies the existing OO receiver and actual-type dispatch rules to [the indexing operators](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing). Method access, available conformance and fixed receiver bindings continue from r228.
 
@@ -274,6 +276,30 @@ Static abstract bounds on a selected named root do not require a runtime object 
 A library fold accumulator retains its explicit type guarantees and facts for its concrete value and possible stored-reference targets, including cycles. Unrelated facts visible only in a factory module do not become loop invariants. This is evidence preservation, not structural interface inference; unknown layouts cannot justify erasing required guarantees.
 
 Lean acceptance must show one data identity with head-only conformance declarations in different modules, rejection of structural lookalikes without a declaration, adapter-import permission versus using-only declaration rejection, and consumer acceptance through using the adapter, invalid direct abstract construction, deterministic unique-best selection and an ambiguous crossed-specialization rejection. Product/sum construction and exhaustiveness need separate acceptance cases; no full GADT or general multiple-inheritance implementation is implied by this declaration split.
+
+#### How receiver dispatch works
+
+CoD’s OO model gives the receiver a part in selecting the method family. An OO method receives `x` as its implicit `self`. The spelling of the operation determines where family lookup begins. Resolve the written operation in the module interpretation of the call. Within an eligible family, the receiver and the other arguments participate in ordinary applicability and specificity. A free call such as `quote(x)` starts with the lexical binding of `quote`. A local binding can therefore change the free call even when the type and object passed as `x` are unchanged.
+
+| Written operation | What identifies the field or family |
+| --- | --- |
+| `x.id` | A stored field is selected through the receiver’s declared view. A computed accessor invokes the visible accessor for that member. Stored fields and computed accessors of the same spelling conflict when brought together. |
+| `x.quote(args)` | Try applicable members of the actual receiver, then defaults on its declared abstractions, then the visible free `quote` family with the receiver as its first argument. An explicit `super.quote(args)` starts at the lexical storage parent. |
+| `x(args)` for a data receiver | The selected type carries its own `(())` family. A forwarding `here` call retains the receiver and the supplying view. |
+| `x[i]`, `x[i] <- v`, `x[i] = target` | Indexed read, indexed value transfer and indexed reference binding each have their own receiver family. An applicable concrete method wins, followed by applicable defaults on declared abstractions, then the visible free operator family. |
+| `make T(args)` | The selected constructor initializes a destination under its owner. Constructor `super(args)` initializes the embedded direct parent. |
+
+Two calls on the same object illustrate the distinction. Given a `Child` with its own stored `id` and `score` method, a `Parent` reference reads the parent’s `id` but can invoke the child’s `score()`. An ancestor implementation reached by `super` can itself call an ordinary member on `self`, which again uses the actual child. Both references retain the same object throughout. Selecting a more specific body preserves readonly access. [Field shadowing](#product-storage-inheritance) · [Super-calls](#super-calls-in-oo-bodies)
+
+For indexing, keep **family priority** separate from **specificity within a family**. An applicable variadic indexed value transfer on the concrete receiver can beat an exact free two-index value transfer method. An explicit pack expansion admits only variadic methods. Two equally good, unrelated abstract defaults give an ambiguity even when a free method could handle the call. A selected method’s missing effect or runtime failure propagates at that call. The pre-2.0 caller must supply the incoming effects of each family the call can reach, after accounting for local installations. A lower family that cannot win adds no obligation. Ahead-of-time compilation covers the possible selections in the chosen module interpretation and can emit a direct call when the actual type is known. [Indexing examples and evaluation order](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing) · [Family-wide effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) · [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
+
+#### When a dotted call uses a free callable
+
+Suppose a module can see a free `quote(x)` returning 9. For an actual receiver with no applicable member or abstract default, `x.quote()` returns **9**. If an applicable member returns 2, the dotted call returns **2** and a directly written `quote(x)` still returns **9** in that module. Selecting a different adapter can therefore change the dotted call while the free callable’s identity stays fixed. The free name follows ordinary lexical lookup at the call in its selected interpretation, including shadowing, aliases and extension permissions. Bind the prepared receiver as its first actual and check the selected signature’s access, owners, result and effects. A missing implementation or an ambiguous winning level gives the ordinary diagnostic. An error or throw from a selected body keeps its original failure path.
+
+The production compiler (`e-wrks/cod`) emits a **warning by default** at a dotted call site that can select a free implementation. A compile-time option lowers this finding to **info**. Identify the written member and the resolved free callable by its canonical name. At a generic site, say which receiver can reach the free callable. Rewriting that site as `quote(x)` would also change the receivers that currently use members. Suggest an explicit free call only where it preserves the intended behavior. When all admitted targets use members, there is no fallback to report. Both severities preserve the selected method and its execution. The diagnostic applies to named dotted calls. An intentional free call and an indexed write reaching its free operator have their own call forms. Seed and booter delivery carry no requirement to issue this production diagnostic.
+
+The storage-parent intersection remains open: if a child declares no indexed read method, its product parent accepts an integer pack and its declared abstraction supplies a fixed one-index default, which method receives `child[1]`? The existing [fixed and variadic examples](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) specify the case of a concrete type’s own method. Generalizing exact-count priority across families would change those examples and requires a separate decision.
 
 #### Constructor and call-operator method families
 
@@ -587,8 +613,6 @@ For n equal to zero, `consume(10u64)` runs in the current outer iteration. For n
 In a single-brace arm, `break v;` can finish the case from any ordinary nested statement group. Evaluate v once and join this result with the other value-producing case paths under the ordinary conditional result rules, including mode, owner and lifetime. A bare `break;` is a void completion. A value/void mismatch rejects at the chosen case, even if an outer target could accept the exit. Throwing during operand evaluation follows ordinary exception control. Run cleanup for scopes actually exited before delivering the result. The enclosing callable’s return and deferred actions keep their ordinary destinations. A break in an ordinary statement between arms likewise completes the case. Case completion itself registers no return in the enclosing callable. Fallthrough requires an active arm and resumes the scan. Double-brace arms retain their local return and the specific fallthrough permission above. There is no general transfer across an independently invoked full scope.
 
 #### Receivers in field accessors and member methods
-
-An indexing head such as `func Dense.([]<-)(value:Int64, idxs:Int64...) -> void` attaches that setter to the nominal receiver. Calling through an admitted abstract receiver preserves selection by the actual ADT. [Indexing family identity and examples](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing)
 
 A field accessor is declared with `func T.@name()` and read as `x.name`. A member method is declared with `func T.name(...)` and called as `x.name(...)`. Both receive the initialized target selected by `x` as their implicit first argument, `self`. Write `const` immediately before the receiver type for readonly access. Omitting it requires writable access in either form. The declaration marker `@` identifies an accessor in this position. Reading the member uses its receiver without looking up a dynamic symbol.
 

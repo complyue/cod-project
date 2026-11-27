@@ -13,7 +13,7 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
-Guide revision 18 links the [DBMR database service guide](BuildingADatabaseServiceInCoD.md) from the stock ownership example. Revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
+Guide revision 19 distinguishes [receiver-family lookup](../design/DomainLanguageDesign.md#how-receiver-dispatch-works) from [associated callable names](#make-module-boundaries-express-intent) under [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics). Guide revision 18 links the [DBMR database service guide](BuildingADatabaseServiceInCoD.md) from the stock ownership example. Revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
 It retains revision 12's [fixed receiver binding](../CHANGELOG.md#h-fixed-self-binding-20261125) in the member examples. Revision 11 applies the [OO call-operator decision](../CHANGELOG.md#h-oo-call-operator-head-20261125) to direct calls and borrowed results. It continues the revision 10 guidance on the [confirmed OO source rules](../design/DomainLanguageDesign.md#product-storage-inheritance)
@@ -434,6 +434,8 @@ only when the direct parent actually supplies an applicable niladic constructor.
 [Parent initialization and failure](../design/ConstructionAndAcquisition.md#initializing-the-storage-parent-of-a-product)
 
 ### Choose the ancestor implementation deliberately
+
+Choose the call form that expresses the dependency. `as_shipping.quote()` asks the actual receiver for its member. A free call `quote(as_shipping)` looks up the callable name in the current scope. When the dotted form reaches that free callable, the production compiler warns by default. Write the free call explicitly if that dependency is intended, or lower the finding to info at compile time. For an indexed collection, a library can supply a default through a declared abstraction and a caller can select an adapter by choosing its module view. [Which family does each operation use?](../design/DomainLanguageDesign.md#how-receiver-dispatch-works)
 
 ```cod
 func const ShippingRate.quote() -> u64 { self.base_fee }
@@ -1140,10 +1142,13 @@ every same-named local function into an extension of an associated source family
 the callable you intend to extend. A local shadow and an extension carry different identities and
 can lead to different dispatch.
 
-The same family selection governs an [OO receiver call](#choose-the-ancestor-implementation-deliberately).
-`with methods` explicitly selects the associated public callable families. `using` preserves their
-selected context, and `import` grants the corresponding extension permission.
-[Associated callables](../design/ModuleWorlds.md#explicit-associated-callables-with-with-methods)
+For `cartons_sent(shipment)`, look up the callable name. The optional `with methods` clause can
+bring associated public callable names into scope explicitly. For `matrix[row, col]`, selecting
+the matrix type already carries its published indexed read family. An adapter can extend that family
+by importing the receiver type. To extend the free indexing operator, import that callable.
+These grants let a consumer choose the adapter’s view while another consumer keeps the original.
+[Associated callables](../design/ModuleWorlds.md#explicit-associated-callables-with-with-methods) ·
+[Receiver-owned operations](../design/DomainLanguageDesign.md#how-receiver-dispatch-works)
 
 Treat the public declarations in the shipment example as `shipping.cod`. A consumer that uses the
 model and its query together can state that dependency in one selection:
