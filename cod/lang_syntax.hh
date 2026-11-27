@@ -2283,6 +2283,9 @@ class Parser {
       expect(")");
       return expr;
     }
+    // Signed-literal contract for the full grammar: group before attaching a sign.
+    // With Julia precedence and e = 2, -2^e negates 2^e (-4); (-2)^e squares -2 (4).
+    // Only adjacent -1 is a signed literal; - 1 is unary. This bootstrap path emits unary.
     if (take("-") || take("!") || take("not")) {
       auto expr = make(Expression::Kind::unary, token);
       if (expr->text == "not") expr->text = "!";

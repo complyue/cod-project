@@ -1756,6 +1756,9 @@ func parse_primary(source:const SourceBytes in S, tokens:const Tokens in T,
         if (result.diagnostic == 0u8) { (result.next <- at + 1u64):void; } else {};
         return;
     } else {};
+    # This bootstrap branch handles a signed integer operand. The full grammar groups first:
+    # with Julia precedence and e = 2, -2^e negates 2^e (-4), while (-2)^e squares -2 (4).
+    # After grouping, adjacent -1 carries a literal sign; spaced - 1 invokes negation.
     if (punct_at(source, tokens, at, past) == MINUS) {
         if (!parse_enum_integer_literal(source, tokens, nodes, result, past) && result.diagnostic == 0u8)
             { (result.diagnostic <- expected_operand()):void };
