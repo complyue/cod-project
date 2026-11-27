@@ -129,7 +129,7 @@ using "./NativeDeclarations.cod" {
     inspect_acquired_handle_loan,
     prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array,
 };
-using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement } };
+using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement } };
 using "./NativeDeclarations.cod" source_literal_kind;
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
@@ -864,6 +864,11 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     (report.diagnostic <- unproved_result_contract()):void
 }
 
+export func allocated_source_array(facts:const OperandFacts in F, at:UInt64) -> bool
+    where {const owner F} {
+    return facts[at].kind == source_array_loan() && facts[at].allocation_owner != no_node()
+}
+
 export func has_slot_array(facts:const OperandFacts in F, at:UInt64) -> bool
     where {const owner F} {
     return facts[at].kind == source_array_loan() &&
@@ -895,7 +900,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     val pointer <- local.mode == PointerLocal;
     if (value_binding && binding.owner_name != no_node()) return unproved_operand();
     val required_owner <- if (binding.owner_name == no_node()) { no_node() } else { (names[binding.owner_name].declaration) };
-    if (has_slot_array(facts, initializer)) {
+    if (has_slot_array(facts, initializer) || allocated_source_array(facts, initializer)) {
         if (local.mode != ReferenceLocal || facts[initializer].reception != borrowed_ref() ||
             facts[initializer].target_presence != present_target()) return unproved_nonnull_borrow();
         val array_owner <- facts[initializer].owner;
@@ -914,7 +919,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
                 return expected_writable_place()
         };
         copy_fact(facts, at, initializer);
-        if (!local.declaration_const) { (facts[at].array_slot <- at):void };
+        if (!local.declaration_const && has_slot_array(facts, initializer)) { (facts[at].array_slot <- at):void };
         if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
         return 0u8
     };
@@ -1029,7 +1034,7 @@ func require_prepared_widening_u64(facts:OperandFacts in F, operand:UInt64) -> U
 func check_prepared_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64,
     requested:UInt64, placement:UInt64, length:UInt64, fill:UInt64, owner_site:UInt64,
-    type_module_id:UInt64, type_identity_id:UInt64, element:ArraySlotElement, sum:UInt64) -> UInt8
+    type_module_id:UInt64, type_identity_id:UInt64, element:ArraySlotElement, element_identity:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, owner F} {
     ref syntax = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -1046,8 +1051,9 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
         count_entry.previous != no_node() || count_entry.item != length || fill_entry.item != fill)
         return invalid_operand_tree();
     val element_kind <- slot_scalar_kind(element);
+    val product <- element == (ProductArrayElement:ArraySlotElement);
     if (placement == no_node()) {
-        if (element_kind != scalar_u64() || names[at].scope != owner_site) return unproved_owner()
+        if ((!product && element_kind != scalar_u64()) || names[at].scope != owner_site) return unproved_owner()
     } else {
         if (placement >= at || owner_site >= at || names[placement].declaration != owner_site ||
             owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint)
@@ -1070,14 +1076,15 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
         diagnostic <- require_typed_bits(nodes, facts, fill, element_kind);
         if (diagnostic != 0u8) return diagnostic
     } else {
-        if (type_module_id != 0u64 || facts[fill].kind != independent_sum_bits() ||
-            facts[fill].reception != independent_value() || facts[fill].identity != sum ||
+        val expected <- if (product) { independent_product_bits() } else { independent_sum_bits() };
+        if (type_module_id != 0u64 || facts[fill].kind != expected ||
+            facts[fill].reception != independent_value() || facts[fill].identity != element_identity ||
             facts[fill].identity_module != 0u64) return wrong_operand_type()
     };
     set_fact(facts, at, source_array_loan(), borrowed_ref(), owner_site, type_identity_id, 0u8);
     facts[at].identity_module <- type_module_id;
     facts[at].array_scalar <- element_kind;
-    facts[at].array_sum <- sum;
+    facts[at].array_sum <- if (product) { no_node() } else { element_identity };
     facts[at].allocation_owner <- owner_site;
     # An explicit owner role carries an allocator requirement to its caller.
     if (placement != no_node()) { (facts[owner_site].owner_chain <- 0u64):void };
@@ -5193,7 +5200,7 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
     if (parent <= at || parent >= used || parent >= intrinsic (len)(views) ||
         arm >= used) return invalid_operand_tree();
     val prepared <- case views[parent] of {
-        PreparedArrayConstruction { val fill <-; val element <-; val expected_sum <- element_sum; } ->
+        PreparedArrayConstruction { val fill <-; val element <-; val expected_sum <- element_identity; } ->
             fill == at && element == (SumArrayElement:ArraySlotElement) && expected_sum == sum;
         _ -> false
     };
@@ -5499,11 +5506,15 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             };
             PreparedArrayConstruction {
                 val requested <-; val placement <-; val length <-; val fill <-; val owner_site <-;
-                val module <- type_module; val identity <- type_identity; val element <-; val sum <- element_sum;
+                val module <- type_module; val identity <- type_identity; val element <-; val declared_element <- element_identity;
             } -> {
-                if (!valid_array_slot_element(element, sum, module, used)) return invalid_operand_tree();
+                if (element == (ProductArrayElement:ArraySlotElement)) {
+                    if (placement != no_node() || declared_element >= used || module != 0u64) return invalid_operand_tree()
+                } else {
+                    if (!valid_array_slot_element(element, declared_element, module, used)) return invalid_operand_tree()
+                };
                 return check_prepared_array_construction(nodes, names, selected, facts, at, used, revision,
-                    requested, placement, length, fill, owner_site, module, identity, element, sum)
+                    requested, placement, length, fill, owner_site, module, identity, element, declared_element)
             };
             EmptySumArrayFill { val parent <- construction; val sum <-; val arm <-; } -> {
                 return check_empty_sum_array_fill(nodes, names, facts, views, at, used, revision, parent, sum, arm)

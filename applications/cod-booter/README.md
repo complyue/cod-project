@@ -327,7 +327,9 @@ Both source commands accept the unchanged `ModuleParser` and `Frontend`. The `pa
 
 Both source commands check named `UInt64` arrays with `UInt64` indices in the same module. A direct reference initializer without a receiving owner uses its lexical scope. An explicit placement uses the named writable owner role. The checker uses the selected nominal array schema to check length and fill in order. After successful construction the array supports indexed reads and writes and synchronous ordinary reference parameters. Bounds failure, allocation failure and attempted writes through readonly loans follow the existing checks. Executable object emission for these arrays remains outside the supported profile.
 
-Both source commands on the full CLI first stop at the `SourceDiagnosticRows` product fill in `NativeDiagnostics.cod:174:20`. The preceding ordering array and its heap helpers pass in a reduction that keeps the original helpers and the imported parser operations.
+Both source commands also check a lexically allocated named array with `UInt64` indices and a finite-bits C-layout record element. The braced fill must initialize that exact record. The checker keeps the written length and fill order, and checks indexed scalar field reads and writes against the selected row, bounds and access. The ordering array, heap helpers and diagnostic row preparation pass in a reduction using the imported parser operations.
+
+The full CLI source commands first stop at the native `append_symbol_diagnostic` array argument in `NativeDiagnostics.cod:74:31`. The reduced row preparation supplies its positions directly and consumes the rows in CoD. Importing the original position writer and passing those rows to the native reporting function still have separate source-check limits.
 
 ### Imported array length families
 
