@@ -13,7 +13,8 @@ using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, calla
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, native_loan_requires_body, source_handle_callable,
+    SuppliedViews, SuppliedView { ImportedProductWriter, CheckedHandleArrayCall }, read_acquisition_failure,
+    native_loan_requires_body, source_handle_callable, prepared_handle_array_body,
     prepared_source_here_relay,
     prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_record_inspector
 };
@@ -229,6 +230,7 @@ export func discover_declaration_demand(
             };
             if ((prepared_product_writer(views, site) || prepared_scalar_predicate(views, site) ||
                 prepared_aggregate_writer(views, site) || prepared_readonly_query(views, site) ||
+                prepared_handle_array_body(views, site) ||
                 prepared_parser_writer(views, site) || prepared_record_inspector(views, site)) &&
                 !require_receipt_body(demand, site, count, receipt_count, used)) {
                 problem <- site;
@@ -270,7 +272,9 @@ export func discover_declaration_demand(
         checked_call <- links[site].imported_interface != no_node() &&
             (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
              (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
-             (site < intrinsic (len)(views) && (case views[site] of { ImportedProductWriter -> true; _ -> false })));
+             (site < intrinsic (len)(views) && (case views[site] of {
+                 ImportedProductWriter -> true; CheckedHandleArrayCall -> true; _ -> false
+             })));
         shape <- direct_invocation(nodes, revision, used, site, invocation);
         if (shape == InvalidInvocation) {
             problem <- site;

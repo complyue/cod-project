@@ -361,7 +361,13 @@ Both source commands check immediate calls to the imported C function `append_pa
 
 Both source commands check an immediate ordinary Boolean query over one readonly nominal array of finite-bits records. The defining visit checks the body and publishes its ordered signature with completed bounds and arithmetic evidence. A direct import, including a rename, keeps the same array identity and actual owner. The caller prepares the loan before invoking the query and routes any recorded bounds failure through its own completion context.
 
-This covers the unchanged `diagnostic_budget_full` call in `PackageDiagnostics`. Both source commands on that module, `ModuleGraph` and the CLI now stop at the subsequent ordinary `report_rejection` call in `PackageDiagnostics.cod:37:13`. Object emission requires its own admission.
+This covers the unchanged `diagnostic_budget_full` call in `PackageDiagnostics`. Object emission requires its own admission.
+
+### Ordinary diagnostic calls with mixed loans
+
+Both source commands check the unchanged `PackageDiagnostics` module. It imports `report_rejection`, which writes through the diagnostic handle and borrows the source bytes and line rows under one readonly owner role. The defining visit completes the ordered signature and the body's reachable bounds and numeric outcomes before publication. The caller matches each loan to its nominal type and binds a repeated owner role consistently, including when a role is shared by an array and a handle. An abrupt operand prevents entry.
+
+Both source commands on the unchanged `ModuleGraph` and CLI now stop at the lexical byte-array construction in `LoadPackageInputs.cod:114:20`.
 
 ### Imported array length families
 

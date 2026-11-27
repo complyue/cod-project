@@ -15,6 +15,7 @@ using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_readonly_query,
+    prepared_handle_array_body, prepared_local_native_function,
     prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
@@ -26,10 +27,11 @@ using "./ParserStorage.cod" {
     LogicalSyntax { LogicalAnd, LogicalOr, LogicalNot },
     RhsEvaluation { ConditionalRhs }
 };
-using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
+using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8, c_operation };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector, CheckedHandleArrayBody }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -325,7 +327,7 @@ func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
 
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
-    at:UInt64, callee:UInt64, stops_before_entry:bool) -> bool
+    at:UInt64, callee:UInt64, stops_before_entry:bool, native_function:bool) -> bool
     where {const owner N, const owner B, const owner F, const owner V, const owner C} {
     if (at < intrinsic (len)(cases) &&
         (case cases[at] of {
@@ -372,7 +374,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
-            Call -> callee != no_node() || stops_before_entry ||
+            Call -> callee != no_node() || stops_before_entry || native_function ||
                 checked_literal_call(views, at) || prepared_array_length_call(views, at) || checked_source_array_call(views, at);
             EmptyCall -> callee != no_node() || checked_literal_call(views, at);
             _ -> false
@@ -395,7 +397,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
         if (demand[definition].receipt_body && names[definition].kind == callable_binding() &&
             names[definition].declaration == definition && work[definition].next_method == no_node() &&
             inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable &&
-            callable.function_form && !is_scope_block(nodes, callable.body) &&
+            (callable.function_form || prepared_handle_array_body(views, definition)) &&
+            !is_scope_block(nodes, callable.body) &&
             demand[definition].declared_failure == no_node() && facts[definition].reception != borrowed_ref()) {
             result <- facts[definition].kind;
             if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64() || result == declared_scalar(enum_type())) &&
@@ -419,17 +422,23 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val event <- 0u8;
     val ordinary <- false;
     val stops_before_entry <- false;
+    val native_function <- false;
     for (at in 0u64 .. used) {
         definition <- demand[at].scope;
         if (definition < used && definition != at && local[definition].available &&
             !readonly_indexed_byte_reader(views, definition) && sites[at].event != skipped_operand()) {
             callee <- facts[at].call_definition;
-            ordinary <- (callee != no_node() || facts[at].kind == never_result()) &&
+            ordinary <- (callee != no_node() || facts[at].kind == never_result() ||
+                prepared_handle_array_body(views, definition)) &&
                 inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation;
             stops_before_entry <- ordinary &&
                 (!can_continue(sites, call.callee) || !can_continue(sites, call.arguments));
+            native_function <- ordinary && prepared_handle_array_body(views, definition) &&
+                names[call.callee].kind == c_operation() &&
+                prepared_local_native_function(views, at, names[call.callee].declaration, revision);
             if ((callee != no_node() && (!ordinary || callee >= used || callee != demand[at].callee)) ||
-                !checked_function_operation(nodes, names, facts, views, cases, at, callee, stops_before_entry)) {
+                !checked_function_operation(nodes, names, facts, views, cases, at, callee, stops_before_entry,
+                    native_function)) {
                 (local[definition].available <- false):void
             } else {
                 event <- sites[at].event;
@@ -520,6 +529,7 @@ func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) 
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
             prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
+            prepared_handle_array_body(views, at) ||
             prepared_parser_writer(views, at) || prepared_record_inspector(views, at)) return true
     };
     return false
@@ -568,6 +578,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         };
         if (prepared_readonly_query(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedReadonlyReader {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        };
+        if (prepared_handle_array_body(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedHandleArrayBody {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
