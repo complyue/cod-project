@@ -40,7 +40,6 @@ using "./ModuleExportStorage.cod" {
 enum ContractOperationKind:UInt8 {
     NoContractOperation; PendingExpression; CheckedLeaf; FalseValue; TrueValue;
     ForwardValue; NegateValue; ConjoinValues; DisjoinValues; ReturnFalseOrTail;
-    FunctionBody; FunctionCall;
 }
 data ContractOperation {
     kind:ContractOperationKind;
@@ -315,13 +314,18 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
 data FunctionEffects { available:bool; bounds:bool; numeric:bool; }
 array FunctionEffectRows[UInt64]:FunctionEffects;
 
+data FunctionCallNode { first_caller:UInt64; caller:UInt64; next_caller:UInt64; }
+array FunctionCallGraph[UInt64]:FunctionCallNode;
+array FunctionEffectStack[UInt64]:UInt64;
+enum FunctionEffect:UInt8 { UnavailableBody; EscapingBounds; FatalArithmetic; }
+
 func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
     return kind == scalar_u8() || kind == scalar_u64()
 }
 
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
-    at:UInt64, callee:UInt64) -> bool
+    at:UInt64, callee:UInt64, stops_before_entry:bool) -> bool
     where {const owner N, const owner B, const owner F, const owner V, const owner C} {
     if (at < intrinsic (len)(cases) &&
         (case cases[at] of {
@@ -368,7 +372,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
-            Call -> callee != no_node() || facts[at].kind == never_result() ||
+            Call -> callee != no_node() || stops_before_entry ||
                 checked_literal_call(views, at) || prepared_array_length_call(views, at) || checked_source_array_call(views, at);
             EmptyCall -> callee != no_node() || checked_literal_call(views, at);
             _ -> false
@@ -377,13 +381,12 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
     }
 }
 
-# Collect once over checked operations. A function body depends on a chain of
-# its entered call sites. Each site identifies the exact checked callee and
-# the preceding edge in this body. The ordering pass needs only those links.
+# Collect local effects and reverse edges over the checked operations. Each
+# call site belongs to only one callee's list of possible entered calls.
 func collect_function_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:const SuppliedViews in V, facts:const OperandFacts in F,
     demand:const DeclarationDemands in D, sites:const CompletionSites in X, cases:const ConstructorCaseFacts in C,
-    operations:ContractOperations in P, local:FunctionEffectRows in E, used:UInt64, revision:UInt64) -> void
+    calls:FunctionCallGraph in P, local:FunctionEffectRows in E, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner W, const owner V, const owner F,
         const owner D, const owner X, const owner C, owner P, owner E} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -402,12 +405,10 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     if (sites[definition].array_read_completion != NoArrayRead) {
                         local[definition].available <- true;
                         local[definition].bounds <- sites[definition].array_read_completion == ArrayReadMayFailBounds;
-                        local[definition].numeric <- sites[definition].numeric_fault;
-                        (operations[definition].kind <- (CheckedLeaf:ContractOperationKind)):void
+                        (local[definition].numeric <- sites[definition].numeric_fault):void
                     }
                 } else {
-                    local[definition].available <- true;
-                    (operations[definition].kind <- (FunctionBody:ContractOperationKind)):void
+                    (local[definition].available <- true):void
                 }
             }
         }
@@ -416,14 +417,19 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val definition <- no_node();
     val callee <- no_node();
     val event <- 0u8;
+    val ordinary <- false;
+    val stops_before_entry <- false;
     for (at in 0u64 .. used) {
         definition <- demand[at].scope;
         if (definition < used && definition != at && local[definition].available &&
-            operations[definition].kind == (FunctionBody:ContractOperationKind) && sites[at].event != skipped_operand()) {
+            !readonly_indexed_byte_reader(views, definition) && sites[at].event != skipped_operand()) {
             callee <- facts[at].call_definition;
-            if ((callee != no_node() && (callee != demand[at].callee ||
-                 inspect_invocation(nodes, revision, used, at, call) != OrdinaryInvocation)) ||
-                !checked_function_operation(nodes, names, facts, views, cases, at, callee)) {
+            ordinary <- (callee != no_node() || facts[at].kind == never_result()) &&
+                inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation;
+            stops_before_entry <- ordinary &&
+                (!can_continue(sites, call.callee) || !can_continue(sites, call.arguments));
+            if ((callee != no_node() && (!ordinary || callee >= used || callee != demand[at].callee)) ||
+                !checked_function_operation(nodes, names, facts, views, cases, at, callee, stops_before_entry)) {
                 (local[definition].available <- false):void
             } else {
                 event <- sites[at].event;
@@ -444,32 +450,70 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                          }))) {
                         (local[definition].numeric <- true):void
                     };
-                    if (callee != no_node()) {
-                        operations[at].kind <- (FunctionCall:ContractOperationKind);
-                        operations[at].first <- callee;
-                        operations[at].second <- operations[definition].first;
-                        (operations[definition].first <- at):void
-                    }
+                };
+                if (callee != no_node() && !stops_before_entry) {
+                    calls[at].caller <- definition;
+                    calls[at].next_caller <- calls[callee].first_caller;
+                    (calls[callee].first_caller <- at):void
                 }
             }
         }
     };
 }
 
-func apply_function_operation(operations:const ContractOperations in P, local:const FunctionEffectRows in L,
-    outcomes:FunctionEffectRows in O, at:UInt64) -> void where {const owner P, const owner L, owner O} {
-    val kind <- operations[at].kind;
-    val body <- kind == (FunctionBody:ContractOperationKind) || kind == (CheckedLeaf:ContractOperationKind);
-    if (body && !local[at].available) return;
-    val first <- operations[at].first;
-    val second <- operations[at].second;
-    if ((first != no_node() && !outcomes[first].available) ||
-        (second != no_node() && !outcomes[second].available)) return;
-    outcomes[at].bounds <- (body && local[at].bounds) ||
-        (first != no_node() && outcomes[first].bounds) || (second != no_node() && outcomes[second].bounds);
-    outcomes[at].numeric <- (body && local[at].numeric) ||
-        (first != no_node() && outcomes[first].numeric) || (second != no_node() && outcomes[second].numeric);
-    (outcomes[at].available <- true):void;
+func has_function_effect(row:const FunctionEffects in R, category:FunctionEffect) -> bool
+    where {const owner R} {
+    return case category of {
+        UnavailableBody -> !row.available;
+        EscapingBounds -> row.bounds;
+        FatalArithmetic -> row.numeric
+    }
+}
+
+func remember_function_effect(row:FunctionEffects in R, category:FunctionEffect) -> void
+    where {owner R} {
+    case category of {
+        UnavailableBody -> (row.available <- false):void;
+        EscapingBounds -> (row.bounds <- true):void;
+        FatalArithmetic -> (row.numeric <- true):void
+    }
+}
+
+# Close one possible outcome over the frozen graph. A function enters the
+# stack at most once. Components without a local origin add no outcome.
+func propagate_function_effect(calls:const FunctionCallGraph in P, local:const FunctionEffectRows in L,
+    outcomes:FunctionEffectRows in O, stack:FunctionEffectStack in S, used:UInt64, category:FunctionEffect)
+    -> void where {const owner P, const owner L, owner O, owner S} {
+    val depth <- 0u64;
+    for (at in 0u64 .. used) {
+        if (has_function_effect(local[at], category)) {
+            remember_function_effect(outcomes[at], category);
+            if (calls[at].first_caller != no_node()) {
+                stack[depth] <- at;
+                (depth <- depth + 1u64):void
+            }
+        }
+    };
+    val edge <- no_node();
+    val caller <- no_node();
+    # Each step takes a stack entry or visits a call site.
+    for (step in 0u64 .. used + used) {
+        if (edge == no_node()) {
+            if (depth == 0u64) return;
+            depth <- depth - 1u64;
+            (edge <- calls[stack[depth]].first_caller):void
+        } else {
+            caller <- calls[edge].caller;
+            if (!has_function_effect(outcomes[caller], category)) {
+                remember_function_effect(outcomes[caller], category);
+                if (calls[caller].first_caller != no_node()) {
+                    stack[depth] <- caller;
+                    (depth <- depth + 1u64):void
+                }
+            };
+            (edge <- calls[edge].next_caller):void
+        }
+    }
 }
 
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
@@ -486,20 +530,17 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
     demand:const DeclarationDemands in D, sites:const CompletionSites in X, cases:const ConstructorCaseFacts in C,
     used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner W, owner V, const owner F, const owner D, const owner X, const owner C} {
-    if (used > 4611686018427387903u64 || !has_closed_function_candidate(views, used)) return;
-    ref operations = make ContractOperations(used, make ContractOperation {
-        kind <- (NoContractOperation:ContractOperationKind); first <- no_node(); second <- no_node()
+    if (used > 9223372036854775807u64 || !has_closed_function_candidate(views, used)) return;
+    ref calls = make FunctionCallGraph(used, make FunctionCallNode {
+        first_caller <- no_node(); caller <- no_node(); next_caller <- no_node()
     });
     ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
-    collect_function_operations(nodes, names, work, views, facts, demand, sites, cases, operations, local, used, revision);
-    ref traversal = make ContractTraversals(used, make ContractTraversal {
-        visit <- (Unvisited:ContractVisit); stack_site <- no_node(); ordered_site <- no_node()
-    });
-    val count <- order_contract_operations(operations, traversal, used);
-    ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
-    for (item in 0u64 .. count) {
-        apply_function_operation(operations, local, outcomes, traversal[item].ordered_site)
-    };
+    collect_function_operations(nodes, names, work, views, facts, demand, sites, cases, calls, local, used, revision);
+    ref stack = make FunctionEffectStack(used, no_node());
+    ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- true; bounds <- false; numeric <- false });
+    propagate_function_effect(calls, local, outcomes, stack, used, UnavailableBody:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, stack, used, EscapingBounds:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, stack, used, FatalArithmetic:FunctionEffect);
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedProductWriter {

@@ -245,7 +245,7 @@ The contract carries possible bounds failure separately from possible fatal arit
 
 The source commands check `Lexer.scan_token` and its local helpers. The checker verifies scalar field transfers on the selected finite-bits product, including the field's declared access. The ordinary initialized loan provides the current value of every field. The call can update `kind`, `first`, and `past`. It supplies no initialization promise. The caller reads live fields after a successful call, and a completed store remains visible if a later operation fails.
 
-The defining visit completes bounds and fatal arithmetic evidence over the recorded ordinary call dependencies. A cyclic or unsupported dependency leaves the source call proof unavailable. On a source-preserving import, the caller prepares the byte-array loan, offset, and writable record loan in written order. For `tokens[index]` the bounds check and target selection precede entry. The owner role follows the selected record rather than the intervening value operand.
+The defining visit completes bounds and fatal arithmetic evidence over the recorded ordinary call dependencies. An unsupported entered dependency leaves the source call proof unavailable. On a source-preserving import, the caller prepares the byte-array loan, offset, and writable record loan in written order. For `tokens[index]` the bounds check and target selection precede entry. The owner role follows the selected record rather than the intervening value operand.
 
 Object emission for the writable loan has its own admission checks.
 
@@ -263,7 +263,7 @@ Both source commands accept the reduced call to unchanged `append_syntax_node`. 
 
 ### Imported binding-name parser
 
-Both source commands now check the imported call to `ParserInput.parse_binding_name` in the unchanged `CallableSyntax`. The defining visit completes the bound parser, recovery, and syntax-row helper dependencies from their checked operations. The result is an independent Boolean. The contract carries possible bounds failure and fatal arithmetic separately. An unsupported or cyclic dependency leaves the contract unavailable.
+Both source commands now check the imported call to `ParserInput.parse_binding_name` in the unchanged `CallableSyntax`. The defining visit completes the bound parser, recovery, and syntax-row helper dependencies from their checked operations. The result is an independent Boolean. The contract carries possible bounds failure and fatal arithmetic separately. An unsupported entered dependency leaves the contract unavailable.
 
 A direct source-preserving selection prepares the two readonly array loans, the writable syntax array, the initialized writable `ParseResult`, and the scalar operands in written order. The borrowed targets keep their exact nominal types, access and actual owners. A failed operand prevents entry. Successful stores remain visible if a later operation fails. The linked seed witness checks a qualified binding, a missing type, a full syntax array and local binding recovery.
 
@@ -323,7 +323,9 @@ Both source commands check the unchanged `same_bytes` call comparing written own
 
 Both source commands check the original `parse_enum_integer_literal` call. The completed writer contract includes checked `UInt8` decimal arithmetic and carries its possible fatal outcome through the digit helper. The reader preserves the sign, magnitude and written width for the backing-type check. An overflowing literal reports its original span and leaves the following declaration available to recovery.
 
-The unchanged module parser, frontend and CLI first stop at `parse_callable` in `ModuleParser.cod:776:9`. Executable object checking has a separate admission path.
+Both source commands accept the unchanged `ModuleParser` and `Frontend`. The `parse_callable` contract includes the mutually recursive helpers that parse nested callables. From locally checked body facts and frozen call edges, the completion pass propagates unavailability, escaping bounds and fatal arithmetic independently to callers. A failed operand prevents entry. A cycle with completed dependencies supplies a bound on these outcomes without implying termination. The linked parser retains nested callable syntax and diagnoses a malformed declaration while keeping the valid suffix.
+
+The full CLI source check first stops at the `const` value local in `NativeDiagnostics.cod:61:5`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
