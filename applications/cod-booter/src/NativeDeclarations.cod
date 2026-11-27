@@ -917,6 +917,10 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
                                   record_type()
                               } else { array_type() } }
                           };
+        if (fixed_values && mode == ReferenceFormal &&
+            (kind == sum_type() || imported_kind(names, selected, marker) == sum_export())) {
+            (row.value_kind <- sum_type()):void
+        };
         if (!scalar_place) {
             row.type_module <- type_module(names, selected, marker, current_module);
             (row.type_identity <- type_identity(names, selected, marker)):void
@@ -1526,7 +1530,7 @@ export data SuppliedView =
     CheckedProductWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedLiteralCall {} |
-    CheckedReadonlyCall {} |
+    CheckedReadonlyCall { sum_loan:bool; } |
     CheckedWriterCall {} |
     CheckedArrayProcedureCall { allocates:bool; } |
     CheckedArrayReaderCall {} |
@@ -1654,6 +1658,17 @@ export func published_enum_array_header(contracts:const ModuleInterfaces in C, p
     return head
 }
 
+func checked_bits_sum(contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, type:const DeclaredType in T)
+    -> bool where {const owner C, const owner A, const owner T} {
+    if (type.kind != sum_type()) return false;
+    return if (type.defining_module == 0u64) {
+        type.identity < intrinsic (len)(aggregate) && aggregate[type.identity] == CoDBitsAggregate
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, sum_type()) == CoDBitsAggregate
+    }
+}
+
 func checked_sum_array_type(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> bool
@@ -1661,14 +1676,9 @@ func checked_sum_array_type(nodes:const ExprNodes in N, names:const NameBindings
     if (marker >= used) return false;
     if (names[marker].kind == array_type()) {
         ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-        if (!describe_local_u64_array_element(nodes, names, selected, names[marker].declaration, used, revision, element) ||
-            element.kind != sum_type()) return false;
-        return if (element.defining_module == 0u64) {
-            element.identity < intrinsic (len)(aggregate) && aggregate[element.identity] == CoDBitsAggregate
-        } else {
-            checked_aggregate_storage(contracts, published, element.defining_module,
-                element.identity, sum_type()) == CoDBitsAggregate
-        }
+        return describe_local_u64_array_element(nodes, names, selected,
+            names[marker].declaration, used, revision, element) &&
+            checked_bits_sum(contracts, published, aggregate, element)
     };
     val selection <- names[marker].declaration;
     return names[marker].kind == ordinary_selection() && selection < intrinsic (len)(selected) &&
@@ -2583,7 +2593,7 @@ export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UI
     return site < intrinsic (len)(views) && (case views[site] of { ReadonlyIndexedByteReader -> true; _ -> false })
 }
 
-# A query receives independent scalar values and one readonly array at
+# A query receives independent scalar values and one readonly loan at
 # each owner role, in owner-clause order. Check the two lists from their tails.
 func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
@@ -2604,12 +2614,14 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
     ref bytes = make ArraySlotType {
         owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
+    ref sum = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val formal <- clause.parameter_tail;
     val role <- signature;
     val marker <- no_node();
     val annotation <- no_node();
     val parameter_kind <- 0u8;
     val array_kind <- 0u8;
+    val storage <- UnprovedAggregate;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return role == result;
         if (inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
@@ -2624,9 +2636,13 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
             array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 marker, used, revision, bytes);
             if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
-                !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision) &&
-                !readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision))
-                return false;
+                !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
+                storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
+                    aggregate, marker, used, revision);
+                if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate &&
+                    !(describe_type(nodes, names, selected, marker, 0u64, revision, used, sum) &&
+                      checked_bits_sum(contracts, published, aggregate, sum))) return false
+            };
             (role <- clause.previous):void
         };
         (formal <- entry.previous):void
@@ -2656,9 +2672,8 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     val last_owner <- callable.signature;
     if (inspect_signature(nodes, revision, used, last_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
     val preceding <- clause.previous;
-    val record_loan <- inspect_signature(nodes, revision, used, preceding, clause) == OwnerSignatureClause;
-    if (record_loan && !clause.readonly) return;
-    val result_site <- if (record_loan) { (clause.previous) } else { preceding };
+    if (inspect_signature(nodes, revision, used, preceding, clause) != OwnerSignatureClause || !clause.readonly) return;
+    val result_site <- clause.previous;
     if (inspect_signature(nodes, revision, used, result_site, clause) != ValueResultClause || clause.annotation >= used) return;
     val result <- names[clause.annotation].kind;
     if (result != builtin_bool()) return;
@@ -2666,39 +2681,29 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
         first >= used) return;
-    val array_owner <- if (record_loan) { preceding } else { last_owner };
-    val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
+    val marker <- readonly_formal_marker(nodes, names, first, preceding, used, revision);
     if (marker >= used) return;
     val input <- work[first].next;
-    if (record_loan) {
-        if (variadic_method_formal(nodes, revision, used, at) != no_node() ||
-            !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
-        for (position in 0u64 .. 2u64) {
-            if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
-            (input <- work[input].next):void
-        };
-        val record <- readonly_formal_marker(nodes, names, input, last_owner, used, revision);
-        if (record >= used || work[input].next != no_node()) return;
-        ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-        if (!describe_type(nodes, names, selected, record, 0u64, revision, used, type) || type.kind != record_type()) return;
-        val storage <- if (type.defining_module == 0u64) {
-            if (type.identity >= used || type.identity >= intrinsic (len)(aggregate)) return;
-            (aggregate[type.identity])
-        } else {
-            checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
-        };
-        if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
-            (views[at] <- make PreparedReadonlyQuery {}):void
-        };
-        return
+    if (variadic_method_formal(nodes, revision, used, at) != no_node() ||
+        !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
+    for (position in 0u64 .. 2u64) {
+        if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
+        (input <- work[input].next):void
     };
-    if (input == no_node()) {
-        val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
-            aggregate, marker, used, revision);
-        if (storage == CoDBitsAggregate || storage == CLayoutBitsRecord) {
-            (views[at] <- make PreparedReadonlyQuery {}):void
-        };
-    }
+    val record <- readonly_formal_marker(nodes, names, input, last_owner, used, revision);
+    if (record >= used || work[input].next != no_node()) return;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, record, 0u64, revision, used, type) || type.kind != record_type()) return;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= used || type.identity >= intrinsic (len)(aggregate)) return;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+    };
+    if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
+        (views[at] <- make PreparedReadonlyQuery {}):void
+    };
+    return
 }
 
 export func prepared_readonly_query(views:const SuppliedViews in V, site:UInt64) -> bool
@@ -2825,9 +2830,7 @@ func aggregate_writer_loan(nodes:const ExprNodes in N, names:const NameBindings 
     # The writer body already has the ordinary local scalar-product path.
     if (kind == record_type())
         return type.defining_module == 0u64 && type.identity < used && aggregate[type.identity] == CLayoutBitsRecord;
-    if (type.defining_module == 0u64)
-        return type.identity < used && aggregate[type.identity] == CoDBitsAggregate;
-    return checked_aggregate_storage(contracts, published, type.defining_module, type.identity, kind) == CoDBitsAggregate
+    return checked_bits_sum(contracts, published, aggregate, type)
 }
 
 func independent_scalar_tail(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -5079,16 +5082,10 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                 kind == c_operation(), kind == callable_binding(),
                                 contracts[next], used, revision))
             return no_node();
-        if ((source_array_reader && source_writer == NoSourceWriter && owner_count >= 2u64 && result_kind == builtin_bool() &&
-             next == count + 2u64 && work[parameter].next == no_node() &&
-             contracts[next].value_kind != array_type()) ||
-            (source_writer == ProductWriter && work[parameter].next == no_node()) ||
+        if ((source_writer == ProductWriter && work[parameter].next == no_node()) ||
             (source_writer == AggregateWriter && next == count + 2u64) ||
             (source_writer == ParserWriter && next == count + owner_count)) {
             (contracts[next].value_kind <- record_type()):void
-        };
-        if (source_writer == AggregateWriter && owner_count == 3u64 && next == count + 5u64) {
-            (contracts[next].value_kind <- sum_type()):void
         };
         if (indexed_owners &&
             (contracts[next].value_kind == c_handle_type() ||

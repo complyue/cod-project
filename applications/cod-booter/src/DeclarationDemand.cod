@@ -14,7 +14,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, calla
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayProcedureCall }, read_acquisition_failure,
+    SuppliedViews, SuppliedView { ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayProcedureCall, CheckedReadonlyCall }, read_acquisition_failure,
     native_loan_requires_body, source_handle_callable, prepared_array_procedure,
     prepared_source_here_relay, SourceArrayFormals { NoSourceArrayFormal, ArrayReferenceSlotFormal },
     prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_array_inspector
@@ -22,7 +22,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, LocalSumConstruction, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -124,7 +124,7 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
         if (entry.item < intrinsic (len)(cases)) {
             case cases[entry.item] of {
                 # Imported indexed loans keep their existing demand rule.
-                IndexedProductLoan { val consumer <-; val array_module <-; } -> {
+                IndexedAggregateLoan { val consumer <-; val array_module <-; } -> {
                     if (consumer == argument && array_module == 0u64) { (needs_receipt <- true):void }
                 };
                 InlineProductField { val type <- value_type; } -> {
@@ -303,7 +303,9 @@ export func discover_declaration_demand(
             (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
              (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
              (site < intrinsic (len)(views) && (case views[site] of {
-                 ImportedProductWriter -> true; CheckedArrayProcedureCall -> true; CheckedImportedArraySlotCall -> true; _ -> false
+                 ImportedProductWriter -> true; CheckedArrayProcedureCall -> true; CheckedImportedArraySlotCall -> true;
+                 CheckedReadonlyCall { val sum_loan <-; } -> sum_loan;
+                 _ -> false
              })));
         shape <- direct_invocation(nodes, revision, used, site, invocation);
         if (shape == InvalidInvocation) {
@@ -366,6 +368,9 @@ export func discover_declaration_demand(
             (case cases[site] of {
                 LocalSumConstruction -> true;
                 IndexedAggregateDestination -> true;
+                InlineProductField { val receiver <-; val writable <-; } ->
+                    writable && receiver < site &&
+                    (case cases[receiver] of { InlineProductField -> true; _ -> false });
                 LexicalSumReference -> true;
                 ImportedFreshSumInvocation -> true;
                 _ -> false
