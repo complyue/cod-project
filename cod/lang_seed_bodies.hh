@@ -753,13 +753,17 @@ class BodyExtraction {
 
     void bind_capture(const Expression &expr, Local original) {
       auto &outlined = *body_.outline;
-      const auto &supplier = extraction_.bodies_.at(outlined.supplier).instance;
+      const auto &supplier_body = extraction_.bodies_.at(outlined.supplier);
+      const auto &supplier = supplier_body.instance;
       const auto &source = supplier.bindings.at(original.binding);
       const bool live_view = source.type.kind == Type::array ||
           ((supplied_body() || form_.implicit_scope) && source.type.kind == Type::product &&
            declarations().bits_payload(source.type));
-      const bool fixed_product = supplied_body() && !original.owner && source.fixed &&
-          extraction_.reference_product(source.type);
+      const auto placement = supplier_body.input_products.find(original.owner);
+      const bool regional_product = outlined.handler && placement != supplier_body.input_products.end() &&
+          placement->second == ProductPlacement::region;
+      const bool fixed_product = source.fixed && extraction_.reference_product(source.type) &&
+          ((supplied_body() && !original.owner) || regional_product);
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
       const bool builder = form_.implicit_scope && declarations().builder_type(source.type);
@@ -798,6 +802,8 @@ class BodyExtraction {
         parameter.caller_place = Parameter::CallerPlace::reference_slot;
         if (outlined.handler) parameter.fixed_binding = source.fixed;
       }
+      if (fixed_product && regional_product)
+        body_.input_products.emplace(input_owner(role), ProductPlacement::region);
       bind_input(parameter, parameter.type, true);
       outlined.captures.push_back({&expr, original, std::move(parameter)});
     }
@@ -1355,7 +1361,7 @@ class BodyExtraction {
           const auto role = std::ranges::find(roles, parameter.owner, &OwnerParameter::name);
           const bool native_handle = mode == ArgumentMode::borrowed_handle && formal.kind == Type::native_handle;
           const bool product_loan = selected->methods.size() == 1 && !target.source->c_linkage &&
-              target.here.empty() && reference_product_loan(parameter, mode, formal);
+              reference_product_loan(parameter, mode, formal);
           expect(role != roles.end() && !role->root && !role->explicit_parameter &&
                  !parameter.not_init_ref && (!parameter.selects_caller_place() || parameter.selects_caller_ref_slot()) &&
                  (native_handle || product_loan || ordinary_loan(parameter, mode, formal)) &&
@@ -1755,8 +1761,6 @@ class BodyExtraction {
         write.type = write.operand_type = field.type;
         write.product_field = order[i];
         if (field.storage != PlaceKind::value) {
-          expect(!op.regional_storage || field.type.kind != Type::array, item.at,
-                 "seed needs lexical storage for an array reference field");
           expect(admits_reference(extract(input), field.type, owner, field.storage == PlaceKind::pointer,
                                   field.readonly_target(), input.at),
                  input.at, "reference field initializer must preserve type, owner and target access");
@@ -2179,8 +2183,6 @@ class BodyExtraction {
         expect(placement.has_value() && extraction_.reference_product(type) && !member.direct_text_place(),
                expr.at, "seed needs an established placement for this reference-bearing product field");
         op.regional_storage = *placement == ProductPlacement::region;
-        expect(!op.regional_storage || member.type.kind != Type::array, expr.at,
-               "seed needs lexical storage for an array reference field");
       }
       op.view = op.indexed_target = true;
       op.read_only = base.read_only || (member.stores_target() ? member.readonly_target() : readonly_field(member));

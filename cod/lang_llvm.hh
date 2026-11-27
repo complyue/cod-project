@@ -2973,8 +2973,13 @@ class LLVMEmission {
           if (fact.regional_storage) {
             auto *owner = selected_owner(expr);
             auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
-            auto *target_layout = description.type.kind == Type::product
-                ? regional_product_layout(description.type.identity) : inline_layout(description.type);
+            // A named array edge selects its header. Indexing uses that
+            // header's existing backing and length.
+            llvm::Type *target_layout = array_header_;
+            if (description.type.kind == Type::product)
+              target_layout = regional_product_layout(description.type.identity);
+            else if (description.type.kind != Type::array)
+              target_layout = inline_layout(description.type);
             field = regional_target(owner, offset, target_layout);
           } else field = b_.CreateLoad(b_.getPtrTy(), slot);
         }

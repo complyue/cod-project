@@ -121,7 +121,7 @@ using "./NativeCommands.cod" {
 };
 using "./ModuleIndex.cod" {
     Visits, VisitFailure, KeyLookup, lookup_path, insert_visit, visit_has_membership, visit_rejection, mark_failed_visit, growth_capacity,
-        reserve_keys, mark_checked,
+    SourceBytePool, reserve_keys, mark_checked,
     earliest_profile_stop, mark_structural_only, VariadicProfileStop, structural_visit_dependency,
     VisitSlot { StructuralOnly }, ModuleSelectionRanges, CanonicalKeyRange, published_module_key, checked_module_selections,
     VisitObject { NoVisitObject, CompletedVisitObject },
@@ -1232,7 +1232,7 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
                    staged:const ModuleExports in F, staged_names:const StagedExportNames in F,
                    staged_defaults:const StagedDefaultExports in F,
                    staged_interfaces:const ModuleInterfaces in F,
-                   staged_commands:const NativeCommands in F, visits:Visits in G,
+                   staged_commands:const NativeCommands in F, pool:SourceBytePool in G, visits:Visits in G,
                    ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
                    ref var interfaces:ModuleInterfaces in G,
                    ref var spellings:SourceBytes in G, ref var commands:NativeCommands in G,
@@ -1281,7 +1281,7 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
     reserve_exports(exports, export_first, export_past);
     reserve_defaults(defaults, default_first, default_past);
     reserve_interfaces(interfaces, interface_first, interface_past);
-    reserve_keys(spellings, spelling_first, spelling_past);
+    reserve_keys(pool, spellings, spelling_first, spelling_past);
     reserve_commands(commands, command_first, command_past);
     reserve_literals(literals, literal_first, literal_past);
     reserve_units(units, unit_used, unit_past);
@@ -1390,7 +1390,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
                          handle diagnostic:DiagnosticDestination in D, const val purpose:GraphPurpose,
                          builtin_spellings:const SourceBytes in B,
                          builtins:const ModuleExports in B,
-                         ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                         pool:SourceBytePool in G, ref var visits:Visits in G, ref var keys:SourceBytes in G,
                          const used:UInt64 in G, const key_used:UInt64 in G, const next_revision:UInt64 in G,
                          ref var exports:ModuleExports in G,
                              ref var defaults:DefaultExportRefs in G,
@@ -1527,10 +1527,11 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         if (run[0u64].retained > parse_finding) { (failure.finding <- parse_finding):void };
         if (parsed != Complete) return parsed;
         const val child_depth <- depth + 1u64;
+        const ref dependency_pool = pool;
         effect @followDependency(edge:UInt64) -> UInt8 {
             return visit_child(path, entry, opened, diagnostic, purpose, builtin_spellings,
                 builtins,
-                edges, decoded, selected, edge, child_depth, visits, keys, used, key_used,
+                edges, decoded, selected, edge, child_depth, dependency_pool, visits, keys, used, key_used,
                 next_revision, exports, defaults, interfaces, spellings, commands, units, literals,
                 export_used, default_used, interface_used, spelling_used, command_used, unit_used, literal_used,
                 function_used, package_ready, package_rows, package_bytes, package_roots,
@@ -1680,7 +1681,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             return bound
         };
         return publish_visit(opened, progress, staged, export_names, staged_defaults, staged_interfaces,
-            staged_commands,
+            staged_commands, pool,
             visits, exports, defaults, interfaces, spellings, commands, units, literals,
                 export_used,
             default_used, interface_used, spelling_used, command_used, unit_used, literal_used,
@@ -1717,7 +1718,7 @@ export proc complete_graph_profile(handle diagnostic:DiagnosticDestination in D,
 
 export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                           builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
-                          ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                          pool:SourceBytePool in G, ref var visits:Visits in G, ref var keys:SourceBytes in G,
                           used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
                           ref var exports:ModuleExports in G,
                               ref var defaults:DefaultExportRefs in G,
@@ -1743,7 +1744,7 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
         val revision <- next_revision;
         val first <- key_used;
         val root <- used;
-        if (key.id != root || insert_visit(canonical, key.length, visits, keys, used, key_used, next_revision) != Complete)
+        if (key.id != root || insert_visit(canonical, key.length, pool, visits, keys, used, key_used, next_revision) != Complete)
             return ScratchFailed;
         ref package_roots = make PackageSourceRoots(0u64, make PackageSourceRoot {
             path_first <- 0u64; path_past <- 0u64;
@@ -1752,7 +1753,7 @@ export proc compile_graph(handle input:Path in A, handle diagnostic:DiagnosticDe
         ref failure = make VisitFailure { rejection <- 0u8; finding <- no_node() };
         return visit_open_revision(opened, path, canonical, diagnostic, purpose, builtin_spellings,
             builtins,
-                                   visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
+                                   pool, visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
                                    commands, units, literals, export_used, default_used, interface_used, spelling_used,
                                    command_used, unit_used, literal_used, function_used,
                                    package_ready, package_rows, package_bytes, package_roots,
@@ -1775,7 +1776,7 @@ proc visit_child(handle parent_path:Path in P, handle entry:PathOwner in A,
                  builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
                  edges:DependencyEdges in F, decoded:const SourceBytes in F, selected:SelectedExports in F,
                  edge:UInt64, depth:UInt64,
-                 ref var visits:Visits in G, ref var keys:SourceBytes in G,
+                 pool:SourceBytePool in G, ref var visits:Visits in G, ref var keys:SourceBytes in G,
                  used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
                  ref var exports:ModuleExports in G, ref var defaults:DefaultExportRefs in G,
                  ref var interfaces:ModuleInterfaces in G,
@@ -1842,11 +1843,11 @@ proc visit_child(handle parent_path:Path in P, handle entry:PathOwner in A,
             own handle child_source:SourceRevision <- make own handle SourceRevision(child_path);
             val revision <- next_revision;
             val key_first <- key_used;
-            if (insert_visit(owner_path, match_key.length, visits, keys, used, key_used, next_revision) != Complete)
+            if (insert_visit(owner_path, match_key.length, pool, visits, keys, used, key_used, next_revision) != Complete)
                 return 8u8;
             val compiled <- visit_open_revision(child_source, child_path, entry, diagnostic,
                                                purpose, builtin_spellings, builtins,
-                                               visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
+                                               pool, visits, keys, used, key_used, next_revision, exports, defaults, interfaces, spellings,
                                                commands, units, literals, export_used, default_used, interface_used, spelling_used,
                                                command_used, unit_used, literal_used, function_used,
                                                package_ready, package_rows, package_bytes,

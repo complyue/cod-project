@@ -54,6 +54,10 @@ export data VisitSlot =
 export array Visits [UInt64]:VisitSlot;
 export data KeyLookup { id:UInt64; length:UInt64; }
 
+export data SourceBytePool {
+    ref spare:SourceBytes;
+}
+
 func same_key(bytes:const SourceBytes in G, first:UInt64, past:UInt64, canonical:const SourceBytes in P)
     -> bool where {const owner G, const owner P} {
     if (first > past || past > intrinsic (len)(bytes)) return false;
@@ -100,13 +104,24 @@ export proc reserve_visits(ref var visits:Visits in G, used:UInt64, required:UIn
     return;
 }
 
-export proc reserve_keys(ref var keys:SourceBytes in G, used:UInt64, required:UInt64) -> void where {owner G} {
+export proc reserve_keys(pool:SourceBytePool in G, ref var keys:SourceBytes in G,
+                         used:UInt64, required:UInt64) -> void where {owner G} {
     val current <- intrinsic (len)(keys);
     if (required <= current) return;
-    ref replacement = make SourceBytes(growth_capacity(current, required), 0u8) in G;
-    for (i in 0u64 .. used) { replacement[i] <- keys[i]; };
+    ref previous = keys;
+    val capacity <- growth_capacity(current, required);
+    ref replacement = pool.spare;
+    # A zero-length spare is never selected for growth.
+    const val reused <- intrinsic (len)(replacement) == capacity;
+    if (!reused) {
+        (replacement = make SourceBytes(capacity, 0u8) in G):void;
+    };
+    for (i in 0u64 .. used) { replacement[i] <- previous[i]; };
+    if (reused) {
+        for (i in used .. capacity) { replacement[i] <- 0u8; };
+    };
     keys = replacement;
-    return;
+    (pool.spare = previous):void;
 }
 
 export proc fill_key(bytes:SourceBytes in G, first:UInt64, canonical:const SourceBytes in P)
@@ -142,7 +157,7 @@ export proc fill_path(handle path:PathOwner in P, keys:SourceBytes in G, const v
 }
 
 export proc insert_visit(handle path:PathOwner in P, length:UInt64,
-                         ref var visits:Visits in G, ref var keys:SourceBytes in G, used:UInt64 in G,
+                         pool:SourceBytePool in G, ref var visits:Visits in G, ref var keys:SourceBytes in G, used:UInt64 in G,
                          key_used:UInt64 in G, next_revision:UInt64 in G)
     -> CompilerStatus throws PathNotReadyException where {const owner P, owner G} {
     val limit <- 18446744073709551615u64;
@@ -152,7 +167,7 @@ export proc insert_visit(handle path:PathOwner in P, length:UInt64,
     val first <- key_used;
     val past <- first + length;
     reserve_visits(visits, id, id + 1u64);
-    reserve_keys(keys, first, past);
+    reserve_keys(pool, keys, first, past);
     val filled <- fill_path(path, keys, first, length);
     if (filled != Complete) return filled;
     mark_visiting(visits, id, first, past, next_revision);

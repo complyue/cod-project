@@ -20,7 +20,7 @@ using "./ModuleExportStorage.cod" {
     SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate }
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
-using "./ModuleIndex.cod" Visits;
+using "./ModuleIndex.cod" { SourceBytePool, Visits };
 using "./ModuleIndex.cod" VisitSlot { Vacant };
 using "./NativeCommands.cod" {
     NativeCommand, NativeCommands, NativeUnitRow, NativeUnitRows, NativeLiteralRange, NativeLiteralRanges,
@@ -152,7 +152,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
                                 functions:UInt64, visit_count:UInt64, interface_count:UInt64) -> CompilerStatus,
                     handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                     builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
-                    initial_keys:SourceBytes in G, progress:GraphProgress in G)
+                    initial_keys:SourceBytes in G, pool:SourceBytePool in G, progress:GraphProgress in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     ref visits = make Visits(0u64, make Vacant {}) in G;
     ref keys = initial_keys;
@@ -197,7 +197,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
     ref run = make DiagnosticRuns(1u64, make DiagnosticRun {
         limit <- limit; retained <- 0u64; package_input_failure <- no_node()
     }) in G;
-    val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
+    val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, pool, visits, keys,
                                   progress.used, progress.key_used, progress.next_revision,
                                   exports, defaults, interfaces, spellings, commands, units, literals,
                                   progress.export_used, progress.default_used, progress.interface_used, progress.spelling_used,
@@ -217,7 +217,8 @@ proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination
     where {const owner A, const owner B, owner D} {
     own region graph:GraphRoot <- fresh_graph();
     ref keys = make SourceBytes(0u64, 0u8) in graph;
-    return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, graph.progress)
+    ref pool = make SourceBytePool in graph { spare = keys };
+    return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, pool, graph.progress)
         (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
          spelling_size, name_size, functions, visit_count, interface_count) => { continue Complete; };
 }
@@ -243,7 +244,8 @@ export proc compile_object(handle input:Path in A, output:const String in A,
     try {
         own region graph:GraphRoot <- fresh_graph();
         ref keys = make SourceBytes(0u64, 0u8) in graph;
-        return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins, keys, graph.progress)
+        ref pool = make SourceBytePool in graph { spare = keys };
+        return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins, keys, pool, graph.progress)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_object(commands, units, literals, spellings, names, command_count, unit_count, literal_count,
@@ -264,7 +266,8 @@ export proc compile_providers(handle input:Path in A, handle directory:Path in P
     try {
         own region graph:GraphRoot <- fresh_graph();
         ref keys = make SourceBytes(0u64, 0u8) in graph;
-        return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, graph.progress)
+        ref pool = make SourceBytePool in graph { spare = keys };
+        return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, pool, graph.progress)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_providers(visits, names, spellings, interfaces, visit_count, name_size, spelling_size,
