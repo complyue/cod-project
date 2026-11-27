@@ -121,7 +121,7 @@ export func extract_initialization_flow(
         if (opcode == begin_function()) {
             if (b >= plan.labels) return false;
             activation <- at;
-            entries[at] <- b;
+            (entries[at] <- b):void
         } else {
             if (opcode != declare_function()) {
                 if (activation == no_node()) return false;

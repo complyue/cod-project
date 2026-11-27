@@ -935,15 +935,19 @@ export func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindi
     return no_node();
 }
 
-func selected_inline_sum(nodes:const ExprNodes in N, work:const NameWork in W,
-    state:const NameState in R, at:UInt64) -> bool where {const owner N, const owner W, const owner R} {
+func selected_inline_sum(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:const NameBindings in B, work:const NameWork in W, state:const NameState in R, at:UInt64, lexical:bool)
+    -> bool where {const owner S, const owner N, const owner B, const owner W, const owner R} {
     ref syntax = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
-    return inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, syntax) == BracedConstruction &&
-        syntax.placement == no_node() && syntax.queried_operand == no_node() &&
-        work[syntax.requested].selected_constructor
+    if (inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, syntax) != BracedConstruction ||
+        syntax.placement != no_node() || syntax.queried_operand != no_node()) return false;
+    if (!lexical) return (work[syntax.requested].selected_constructor);
+    val found <- lookup(source, nodes, work, syntax.requested, 0u64, state.used);
+    if (found == no_node()) return (work[syntax.requested].selected_constructor);
+    return bindings[found].kind == constructor_type()
 }
 
 # Lists link forward in the temporary workspace. Traversing a wide block or
@@ -968,7 +972,7 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         };
         bindings[item].scope <- state.scope_node;
         if (inline_actuals && kind == ArgumentSequence &&
-            selected_inline_sum(nodes, work, state, entry.item)) {
+            selected_inline_sum(source, nodes, bindings, work, state, entry.item, false)) {
             (state.inline_field_input <- entry.item):void
         };
         resolve_expression(source, nodes, bindings, work, state, entry.item);
@@ -1168,7 +1172,8 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     resolve_annotation(source, nodes, bindings, work, state, binding.index);
     if (state.diagnostic != 0u8) return;
     val previous_inline <- state.inline_field_input;
-    if (state.source_only && mode == ReferenceLocal && selected_inline_sum(nodes, work, state, initializer.index)) {
+    if (state.source_only && mode == ReferenceLocal &&
+        selected_inline_sum(source, nodes, bindings, work, state, initializer.index, true)) {
         (state.inline_field_input <- initializer.index):void
     };
     val previous_array <- state.lexical_array_initializer;
@@ -1883,7 +1888,7 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
             };
             if (inspect_local_binding(nodes, state.syntax_revision, state.syntax_used, bindings[name].declaration, local) &&
                 local.mode == ReferenceLocal && local.initializer < at && work[local.initializer].inline_sum_initializer &&
-                selected_inline_sum(nodes, work, state, assignment.input)) {
+                selected_inline_sum(source, nodes, bindings, work, state, assignment.input, true)) {
                 (state.inline_field_input <- assignment.input):void
             }
         }

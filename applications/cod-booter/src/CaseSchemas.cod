@@ -1523,13 +1523,22 @@ func prepare_lexical_sum_reference(nodes:const ExprNodes in N, names:const NameB
     if (input >= at || lexical_owner >= used || names[input].scope != lexical_owner ||
         inspect_construction(nodes, revision, at, input, syntax) != BracedConstruction)
         return case_problem(report, input, unsupported_bits_construction());
-    val chosen <- selected[syntax.requested].constructor_selection;
-    if (chosen >= used) return case_problem(report, syntax.requested, unselected_case_constructor());
-    val head <- selected[chosen].sum_head;
-    if (head >= published || interfaces[head].interface_kind != sum_type())
+    if (names[syntax.requested].kind != constructor_type())
         return case_problem(report, syntax.requested, unselected_case_constructor());
     ref type = make DeclaredType {
-        kind <- sum_type(); defining_module <- interfaces[head].defining_module; identity <- interfaces[head].declaration;
+        kind <- sum_type(); defining_module <- 0u64; identity <- no_node();
+    };
+    val arm <- names[syntax.requested].declaration;
+    if (arm < used) {
+        (type.identity <- work[arm].declaring_sum):void
+    } else {
+        val chosen <- selected[syntax.requested].constructor_selection;
+        if (chosen >= used) return case_problem(report, syntax.requested, unselected_case_constructor());
+        val head <- selected[chosen].sum_head;
+        if (head >= published || interfaces[head].interface_kind != sum_type())
+            return case_problem(report, syntax.requested, unselected_case_constructor());
+        type.defining_module <- interfaces[head].defining_module;
+        (type.identity <- interfaces[head].declaration):void
     };
     if (!case_bits_type(type, aggregate, interfaces, published))
         return case_problem(report, input, unsupported_bits_construction());

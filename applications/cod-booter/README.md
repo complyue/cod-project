@@ -243,6 +243,8 @@ The declaration and C provider commands check a selected, unplaced braced sum co
 
 Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls.
 
+A lexical reference can also select a newly constructed finite-bits sum in the same revision. The written constructor determines the parent sum and the checked field order, including an imported inline product such as the `SourceSpan` in `ModuleExports.GraphSpelling`. An annotation must agree with the exact nominal sum. The reference selects storage under its actual lexical owner after successful initialization.
+
 ### Readonly lexer predicates
 
 The source commands check `Lexer.word_is`, its direct wrappers and the composed predicates used by `ParserInput.parse_binding`. Ordinary operand checking prepares the readonly byte-array and token loans and the optional immutable String literal. The defining visit records direct calls to the selected same-revision functions and the short-circuit continuations. It completes the recorded dependencies leaf first, including forward references and shared leaves. An early return ends that path. A skipped branch contributes no failure. Dependencies outside the represented call shapes and cyclic dependencies leave the profile unavailable.
@@ -306,6 +308,8 @@ A direct source-preserving selection can use an initialized product formal or a 
 Both source commands check the uses of `ParserStorage.is_here_formal` and `formal_variadic_at` in unchanged `CallableSyntax`. The defining visit completes the case operations and the dependencies that validate the formal's revision, binding, and ellipsis extent. The published signature identifies the readonly `UInt64`-indexed finite-bits sum array, the independent index operands, and the exact result type. That result can be a Boolean, integer, or nominal enum in this source profile. A local scratch record used by a helper keeps its own lexical owner.
 
 A direct source-preserving selection prepares the array loan and operands in order. An independent `UInt8` or `UInt32` can widen to a `UInt64` formal regardless of the query's return type. The completion contract keeps bounds and fatal arithmetic separate. The linked parser witness covers multiple `here` formals, a final variadic formal, a misplaced ellipsis, stale revisions, and indices beyond the permitted extent.
+
+The two source commands also check `ParserStorage.published_syntax_id` calls with the readonly AST array, two independent `UInt64` operands and a readonly `NodeId` under its own owner role. A case reception or its checked inline record field can supply the final argument while the receiving arm is active. Renaming the imported callable preserves its signature and completed failure information.
 
 ### Imported parser name and separator calls
 
@@ -414,6 +418,8 @@ Demanded source bodies can call a directly selected ordinary function proved to 
 An initialized `const val` local evaluates its initializer once and holds an independent readonly scalar on normal completion. Both source commands check the initializer and enforce readonly access even in a private unused body. A readonly loan is allowed, and copying the value into a writable local gives that local independent storage. The source commands also check a fixed scalar initialized from a field of a supported indexed product formal, including the array owner and bounds at the read. The object command emits fixed locals with supported scalar initializers.
 
 Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls. Fixed reference formals and fixed formals in C and `here` signatures remain outside this profile. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)
+
+For a local nominal `UInt64`-indexed `bool` array, the source commands check lexical allocation and fill, indexed reads, and writes through a live writable target. The destination and its bounds check precede the value operand. This covers tag writes in `InitializationFlow`. Reference-slot formals and object emission for these arrays remain outside this profile.
 
 ### Predicate assertions
 

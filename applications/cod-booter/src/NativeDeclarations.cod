@@ -1467,7 +1467,7 @@ data ArraySlotType {
     element_sum:UInt64;
 }
 
-export enum ArraySlotElement:UInt8 { ByteArrayElement; SumArrayElement; UInt64ArrayElement; ProductArrayElement; }
+export enum ArraySlotElement:UInt8 { ByteArrayElement; SumArrayElement; UInt64ArrayElement; ProductArrayElement; BoolArrayElement; }
 
 export data SuppliedView =
     NoSuppliedView {} |
@@ -1725,7 +1725,7 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, element))
         return 0u8;
-    if (element.kind != builtin_u8() && element.kind != builtin_u64() &&
+    if (element.kind != builtin_u8() && element.kind != builtin_u64() && element.kind != builtin_bool() &&
         (element.kind != sum_type() || element.defining_module != 0u64 || element.identity >= used ||
          element.identity >= intrinsic (len)(aggregate) ||
          aggregate[element.identity] != (CoDBitsAggregate:AggregateStorage))) return 0u8;
@@ -1758,6 +1758,7 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
 func slot_element(kind:UInt8) -> ArraySlotElement {
     if (kind == builtin_u8()) return (ByteArrayElement:ArraySlotElement);
     if (kind == builtin_u64()) return (UInt64ArrayElement:ArraySlotElement);
+    if (kind == builtin_bool()) return (BoolArrayElement:ArraySlotElement);
     if (kind == record_type()) return (ProductArrayElement:ArraySlotElement);
     return (SumArrayElement:ArraySlotElement)
 }
@@ -1795,7 +1796,7 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
                     (kind <- record_type()):void
                 }
             };
-            if (kind != 0u8 && (!slot || (kind != builtin_u64() &&
+            if (kind != 0u8 && (!slot || (kind != builtin_u64() && kind != builtin_bool() &&
                 source_slot_parameter(nodes, work, names[at].scope, at, used, revision)))) {
                 views[at] <- make ArraySlotFormal {
                     owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
@@ -1940,7 +1941,8 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
     };
     val imported_sum <- kind == sum_type() && element_module != 0u64;
     if (placement == no_node() && (owner_site >= used ||
-        (!imported_sum && kind != builtin_u8() && kind != builtin_u64() && kind != record_type()))) {
+        (!imported_sum && kind != builtin_u8() && kind != builtin_u64() &&
+         kind != builtin_bool() && kind != record_type()))) {
         reject_declaration(report, at, unsupported_ordinary_construction());
         return false
     };
@@ -2532,10 +2534,13 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
-    val owner_site <- callable.signature;
-    if (inspect_signature(nodes, revision, used, owner_site, clause) != OwnerSignatureClause || !clause.readonly ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
-        clause.annotation >= used) return;
+    val last_owner <- callable.signature;
+    if (inspect_signature(nodes, revision, used, last_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
+    val preceding <- clause.previous;
+    val record_loan <- inspect_signature(nodes, revision, used, preceding, clause) == OwnerSignatureClause;
+    if (record_loan && !clause.readonly) return;
+    val result_site <- if (record_loan) { (clause.previous) } else { preceding };
+    if (inspect_signature(nodes, revision, used, result_site, clause) != ValueResultClause || clause.annotation >= used) return;
     val result <- names[clause.annotation].kind;
     if (result != builtin_bool() && result != builtin_u64() && result != builtin_u8() &&
         result != enum_type() && imported_kind(names, selected, clause.annotation) != enum_export()) return;
@@ -2543,9 +2548,32 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
         first >= used) return;
-    val marker <- readonly_formal_marker(nodes, names, first, owner_site, used, revision);
+    val array_owner <- if (record_loan) { preceding } else { last_owner };
+    val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
     if (marker >= used) return;
     val input <- work[first].next;
+    if (record_loan) {
+        if (result != builtin_bool() || variadic_method_formal(nodes, revision, used, at) != no_node() ||
+            !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
+        for (position in 0u64 .. 2u64) {
+            if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
+            (input <- work[input].next):void
+        };
+        val record <- readonly_formal_marker(nodes, names, input, last_owner, used, revision);
+        if (record >= used || work[input].next != no_node()) return;
+        ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+        if (!describe_type(nodes, names, selected, record, 0u64, revision, used, type) || type.kind != record_type()) return;
+        val storage <- if (type.defining_module == 0u64) {
+            if (type.identity >= used || type.identity >= intrinsic (len)(aggregate)) return;
+            (aggregate[type.identity])
+        } else {
+            checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+        };
+        if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
+            (views[at] <- make PreparedReadonlyQuery {}):void
+        };
+        return
+    };
     if (input == no_node() && result == builtin_bool()) {
         val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
             aggregate, marker, used, revision);
