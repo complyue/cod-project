@@ -233,7 +233,15 @@ The indexed construction check carries no object lowering evidence.
 
 Both source commands check the unchanged `ParserInput.punct_at` body and its use in `TokenBuffer.close_delimiter`. The defining visit completes the readonly byte-array reader with a second readonly loan of a finite-bits record array, two independent `UInt64` values and an independent `UInt8` result. A checked literal import can supply the token-kind code. At a source-preserving import, the two nominal arrays and their actual owners remain independent. A writable actual can supply a readonly loan. An independent `UInt8` or `UInt32` can widen to either `UInt64` formal. A failed later operand prevents entry.
 
-The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. Protected, supplied-body and active delayed cleanup uses still require a route for a possible fatal outcome. The complete TokenBuffer and application entry reach the imported writable `scan_token` use at `TokenBuffer.cod:84:9`.
+The contract carries possible bounds failure separately from possible fatal arithmetic. Bounds use ordinary exception routing. Protected, supplied-body and active delayed cleanup uses still require a route for a possible fatal outcome.
+
+### Initialized writable token loans
+
+The source commands check `Lexer.scan_token` and its local helpers. The checker verifies scalar field transfers on the selected finite-bits product, including the field's declared access. The ordinary initialized loan provides the current value of every field. The call can update `kind`, `first`, and `past`. It supplies no initialization promise. The caller reads live fields after a successful call, and a completed store remains visible if a later operation fails.
+
+The defining visit completes bounds and fatal arithmetic evidence over the recorded ordinary call dependencies. A cyclic or unsupported dependency leaves the source call proof unavailable. On a source-preserving import, the caller prepares the byte-array loan, offset, and writable record loan in written order. For `tokens[index]` the bounds check and target selection precede entry. The owner role follows the selected record rather than the intervening value operand.
+
+The complete TokenBuffer and application entry check through the writable `scan_token` call and now reach `lexical_error` at `TokenBuffer.cod:93:13`. Object emission for the writable loan has its own admission checks.
 
 ### Imported array length families
 

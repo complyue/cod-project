@@ -8,17 +8,17 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
-using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, record_type };
+using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type };
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body
+    SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
+    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedAggregateDestination, IndexedProductRead, LexicalSumReference, FreshSumInvocation } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -113,9 +113,15 @@ func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBi
         if (argument >= used || inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return false;
         if (entry.item < intrinsic (len)(cases) && (case cases[entry.item] of {
-            IndexedProductRead { val consumer <-; } -> consumer == argument;
+            IndexedProductLoan { val consumer <-; } -> consumer == argument;
             _ -> false
         })) return true;
+        if (names[entry.item].kind == formal_binding()) {
+            receipt <- names[entry.item].declaration;
+            if (receipt < intrinsic (len)(cases) &&
+                (case cases[receipt] of { InlineProductFormal { val readonly <-; } -> !readonly; _ -> false }))
+                return true
+        };
         if (names[entry.item].kind == local_binding()) {
             receipt <- names[entry.item].declaration;
             if (receipt < entry.item && receipt < intrinsic (len)(cases) &&
@@ -212,6 +218,11 @@ export func discover_declaration_demand(
                     return false
                 }
             };
+            if (prepared_product_writer(views, site) &&
+                !require_receipt_body(demand, site, count, receipt_count, used)) {
+                problem <- site;
+                return false
+            };
             if ((clause != no_node() || links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
                  readonly_reader_needs_body(views, site) ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
@@ -243,7 +254,8 @@ export func discover_declaration_demand(
         demand[site].scope <- scope;
         checked_call <- links[site].imported_interface != no_node() &&
             (links[site].imported_failure_checked != 0u8 ||
-             (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()));
+             (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
+             (site < intrinsic (len)(views) && (case views[site] of { ImportedProductWriter -> true; _ -> false })));
         shape <- direct_invocation(nodes, revision, used, site, invocation);
         if (shape == InvalidInvocation) {
             problem <- site;
