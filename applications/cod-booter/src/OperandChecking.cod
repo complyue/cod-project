@@ -1,6 +1,7 @@
+using "./NameResolution.cod" source_aggregate_formal;
 using "./NativeDeclarations.cod" checked_readonly_call;
 using "./NameResolution.cod" direct_source_using;
-using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter };
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" OwnerConstraintSyntax {
     NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint
@@ -96,7 +97,7 @@ using "./ModuleExports.cod" {
 };
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
-    CallableUseProofs, matches_object_call, checked_aggregate_storage, AggregateStorage { CoDBitsAggregate },
+    CallableUseProofs, matches_object_call, checked_aggregate_storage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord },
     FamilyMembership { FixedMethods },
     InterfaceCallableKind { NoCallableKind, CheckedFunction, CheckedProcedure },
     ExceptionSchema { CheckedExceptionSchema, UncheckedExceptionSchema },
@@ -134,7 +135,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ImportedNativeU64,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
-    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, ImportedProductWriter
+    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, CheckedWriterCall, CheckedArrayReaderCall, ImportedProductWriter
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -2807,6 +2808,48 @@ func checked_product_writer_header(contracts:const ModuleInterfaces in I, publis
             contracts[product].type_identity, record_type()) == CoDBitsAggregate
 }
 
+func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
+    -> UInt64 where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val count <- contracts[header].entry_count;
+    if (count < 6u64 || count >= published - header ||
+        contracts[header].source_writer != ParserWriter || contracts[header].result_kind != builtin_bool() ||
+        contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
+        contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
+        contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
+        contracts[header].target_readonly != 0u8 || contracts[header].owner_count != 4u64 ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
+        contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead)
+        return no_node();
+    val bytes <- header + 1u64;
+    val input <- header + 2u64;
+    val output <- header + 3u64;
+    val record <- header + 4u64;
+    if (!source_aggregate_formal(contracts, bytes, array_type(), 0u64, 1u8) ||
+        !source_aggregate_formal(contracts, input, array_type(), 1u64, 1u8) ||
+        !source_aggregate_formal(contracts, output, array_type(), 2u64, 0u8) ||
+        !source_aggregate_formal(contracts, record, record_type(), 3u64, 0u8) ||
+        !source_aggregate_formal(contracts, header + 5u64, builtin_u64(), no_node(), 0u8))
+        return no_node();
+    val byte_array <- find_interface(contracts, published, contracts[bytes].type_module, contracts[bytes].type_identity);
+    val output_array <- find_interface(contracts, published, contracts[output].type_module, contracts[output].type_identity);
+    if (byte_array >= published || contracts[byte_array].interface_kind != array_type() ||
+        contracts[byte_array].array_index_kind != builtin_u64() || contracts[byte_array].element_kind != builtin_u8() ||
+        !published_record_array(contracts, published, contracts[input].type_module, contracts[input].type_identity) ||
+        output_array >= published || contracts[output_array].interface_kind != array_type() ||
+        contracts[output_array].array_index_kind != builtin_u64() ||
+        contracts[record].type_module != contracts[header].defining_module ||
+        checked_aggregate_storage(contracts, published, contracts[record].type_module,
+            contracts[record].type_identity, record_type()) != CLayoutBitsRecord)
+        return no_node();
+    val past <- header + 1u64 + count;
+    for (row in header + 6u64 .. past) {
+        if (!source_aggregate_formal(contracts, row, builtin_bool(), no_node(), 0u8)) return no_node()
+    };
+    return past
+}
+
 func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3064,6 +3107,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+        (supplied[at] <- make CheckedWriterCall {}):void;
+        return true
+    };
+    if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {
+        val module <- selected[site].origin_module;
+        val past <- checked_parser_writer_past(contracts, interface_count, header);
+        if (obligation || past == no_node() || selected[site].dependency_module != module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
+            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
+            return operand_problem(report, at, wrong_argument_count());
+        remember_imported_call(links, contracts, at, header, true);
+        links[at].imported_array_read_completion <- contracts[header].array_read_completion;
+        links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+        (supplied[at] <- make CheckedWriterCall {}):void;
         return true
     };
     val scalar_reader <- array_read && contracts[header].result_kind == builtin_u64();
@@ -3137,7 +3196,8 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     if (array_read) {
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_type_module <- contracts[header].type_module;
-        (links[at].imported_type_identity <- contracts[header].type_identity):void
+        links[at].imported_type_identity <- contracts[header].type_identity;
+        if (scalar_reader) { (supplied[at] <- make CheckedArrayReaderCall {}):void }
     };
     if ((obligation || (array_read && !scalar_reader)) && required == no_node()) { (required <- at):void };
     return true

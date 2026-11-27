@@ -2613,7 +2613,7 @@ export func direct_source_using(nodes:const ExprNodes in N, selection:UInt64, us
         bulk.mode == UseResource
 }
 
-func source_aggregate_formal(interfaces:const ModuleInterfaces in I, row:UInt64,
+export func source_aggregate_formal(interfaces:const ModuleInterfaces in I, row:UInt64,
     kind:UInt8, role:UInt64, readonly:UInt8) -> bool where {const owner I} {
     if (interfaces[row].interface_kind != 0u8 || interfaces[row].entry_count != 0u64 ||
         interfaces[row].value_kind != kind || interfaces[row].owner_role != role ||

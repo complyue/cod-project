@@ -257,7 +257,13 @@ The source checker can use the completed `ParserInput.append_syntax_node` contra
 
 Both source commands accept the reduced call to unchanged `append_syntax_node`. They also bind an imported finite scalar-layout record to its writable ordinary reference formal before reading any operands. In an already demanded caller, a direct same-module function can receive that initialized record alongside ordinary array loans. The source checker follows the recorded call edge to check the receiving body and preserves the caller's actual target and owner. A readonly reference cannot supply the writable formal, and separate declared owner roles do not imply separate actual owners.
 
-The full frontend checks the `ParseResult` formal and the call to `exception_binder_width`. It now reaches the imported `parse_binding_name` call at `CallableSyntax.cod:107:10`. Executable object checking has a separate admission path.
+### Imported binding-name parser
+
+Both source commands now check the imported call to `ParserInput.parse_binding_name` in the unchanged `CallableSyntax`. The defining visit completes the bound parser, recovery, and syntax-row helper dependencies from their checked operations. The result is an independent Boolean. The contract carries possible bounds failure and fatal arithmetic separately. An unsupported or cyclic dependency leaves the contract unavailable.
+
+A direct source-preserving selection prepares the two readonly array loans, the writable syntax array, the initialized writable `ParseResult`, and the scalar operands in written order. The borrowed targets keep their exact nominal types, access and actual owners. A failed operand prevents entry. Successful stores remain visible if a later operation fails. The linked seed witness checks a qualified binding, a missing type, a full syntax array and local binding recovery.
+
+The full frontend first stops at the following `BindingSites` construction at `CallableSyntax.cod:110:17`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

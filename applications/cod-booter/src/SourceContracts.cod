@@ -8,13 +8,14 @@ using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
-    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer
+    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
+    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_indexed_u64_reader,
-    prepared_array_length_call, checked_literal_call, checked_readonly_call, readonly_indexed_byte_reader
+    prepared_parser_writer, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u64, borrowed_ref, void_result, never_result };
@@ -28,7 +29,7 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -316,7 +317,7 @@ array FunctionEffectRows[UInt64]:FunctionEffects;
 
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
-    at:UInt64, callee:UInt64, aggregate_writer:bool) -> bool
+    at:UInt64, callee:UInt64) -> bool
     where {const owner N, const owner B, const owner F, const owner V, const owner C} {
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -334,11 +335,15 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
-            NamedConstruction -> aggregate_writer && at < intrinsic (len)(cases) &&
+            NamedConstruction -> at < intrinsic (len)(cases) &&
                 facts[at].allocation_owner == no_node() &&
                 (case cases[at] of { BitsConstruction -> true; _ -> false });
-            BracedInitializer -> aggregate_writer;
-            InitializerTransfer -> aggregate_writer && names[at].kind == 0u8;
+            BracedInitializer -> true;
+            InitializerTransfer -> names[at].kind == 0u8;
+            CaseExpression -> true;
+            CaseArm -> true;
+            ConstructorCasePattern -> true;
+            CaseValueReceiver -> true;
             Conditional -> true;
             ReturningCondition -> true;
             BlockSyntax -> true;
@@ -351,7 +356,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             RangeHeader -> true;
             RangeLoop -> true;
             Call -> callee != no_node() || facts[at].kind == never_result() ||
-                checked_literal_call(views, at) || prepared_array_length_call(views, at) || checked_readonly_call(views, at);
+                checked_literal_call(views, at) || prepared_array_length_call(views, at) || checked_source_array_call(views, at);
             EmptyCall -> callee != no_node() || checked_literal_call(views, at);
             _ -> false
         };
@@ -405,8 +410,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             callee <- facts[at].call_definition;
             if ((callee != no_node() && (callee != demand[at].callee ||
                  inspect_invocation(nodes, revision, used, at, call) != OrdinaryInvocation)) ||
-                !checked_function_operation(nodes, names, facts, views, cases, at, callee,
-                    prepared_aggregate_writer(views, definition))) {
+                !checked_function_operation(nodes, names, facts, views, cases, at, callee)) {
                 (local[definition].available <- false):void
             } else {
                 event <- sites[at].event;
@@ -417,7 +421,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     } else { (local[definition].available <- false):void }
                 };
                 if (can_continue(sites, at)) {
-                    if ((checked_readonly_call(views, at) && work[at].imported_numeric_fault) ||
+                    if ((checked_source_array_call(views, at) && work[at].imported_numeric_fault) ||
                         (facts[at].kind == scalar_u64() &&
                          (case nodes[at] of {
                             Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -458,7 +462,8 @@ func apply_function_operation(operations:const ContractOperations in P, local:co
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
-            prepared_aggregate_writer(views, at) || prepared_indexed_u64_reader(views, at)) return true
+            prepared_aggregate_writer(views, at) || prepared_indexed_u64_reader(views, at) ||
+            prepared_parser_writer(views, at)) return true
     };
     return false
 }
@@ -491,6 +496,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         };
         if (prepared_aggregate_writer(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedAggregateWriter {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        };
+        if (prepared_parser_writer(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedParserWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
