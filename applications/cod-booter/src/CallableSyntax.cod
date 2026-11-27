@@ -33,6 +33,7 @@ func expected_parameter_list() -> UInt8 { return 23u8; }
 export func expected_owner_clause() -> UInt8 { return 24u8; }
 func invalid_exception_owner() -> UInt8 { return 35u8; }
 func invalid_value_parameter_owner() -> UInt8 { return 41u8; }
+func invalid_value_result_owner() -> UInt8 { return 53u8; }
 func expected_identity_reference() -> UInt8 { return 50u8; }
 
 func direct_place_head(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> bool
@@ -287,6 +288,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
     val first <- tokens[result.next].first;
     result.next <- result.next + 1u64;
     val clause_kind <- kind;
+    val explicit_value <- false;
     if (kind == result_clause_node() && result.next < past) {
         val at <- result.next;
         if (at + 1u64 < past && own_word(source, tokens[at]) && region_word(source, tokens[at + 1u64]))
@@ -305,10 +307,15 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
             result.next <- result.next + 1u64;
             (clause_kind <- exception_result_node()):void;
         } else {
-            if (ref_word(source, tokens[at])) {
+            if (val_word(source, tokens[at])) {
                 result.next <- at + 1u64;
-                (clause_kind <- ref_result_node()):void;
-            } else {};
+                (explicit_value <- true):void;
+            } else {
+                if (ref_word(source, tokens[at])) {
+                    result.next <- at + 1u64;
+                    (clause_kind <- ref_result_node()):void;
+                } else {};
+            };
         };
     } else {};
     val readonly <- kind == result_clause_node() && result.next < past && const_word(source, tokens[result.next]);
@@ -316,6 +323,10 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
     if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
     val annotation <- result.root;
     if (clause_kind == result_clause_node() && result.next < past && in_word(source, tokens[result.next])) {
+        if (explicit_value) {
+            result.diagnostic <- invalid_value_result_owner();
+            return false
+        };
         (clause_kind <- ref_result_node()):void;
     } else {};
     if (clause_kind == ref_result_node()) {
@@ -351,6 +362,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
             } else {
                 append_syntax_node(nodes, result, first, end, make ValueResult {
                     previous <- previous_item; type_name <- selected_type; readonly <- readonly;
+                    explicit_value <- explicit_value;
                 });
             };
         };

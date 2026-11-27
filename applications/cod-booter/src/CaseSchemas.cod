@@ -22,19 +22,21 @@ using "./ParserStorage.cod" {
     SequenceEntry, inspect_sequence_entry, SequenceSyntax { ArgumentSequence, BlockSequence, CaseReceiverSequence, FormalSequence },
     FieldSelectionSites, inspect_field_selection, name_syntax, NameSyntax { OrdinaryName },
     CallableSites, inspect_callable, CallableSyntax { ModuleCallable, LexicalCallable },
-    SignatureSites, inspect_signature, find_signature_clause, is_function, SignatureSyntax { SignatureHead }
+    SignatureSites, inspect_signature, find_signature_clause, explicit_value_result_type, is_function,
+    SignatureSyntax { SignatureHead }, completion_operand, completion_syntax,
+    CompletionSyntax { ReturnCompletion }
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
-    owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable
+    owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable, local_sum_value_type
 };
-using "./ModuleExports.cod" { SelectedExports, array_export, record_export };
+using "./ModuleExports.cod" { SelectedExports, array_export, record_export, callable_export, ordinary_callable_shape };
 using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, type_module, type_identity };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
     AggregateStorage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord },
-    SumInterfacePayload { ConstructorField }
+    SumInterfacePayload { ConstructorField }, ArrayReadCompletion { NoArrayRead }
 };
 
 export data ConstructorCaseFact =
@@ -43,6 +45,7 @@ export data ConstructorCaseFact =
         expression:UInt64; array_site:UInt64; index:UInt64; owner_site:UInt64; array_module:UInt64; array_type:UInt64; value_type:DeclaredType; count:UInt64;
     } |
     DirectCaseSubject { expression:UInt64; formal:UInt64; count:UInt64; } |
+    ValueCaseSubject { expression:UInt64; value_type:DeclaredType; count:UInt64; } |
     FieldLoanCaseSubject { expression:UInt64; receiver:UInt64; count:UInt64; } |
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
@@ -55,6 +58,7 @@ export data ConstructorCaseFact =
     CaseSumReceipt { receipt:UInt64; arm:UInt64; value_type:DeclaredType; } |
     CaseSumProjection { receiver:UInt64; field:UInt64; receipt:UInt64; arm:UInt64; record:DeclaredType; value_type:DeclaredType; } |
     LocalSumConstruction { transfer:UInt64; sum:UInt64; arm:UInt64; fields:UInt64; } |
+    SumValueResult { value_type:DeclaredType; } |
     IndexedProductLoan {
         consumer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_module:UInt64; array_type:UInt64;
         element:DeclaredType; index_binds_storage:bool; writable:bool;
@@ -834,6 +838,41 @@ func prepare_borrowed_field_sum_case(source:const SourceBytes in S, nodes:const 
     return true
 }
 
+func prepare_value_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:UInt64, choice:const CaseSites in C, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner S, const owner N, const owner B, const owner E, owner W,
+        const owner G, const owner A, owner F, const owner C, owner R} {
+    val subject <- choice.subject;
+    ref invocation = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, subject, invocation) != DirectInvocationReady ||
+        names[invocation.callee].kind != ordinary_selection()) return true;
+    val site <- names[invocation.callee].declaration;
+    if (site >= used || selected[site].kind != callable_export() ||
+        selected[site].shape != ordinary_callable_shape() ||
+        selected[site].dependency_module != selected[site].origin_module) return true;
+    val header <- find_interface(interfaces, published, selected[site].origin_module, selected[site].identity);
+    # This reads the published result schema. Argument and call completion
+    # checks still have to produce that exact independent value.
+    if (header >= published || interfaces[header].result_kind != sum_type() ||
+        interfaces[header].array_read_completion == NoArrayRead) return true;
+    ref type = make DeclaredType {
+        kind <- sum_type(); defining_module <- interfaces[header].type_module; identity <- interfaces[header].type_identity
+    };
+    if (!case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, subject, unproved_sum_subject());
+    ref count = make UInt64 { sum_case_extent(nodes, work, interfaces, published, type, used, revision) };
+    if (count == 0u64) return case_problem(report, subject, unproved_sum_subject());
+    if (!prepare_case_arms(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, subject, choice.items, type, used, revision, count, report))
+        return false;
+    facts[at] <- make ValueCaseSubject { expression <- subject; value_type <- type; count <- count };
+    work[at].case_schema_prepared <- true;
+    return true
+}
+
 func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
@@ -844,6 +883,9 @@ func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
     if (work[at].case_schema_prepared) return true;
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
     if (!inspect_case(nodes, revision, used, at, choice)) return true;
+    if (!prepare_value_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
+    if (work[at].case_schema_prepared) return true;
     if (!prepare_borrowed_field_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
         interfaces, published, aggregate, facts, at, choice, used, revision, report)) return false;
     if (work[at].case_schema_prepared) return true;
@@ -1744,7 +1786,10 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
+    val type_at <- no_node();
     for (at in 0u64 .. used) {
+        type_at <- explicit_value_result_type(nodes, revision, used, at);
+        if (type_at < used && names[type_at].kind == sum_type()) return true;
         if (inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal && formal.mode == ReferenceFormal &&
             inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
             binding.owner_name < used && binding.target_type < used &&
@@ -1773,6 +1818,24 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
     return false
 }
 
+func prepare_sum_value_result(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+    work:const NameWork in W, interfaces:const ModuleInterfaces in G, published:UInt64,
+    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, callable:const CallableSites in C,
+    definition:UInt64, used:UInt64, revision:UInt64, first:UInt64 in P, report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, const owner G,
+        const owner A, owner F, const owner C, owner P, owner R} {
+    val annotation <- local_sum_value_type(nodes, names, callable.signature, revision, used);
+    if (annotation == no_node()) return true;
+    ref type = make DeclaredType { kind <- sum_type(); defining_module <- 0u64; identity <- no_node(); };
+    if (callable.function_form || names[definition].declaration != definition || work[definition].next_method != no_node() ||
+        !describe_type(nodes, names, selected, annotation, 0u64, revision, used, type) ||
+        type.kind != sum_type() || !case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, annotation, unsupported_bits_construction());
+    facts[definition] <- make SumValueResult { value_type <- type };
+    if (first == no_node()) { (first <- definition):void };
+    return true
+}
+
 export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
@@ -1786,6 +1849,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     val mode <- ModuleCallable;
     for (at in 0u64 .. used) {
         mode <- inspect_callable(nodes, revision, used, at, callable);
+        if (mode == ModuleCallable &&
+            !prepare_sum_value_result(nodes, names, selected, work, interfaces, published, aggregate, facts,
+                callable, at, used, revision, first, report)) return false;
         if (mode == ModuleCallable || mode == LexicalCallable) {
             prepare_case_loan_formals(nodes, names, selected, interfaces, published, aggregate, work,
                 facts, prepared_writable_product_formal(views, at),
@@ -1806,7 +1872,23 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     val transfer <- PlaceTransfer;
     ref element = make DeclaredType { kind <- record_type(); defining_module <- 0u64; identity <- no_node() };
     val sum <- false;
+    ref returned = make UInt64 { no_node() };
+    val scope <- no_node();
     for (at in 0u64 .. used) {
+        if (completion_syntax(nodes, at) == ReturnCompletion &&
+            completion_operand(nodes, revision, used, at, returned) && returned < at) {
+            scope <- names[at].scope;
+            if (scope < used) {
+                case facts[scope] of {
+                    SumValueResult { val type <- value_type; } -> {
+                        if (inspect_construction(nodes, revision, at, returned, construction) == BracedConstruction &&
+                            !prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+                                returned, at, type, used, revision, report)) return false
+                    };
+                    _ -> {}
+                }
+            }
+        };
         case views[at] of {
             PreparedArrayConstruction {
                 val fill <-; val kind <- element; val module <- element_module; val identity <- element_identity;

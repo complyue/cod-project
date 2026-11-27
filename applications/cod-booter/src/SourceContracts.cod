@@ -20,7 +20,7 @@ using "./NativeDeclarations.cod" {
     prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result };
+using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -428,7 +428,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             !is_scope_block(nodes, callable.body) &&
             demand[definition].declared_failure == no_node() && facts[definition].reception != borrowed_ref()) {
             result <- facts[definition].kind;
-            if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64() || result == declared_scalar(enum_type())) &&
+            if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) ||
+                 result == scalar_u64() || result == declared_scalar(enum_type()) || result == independent_sum_bits()) &&
                 !can_miss_return(nodes, facts, sites, definition, revision, used)) {
                 if (readonly_indexed_byte_reader(views, definition)) {
                     # The earlier completion pass already proved this leaf.

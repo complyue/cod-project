@@ -63,7 +63,7 @@ using "./ParserStorage.cod" HereSyntax { HereReady };
 using "./ParserStorage.cod" NameSyntax { NotAName, OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" {
     ExprNodes, NodeId, len as syntax_len, DeclarationSites, inspect_declaration, CallableSites, inspect_callable,
-    SignatureSites, inspect_signature, find_signature_clause, ModuleSelectionSites,
+    SignatureSites, inspect_signature, find_signature_clause, explicit_value_result_type, ModuleSelectionSites,
         inspect_module_selection,
     DeclarationSyntax, formal_variadic_at,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, formal_binding_is_fixed, is_scope_block,
@@ -2006,6 +2006,30 @@ func resolve_assertion(source:const SourceBytes in S, nodes:const ExprNodes in N
     resolve_expression(source, nodes, bindings, work, state, operand.index);
 }
 
+export func local_sum_value_type(nodes:const ExprNodes in N, bindings:const NameBindings in B,
+    signature:UInt64, revision:UInt64, used:UInt64) -> UInt64 where {const owner N, const owner B} {
+    ref result = make UInt64 { no_node() };
+    if (!find_signature_clause(nodes, revision, used, signature, ValueResultClause, result)) return no_node();
+    val annotation <- explicit_value_result_type(nodes, revision, used, result);
+    return if (annotation < used && bindings[annotation].kind == sum_type()) { annotation } else { no_node() }
+}
+
+func resolve_return_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:NameWork in W, state:NameState in R, operand:UInt64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val previous_input <- state.inline_field_input;
+    if (state.source_only) {
+        ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+        if (inspect_callable(nodes, state.syntax_revision, state.syntax_used, state.scope_node, callable) == ModuleCallable &&
+            !callable.function_form &&
+            local_sum_value_type(nodes, bindings, callable.signature, state.syntax_revision, state.syntax_used) != no_node()) {
+            (state.inline_field_input <- operand):void
+        }
+    };
+    resolve_expression(source, nodes, bindings, work, state, operand);
+    (state.inline_field_input <- previous_input):void
+}
+
 func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                          work:NameWork in W, state:NameState in R, at:UInt64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
@@ -2256,7 +2280,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                         reject_name(state, at, invalid_module_tree());
                         return;
                     };
-                    resolve_expression(source, nodes, bindings, work, state, value.index);
+                    resolve_return_operand(source, nodes, bindings, work, state, value.index);
                     return;
                 };
                 (ReturnVoid) -> { return; };

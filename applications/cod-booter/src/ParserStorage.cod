@@ -154,7 +154,7 @@ export data ExprPayload =
     | HereFormal { previous:NodeLink; signature:NodeId; }
     | OwnerConstraint { previous:NodeLink; declared_owner:NodeId; readonly:bool; }
     | TypeConstraint { previous:NodeId; type_name:NodeId; }
-    | ValueResult { previous:NodeId; type_name:NodeId; readonly:bool; }
+    | ValueResult { previous:NodeId; type_name:NodeId; readonly:bool; explicit_value:bool; }
     | BorrowedResult { previous:NodeId; owner_qualified_type:NodeId; readonly:bool; }
     | ExceptionResult { previous:NodeId; type_name:NodeId; readonly:bool; }
     | OwningRegionResult { previous:NodeId; schema:NodeLink; readonly:bool; }
@@ -1420,6 +1420,22 @@ export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:UInt64,
             }
         };
     };
+}
+
+export func explicit_value_result_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64)
+    -> UInt64 where {const owner N} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            ValueResult { val previous <-; val type_name <-; val explicit_value <-; } -> {
+                if (!explicit_value || !published_syntax_id(nodes, revision, at, previous) ||
+                    !published_syntax_id(nodes, revision, at, type_name)) return no_node();
+                type_name.index
+            };
+            _ -> no_node()
+        };
+        Vacant -> no_node()
+    }
 }
 
 export enum SignatureSyntax:UInt8 {

@@ -123,6 +123,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a call can supply only one trailing here body\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 41)
         fputs(": error: a val parameter has independent storage and cannot declare 'in'\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 53)
+        fputs(": error: a val result has independent storage and cannot declare 'in'\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 42)
         fputs(": error: expected ']' after the subscript expression\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 43)

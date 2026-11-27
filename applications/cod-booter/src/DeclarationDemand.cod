@@ -21,7 +21,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -269,6 +269,12 @@ export func discover_declaration_demand(
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
+        if (site < intrinsic (len)(cases) &&
+            (case cases[site] of { SumValueResult -> true; _ -> false }) &&
+            !require_receipt_body(demand, site, count, receipt_count, used)) {
+            problem <- site;
+            return false
+        };
         checked_call <- links[site].imported_interface != no_node() &&
             (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
              (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||

@@ -115,9 +115,9 @@ using "./AggregateSchemas.cod" AggregateFacts;
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts, prepare_imported_product_loan,
-    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
+    ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, InlineProductField, LocalSumConstruction,
+        InlineProductFormal, InlineProductField, LocalSumConstruction, SumValueResult,
         IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
@@ -236,7 +236,7 @@ func source_sum_target() -> UInt8 { return 15u8 }
 func received_product() -> UInt8 { return 16u8 }
 func received_sum() -> UInt8 { return 17u8 }
 func source_product_loan() -> UInt8 { return 18u8 }
-func independent_sum_bits() -> UInt8 { return 20u8 }
+export func independent_sum_bits() -> UInt8 { return 20u8 }
 func independent_product_bits() -> UInt8 { return 21u8 }
 
 func nominal_source_loan(kind:UInt8) -> bool {
@@ -772,9 +772,10 @@ func check_borrowed_result(nodes:const ExprNodes in N, names:const NameBindings 
 
 func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                              facts:OperandFacts in F, selected:const SelectedExports in E,
+                             cases:const ConstructorCaseFacts in C,
                              report:OperandCheckResult in R, source_only:bool, definition:UInt64,
                                  first:UInt64, used:UInt64, revision:UInt64) -> void
-    where {const owner N, const owner B, const owner L, owner F, const owner E, owner R} {
+    where {const owner N, const owner B, const owner L, owner F, const owner E, const owner C, owner R} {
     val clause <- first;
     val annotation <- no_node();
     val kind <- 0u8;
@@ -802,13 +803,27 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
                 } else {
                     kind <- if (source_only) { source_scalar_kind(names[annotation].kind) }
                         else { declared_scalar(names[annotation].kind) };
+                    if (kind != 0u8) {
+                        set_fact(facts, definition, kind, independent_value(), no_node(),
+                            nominal_identity(names, annotation), 0u8)
+                    } else {
+                        if (source_only && definition < intrinsic (len)(cases)) {
+                            case cases[definition] of {
+                                SumValueResult { val type <- value_type; } -> {
+                                    kind <- independent_sum_bits();
+                                    set_fact(facts, definition, kind, independent_value(),
+                                        no_node(), type.identity, 0u8);
+                                    (facts[definition].identity_module <- type.defining_module):void
+                                };
+                                _ -> {}
+                            }
+                        };
+                    };
                     if (kind == 0u8) {
                         report.node <- annotation;
                         report.diagnostic <- unproved_result_contract();
                         return
-                    };
-                    set_fact(facts, definition, kind, independent_value(), no_node(),
-                        nominal_identity(names, annotation), 0u8)
+                    }
                 }
             };
         };
@@ -851,7 +866,7 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     check_formals(nodes, names, links, facts, views, selected, cases, source_only, report, definition,
         sites.parameter_tail, used, revision);
     if (report.diagnostic != 0u8) return;
-    check_signature_clauses(nodes, names, links, facts, selected, report, source_only, definition,
+    check_signature_clauses(nodes, names, links, facts, selected, cases, report, source_only, definition,
         links[head].next, used, revision);
     if (report.diagnostic != 0u8 || facts[definition].kind != 0u8) return;
     ref value = make UInt64 { no_node() };
@@ -2569,7 +2584,13 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                     (returned_kind == enum_type() && links[at].imported_array_read_completion != NoArrayRead)) {
                     diagnostic <- remember_native_result(facts, at, enum_type(), links[at].imported_type_module,
                         links[at].imported_type_identity)
-                } else { set_result(facts, at, returned_kind) };
+                } else {
+                    if (returned_kind == independent_sum_bits()) {
+                        set_fact(facts, at, returned_kind, independent_value(), no_node(),
+                            links[at].imported_type_identity, 0u8);
+                        (facts[at].identity_module <- links[at].imported_type_module):void
+                    } else { set_result(facts, at, returned_kind) }
+                };
             };
             facts[at].loans_scoped_aggregate <- scoped_call;
             facts[at].loans_array_slot <- slot_call;
@@ -2770,7 +2791,9 @@ func remember_imported_call(links:NameWork in L, contracts:const ModuleInterface
     links[at].imported_function <- contracts[header].native_function;
     val result <- contracts[header].result_kind;
     links[at].imported_kind <- if (declared_result) {
-        if (result == builtin_void()) { void_result() } else { source_scalar_kind(result) }
+        if (result == builtin_void()) { void_result() } else {
+            if (result == sum_type()) { independent_sum_bits() } else { source_scalar_kind(result) }
+        }
     } else { result };
     if (!declared_result && result == scalar_enum()) {
         links[at].imported_type_module <- contracts[header].type_module;
@@ -2951,11 +2974,17 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
         contracts[header].failure_checked != 0u8 ||
         (contracts[header].array_read_completion != CheckedArrayRead &&
          contracts[header].array_read_completion != ArrayReadMayFailBounds) ||
-        (!source_call_scalar(result) && result != builtin_void() && result != enum_type())) return no_node();
+        (!source_call_scalar(result) && result != builtin_void() && result != enum_type() && result != sum_type())) return no_node();
     if (result == enum_type()) {
         if (!published_enum_domain(contracts, published, header)) return no_node()
     } else {
-        if (contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
+        if (result == sum_type()) {
+            if (!has_nominal_identity(contracts[header]) ||
+                checked_aggregate_storage(contracts, published, contracts[header].type_module,
+                    contracts[header].type_identity, sum_type()) != CoDBitsAggregate) return no_node()
+        } else {
+            if (contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
+        }
     };
     val past <- header + 1u64 + arity;
     val handle <- false;
@@ -2988,13 +3017,15 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
                     (contracts[row].target_readonly == 0u8 && contracts[row].owner_readonly != 0u8) ||
                     contracts[row].native_reception != 0u8 || contracts[row].native_passes_owner != 0u8 ||
                     contracts[row].source_allocates) return no_node();
+                if (result == sum_type() &&
+                    (contracts[row].target_readonly != 1u8 || contracts[row].owner_readonly != 1u8)) return no_node();
                 array <- true;
                 (output <- output || contracts[row].target_readonly == 0u8):void
             } else {
                 if (!source_scalar_value_row(contracts[row], kind) || contracts[row].source_allocates)
                     return no_node();
                 if (kind == enum_type()) {
-                    if (!published_enum_domain(contracts, published, row)) return no_node()
+                    if (result == sum_type() || !published_enum_domain(contracts, published, row)) return no_node()
                 } else {
                     if (!source_call_scalar(kind) || contracts[row].type_module != 0u64 ||
                         contracts[row].type_identity != 0u64) return no_node()
@@ -3002,6 +3033,7 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
             } }
         }
     };
+    if (result == sum_type()) return if (array && !handle && !record && !output) { past } else { no_node() };
     if (record && (!handle || !output)) return no_node();
     return if (array && (handle || (output && result == builtin_void()))) { past } else { no_node() }
 }
@@ -4583,7 +4615,7 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
     if (mode == AnyCaseTarget || mode == NullCaseTarget) return 0u8;
     val kind <- facts[subject].kind;
     if (kind == never_result()) return 0u8;
-    if (kind == source_sum_target()) {
+    if (kind == source_sum_target() || kind == independent_sum_bits()) {
         if ((mode != NamedCaseMember && mode != ConstructorCaseTarget) ||
             pattern >= intrinsic (len)(cases)) return unsupported_case_pattern();
         return case cases[pattern] of {
@@ -4736,7 +4768,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     val kind <- facts[subject].kind;
     val completed <- kind != never_result();
     if (completed && kind != scalar_bool() && kind != scalar_enum() &&
-        kind != null_literal() && kind != source_sum_target())
+        kind != null_literal() && kind != source_sum_target() && kind != independent_sum_bits())
         return operand_problem(report, at, unsupported_case_subject());
     if (kind == scalar_enum() && facts[subject].identity_module != 0u64)
         return operand_problem(report, at, unsupported_case_subject());
@@ -4744,9 +4776,16 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     ref coverage = make CaseCoverage {
         total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at; exclusions <- no_node();
     };
-    if (kind == source_sum_target()) {
+    if (kind == source_sum_target() || kind == independent_sum_bits()) {
         if (at >= intrinsic (len)(cases)) return operand_problem(report, at, invalid_operand_tree());
         case cases[at] of {
+            ValueCaseSubject { val expression <-; val type <- value_type; val count <-; } -> {
+                if (expression != subject || count == 0u64 || kind != independent_sum_bits() || borrowed ||
+                    facts[subject].identity != type.identity || facts[subject].identity_module != type.defining_module)
+                    return operand_problem(report, at, invalid_operand_tree());
+                coverage.total <- count;
+                (coverage.remaining <- count):void
+            };
             IndexedCaseSubject { val expression <- expression; val count <- count; } -> {
                 if (expression != subject || count == 0u64)
                     return operand_problem(report, at, invalid_operand_tree());
@@ -5019,6 +5058,12 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
         return 0u8;
     } else {};
     if (value == no_node()) return wrong_return_type();
+    if (facts[scope].kind == independent_sum_bits()) {
+        return if (facts[value].kind == independent_sum_bits() && facts[value].reception == independent_value() &&
+            facts[value].identity == facts[scope].identity && facts[value].identity_module == facts[scope].identity_module) {
+            0u8
+        } else { wrong_return_type() }
+    };
     if (facts[scope].kind == product_kind()) {
         if (!same_operand_type(facts, value, scope) || facts[value].reception != borrowed_ref())
             return wrong_return_type();

@@ -77,6 +77,7 @@ using "./NameResolution.cod" {
     has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_type_kind, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_string, builtin_c_string, text_type,
     variadic_method_formal, unprovided_callable_promise, unsupported_ordinary_construction, unsupported_reference_slot_formal,
+    local_sum_value_type,
 };
 using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
@@ -4697,8 +4698,11 @@ func source_handle_signature(
             ThrowsSignatureClause, failure) || failure != no_node()) return (NoSourceHandle:SourceHandleProfile)
     };
     ref result = make UInt64 { no_node() };
-    val kind <- declared_call_result(nodes, names, work, selected, form, used, revision, result);
-    if (!source_call_scalar(kind) && kind != builtin_void() && (!array_procedure || kind != enum_type()))
+    val scalar_result <- declared_call_result(nodes, names, work, selected, form, used, revision, result);
+    val sum_value <- array_procedure && scalar_result == 0u8 &&
+        local_sum_value_type(nodes, names, sites.signature, revision, used) != no_node();
+    val kind <- if (sum_value) { sum_type() } else { scalar_result };
+    if (!sum_value && !source_call_scalar(kind) && kind != builtin_void() && (!array_procedure || kind != enum_type()))
         return (NoSourceHandle:SourceHandleProfile);
     ref head = make UInt64 { no_node() };
     ref parameter = make UInt64 { no_node() };
@@ -4723,6 +4727,7 @@ func source_handle_signature(
         if (parameter == no_node()) {
             if (!array_procedure) return if (has_handle) { (SourceHandle:SourceHandleProfile) } else { (NoSourceHandle:SourceHandleProfile) };
             if (!has_array) return (NoSourceHandle:SourceHandleProfile);
+            if (sum_value) return (ArrayProcedure:SourceHandleProfile);
             if (kind == builtin_u8() && has_output) {
                 return if (has_handle && has_record && has_readonly_array) {
                     (MixedRecordProcedure:SourceHandleProfile)
@@ -4735,7 +4740,8 @@ func source_handle_signature(
             return (NoSourceHandle:SourceHandleProfile)
         };
         if (!typed_parameter(nodes, revision, used, parameter, array_procedure, formal, binding)) return (NoSourceHandle:SourceHandleProfile);
-        if (array_procedure && kind == enum_type() && !has_handle && formal.mode != HandleFormal)
+        if ((sum_value && formal.mode == HandleFormal) ||
+            (array_procedure && kind == enum_type() && !has_handle && formal.mode != HandleFormal))
             return (NoSourceHandle:SourceHandleProfile);
         if (formal.mode == HandleFormal) {
             if (source_here_supplier(nodes, names, selected, parameter, used,
@@ -4754,6 +4760,8 @@ func source_handle_signature(
                     (has_record <- true):void
                 } else {
                     if (target_kind != array_type() && imported != array_export()) return (NoSourceHandle:SourceHandleProfile);
+                    if (sum_value && (!binding.readonly || owner_kind != ReadonlyOwnerConstraint))
+                        return (NoSourceHandle:SourceHandleProfile);
                     if (!binding.readonly && owner_kind != WritableOwnerConstraint) return (NoSourceHandle:SourceHandleProfile);
                     if (!binding.readonly && kind != enum_type() && kind != builtin_u8() &&
                         (kind != builtin_void() || target_kind != array_type() ||
@@ -4768,7 +4776,7 @@ func source_handle_signature(
                 parameter_kind <- native_value_kind(names, selected, binding.target_type);
                 if ((formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) ||
                     binding.owner_name != no_node() ||
-                    (!source_call_scalar(parameter_kind) && (!array_procedure || parameter_kind != enum_type())))
+                    (!source_call_scalar(parameter_kind) && (sum_value || !array_procedure || parameter_kind != enum_type())))
                     return (NoSourceHandle:SourceHandleProfile)
             }
         };
@@ -4843,6 +4851,10 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             shape != CEntry)
             return no_node();
         (result_kind <- declared_call_result(nodes, names, work, selected, form, used, revision, result_marker)):void;
+        if (source_array_reader && shape == ModuleCallable && result_kind == 0u8) {
+            result_marker <- local_sum_value_type(nodes, names, callable.signature, revision, used);
+            if (result_marker != no_node()) { (result_kind <- sum_type()):void }
+        };
     } else {};
     if (kind == c_operation() || kind == c_entry()) {
         name <- definition_name(nodes, revision, used, form);
@@ -4903,7 +4915,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             contracts[count].source_writer <- source_writer;
             contracts[count].scalar_source_body <- scalar_predicate;
             if (source_array_reader || scalar_predicate) { (contracts[count].failure_identity <- no_node()):void };
-            if (result_kind == enum_type()) {
+            if (result_kind == enum_type() || result_kind == sum_type()) {
                 contracts[count].type_module <- type_module(names, selected, result_marker, defining_module);
                 (contracts[count].type_identity <- type_identity(names, selected, result_marker)):void;
             } else {};
