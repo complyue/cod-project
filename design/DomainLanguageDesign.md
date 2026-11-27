@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 234
+Discussion revision: 235
 
 Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r235 the [construction terminology](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) applies to sum payloads under D-07-SUM-CONSTRUCTORS/P-601/P-602. Constructor-family selection and the r234 positional, labeled and fieldless forms are continued.
 
 At r234 the [constructor and sum decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) qualifies [positional and labeled sum payloads](#positional-and-labeled-sum-payloads), their case reception and the fieldless construction shorthand under D-07-SUM-CONSTRUCTORS/D-07-CASE, P-601/P-602/P-625/P-626. The r233 bracket syntax and existing constructor-family, placement and case rules continue.
 
@@ -435,7 +437,7 @@ ref bounds:Limits in r = make Bounds in r { high <- 9; low <- 3 }
 
 `Maybe[T]` is a value-item container. Its positional `Just { T }` stores one `T` by value. `Nothing {}` stores no item. For example, construct a `Just` from an `Int64` cell holding 7, then write 13 to the source cell. Receiving `Just { val x }` yields 7. `Maybe[ref Node]` and `Maybe[ptr Node]` are invalid type applications. Borrowing a `Maybe[T]` object or an addressable field follows the ordinary owner and access rules. Instantiation supplies no new way to transfer a reference-bearing ADT. [Value-item contract](CollectionsAndBuiltinContainers.md#container-pointer-results)
 
-For direct positional construction supply one operand per field, in declaration order. Evaluate each reached operand once from left to right. A singleton needs no trailing comma. Labeled initialization retains its field writes, ordinary initializer blocks and readiness rules. The declaration determines how to interpret a single expression in braces. Both forms require an empty initializer family for the selected alternative in the current method world. Parentheses invoke a constructor method. A user-defined initializer may validate or transform its input before it publishes the alternative.
+For direct positional construction supply one operand per field, in declaration order. Evaluate each reached operand once from left to right. A singleton needs no trailing comma. Labeled initialization retains its field writes, ordinary initializer blocks and readiness rules. The declaration determines how to interpret a single expression in braces. Positional and labeled braces both request [make by init](ConstructionAndAcquisition.md#make-by-ctor-and-make-by-init), which requires zero visible ctor overloads for the selected alternative in the current method world. Parentheses request make by ctor and invoke the selected method. A user-defined initializer may validate or transform its input before it publishes the alternative.
 
 Case reception reads the stored fields after matching the tag. For example, the two `Limits` arms can both return the lower limit:
 
@@ -448,7 +450,7 @@ return case limits of {
 
 A positional receiving spec accounts for each position, with `_` skipping an unneeded field. A labeled spec can select any subset in any written order. The existing tag-only head, such as `Just -> found()`, needs no payload spec. A one-field positional arm can bind `Just { val x } -> x`. Reject a label on `Just`, a positional list on `Bounds`, and a mix of selectors and positions within one spec. Apply the same shape check to direct initialization. Preserve ordinary transfer, target selection, owner, access and readiness for each field. Matching reads the stored result even when a constructor method computed it.
 
-For a fieldless alternative with no initializer overload in the selected family, `make Nothing in r` and `make Nothing in r {}` complete the same tagged object in `r`, with the same allocation and failure behavior. The ordinary lexical placement follows the same rule. A generic use still needs a determined nominal sum instance. A constructor-backed alternative requires its selected initializer to complete, even when it has no fields. [Typed reservation and completion](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction)
+For a fieldless alternative with no ctor overload in the selected family, `make Nothing in r` is shorthand for make by init with empty braces. It and `make Nothing in r {}` complete the same tagged object in `r`, with the same allocation and failure behavior. The ordinary lexical placement follows the same rule. A generic use still needs a determined nominal sum instance. A constructor-backed alternative requires its selected initializer to complete, even when it has no fields. [Typed reservation and completion](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction)
 
 #### Sum object construction and reference storage
 

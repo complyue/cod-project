@@ -13,6 +13,8 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
+Guide revision 21 applies the [construction terminology](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) to the shipment example. Its result and owner follow the existing guide r20 contract.
+
 Guide revision 20 adds [contextual numeric literals](#write-numeric-literals-in-context) under [D-11-LITERAL-DEFAULTS](../design/DesignAuthorityRegistry.md#d-11-literal-defaults). Guide revision 19 distinguishes [receiver-family lookup](../design/DomainLanguageDesign.md#how-receiver-dispatch-works) from [associated callable names](#make-module-boundaries-express-intent) under [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics). Guide revision 18 links the [DBMR database service guide](BuildingADatabaseServiceInCoD.md) from the stock ownership example. Revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
 to [ASCII members in a byte scanner](#ascii-members-in-a-byte-scanner). Revision 13 applies the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125)
 to [tariff dispatch](#put-type-and-value-specializations-in-one-method-group) and [method arm boundaries](#use-canonical-source-form).
@@ -71,8 +73,7 @@ func sample_count() -> u64 {
 }
 ```
 
-The result of `sample_count()` is `3u64`. No initializer overload is declared for `Dispatched`, so
-the braced construction establishes its payload directly. With no contextual owner, this `make`
+The result of `sample_count()` is `3u64`. This is **make by init**. The braces establish the payload directly, which is allowed because `Dispatched` has no ctor overload. With no contextual owner, this `make`
 uses the current full lexical scope. The query borrows that live target with readonly access and
 returns independent bits. The object can therefore finish its lifetime when `sample_count` exits
 without invalidating the returned count.
@@ -87,9 +88,7 @@ would instead require callers to maintain their relationship. If every alternati
 independent information, a product with an appropriate discriminant can express that different
 intent. Do not introduce a sum merely to rename a Boolean.
 
-Construction names the selected alternative: `make Dispatched`, not `make Shipment`. Once a
-constructor has initializer overloads, use its initializer contract; direct field writes cannot
-bypass it. This matters when a domain constructor validates information before publishing an object.
+Construction names the selected alternative, here `Dispatched`. If its author supplies a ctor taking a carton count, the call becomes `make Dispatched(3u64)` (**make by ctor**). The ctor then validates and initializes the shipment before publication. [Construction terminology](../design/ConstructionAndAcquisition.md#make-by-ctor-and-make-by-init)
 
 A guard runs after its pattern's receiving operations. Receive into arm-local variables when the
 guard may decline; move writes that should occur only on acceptance into the body. A false guard
