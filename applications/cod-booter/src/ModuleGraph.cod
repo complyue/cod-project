@@ -614,7 +614,7 @@ func prepare_graph_source_operands(source:const SourceBytes in S, nodes:const Ex
         return false
     };
     if (!check_declared_expressions(source, nodes, names, selected, work, spellings, interfaces,
-                                    interface_count, used, result.frontend.tree.revision, expressions)) {
+                                    interface_count, used, result.frontend.tree.revision, first_case, expressions)) {
         binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
         return false;
     } else {};
@@ -1447,7 +1447,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_installation <- no_node();
             case_schema_prepared <- false; declaring_sum <- no_node();
             enclosing_case_arm <- no_node(); arm_case <- no_node();
-            sum_loan_formals <- false; array_construction <- false; repeated_product_transfer <- false;
+            sum_loan_formals <- false; array_construction <- false; repeated_indexed_initializer <- false;
             inline_sum_initializer <- false;
             selected_constructor <- false; selected_aggregate_writer <- no_node();
             product_type_diagnostic <- 0u8; product_type_site <- no_node();

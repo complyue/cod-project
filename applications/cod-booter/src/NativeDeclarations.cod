@@ -1945,9 +1945,7 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
         }
     };
     val imported_sum <- kind == sum_type() && element_module != 0u64;
-    if (placement == no_node() && (owner_site >= used ||
-        (!imported_sum && kind != builtin_u8() && kind != builtin_u64() &&
-         kind != builtin_bool() && kind != record_type()))) {
+    if (placement == no_node() && (owner_site >= used || kind == 0u8)) {
         reject_declaration(report, at, unsupported_ordinary_construction());
         return false
     };

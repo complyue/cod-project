@@ -337,6 +337,13 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     };
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     if (inspect_field_selection(nodes, revision, used, at, selection)) {
+        # Indexed fields have a bound result type from the field planner.
+        if (work[at].value_kind != 0u8) {
+            result.kind <- work[at].value_kind;
+            result.defining_module <- work[at].value_module;
+            result.identity <- work[at].value_identity;
+            return true
+        };
         if (!trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, selection.receiver, used, revision, result) ||
             result.kind != record_type()) return false;
         return describe_record_field(source, nodes, names, selected, work, spellings, intrinsic (len)(spellings), interfaces,
@@ -480,7 +487,7 @@ func bind_enum_code(nodes:const ExprNodes in N, names:NameBindings in B, work:Na
     return missing_enum_member()
 }
 
-func remember_type(work:NameWork in W, at:UInt64, type:const DeclaredType in T) -> void
+export func remember_type(work:NameWork in W, at:UInt64, type:const DeclaredType in T) -> void
     where {owner W, const owner T} {
     work[at].value_kind <- type.kind;
     work[at].value_module <- type.defining_module;
@@ -757,17 +764,19 @@ func check_place_installation(source:const SourceBytes in S, nodes:const ExprNod
 export func check_declared_expressions(source:const SourceBytes in S, nodes:const ExprNodes in N, names:NameBindings in B,
                                        selected:const SelectedExports in E, work:NameWork in W,
                                        spellings:const SourceBytes in P, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
-                                       used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
-    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner R} {
+                                       used:UInt64, revision:UInt64, first_case:UInt64 in F, report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, owner B, const owner E, owner W, const owner P, const owner I, owner F, owner R} {
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     ref assertion = make AssertionSites { operand <- no_node(); annotation <- no_node(); colon <- 0u64; };
     ref choice = make CaseSites { subject <- no_node(); items <- no_node(); };
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node();
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64; };
     val place_operation <- PlaceRebind;
+    val subject <- no_node();
     for (at in 0u64 .. used) {
         if (inspect_local_binding(nodes, revision, used, at, local) && local.mode != ExceptionLocal &&
             !check_text_receiver(nodes, names, local, used, revision, report)) return false;
@@ -778,8 +787,17 @@ export func check_declared_expressions(source:const SourceBytes in S, nodes:cons
                                      construction.contents, construction.placement, used, revision, report)) return false;
         if (inspect_type_assertion(nodes, revision, used, at, assertion) &&
             !check_type_assertion(source, nodes, names, selected, work, spellings, interfaces, interface_count, at, used, revision, assertion, report)) return false;
-        if (!work[at].case_schema_prepared && inspect_case(nodes, revision, used, at, choice) &&
-            !check_case_declaration(source, nodes, names, selected, work, spellings, interfaces, interface_count, at, used, revision, choice, report)) return false;
+        if (!work[at].case_schema_prepared && inspect_case(nodes, revision, used, at, choice)) {
+            if (!check_case_declaration(source, nodes, names, selected, work, spellings,
+                interfaces, interface_count, at, used, revision, choice, report)) return false;
+            subject <- ungrouped(nodes, revision, used, choice.subject);
+            if (subject < at && work[subject].value_kind != 0u8 &&
+                inspect_field_selection(nodes, revision, at, subject, field)) {
+                # The operand pass still checks the selected field and its index.
+                work[at].case_schema_prepared <- true;
+                if (first_case == no_node()) { (first_case <- at):void }
+            }
+        };
         place_operation <- inspect_assignment(nodes, revision, used, at, assignment);
         if (place_operation == PlaceRebind &&
             !check_place_installation(source, nodes, names, selected, work, spellings, interfaces, interface_count,
@@ -796,12 +814,15 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
     val composite <- false;
+    val field <- false;
     ref tail = make UInt64 { no_node() };
     for (at in 0u64 .. used) {
-        composite <- inspect_field_selection(nodes, revision, used, at, selection) ||
+        field <- inspect_field_selection(nodes, revision, used, at, selection);
+        composite <- field ||
             (!is_scope_block(nodes, at) && block_tail(nodes, revision, used, at, tail)) ||
             inspect_conditional(nodes, revision, used, at, branch);
-        if ((composite || (name_syntax(nodes, used, at) == OrdinaryName && names[at].kind != 0u8)) &&
+        if ((!field || work[at].value_kind == 0u8) &&
+            (composite || (name_syntax(nodes, used, at) == OrdinaryName && names[at].kind != 0u8)) &&
             trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, at, used, revision, result)) {
             if (result.kind == enum_type() || text_type(result.kind) || (composite && native_scalar(result.kind))) {
                 work[at].value_kind <- result.kind;

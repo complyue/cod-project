@@ -27,11 +27,11 @@ using "./ParserStorage.cod" {
     CompletionSyntax { ReturnCompletion }
 };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, builtin_u8, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
+    NameBindings, NameWork, builtin_bool, builtin_u8, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
     owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable, local_sum_value_type
 };
 using "./ModuleExports.cod" { SelectedExports, array_export, record_export, callable_export, ordinary_callable_shape };
-using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, type_module, type_identity };
+using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, remember_type, type_module, type_identity };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
@@ -1086,7 +1086,7 @@ func prepare_lexical_bits_array(nodes:const ExprNodes in N, names:const NameBind
             val placement <-; val owner_site <-; val type_module <-; val type_identity <-;
             val kind <- element; val module <- element_module; val identity <- element_identity;
         } -> {
-            sum <- kind == SumArrayElement && module != 0u64;
+            sum <- kind == SumArrayElement;
             if ((kind != ProductArrayElement && !sum) ||
                 (placement == no_node() && owner_site != names[at].scope) ||
                 inspect_binding(nodes, revision, used, local.binding, binding) == InvalidBindingSyntax)
@@ -1133,11 +1133,11 @@ func describe_lexical_bits_element(nodes:const ExprNodes in N, names:const NameB
 }
 
 func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
-    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:NameWork in W,
     spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
     published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
     used:UInt64, revision:UInt64, first:UInt64 in P, report:DeclaredExpressionResult in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner W,
+    where {const owner S, const owner N, const owner B, const owner E, owner W,
            const owner G, const owner A, owner F, owner P, owner R} {
     ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
@@ -1200,6 +1200,9 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                         (case facts[site] of { IndexedFieldDestination -> true; _ -> false }));
                     remember_inline_product_field(facts, site, selection.receiver,
                         selection.field, ordinal, readonly, record, type);
+                    if (loan.expression != no_node() && (type.kind == enum_type() || type.kind == builtin_bool())) {
+                        remember_type(work, site, type)
+                    };
                     if (type.kind == record_type() && first == no_node()) { (first <- site):void }
                 }
             } else {};
@@ -1770,22 +1773,26 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
         const owner A, owner F, const owner S, owner R} {
     val requested <- construction.requested;
     val chosen <- names[requested].declaration;
-    val imported_sum <- names[requested].kind == constructor_type() && chosen == no_node();
+    val sum_initializer <- names[requested].kind == constructor_type();
     val imported_record <- names[requested].kind == ordinary_selection() && chosen < used &&
         selected[chosen].kind == record_export();
-    # Repeated operands require the same inline proof even for flat products.
-    if (!work[assignment.input].repeated_product_transfer && !imported_sum && !imported_record &&
+    val local_bits_product <- names[requested].kind == record_type() &&
+        chosen < used && aggregate[chosen] == CoDBitsAggregate &&
+        names[transfer].kind == 0u8 && names[assignment.destination].kind == 0u8;
+    # A local product with only builtin scalars can use the ordinary path.
+    if (!work[assignment.input].repeated_indexed_initializer && !sum_initializer &&
+        !imported_record && !local_bits_product &&
         !has_inline_aggregate_field(nodes, names, selected, work, chosen, used, revision)) return true;
     ref loan = make IndexedCaseLoan {
         expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
         array_module <- 0u64; array_type <- no_node();
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    val expected_kind <- if (imported_sum) { sum_type() } else { record_type() };
+    val expected_kind <- if (sum_initializer) { sum_type() } else { record_type() };
     if (names[transfer].kind != 0u8 || names[assignment.destination].kind != 0u8 ||
         !describe_indexed_case_loan(nodes, names, selected, interfaces, published, assignment.destination,
             used, revision, expected_kind, loan, type) ||
-        (!imported_sum && !imported_record && loan.array_module != 0u64) ||
+        (!sum_initializer && !imported_record && loan.array_module != 0u64) ||
         !case_bits_type(type, aggregate, interfaces, published))
         return case_problem(report, assignment.destination, wrong_construction_type());
     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
@@ -2116,7 +2123,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         };
         if (transfer == PlaceTransfer && indexed_braced_transfer(nodes, at, revision, assignment, construction)) {
             if (names[construction.requested].kind == constructor_type() &&
-                names[construction.requested].declaration != no_node()) {
+                names[construction.requested].declaration != no_node() &&
+                !work[assignment.input].repeated_indexed_initializer) {
                 if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,
                     construction.requested, used, revision, report)) return false;
                 if (first == no_node()) { (first <- at):void }
