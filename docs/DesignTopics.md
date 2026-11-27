@@ -130,6 +130,8 @@
 
 ## 4. 用户定义中缀操作符的优先级与结合性
 
+等 `e-wrks/cod` 仓库建立后，再讨论库作者的声明语法与跨模块细节。
+
 规划目标是让库声明新的中缀操作符，并在声明处指定优先级、左结合、右结合或不可连续结合。
 此功能由未来的 `e-wrks/cod` 编译器实现。seed 和 booter 负责按已确认的字符集合读取完整 token，
 并报告当前不支持的拼写。新操作符的声明写法、可供用户定义的拼写范围和跨模块规则留待讨论。
@@ -231,6 +233,8 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 <a id="julia-package-portability"></a>
 
 ## 9. 用 julia.cod 降低 Julia 包的移植成本
+
+`julia.cod` 的具体数组接口与步进列视图的移植讨论，等 `e-wrks/cod` 仓库建立后再展开。
 
 用一个单样本 t 检验打通 CoD 调用 Rmath 的浮点结果，再让另一个智能体移植按列计算的距离矩阵，观察数组 API 还需要多少适配和人工纠正。对于 Julia 和 CoD 都用得上的操作，优先研究在 CoD 本身采用一致语义。首例是显式 `x : f64`：用不能精确表示的整数区分舍入结果，并单独决定精度警告。矩阵按列遍历、视图写回和底层存储的实际 owner 则决定数组包能复用到什么程度。[预研 WIP 与对照用例](../design/JuliaPackagePortability.md) · [现有数值转换契约](../design/ScalarUnitsAndIndexTypes.md#explicit-numeric-conversion-and-loss-warnings)
 

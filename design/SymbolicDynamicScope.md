@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 278 · Recorded: 2026-11-27 · Phase: language/application co-design.
+Design revision: 279 · Recorded: 2026-11-27 · Phase: language/application co-design.
 
 ## Design authority
+
+At r279 [D-10-VARARGS](DesignAuthorityRegistry.md#d-10-varargs) uses declared defaults to fill fixed slots when ranking methods. The [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) orders fixed and variadic groups relative to receiver lookup. Explicit expansion, r278 family conflicts, default evaluation and failure order continue.
 
 At r278 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) rejects a [fixed-method definition conflict](#fixed-method-conflicts-from-trailing-defaults) when two fixed methods offer the same positional signature through trailing defaults. The [user decision](../CHANGELOG.md#h-defaulted-method-conflict-20261127) supersedes r277’s call-site outcomes for both `pick` and `tied`. P-405/P-406 continue the separate binding and evaluation phases, permitted type specialization and explicit pack selection.
 
@@ -1270,7 +1272,7 @@ An empty family participates in `export`, `import` and `using` under the ordinar
 
 A family may contain fixed methods and **one distinct variadic method**. Apply the limit in each visible family, including at module composition. Repeated selections of one defining method count once. Two distinct variadic methods in one view conflict even before a call.
 
-For ordinary unexpanded arguments, fixed-only resolution (including its established default ranking) applies whenever there is no applicable variadic candidate. When a variadic candidate is applicable, first select among applicable fixed methods whose slots are filled by the written arguments. Use the established type, access, owner, unit and specificity rules within that tier. Ambiguity there is an error. If the tier is empty, an applicable variadic method receives the trailing arguments. An implicitly omitted default does not supply an exact-count match against the variadic candidate. An explicit named default request fills its written slot. Selection uses the public signatures and default-presence information. Once selection succeeds, a failure during preparation or execution propagates on its ordinary route.
+For ordinary unexpanded arguments, a fixed method can bind a slot with a supplied argument, an explicitly requested default or an implicitly omitted default. All three preserve its membership in the fixed group. Use declared signatures and default presence for matching. Check and evaluate the selected defaults in their ordinary phases. Within a callable family, try applicable fixed methods before its variadic method. An ambiguity in the winning group is an error. Read the [receiver dispatch order](DomainLanguageDesign.md#how-receiver-dispatch-works) when multiple families are eligible. Selection preserves type, access, owner and unit constraints and the original failure path during argument preparation or execution.
 
 A written expansion selects the variadic method and requires the expanded elements to fit its tail. Its fixed prefix still requires independent binding. This rule applies to a literal expansion, a runtime-sized array and an already received pack, including an empty expansion. A wrapper forwarding its pack with `...` preserves the pack call. A library can explicitly unpack two elements and make a fixed-arity call when its algorithm calls for that specialization.
 

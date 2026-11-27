@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 13 · 2026-11-27 · Source design draft
+Design revision 14 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r14 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families), P-778/P-779, applies the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) to indexed read, indexed value transfer and indexed reference binding. Fixed methods precede variadic methods across the eligible receiver and free families. The r13 A/B outcomes and explicit expansion continue.
 
 At r13 the [user’s A/B decision](../CHANGELOG.md#h-fixed-arity-oo-indexed-reads-20261127) revises [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) for [fixed-arity OO indexed reads](#fixed-arity-oo-indexed-reads). P-778/P-779 continue the receiver, access, module view and explicit pack rules.
 
@@ -98,7 +100,7 @@ Suppose `Dense` and `Sparse` both declare conformance to `Matrix`. Each defines 
 | `m[row, col] <- value` | Fixed `Dense.([]<-)` from the adapter | Variadic `Sparse.([]<-)` |
 | `m[axes...] <- value`, with the same two indices | Variadic `Dense.([]<-)` | Variadic `Sparse.([]<-)` |
 
-One receiver's variadic method never competes with another receiver's variadic method. Within the chosen family, ordinary tuple specificity and the explicit pack rule apply. Its methods may specialize an index type, a selector pattern or the value. An ambiguous concrete choice needs resolution in that family. For the indexed value transfers in this example, an applicable concrete method takes priority. A shape missing on the concrete receiver can use an [abstract default or a free operator](#abstract-defaults-and-free-indexing-operators). An invocation failure propagates through ordinary cleanup. A read-only receiver keeps its access when its concrete type becomes known.
+One receiver's variadic method never competes with another receiver's variadic method. Within the chosen family, ordinary tuple specificity and the explicit pack rule apply. Its methods may specialize an index type, a selector pattern or the value. An ambiguous concrete choice needs resolution in that family. Within a given arity group, an applicable concrete method takes priority. A shape missing on the concrete receiver can use an [abstract default or a free operator](#abstract-defaults-and-free-indexing-operators). An invocation failure propagates through ordinary cleanup. A read-only receiver keeps its access when its concrete type becomes known.
 
 A caller can pass or forward a `Matrix` view without a cast or a user-written type switch. Its declared conformance and the selected world determine which concrete types the call can admit. Ahead-of-time compilation checks coverage of each demanded call, including its result, access, ownership and effects. When the actual type is already known the compiler can emit a direct call. Otherwise it preserves the receiver evidence and prepares local dispatch that selects the actual ADT's indexing behavior. A shared generic body can execute both rows of the table. A call known to select `Dense.([]<-)` needs that family’s incoming effects. When several receiver types or call shapes remain reachable, cover every family the call can actually select, including an abstract or free fallback. Apply the pre-2.0 incoming-symbol rule to each selected family. Concrete type evidence can discharge an unreachable alternative. [Family-wide incoming effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
 
@@ -106,13 +108,13 @@ Verify the same actual through concrete and abstract formals, both receiver type
 
 #### Abstract defaults and free indexing operators
 
-Identify candidates for each admitted receiver and prepared argument shape in these levels. Apply the [fixed-arity rule for ordinary OO indexed reads](#fixed-arity-oo-indexed-reads) before choosing between the two OO levels:
+For each bracket operation, ordinary indexing first considers applicable fixed methods, including those using declared defaults. If that group is empty it considers variadic methods. Within each group, use the following family order:
 
 1. The actual concrete receiver’s OO family.
 2. Visible OO defaults on abstractions to which that receiver has declared conformance, including inherited abstractions. Conformance makes an applicable default available automatically. A concrete author can specialize a fixed default by supplying a matching fixed method.
 3. The unprefixed free operator family for that operation, resolved by ordinary name lookup in the call’s selected module interpretation.
 
-Within the resulting arity class, family priority precedes comparison of parameter refinements across OO levels. For example, a free method that explicitly names `Dense` and the exact index type still yields to an applicable `Matrix` default. Within a level use the established applicability and unique-most-specific rules, including nominal conformance, access, units and typed patterns. The same inherited definition reached twice counts once. If two unrelated abstractions offer equally good defaults for the same arguments, a call reaching those defaults is ambiguous even if the free family has an exact match. A concrete implementation for that shape can resolve it.
+Within each group, family priority precedes comparison of refinements across levels. For example, a free method that explicitly names `Dense` and the exact index type still yields to an applicable `Matrix` default. Within a level use the established applicability and unique-most-specific rules, including nominal conformance, access, units and typed patterns. The same inherited definition reached twice counts once. If two unrelated abstractions offer equally good defaults for the same arguments, a call reaching those defaults is ambiguous even if the free family has an exact match. A concrete implementation for that shape can resolve it.
 
 Suppose `Dense` declares conformance to `Matrix` and supplies a two-index value transfer method. `Matrix` supplies a one-index default that translates a linear index into a row and column and calls the two-index operation. A library can also author methods in an unprefixed family, for example with the head `func ([]<-)(m:Dense in O, value:Int64, i:Int64) -> void where {const owner O}`. It can define a local free callable or explicitly import a free family to extend it. This declaration contributes to that free family. An OO head such as `func Dense.([]<-)(…)` contributes to the receiver family under its own extension grant. The free family follows ordinary aliases, shadowing and visibility in the selected world. Another package’s private or unselected family is outside lookup.
 
@@ -122,13 +124,13 @@ Suppose `Dense` declares conformance to `Matrix` and supplies a two-index value 
 | `m[i] <- v`, with both the `Matrix` default and the exact free method above | The one-index `Matrix` default. Its delegated two-index write reaches `Dense`. |
 | `m[label] <- v`, with a nominal label accepted only by a visible free method | The free indexed value transfer for the label. Without that family the demanded call lacks coverage. |
 
-The written call form determines eligibility at every level. If `Dense` also provides a variadic indexed value transfer that applies, it wins over a fixed abstract or free method for the same ordinary call. For `m[axes...] <- v`, only variadic implementations participate. A fixed concrete method therefore leaves room for an applicable variadic abstract default, then a visible free variadic implementation if the OO levels lack one. The one-variadic limit remains per family. [Fixed and expanded calls](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter)
+The written call form determines eligibility at every level. If `Dense` supplies only a variadic indexed value transfer for the call, a fixed abstract or visible free method can win. For `m[axes...] <- v`, only variadic implementations participate. A fixed concrete method therefore leaves room for an applicable variadic abstract default, then a visible free variadic implementation if the OO levels lack one. The one-variadic limit remains per family. [Fixed and expanded calls](SymbolicDynamicScope.md#runtime-array-expansion-and-one-variadic-parameter)
 
 This ordering selects one implementation. Ambiguity at the winning level, a missing required effect, a failed argument conversion, a bounds failure or a throw from the selected body do not trigger another attempt. Use the same prepared receiver and argument values. Both bracket notation and the corresponding explicit indexing operator call keep their established written evaluation orders. Explicit `intrinsic` indexing retains its existing builtin contract. Check the three calls above in two worlds with different free-family visibility, explicit pack selection through a missing OO shape, and a throwing default with a free indexed value transfer whose observable write must be skipped.
 
 #### Fixed-arity OO indexed reads
 
-For an ordinary indexed read, prefer an applicable OO method whose fixed parameters match the written index count over an applicable OO method that takes an index pack. This applies across the concrete receiver, its storage ancestors and its declared abstractions. A fixed method still needs compatible index types and receiver access. Explicit expansion `g[axes...]` selects a variadic method even for a single element.
+For an ordinary indexed read, prefer an applicable fixed method over a variadic one. A declared default can fill an omitted fixed slot. This applies across the concrete receiver, its storage ancestors and its declared abstractions. A fixed method still needs compatible index types and receiver access. Explicit expansion `g[axes...]` selects a variadic method even for a single element.
 
 Suppose `ChildGrid extends BaseGrid` and declares conformance to `Matrix`. The method `func const Matrix.([])(i:Int64) -> Int64 { 2 }` supplies the one-index default. Compare two alternative definitions of the pack method:
 
@@ -137,7 +139,7 @@ Suppose `ChildGrid extends BaseGrid` and declares conformance to `Matrix`. The m
 | A. `func const BaseGrid.([])(axes:Int64...) -> Int64 { 1 }` | 2 | 1 |
 | B. `func const ChildGrid.([])(axes:Int64...) -> Int64 { 1 }` | 2 | 1 |
 
-A visible free one-index method returning 3 does not displace the applicable fixed OO default in either case. Removing only the `Matrix` default from B leaves a concrete pack and a free fixed method. The priority for that comparison is under review. Indexed value transfer and indexed reference binding retain their existing priority.
+A visible free one-index method returning 3 leaves A and B at 2. In C, remove the `Matrix` method from B. The child still offers its pack, and the free method now handles `g[7]` and returns 3. A free fixed method taking `row:Int64, col:Int64 { 0 }` also returns 3 for this call when it replaces the free one-index method. The default fills the column after selection. Writing `g[axes...]` for an actual one-element pack reaches the child’s variadic method and returns 1 in all three cases.
 
 ### Unitless and unit-bearing axes
 

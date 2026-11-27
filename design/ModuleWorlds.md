@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 87 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 88 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r88 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) refines when lookup reaches the visible free family. The r87 identities, publication and extension grants continue under [D-15](DesignAuthorityRegistry.md#d-15).
 
 At r87 [D-15](DesignAuthorityRegistry.md#d-15) continues r86’s publication rules. The [family merge](#merging-type-owned-method-families) accounts for indexing alongside construction and data calls. [Receiver dispatch](DomainLanguageDesign.md#how-receiver-dispatch-works) distinguishes these operations from ordinary callable name lookup. [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback) uses ordinary lookup for the free tier of a dotted call.
 
@@ -195,7 +197,7 @@ When several `using` or `import` declarations select views of the same nominal d
 
 The constructor overload family belongs to the nominal type. Its dctors are methods of that family. For a sum, `export Receipt;` publishes every dctor and its visible initializer overloads. A constructor selector makes the named dctors explicit, and importing a dctor permits extending it. In the merged family, the overloads for the dctor named at the `make` site determine whether braced initialization is available. See the [constructor selectors and combined-world example](DomainLanguageDesign.md#publishing-and-selecting-data-constructors).
 
-For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic indexed value transfer in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. A declared conformer receives visible abstract indexing defaults. An unprefixed operator declaration belongs to the ordinary local or explicitly imported free family. Indexing can reach that family after both OO levels lack an applicable implementation. [Dispatch order and a two-world test](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators)
+For the three indexing operations, selecting a type view likewise brings its published receiver families; an explicit import of the receiver permits an OO extension. Distinct ADTs can each supply their own variadic indexed value transfer in the same world. Selecting multiple views of one receiver applies the existing contribution identity, conflict and visibility rules. A declared conformer receives visible abstract indexing defaults. An unprefixed operator declaration belongs to the ordinary local or explicitly imported free family. In ordinary indexing its applicable fixed methods precede OO variadic methods. A named dotted call considers applicable OO methods before the free name. [Dispatch order and a two-world test](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators)
 
 ### Publication of type-carried call operators
 

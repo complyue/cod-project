@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-27 — Use the written call form to order OO and free overloads
+
+<a id="h-dispatch-by-call-form-20261127"></a>
+**H-DISPATCH-BY-CALL-FORM-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user specified “dot access 时，最大匹配分组是是否OO，variadic与否是内部小分组”. [Named dotted calls](design/DomainLanguageDesign.md#how-receiver-dispatch-works) preserve OO priority. Ordinary [indexing](design/CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) groups fixed methods across families before packs. The user’s default-completion rule keeps a fixed method eligible when its trailing argument defaults. This revises the [earlier scoped order](https://github.com/complyue/cod-project/blob/0fcb9cb2180dbde224e567550c04a847e50d492f/design/CollectionsAndBuiltinContainers.md#fixed-arity-oo-indexed-reads). Explicit pack dispatch, module visibility, once-only preparation and the production named-fallback diagnostic continue under D-07r232, D-10r279, D-15r88, D-30r14, P-403/P-404 and P-778–P-781. The user deferred the concrete Julia array interface and operator-declaration discussions until the `e-wrks/cod` repository exists. Registry r1361→1362.
+
+## 2026-11-27 — Reject competing perfect numeric literal matches at the call
+
+<a id="h-perfect-numeric-overload-matches-20261127"></a>
+**H-PERFECT-NUMERIC-OVERLOAD-MATCHES-20261127.** For the [two fixed overloads](design/NumericLiterals.md#numeric-defaults-in-source-order) whose parameter types occupy positions (1, 4) and (2, 2) in the caller’s ordered list, the project user chose “static reject，因为两个method都完美匹配上了” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). This settles that comparison left open by [r1](https://github.com/complyue/cod-project/blob/d891763e5d90d83a0dabdeae7fd941eaa4ba9877/design/NumericLiterals.md#numeric-defaults-in-source-order). D-11-LITERAL-DEFAULTS r2 retains contextual typing, exact representability and explicit suffixes under P-782/P-783.
+
 ## 2026-11-27 — Reject duplicate fixed positional signatures exposed by defaults
 
 <a id="h-defaulted-method-conflict-20261127"></a>

@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 231
+Discussion revision: 232
 
 Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r232 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) distinguishes the outer lookup group for a dotted name from that for indexing. [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback) retains the production diagnostic and [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) retains the three operation identities, argument order and access rules.
 
 At r231 [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) applies the [confirmed fixed-arity rule](CollectionsAndBuiltinContainers.md#fixed-arity-oo-indexed-reads) to OO indexed reads. Other operations in the r230 receiver model retain their rules.
 
@@ -286,18 +288,20 @@ CoD’s OO model gives the receiver a part in selecting the method family. An OO
 | Written operation | What identifies the field or family |
 | --- | --- |
 | `x.id` | A stored field is selected through the receiver’s declared view. A computed accessor invokes the visible accessor for that member. Stored fields and computed accessors of the same spelling conflict when brought together. |
-| `x.quote(args)` | Try applicable members of the actual receiver, then defaults on its declared abstractions, then the visible free `quote` family with the receiver as its first argument. An explicit `super.quote(args)` starts at the lexical storage parent. |
+| `x.quote(args)` | Select among applicable OO methods first. Within OO try fixed methods, then variadic methods; within each group prefer the concrete receiver over abstract defaults. If OO lookup finds no applicable method, try the visible free `quote` family with the receiver as its first argument. An explicit `super.quote(args)` starts at the lexical storage parent. |
 | `x(args)` for a data receiver | The selected type carries its own `(())` family. A forwarding `here` call retains the receiver and the supplying view. |
-| `x[i]`, `x[i] <- v`, `x[i] = target` | Indexed read, indexed value transfer and indexed reference binding each have their own receiver family. For an ordinary indexed read, compare fixed-count and variadic OO candidates across receiver levels. See the [per-operation priority](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) for abstract defaults and free operators. |
+| `x[i]`, `x[i] <- v`, `x[i] = target` | Indexed read, indexed value transfer and indexed reference binding each have their own receiver family. For ordinary indexing, try fixed methods across all eligible OO and free families before considering variadic methods. See the [per-operation priority](CollectionsAndBuiltinContainers.md#abstract-defaults-and-free-indexing-operators) for abstract defaults and free operators. |
 | `make T(args)` | The selected constructor initializes a destination under its owner. Constructor `super(args)` initializes the embedded direct parent. |
 
 Two calls on the same object illustrate the distinction. Given a `Child` with its own stored `id` and `score` method, a `Parent` reference reads the parent’s `id` but can invoke the child’s `score()`. An ancestor implementation reached by `super` can itself call an ordinary member on `self`, which again uses the actual child. Both references retain the same object throughout. Selecting a more specific body preserves readonly access. [Field shadowing](#product-storage-inheritance) · [Super-calls](#super-calls-in-oo-bodies)
 
-For indexing, keep **family priority** separate from **specificity within a family**. An applicable variadic indexed value transfer on the concrete receiver can beat an exact free two-index value transfer method. An explicit pack expansion admits only variadic methods. Two equally good, unrelated abstract defaults give an ambiguity even when a free method could handle the call. A selected method’s missing effect or runtime failure propagates at that call. The pre-2.0 caller must supply the incoming effects of each family the call can reach, after accounting for local installations. A lower family that cannot win adds no obligation. Ahead-of-time compilation covers the possible selections in the chosen module interpretation and can emit a direct call when the actual type is known. [Indexing examples and evaluation order](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing) · [Family-wide effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) · [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
+For indexing, keep **family priority** separate from **specificity within a family**. A fixed free two-index value transfer can specialize an operation for which the concrete receiver provides a variadic implementation. An explicit pack expansion admits only variadic methods. Two equally good, unrelated abstract defaults give an ambiguity even when a free method could handle the call. A selected method’s missing effect or runtime failure propagates at that call. The pre-2.0 caller must supply the incoming effects of each family the call can reach, after accounting for local installations. A lower family that cannot win adds no obligation. Ahead-of-time compilation covers the possible selections in the chosen module interpretation and can emit a direct call when the actual type is known. [Indexing examples and evaluation order](CollectionsAndBuiltinContainers.md#receiver-families-for-indexing) · [Family-wide effects](SymbolicDynamicScope.md#family-wide-effect-requirements-before-20) · [AOT coverage](AheadOfTimeExecutionPreparation.md#actual-type-dispatch-and-wpo-coverage)
 
 #### When a dotted call uses a free callable
 
 Suppose a module can see a free `quote(x)` returning 9. For an actual receiver with no applicable member or abstract default, `x.quote()` returns **9**. If an applicable member returns 2, the dotted call returns **2** and a directly written `quote(x)` still returns **9** in that module. Selecting a different adapter can therefore change the dotted call while the free callable’s identity stays fixed. The free name follows ordinary lexical lookup at the call in its selected interpretation, including shadowing, aliases and extension permissions. Bind the prepared receiver as its first actual and check the selected signature’s access, owners, result and effects. A missing implementation or an ambiguous winning level gives the ordinary diagnostic. An error or throw from a selected body keeps its original failure path.
+
+For a concrete example, let the only OO implementation be `func const Grid.quote(args:Int64...) -> Int64 { 1 }` and let the visible free `quote(g, i:Int64)` return 3. Then `g.quote(7)` returns 1 and `quote(g, 7)` returns 3. With the equivalent indexed read methods, `g[7]` returns 3. An explicit expansion restricts eligibility to variadic methods in the lookup belonging to its written call form.
 
 The production compiler (`e-wrks/cod`) emits a **warning by default** at a dotted call site that can select a free implementation. A compile-time option lowers this finding to **info**. Identify the written member and the resolved free callable by its canonical name. At a generic site, say which receiver can reach the free callable. Rewriting that site as `quote(x)` would also change the receivers that currently use members. Suggest an explicit free call only where it preserves the intended behavior. When all admitted targets use members, there is no fallback to report. Both severities preserve the selected method and its execution. The diagnostic applies to named dotted calls. An intentional free call and an indexed write reaching its free operator have their own call forms. Seed and booter delivery carry no requirement to issue this production diagnostic.
 
