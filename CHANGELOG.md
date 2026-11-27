@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Nominal regions have exact types and method-only interfaces
+
+<a id="h-nominal-region-types-20261127"></a>
+**H-NOMINAL-REGION-TYPES-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user proposed `region type` with C-implemented constructors and methods and specified “nominal typed region 没有roots，只能通过methods接口与CoD程序交互” and “要求 nominal typed region 总是精确匹配类型，而不得有roots要求”. [D-13-NOMINAL-REGIONS](design/GraphGrainedMemoryManagement.md#opaque-nominal-region-types) excludes the suggested structural projection, including one under a transaction loan. D-14r140 and D-22r74 continue the [prior structural root contract](https://github.com/complyue/cod-project/blob/3b9cf62b591d63b31175fbf364c04e76efd5ba7c/design/GraphGrainedMemoryManagement.md#named-root-access-and-receiving-specifications). DSDS draft 3 applies the boundary to the specialized stock database. Provider ABI, commit and recovery protocols and compiler support remain open. P-786/P-787, registry r1364→1365.
+
 ## 2026-11-27 — Dispatch with numeric literals still untyped
 
 <a id="h-dispatch-before-literal-typing-20261127"></a>

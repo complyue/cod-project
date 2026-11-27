@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 39 · 2026-11-24
+Design revision 40 · 2026-11-27
 
 ## Design authority
+
+At r40 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) records the [project user's exact-match and method-interface decision](../CHANGELOG.md#h-nominal-region-types-20261127) for specialized regions. P-786/P-787 connect the DSDS provider use case to nominal identity and the existing actual-owner rule. The examples under [opaque nominal region types](#opaque-nominal-region-types) specify acceptance. R39 structural root access and existing DBMR publication continue. The native ABI and service guarantees have separate scope.
 
 [D-10’s explicit reference symbols](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost) require valid target access through the actual owner during installation, capture and restoration. The [scope reconciliation](../CHANGELOG.md#k-design-scope-audit-20261124) applies this dependency to the whole-region holder comparison.
 
@@ -45,7 +47,7 @@ Region acquisition/release, capacity, typed placement and reference provenance r
 
 ### Named root access and receiving specifications
 
-H-595 removes the CoD `root(r)` intrinsic. A region is a structural product of named root fields, accessed either by `r.name` or by a receiving specification. Neither form exposes a separate unnamed whole-root object. A named region schema and an otherwise admitted structural field requirement use the same field semantics; this does not select new anonymous-annotation grammar.
+H-595 removes the CoD `root(r)` intrinsic. An intrinsic structural region is a product of named root fields, accessed either by `r.name` or by a receiving specification. Neither form exposes a separate unnamed whole-root object. A named region schema and an otherwise admitted structural field requirement use the same field semantics; this does not select new anonymous-annotation grammar.
 
 ```cod
 data Node { value:u64; }
@@ -83,6 +85,27 @@ There is no implicit first-root selection or flattening of a referenced object's
 **Implementation boundary:** no builtin or compatibility meaning remains for `root(r)`. The parser treats root as an ordinary name for user callables, lexical storage and imports; intrinsic syntax cannot force whole-root access. An undeclared root follows ordinary lookup failure. Native root-address helpers belong to the storage implementation. This naming rule establishes no regional native or receiving support; the [archived source capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md) remains authoritative for implementation coverage.
 
 **Acceptance:** cover direct and receiving access to bits/ref/ptr roots, single/multiple roots, renamed/reordered/subset selection, actual layout differences, omitted roots left untouched, destination selection/effect order, valid declared place aliases, later rebinding, inherited access, unreadable slots/payloads, nullable-to-ref rejection, missing fields, same shape with different owners, symbolic shadowing and ownership transfer/release/resize. Apply receiving overlap rules to the actual selected reads/writes, not to harmless shared target identities. Reject builtin whole-root access, hidden owner retention and invalid temporary borrows. No regional callable field, owning user-data field, general structural ADT, automatic graph transfer, RTTI or physical allocator change follows; D-16 bits/UoM identities and validity remain unchanged.
+
+## Opaque nominal region types
+
+`region type StockDB` declares a nominal region. It has no CoD roots. Its package declares the constructors and methods that C implements. CoD calls a declared constructor to create an instance and uses the method interface to operate on it. A parameter requiring `StockDB` matches the exact declared type identity. A renamed import of that declaration denotes the same type. Each opening still has its own actual owner.
+
+In this example the provider declares a niladic `available_count` function on `StockDB` returning `UInt64`.
+
+```cod
+region type StockDB
+region type ArchiveDB
+region StockRoots { available:UInt64 }
+
+func stock_count(region db:StockDB) -> UInt64 { db.available_count() }
+func root_count(region s:const StockRoots) -> UInt64 { s.available }
+```
+
+* `stock_count(db)` accepts an opening of `StockDB`. An opening of `ArchiveDB` fails this call even if its package declares the same methods and uses the same native layout. An intrinsic region matching `StockRoots` also fails the nominal parameter.
+* `root_count(s)` accepts an intrinsic structural region with the required root. `root_count(db)` is a type error. A nominal region cannot satisfy a structural region requirement, even an empty subset. A combined requirement for `StockDB` and a named root is invalid.
+* Selecting `db.available` as a root or receiving `{ val n <- available } := db` is a type error. A package cannot project this nominal region as a structural view of its backing. The result of a declared method has the type and owner given by that method's contract.
+
+The [database service](../papers/DSDS.md#send-a-dml-program-to-the-records-it-changes) can thus give the catalog a directly traversable intrinsic schema and give the stock database a nominal interface for reservation. Its provider decides what a successful reservation commits and which failures it survives. Exact matching supplies neither a transaction protocol nor an on-disk compatibility check. The constructor ABI, concrete provider protocols and compiler delivery remain open.
 
 ## Relationships between regions
 

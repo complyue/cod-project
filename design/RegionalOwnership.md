@@ -1,8 +1,10 @@
 # CoD regional ownership: syntax, semantics and use
 
-Design revision: 139 · Recorded: 2026-11-27 · Status: design draft with scoped confirmed requirements.
+Design revision: 140 · Recorded: 2026-11-27 · Status: design draft with scoped confirmed requirements.
 
 ## Design authority
+
+At r140 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) limits root-schema constraints to intrinsic structural regions. R139 actual-owner, lifetime and access rules continue. [Exact-match acceptance](GraphGrainedMemoryManagement.md#opaque-nominal-region-types)
 
 At r139 the [indexing terminology](CollectionsAndBuiltinContainers.md#indexing-terminology) names the existing bracket operations. The [D-14](DesignAuthorityRegistry.md#d-14) rules and acceptance at r138 continue.
 
@@ -417,7 +419,7 @@ Owner qualifiers distinguish allocation permission; H-274/H-275 additionally dis
 | `const owner O` | Region or lexical scope, including all-readonly inputs or a deliberate weaker contract | Fixed actual owner with no allocation through this path; declared writable-target access remains independent. |
 | Region-specific owner constrained by a root schema | A region whose named roots satisfy the structural field requirement | An implicit const lexical binding and a usable borrowed region reference; named policy roots supply the objects needed by authorized library methods. |
 
-The region-specific binder retains H-275's actual-owner role. Its structural requirement names roots used by the helper; an ordinary named policy object can retain an abstract nominal interface:
+A root requirement applies exclusively to an intrinsic structural region. A [nominal region](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) matches its declared type exactly and provides no root evidence. The region-specific binder retains H-275's actual-owner role. Its structural requirement names roots used by the helper; an ordinary named policy object can retain an abstract nominal interface:
 
 ```cod
 type PoolPolicy;
@@ -444,7 +446,7 @@ H-284 proposes `symbol @o1:T1 in r, @o2:T2 in r where {region r:RT};`, applying 
 
 ### Region as a declaration keyword throughout the language
 
-H-275 selects this language-wide direction. A region declaration identifies the storage resource and its structural root schema; a ptr declaration identifies an object or bits view. The actual region is distinct from each selected root: `r.name` or a receiving spec supplies the corresponding field view, while r supplies regional access to storage-policy helpers. Generic `owner O` remains a provenance constraint accepting regions and lexical scopes; it introduces no resource value by itself.
+H-275 selects this language-wide direction. An intrinsic structural region declaration identifies the storage resource and its root schema; a ptr declaration identifies an object or bits view. The actual region is distinct from each selected root: `r.name` or a receiving spec supplies the corresponding field view, while r supplies regional access to storage-policy helpers. Generic `owner O` remains a provenance constraint accepting regions and lexical scopes; it introduces no resource value by itself.
 
 The root annotation must not be reinterpreted as allocating a RootType object in the surrounding lexical scope. The resource remains intrinsic; a borrowed region reference does not gain cleanup responsibility, and an owned region still has exactly one transferable cleanup obligation. Removing a user-facing type-constructor spelling does not erase the compiler's distinction between a whole-region reference, a region owner and an interior object view.
 
