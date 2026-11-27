@@ -1687,9 +1687,9 @@ class LLVMEmission {
   llvm::Value *allocate_aggregate(const Expression &expr, llvm::Type *layout, llvm::Value *region = nullptr) {
     if (region) return reserve_regional_row(region, layout, expr.at);
     const auto &fact = checked_.at(&expr);
-    if (!fact.lexical_row_role) return storage_.at(fact.place.value());
+    if (!fact.lexical_row_allocator) return storage_.at(fact.place.value());
     const auto &data = module_.getDataLayout();
-    auto *capability = allocation_capabilities_.at(*fact.lexical_row_role);
+    auto *capability = allocation_capability(*fact.lexical_row_allocator);
     auto *owner = b_.CreateExtractValue(capability, 1);
     auto *bytes = integer(data.getTypeAllocSize(layout).getFixedValue());
     return allocate_lexical_extent(owner, bytes, data.getABITypeAlign(layout).value(), expr.at);
@@ -3530,7 +3530,12 @@ public:
   std::pair<std::string, std::string> emit(const CheckedProgram &program, bool emit_text, bool emit_bitcode, bool bounds_checks = true) {
     program_ = &program; bounds_checks_ = bounds_checks;
     const auto allocates_lexically = [](const auto &operations) {
-      return std::ranges::any_of(operations, [](const auto &operation) { return operation.second.lexical_allocation.has_value(); });
+      return std::ranges::any_of(operations, [](const auto &operation) {
+        const auto &fact = operation.second;
+        return fact.lexical_allocation ||
+            (fact.lexical_row_allocator &&
+             fact.lexical_row_allocator->kind == CheckedOperation::OwnerAllocator::lexical);
+      });
     };
     owns_lexical_allocations_ = std::ranges::any_of(program.instances, [&](const auto &instance) {
       return allocates_lexically(instance.operations);

@@ -174,8 +174,7 @@ struct CheckedOperation {
     auto operator<=>(const OwnerAllocator &) const = default;
   };
   std::optional<OwnerAllocator> array_allocator;
-  // An aggregate made in an incoming lexical owner uses that owner's extent list.
-  std::optional<size_t> lexical_row_role;
+  std::optional<OwnerAllocator> lexical_row_allocator;
   std::shared_ptr<const std::map<size_t, OwnerAllocator>> allocator_arguments;
   std::optional<SumConstructor> sum_constructor;
   bool invokes_regional_initializer = false;

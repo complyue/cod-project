@@ -1269,7 +1269,7 @@ class BodyExtraction {
         confirm_intrinsic(expr, expr.text);
         op = index(expr);
         expect(!op.read_only, expr.at, "indexed transfer needs a writable array view");
-        const auto &source = operand(expr, 2);
+        const auto &source = bits_copy_operand(*expr.children[2]);
         takes_payload(source, op.type, expr.children[2]->at);
         op.builtin = BuiltinOperation::array_transfer;
         op.read_only = true;
@@ -1702,29 +1702,37 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation aggregate_construction(const Type &type, size_t owner, bool local_storage, const Location &at) {
+    enum class AggregateTarget { object, copy_scratch, inline_field };
+
+    CheckedOperation aggregate_construction(const Type &type, size_t owner, AggregateTarget target,
+                                            const Location &at) {
       CheckedOperation op;
       op.type = op.operand_type = type;
       op.view = true;
       op.owners.insert(owner);
       if (!owner) {
-        if (local_storage) op.place = storage(type.kind == Type::sum ? "$sum" : "$product", type, 0, false, false);
+        if (in_iteration_ && target == AggregateTarget::object) {
+          // An earlier construction can still be selected by a reference in this full scope.
+          op.lexical_row_allocator = Allocator{Allocator::lexical};
+        } else if (target != AggregateTarget::inline_field) {
+          op.place = storage(type.kind == Type::sum ? "$sum" : "$product", type, 0, false, false);
+        }
         return op;
       }
 
       const auto placement = product_placement(owner);
-      expect(local_storage && placement && product_allocation_permitted(owner),
+      expect(target == AggregateTarget::object && placement && product_allocation_permitted(owner),
              at, "seed needs a known writable owner for placed construction");
       if (*placement == ProductPlacement::region) op.regional_storage = true;
       else {
         const auto role = null_target - 1 - owner;
-        op.lexical_row_role = role;
+        op.lexical_row_allocator = Allocator{Allocator::input, role};
         body_.allocations.insert(role);
       }
       return op;
     }
 
-    CheckedOperation make_product(const Expression &expr, const Type &type, bool local_storage) {
+    CheckedOperation make_product(const Expression &expr, const Type &type, AggregateTarget target) {
       expect(expr.kind == Kind::make_object && expr.annotation &&
              !expr.construction_type_query && !expr.constructor_arguments &&
              expr.initializer_block && resolve_annotation(*expr.annotation, expr.at) == type,
@@ -1732,9 +1740,9 @@ class BodyExtraction {
       const auto owner = named_owner(expr.owner_name, expr.at);
       if (!owner)
         expect(declarations().bits_payload(type) ||
-               (local_storage && !in_iteration_ && extraction_.reference_product(type)),
+               (target == AggregateTarget::object && !in_iteration_ && extraction_.reference_product(type)),
                expr.at, "seed needs a complete braced product with an admitted allocation owner");
-      auto op = aggregate_construction(type, owner, local_storage, expr.at);
+      auto op = aggregate_construction(type, owner, target, expr.at);
       const auto &schema = declarations().schemas.at(type.identity);
       const auto order = product_initializers(schema, expr);
       expect(std::set(order.begin(), order.end()).size() == schema.fields.size(), expr.at,
@@ -1757,10 +1765,10 @@ class BodyExtraction {
                  "seed needs an inline bits field in a braced product initializer");
           if (field.type.kind == Type::product && input.kind == Kind::make_object &&
               input.owner_name.empty() && input.initializer_block) {
-            remember(input, make_product(input, field.type, false));
+            remember(input, make_product(input, field.type, AggregateTarget::inline_field));
             write.initialize_nested_product = true;
           } else if (inline_aggregate_type(field.type)) {
-            takes_complete_value(input, extract(input), field.type);
+            takes_complete_value(input, bits_copy_operand(input), field.type);
           } else takes_value(extract(input), field.type, input.at);
         }
         remember(item, std::move(write));
@@ -1811,7 +1819,7 @@ class BodyExtraction {
       expect(expr.constructor_arguments && expr.children.empty(), expr.at,
              "seed needs the niladic initializer for this generic product");
       const auto owner = named_owner(expr.owner_name, expr.at);
-      auto op = aggregate_construction(type, owner, true, expr.at);
+      auto op = aggregate_construction(type, owner, AggregateTarget::object, expr.at);
       const auto placement = op.regional_storage ? ProductPlacement::region : ProductPlacement::lexical;
       op.callee = extraction_.product_initializer(initializer, type, placement, expr.at);
       op.scope_owners.push_back(owner);
@@ -1822,7 +1830,7 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation make(const Expression &expr) {
+    CheckedOperation make(const Expression &expr, AggregateTarget target = AggregateTarget::object) {
       expect(!expr.construction_type_query && expr.annotation,
              expr.at, "seed needs a declared construction type");
       CheckedOperation op;
@@ -1836,7 +1844,7 @@ class BodyExtraction {
         expect(expr.initializer_block && !sum.regional_only && arm.initializers.empty() && !family(spelling),
                expr.at, "seed needs a complete braced bits sum initializer");
         const auto owner = named_owner(expr.owner_name, expr.at);
-        op = aggregate_construction(Type{Type::sum, sum.source->name, selected.sum}, owner, true, expr.at);
+        op = aggregate_construction(Type{Type::sum, sum.source->name, selected.sum}, owner, target, expr.at);
         op.sum_constructor = selected;
         std::set<size_t> supplied;
         for (const auto &item : expr.initializer_items()) {
@@ -1846,7 +1854,7 @@ class BodyExtraction {
           expect(field != arm.fields.end() && !field->stores_target(), label->at, "sum initializer field is unavailable");
           const auto ordinal = static_cast<size_t>(field - arm.fields.begin());
           expect(supplied.insert(ordinal).second, label->at, "seed needs a single initializer per field");
-          takes_payload(extract(*item->children.back()), field->type, item->at);
+          takes_payload(bits_copy_operand(*item->children.back()), field->type, item->at);
           CheckedOperation initializer;
           initializer.operand_type = field->type;
           body_.instance.operations.emplace(item.get(), std::move(initializer));
@@ -1864,7 +1872,7 @@ class BodyExtraction {
         if (schema.application)
           if (const auto initializer = declarations().product_templates.at(schema.application->identity).initializer)
             return make_initialized_product(expr, type, *initializer);
-        return make_product(expr, type, true);
+        return make_product(expr, type, target);
       }
       expect(type.kind == Type::array && expr.constructor_arguments &&
              expr.children.size() == 2 && !family(spelling),
@@ -1878,7 +1886,7 @@ class BodyExtraction {
       const auto &array = declarations().arrays.at(type.identity);
       expect(declarations().bits_payload(array.element), expr.at, "array fill requires a finite bits element");
       takes_value(operand(expr, 0), Type::uint64, expr.children.front()->at);
-      const auto &fill = operand(expr, 1);
+      const auto &fill = bits_copy_operand(*expr.children[1]);
       takes_payload(fill, array.element, expr.children.back()->at);
       op.type = op.operand_type = type;
       op.view = true;
@@ -1886,6 +1894,15 @@ class BodyExtraction {
       op.array_allocator = allocator;
       if (allocator->kind == Allocator::input) body_.allocations.insert(allocator->place);
       return op;
+    }
+
+    const CheckedOperation &bits_copy_operand(const Expression &input) {
+      if (input.kind != Kind::make_object || !input.initializer_block ||
+          input.constructor_arguments || !input.owner_name.empty())
+        return extract(input);
+      // Only the completed payload leaves this operand. It cannot publish the scratch address.
+      require_executable_expression(input);
+      return remember(input, make(input, AggregateTarget::copy_scratch));
     }
 
     CheckedOperation index(const Expression &expr) {
@@ -1906,7 +1923,7 @@ class BodyExtraction {
     CheckedOperation assign(const Expression &expr) {
       confirm_intrinsic(expr, expr.kind == Kind::transfer ? "<-" : "=");
       const auto &target = operand(expr, 0);
-      const auto &source = operand(expr, 1);
+      const auto &source = expr.kind == Kind::rebind ? operand(expr, 1) : bits_copy_operand(*expr.children[1]);
       CheckedOperation op;
       op.type = op.operand_type = target.type;
       op.view = true;
