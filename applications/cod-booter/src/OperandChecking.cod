@@ -3018,6 +3018,15 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
     return past
 }
 
+func checked_readonly_byte_loan(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64, role:UInt64)
+    -> bool where {const owner I} {
+    if (!checked_readonly_loan_row(contracts[row], array_type(), role)) return false;
+    val array <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
+    return array < published && contracts[array].interface_kind == array_type() &&
+        contracts[array].entry_count == 0u64 && contracts[array].array_index_kind == builtin_u64() &&
+        contracts[array].element_kind == builtin_u8()
+}
+
 func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3038,12 +3047,17 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
          contracts[header].array_read_completion != ArrayReadMayFailBounds)) return no_node();
     val bytes <- header + 1u64;
     val second <- header + 2u64;
-    if (!checked_readonly_loan_row(contracts[bytes], array_type(), 0u64)) return no_node();
-    val array <- find_interface(contracts, published, contracts[bytes].type_module, contracts[bytes].type_identity);
-    if (array >= published || contracts[array].interface_kind != array_type() ||
-        contracts[array].entry_count != 0u64 || contracts[array].array_index_kind != builtin_u64() ||
-        contracts[array].element_kind != builtin_u8()) return no_node();
+    if (!checked_readonly_byte_loan(contracts, published, bytes, 0u64)) return no_node();
     val past <- header + 1u64 + parameters;
+    if (output == builtin_bool() && parameters == 6u64 && contracts[second].value_kind == builtin_u64()) {
+        val right <- second + 2u64;
+        if (!source_aggregate_formal(contracts, second, builtin_u64(), no_node(), 0u8) ||
+            !source_aggregate_formal(contracts, second + 1u64, builtin_u64(), no_node(), 0u8) ||
+            !checked_readonly_byte_loan(contracts, published, right, 1u64) ||
+            !source_aggregate_formal(contracts, right + 1u64, builtin_u64(), no_node(), 0u8) ||
+            !source_aggregate_formal(contracts, right + 2u64, builtin_u64(), no_node(), 0u8)) return no_node();
+        return past
+    };
     if (text_predicate) {
         if (!checked_readonly_loan_row(contracts[second], record_type(), 1u64) ||
             checked_aggregate_storage(contracts, published, contracts[second].type_module,

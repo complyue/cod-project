@@ -2317,13 +2317,29 @@ func prepare_readonly_reader(nodes:const ExprNodes in N, names:const NameBinding
     val second <- work[first].next;
     if (second >= used) return;
     val third <- work[second].next;
-    val record_owner <- if (third_owner) { previous_owner } else { last_owner };
     val array_owner <- if (third_owner) { first_owner } else { previous_owner };
-    val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
-    if (record >= used) return;
     val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
     ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
     if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
+    if (!third_owner && output == builtin_bool() &&
+        independent_scalar_formal(nodes, names, second, used, revision, builtin_u64())) {
+        # Two byte spans, each with its own readonly loan and value bounds.
+        if (!independent_scalar_formal(nodes, names, third, used, revision, builtin_u64())) return;
+        val right <- work[third].next;
+        val right_type <- readonly_formal_marker(nodes, names, right, last_owner, used, revision);
+        if (!describe_byte_array(nodes, names, selected, contracts, published, right_type, used, revision, bytes))
+            return;
+        val start <- work[right].next;
+        if (!independent_scalar_formal(nodes, names, start, used, revision, builtin_u64())) return;
+        val end <- work[start].next;
+        if (independent_scalar_formal(nodes, names, end, used, revision, builtin_u64()) && work[end].next == no_node()) {
+            (views[at] <- make PreparedReadonlyQuery {}):void
+        };
+        return
+    };
+    val record_owner <- if (third_owner) { previous_owner } else { last_owner };
+    val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
+    if (record >= used) return;
     val indexed <- !third_owner &&
         readonly_record_array(nodes, names, selected, contracts, published, aggregate, record, used, revision);
     if (output != builtin_bool() || indexed) {

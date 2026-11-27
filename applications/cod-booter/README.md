@@ -319,7 +319,9 @@ The readonly predicate contract covers `c_linkage` and `valid_module_path` with 
 
 Both source commands accept the unchanged `ExpressionParser` and check the module path call in `ModuleParser`. They also check construction and synchronous writable loans of finite-bits CoD records, including the `FormalSites` record used by `inspect_formal`. The constructor uses its selected nominal schema and checks every initializer. A call uses the initialized target and its actual owner, and the returned classification and record fields keep their exact enum types. Delayed writable loans remain outside this profile.
 
-The unchanged module parser, frontend and CLI first stop at the `same_bytes` call comparing the written owner names in `ModuleParser.cod:618:10`. Executable object checking has a separate admission path.
+Both source commands check the unchanged `same_bytes` call comparing written owner names. Each span keeps its nominal byte-array loan, actual owner and two independent bounds. The two roles can borrow the same backing or different backings. The completed body records bounds failure separately from fatal arithmetic. The linked frontend recognizes a matching owner and reports a mismatch while retaining the following declaration.
+
+The unchanged module parser, frontend and CLI first stop at `parse_enum_integer_literal` in `ModuleParser.cod:684:9`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
