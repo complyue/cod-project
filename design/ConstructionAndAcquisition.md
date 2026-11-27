@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 73 · Recorded: 2026-11-25 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 74 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r74 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) specifies that only intrinsic structural regions can supply roots to a receiving specification. R73 acquisition, publication and structural reception continue. [Method-only nominal interface](GraphGrainedMemoryManagement.md#opaque-nominal-region-types)
 
 At r73 [D-22-PARENT-INIT](DesignAuthorityRegistry.md#d-22-parent-init) records the [user’s explicit parent-constructor decision](../CHANGELOG.md#h-product-parent-init-20261125), P-734/P-735. Each derived product initializes its direct parent in place before inherited field access or publication. The r72 readiness, actual-owner and failure rules continue. Check the validated ID, a skipped or repeated call, and an escaping parent failure. Runtime representation and implementation are separate.
 
@@ -462,7 +464,7 @@ This syntax adds no arbitrary executable statements, callbacks or explicit defer
 
 ### Region sources for receiving
 
-H-595 also admits an independently typed region as the source of the same receiving specification. [D-13 named roots](GraphGrainedMemoryManagement.md#named-root-access-and-receiving-specifications) defines the selected source fields. Existing destination selection precedes RHS evaluation as usual; evaluate the region expression once, then use its actual owner/layout/access and field readiness. New receivers do not become inputs, and ordinary partial/reordered/repeated selectors, temporary scopes and overlap rules continue.
+H-595 also admits an independently typed intrinsic structural region as the source of the same receiving specification. Nominal regions have no roots to receive. [D-13 named roots](GraphGrainedMemoryManagement.md#named-root-access-and-receiving-specifications) defines the selected source fields. Existing destination selection precedes RHS evaluation as usual; evaluate the region expression once, then use its actual owner/layout/access and field readiness. New receivers do not become inputs, and ordinary partial/reordered/repeated selectors, temporary scopes and overlap rules continue.
 
 A callable structural result supplies prepared component results; an existing region supplies addressable stored fields. This difference determines ordinary operation and cleanup behavior. `{ ref n = count; } := state;` borrows the regional bits place, whereas a callable's independent val result may materialize a new lexical target under D-23. `{ ptr p = next; } := state;` creates an independent local reference binding to the selected target, not a declared place alias of the regional slot. Use ordinary `state.next = target` or standalone `var link -> state.next` to update that slot. Receiving introduces no extra item operator or source-place alias form.
 
