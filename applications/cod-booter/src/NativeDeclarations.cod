@@ -908,7 +908,13 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
         val const_role <- owner_constraint_syntax(nodes, role) == ReadonlyOwnerConstraint;
         val kind <- names[marker].kind;
         row.value_kind <- if (mode == HandleFormal) { c_handle_type() }
-                          else { if (text_type(kind)) { kind } else { array_type() } };
+                          else {
+                              if (text_type(kind)) { kind }
+                              else { if (fixed_values && (kind == record_type() ||
+                                  imported_kind(names, selected, marker) == record_export())) {
+                                  record_type()
+                              } else { array_type() } }
+                          };
         row.type_module <- type_module(names, selected, marker, current_module);
         row.type_identity <- type_identity(names, selected, marker);
         row.owner_role <- role;
@@ -1498,8 +1504,8 @@ export data SuppliedView =
     ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
     ReadonlyIndexedByteReader {} |
     PreparedReadonlyQuery {} |
-    PreparedArrayProcedure {} |
-    CheckedArrayProcedure { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    PreparedArrayProcedure { mixed_record:bool; } |
+    CheckedArrayProcedure { completion:ArrayReadCompletion; numeric_fault:bool; allocates:bool; } |
     PreparedProductWriter {} |
     PreparedAggregateWriter {} |
     CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
@@ -1513,7 +1519,7 @@ export data SuppliedView =
     CheckedLiteralCall {} |
     CheckedReadonlyCall {} |
     CheckedWriterCall {} |
-    CheckedArrayProcedureCall {} |
+    CheckedArrayProcedureCall { allocates:bool; } |
     CheckedArrayReaderCall {} |
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
@@ -4369,6 +4375,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
     val literal_kind <- 0u8;
+    val profile <- (NoSourceHandle:SourceHandleProfile);
     for (at in 0u64 .. used) {
         literal_kind <- literal_source_result(nodes, names, work, at, used, revision);
         if (literal_kind != 0u8) {
@@ -4413,9 +4420,11 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_record_inspector(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
-        if ((case views[at] of { NoSuppliedView -> true; _ -> false }) &&
-            source_handle_signature(nodes, names, selected, work, at, used, revision, true)) {
-            (views[at] <- make PreparedArrayProcedure {}):void
+        if (case views[at] of { NoSuppliedView -> true; _ -> false }) {
+            profile <- source_handle_signature(nodes, names, selected, work, at, used, revision, true);
+            if (profile == (ArrayProcedure:SourceHandleProfile) || profile == (MixedRecordProcedure:SourceHandleProfile)) {
+                (views[at] <- make PreparedArrayProcedure { mixed_record <- profile == (MixedRecordProcedure:SourceHandleProfile) }):void
+            }
         };
         prepare_scalar_predicate(nodes, names, work, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
@@ -4668,10 +4677,12 @@ export func source_call_scalar(kind:UInt8) -> bool {
         kind == builtin_bool()
 }
 
+enum SourceHandleProfile:UInt8 { NoSourceHandle; SourceHandle; ArrayProcedure; MixedRecordProcedure; }
+
 func source_handle_signature(
     nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
     work:const NameWork in W, form:UInt64, used:UInt64, revision:UInt64, array_procedure:bool)
-    -> bool where {const owner N, const owner B, const owner E, const owner W} {
+    -> SourceHandleProfile where {const owner N, const owner B, const owner E, const owner W} {
     ref sites = make CallableSites {
         signature <- no_node(); body <- no_node(); function_form <- false;
     };
@@ -4679,19 +4690,19 @@ func source_handle_signature(
         inspect_callable(nodes, revision, used, form, sites) != ModuleCallable ||
         sites.body >= used || names[form].declaration != form ||
             work[form].next_method != no_node())
-        return false;
+        return (NoSourceHandle:SourceHandleProfile);
     if (array_procedure) {
         ref failure = make UInt64 { no_node() };
         if (sites.function_form || !find_signature_clause(nodes, revision, used, sites.signature,
-            ThrowsSignatureClause, failure) || failure != no_node()) return false
+            ThrowsSignatureClause, failure) || failure != no_node()) return (NoSourceHandle:SourceHandleProfile)
     };
     ref result = make UInt64 { no_node() };
     val kind <- declared_call_result(nodes, names, work, selected, form, used, revision, result);
     if (!source_call_scalar(kind) && kind != builtin_void() && (!array_procedure || kind != enum_type()))
-        return false;
+        return (NoSourceHandle:SourceHandleProfile);
     ref head = make UInt64 { no_node() };
     ref parameter = make UInt64 { no_node() };
-    if (!signature_formals(nodes, revision, used, sites.signature, head, parameter)) return false;
+    if (!signature_formals(nodes, revision, used, sites.signature, head, parameter)) return (NoSourceHandle:SourceHandleProfile);
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <-
         ValueFormal; };
     ref binding = make BindingSites {
@@ -4701,56 +4712,76 @@ func source_handle_signature(
     val has_handle <- false;
     val has_array <- false;
     val has_output <- false;
+    val has_record <- false;
     val has_readonly_array <- false;
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val parameter_kind <- 0u8;
+    val owner_kind <- ReadonlyOwnerConstraint;
+    val target_kind <- 0u8;
+    val imported <- 0u8;
     for (unused in 0u64 .. used) {
-        if (parameter == no_node()) return if (array_procedure) {
-            has_array && (if (kind == enum_type()) { has_handle }
+        if (parameter == no_node()) {
+            if (!array_procedure) return if (has_handle) { (SourceHandle:SourceHandleProfile) } else { (NoSourceHandle:SourceHandleProfile) };
+            if (!has_array) return (NoSourceHandle:SourceHandleProfile);
+            if (kind == builtin_u8() && has_output) {
+                return if (has_handle && has_record && has_readonly_array) {
+                    (MixedRecordProcedure:SourceHandleProfile)
+                } else { (NoSourceHandle:SourceHandleProfile) }
+            };
+            if (has_record) return (NoSourceHandle:SourceHandleProfile);
+            if (if (kind == enum_type()) { has_handle }
                 else { if (has_output) { has_readonly_array } else { has_handle } })
-        } else { has_handle };
-        if (!typed_parameter(nodes, revision, used, parameter, array_procedure, formal, binding)) return false;
+                return (ArrayProcedure:SourceHandleProfile);
+            return (NoSourceHandle:SourceHandleProfile)
+        };
+        if (!typed_parameter(nodes, revision, used, parameter, array_procedure, formal, binding)) return (NoSourceHandle:SourceHandleProfile);
         if (array_procedure && kind == enum_type() && !has_handle && formal.mode != HandleFormal)
-            return false;
+            return (NoSourceHandle:SourceHandleProfile);
         if (formal.mode == HandleFormal) {
             if (source_here_supplier(nodes, names, selected, parameter, used,
                 revision) == no_node())
-                return false;
+                return (NoSourceHandle:SourceHandleProfile);
             (has_handle <- true):void
         } else {
             if (array_procedure && formal.mode == ReferenceFormal) {
-                if (binding.owner_name >= used || names[binding.owner_name].kind != owner_binding() ||
-                    (names[binding.target_type].kind != array_type() &&
-                     imported_kind(names, selected, binding.target_type) != array_export())) return false;
-                if (!binding.readonly &&
-                    owner_constraint_syntax(nodes, names[binding.owner_name].declaration) != WritableOwnerConstraint)
-                    return false;
-                if (!binding.readonly && kind != enum_type() &&
-                    (kind != builtin_void() || names[binding.target_type].kind != array_type() ||
-                     !describe_local_u64_array_element(nodes, names, selected, names[binding.target_type].declaration,
-                        used, revision, element) || element.kind != sum_type() || element.defining_module != 0u64))
-                    return false;
-                has_array <- true;
-                has_output <- has_output || !binding.readonly;
-                (has_readonly_array <- has_readonly_array || binding.readonly):void
+                if (binding.owner_name >= used || names[binding.owner_name].kind != owner_binding())
+                    return (NoSourceHandle:SourceHandleProfile);
+                owner_kind <- owner_constraint_syntax(nodes, names[binding.owner_name].declaration);
+                target_kind <- names[binding.target_type].kind;
+                imported <- imported_kind(names, selected, binding.target_type);
+                if (kind == builtin_u8() && (target_kind == record_type() || imported == record_export())) {
+                    if (!binding.readonly || owner_kind != ReadonlyOwnerConstraint) return (NoSourceHandle:SourceHandleProfile);
+                    (has_record <- true):void
+                } else {
+                    if (target_kind != array_type() && imported != array_export()) return (NoSourceHandle:SourceHandleProfile);
+                    if (!binding.readonly && owner_kind != WritableOwnerConstraint) return (NoSourceHandle:SourceHandleProfile);
+                    if (!binding.readonly && kind != enum_type() && kind != builtin_u8() &&
+                        (kind != builtin_void() || target_kind != array_type() ||
+                         !describe_local_u64_array_element(nodes, names, selected, names[binding.target_type].declaration,
+                            used, revision, element) || element.kind != sum_type() || element.defining_module != 0u64))
+                        return (NoSourceHandle:SourceHandleProfile);
+                    has_array <- true;
+                    has_output <- has_output || !binding.readonly;
+                    (has_readonly_array <- has_readonly_array || binding.readonly):void
+                }
             } else {
                 parameter_kind <- native_value_kind(names, selected, binding.target_type);
                 if ((formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) ||
                     binding.owner_name != no_node() ||
                     (!source_call_scalar(parameter_kind) && (!array_procedure || parameter_kind != enum_type())))
-                    return false
+                    return (NoSourceHandle:SourceHandleProfile)
             }
         };
         parameter <- work[parameter].next
     };
-    return false
+    return (NoSourceHandle:SourceHandleProfile)
 }
 
 export func source_handle_callable(
     nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
     work:const NameWork in W, form:UInt64, used:UInt64, revision:UInt64)
     -> bool where {const owner N, const owner B, const owner E, const owner W} {
-    return source_handle_signature(nodes, names, selected, work, form, used, revision, false)
+    return source_handle_signature(nodes, names, selected, work, form, used, revision, false) == (SourceHandle:SourceHandleProfile)
 }
 
 export func first_source_handle_callable(
@@ -5165,8 +5196,11 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                                 CheckedReadonlyReader { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedArrayProcedure { val numeric_fault <-; } -> {
-                                    (contracts[first].source_numeric_fault <- numeric_fault):void
+                                CheckedArrayProcedure { val numeric_fault <-; val allocates <-; } -> {
+                                    contracts[first].source_numeric_fault <- numeric_fault;
+                                    contracts[first].array_slot_failures.out_of_memory <- allocates;
+                                    contracts[first].array_slot_failures.region_capacity <- allocates;
+                                    (contracts[first].array_slot_failures.invalid_capacity <- allocates):void
                                 };
                                 CheckedProductWriter { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void

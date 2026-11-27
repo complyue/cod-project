@@ -81,7 +81,7 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion {
     NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds
 };
 using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
-using "./NativeDeclarations.cod" SuppliedView { CheckedImportedArraySlotCall };
+using "./NativeDeclarations.cod" SuppliedView { CheckedImportedArraySlotCall, CheckedArrayProcedureCall };
 
 export data CompletionSite {
     event:UInt8;
@@ -1207,7 +1207,7 @@ func in_slot_summary(demand:const DeclarationDemands in D, sites:const Completio
     return definition < used && sites[definition].slot_summary
 }
 
-func imported_slot_escapes(views:const SuppliedViews in H, at:UInt64, category:UInt64)
+func imported_array_escapes(views:const SuppliedViews in H, at:UInt64, category:UInt64)
     -> bool where {const owner H} {
     return case views[at] of {
         CheckedImportedArraySlotCall { val failures <-; } ->
@@ -1215,6 +1215,9 @@ func imported_slot_escapes(views:const SuppliedViews in H, at:UInt64, category:U
             (category == out_of_memory_identity() && failures.out_of_memory) ||
             (category == region_capacity_identity() && failures.region_capacity) ||
             (category == invalid_capacity_identity() && failures.invalid_capacity);
+        CheckedArrayProcedureCall { val allocates <-; } ->
+            allocates && (category == out_of_memory_identity() || category == region_capacity_identity() ||
+                category == invalid_capacity_identity());
         _ -> false
     }
 }
@@ -1255,8 +1258,8 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
             imported <- links[at].imported_interface != no_node() &&
                 (if (array_summary) {
                     invocation_reached(nodes, sites, at, used, revision) &&
-                        (if (facts[at].loans_array_slot) { imported_slot_escapes(views, at, category) }
-                            else { links[at].imported_array_read_completion == NoArrayRead })
+                        (imported_array_escapes(views, at, category) ||
+                            (!facts[at].loans_array_slot && links[at].imported_array_read_completion == NoArrayRead))
                 } else { can_continue(sites, at) });
             allocation <- array_summary && category != index_out_of_bounds_identity() &&
                 allocated_source_array(facts, at) && can_continue(sites, at);

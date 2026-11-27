@@ -13,14 +13,14 @@ using "./ParserStorage.cod" ExprPayload {
     HereInvocation, HereSupply, HereReceiver, ContinueValue, Formal
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
-using "./ModuleExports.cod" index_out_of_bounds_identity;
+using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity };
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_readonly_query,
     prepared_array_procedure, prepared_native_function,
     prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, borrowed_ref, void_result, never_result };
+using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -32,7 +32,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector, CheckedArrayProcedure, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -314,13 +314,13 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
     };
 }
 
-data FunctionEffects { available:bool; bounds:bool; numeric:bool; }
+data FunctionEffects { available:bool; bounds:bool; numeric:bool; allocates:bool; }
 array FunctionEffectRows[UInt64]:FunctionEffects;
 
 data FunctionCallNode { first_caller:UInt64; caller:UInt64; next_caller:UInt64; }
 array FunctionCallGraph[UInt64]:FunctionCallNode;
 array FunctionEffectStack[UInt64]:UInt64;
-enum FunctionEffect:UInt8 { UnavailableBody; EscapingBounds; FatalArithmetic; }
+enum FunctionEffect:UInt8 { UnavailableBody; EscapingBounds; FatalArithmetic; LexicalArrayAllocation; }
 
 func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
     return kind == scalar_u8() || kind == scalar_u64()
@@ -331,6 +331,16 @@ func prepared_synchronous_here(views:const SuppliedViews in V, site:UInt64, call
     if (site >= intrinsic (len)(views)) return false;
     return case views[site] of {
         PreparedSynchronousHere { val invocation <- call; } -> call == no_node() || invocation == call;
+        _ -> false
+    }
+}
+
+func lexical_array_allocation(names:const NameBindings in B, facts:const OperandFacts in F,
+    views:const SuppliedViews in V, at:UInt64) -> bool
+    where {const owner B, const owner F, const owner V} {
+    return case views[at] of {
+        PreparedArrayConstruction { val placement <-; val owner_site <-; } ->
+            placement == no_node() && owner_site == names[at].scope && allocated_source_array(facts, at);
         _ -> false
     }
 }
@@ -363,9 +373,10 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
-            NamedConstruction -> facts[at].allocation_owner == no_node() &&
+            NamedConstruction -> lexical_array_allocation(names, facts, views, at) ||
+                (facts[at].allocation_owner == no_node() &&
                 ((at < intrinsic (len)(cases) && (case cases[at] of { BitsConstruction -> true; _ -> false })) ||
-                 completed_lexical_bits_target(facts, at, names[at].scope));
+                 completed_lexical_bits_target(facts, at, names[at].scope)));
             CheckedTypeAssertion -> facts[at].kind == declared_scalar(enum_type());
             BracedInitializer -> true;
             InitializerTransfer -> names[at].kind == 0u8;
@@ -380,8 +391,9 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ArgumentItem -> true;
             ReturnVoid -> true;
             ReturnValue -> true;
-            LocalBinding { val mode <-; } -> mode == ValueLocal ||
-                (mode == ReferenceLocal && completed_lexical_bits_target(facts, at, names[at].scope));
+            LocalBinding { val mode <-; val initializer <-; } -> mode == ValueLocal ||
+                (mode == ReferenceLocal && (completed_lexical_bits_target(facts, at, names[at].scope) ||
+                    (initializer.index < at && lexical_array_allocation(names, facts, views, initializer.index))));
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
@@ -461,7 +473,16 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     if (sites[at].category_module == 0u64 && sites[at].category == index_out_of_bounds_identity() &&
                         sites[at].destination == definition) {
                         (local[definition].bounds <- true):void
-                    } else { (local[definition].available <- false):void }
+                    } else {
+                        if (sites[at].category_module == 0u64 && sites[at].category == out_of_memory_identity() &&
+                            sites[at].destination == definition && lexical_array_allocation(names, facts, views, at)) {
+                            (local[definition].allocates <- true):void
+                        } else { (local[definition].available <- false):void }
+                    }
+                };
+                if (checked_call && !stops_before_entry &&
+                    (case views[at] of { CheckedArrayProcedureCall { val allocates <-; } -> allocates; _ -> false })) {
+                    (local[definition].allocates <- true):void
                 };
                 if (can_continue(sites, at)) {
                     if ((checked_source_array_call(views, at) && work[at].imported_numeric_fault) ||
@@ -490,7 +511,8 @@ func has_function_effect(row:const FunctionEffects in R, category:FunctionEffect
     return case category of {
         UnavailableBody -> !row.available;
         EscapingBounds -> row.bounds;
-        FatalArithmetic -> row.numeric
+        FatalArithmetic -> row.numeric;
+        LexicalArrayAllocation -> row.allocates
     }
 }
 
@@ -499,7 +521,8 @@ func remember_function_effect(row:FunctionEffects in R, category:FunctionEffect)
     case category of {
         UnavailableBody -> (row.available <- false):void;
         EscapingBounds -> (row.bounds <- true):void;
-        FatalArithmetic -> (row.numeric <- true):void
+        FatalArithmetic -> (row.numeric <- true):void;
+        LexicalArrayAllocation -> (row.allocates <- true):void
     }
 }
 
@@ -559,51 +582,59 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
     ref calls = make FunctionCallGraph(used, make FunctionCallNode {
         first_caller <- no_node(); caller <- no_node(); next_caller <- no_node()
     });
-    ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
+    ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false; allocates <- false });
     collect_function_operations(nodes, names, work, views, facts, demand, sites, cases, calls, local, used, revision);
     ref stack = make FunctionEffectStack(used, no_node());
-    ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- true; bounds <- false; numeric <- false });
+    ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- true; bounds <- false; numeric <- false; allocates <- false });
     propagate_function_effect(calls, local, outcomes, stack, used, UnavailableBody:FunctionEffect);
     propagate_function_effect(calls, local, outcomes, stack, used, EscapingBounds:FunctionEffect);
     propagate_function_effect(calls, local, outcomes, stack, used, FatalArithmetic:FunctionEffect);
+    propagate_function_effect(calls, local, outcomes, stack, used, LexicalArrayAllocation:FunctionEffect);
+    val nonallocating <- false;
     for (at in 0u64 .. used) {
-        if (prepared_product_writer(views, at) && outcomes[at].available) {
+        nonallocating <- outcomes[at].available && !outcomes[at].allocates;
+        if (prepared_product_writer(views, at) && nonallocating) {
             (views[at] <- make CheckedProductWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_aggregate_writer(views, at) && outcomes[at].available) {
+        if (prepared_aggregate_writer(views, at) && nonallocating) {
             (views[at] <- make CheckedAggregateWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_record_inspector(views, at) && outcomes[at].available) {
+        if (prepared_record_inspector(views, at) && nonallocating) {
             (views[at] <- make CheckedRecordInspector {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_parser_writer(views, at) && outcomes[at].available) {
+        if (prepared_parser_writer(views, at) && nonallocating) {
             (views[at] <- make CheckedParserWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_readonly_query(views, at) && outcomes[at].available) {
+        if (prepared_readonly_query(views, at) && nonallocating) {
             (views[at] <- make CheckedReadonlyReader {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_array_procedure(views, at) && outcomes[at].available) {
-            (views[at] <- make CheckedArrayProcedure {
-                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
-                numeric_fault <- outcomes[at].numeric
-            }):void
+        case views[at] of {
+            PreparedArrayProcedure { val mixed_record <-; } -> {
+                if (outcomes[at].available && (mixed_record || !outcomes[at].allocates)) {
+                    (views[at] <- make CheckedArrayProcedure {
+                        completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                        numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
+                    }):void
+                }
+            };
+            _ -> {}
         };
-        if (prepared_scalar_predicate(views, at) && outcomes[at].available &&
+        if (prepared_scalar_predicate(views, at) && nonallocating &&
             !outcomes[at].bounds && !outcomes[at].numeric) {
             (views[at] <- make CheckedScalarPredicate {}):void
         }
