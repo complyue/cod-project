@@ -241,7 +241,13 @@ The source commands check `Lexer.scan_token` and its local helpers. The checker 
 
 The defining visit completes bounds and fatal arithmetic evidence over the recorded ordinary call dependencies. A cyclic or unsupported dependency leaves the source call proof unavailable. On a source-preserving import, the caller prepares the byte-array loan, offset, and writable record loan in written order. For `tokens[index]` the bounds check and target selection precede entry. The owner role follows the selected record rather than the intervening value operand.
 
-The complete TokenBuffer and application entry check through the writable `scan_token` call and now reach `lexical_error` at `TokenBuffer.cod:93:13`. Object emission for the writable loan has its own admission checks.
+Object emission for the writable loan has its own admission checks.
+
+### Imported byte predicates
+
+In a body already required to be checked, a direct source-preserving `using` selection can call an ordinary fixed function with one independent `UInt8` value and a `bool` result. The defining visit checks the single returned predicate and completes its exact local call dependencies before publishing the result and signature. Only a proved normal contract with no possible bounds or fatal arithmetic outcome after entry is published in this profile. The caller evaluates and checks the actual once. An indexed read can still fail before entry. Cyclic or unrepresented dependencies leave the contract unavailable.
+
+Both source commands accept the full unchanged `TokenBuffer`, including its imported `Lexer.lexical_error` call. The application frontend currently stops at the imported `make Formal` operand in `CallableSyntax.cod:147:56`.
 
 ### Imported array length families
 

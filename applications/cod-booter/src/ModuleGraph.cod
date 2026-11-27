@@ -85,11 +85,11 @@ using "./NameResolution.cod" {
     ModuleNameUse { LexicalName }, first_module_variadic_formal
 };
 using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_forward };
-using "./SourceContracts.cod" { finish_text_predicates, finish_product_writers };
+using "./SourceContracts.cod" { finish_text_predicates, finish_closed_source_functions };
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
     publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
-    finish_array_slot_body, first_source_reader_or_writer, readonly_indexed_byte_reader,
+    finish_array_slot_body, first_source_call_profile, readonly_indexed_byte_reader,
     publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView, CheckedReadonlyReader },
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
@@ -280,7 +280,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, require
         membership <- UnprovedMembership;
         sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -779,7 +779,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         return false;
     if (!executable) {
         finish_text_predicates(nodes, names, work, views, facts, sites, used, revision);
-        finish_product_writers(nodes, names, work, views, facts, demand, sites, used, revision)
+        finish_closed_source_functions(nodes, names, work, views, facts, demand, sites, used, revision)
     };
     val callee <- no_node();
     for (at in 0u64 .. used) {
@@ -988,11 +988,11 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected;
     } else {};
-    val source_reader_or_writer <- if (native) { no_node() } else { first_source_reader_or_writer(views, used) };
-    val case_capacity <- if (!native && (source_reader_or_writer != no_node() ||
+    val source_call_profile <- if (native) { no_node() } else { first_source_call_profile(views, used) };
+    val case_capacity <- if (!native && (source_call_profile != no_node() ||
         needs_constructor_case_plan(nodes, used, revision))) { used } else { 0u64 };
     ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
-    ref first_case = make UInt64 { source_reader_or_writer };
+    ref first_case = make UInt64 { source_call_profile };
     if (!native && !prepare_graph_source_operands(source, nodes, names, selected, work,
         spellings, spelling_size, published_interfaces, interface_count, aggregate_facts, cases, views, first_case, result)) {
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
@@ -1608,7 +1608,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_passes_owner <- 0u8; membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false

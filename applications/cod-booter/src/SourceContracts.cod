@@ -11,7 +11,7 @@ using "./ParserStorage.cod" ExprPayload {
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
-using "./NativeDeclarations.cod" { prepared_product_writer, prepared_array_length_call, checked_literal_call };
+using "./NativeDeclarations.cod" { prepared_product_writer, prepared_scalar_predicate, prepared_array_length_call, checked_literal_call };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u64, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
@@ -24,7 +24,7 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedScalarPredicate }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -35,7 +35,7 @@ using "./ModuleExportStorage.cod" {
 enum ContractOperationKind:UInt8 {
     NoContractOperation; PendingExpression; CheckedLeaf; FalseValue; TrueValue;
     ForwardValue; NegateValue; ConjoinValues; DisjoinValues; ReturnFalseOrTail;
-    WriterBody; WriterCall;
+    FunctionBody; FunctionCall;
 }
 data ContractOperation {
     kind:ContractOperationKind;
@@ -307,10 +307,10 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
     };
 }
 
-data WriterEffects { available:bool; bounds:bool; numeric:bool; }
-array WriterEffectRows[UInt64]:WriterEffects;
+data FunctionEffects { available:bool; bounds:bool; numeric:bool; }
+array FunctionEffectRows[UInt64]:FunctionEffects;
 
-func checked_writer_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
+func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, at:UInt64, callee:UInt64) -> bool
     where {const owner N, const owner B, const owner F, const owner V} {
     return case nodes[at] of {
@@ -348,13 +348,13 @@ func checked_writer_operation(nodes:const ExprNodes in N, names:const NameBindin
     }
 }
 
-# Collect once over checked operations. A writer body depends on a chain of
+# Collect once over checked operations. A function body depends on a chain of
 # its entered call sites. Each site identifies the exact checked callee and
 # the preceding edge in this body. The ordering pass needs only those links.
-func collect_writer_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
+func collect_function_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:const SuppliedViews in V, facts:const OperandFacts in F,
     demand:const DeclarationDemands in D, sites:const CompletionSites in X,
-    operations:ContractOperations in P, local:WriterEffectRows in E, used:UInt64, revision:UInt64) -> void
+    operations:ContractOperations in P, local:FunctionEffectRows in E, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner W, const owner V, const owner F,
         const owner D, const owner X, owner P, owner E} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -369,7 +369,7 @@ func collect_writer_operations(nodes:const ExprNodes in N, names:const NameBindi
             if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64()) &&
                 !can_miss_return(nodes, facts, sites, definition, revision, used)) {
                 local[definition].available <- true;
-                (operations[definition].kind <- (WriterBody:ContractOperationKind)):void
+                (operations[definition].kind <- (FunctionBody:ContractOperationKind)):void
             }
         }
     };
@@ -383,7 +383,7 @@ func collect_writer_operations(nodes:const ExprNodes in N, names:const NameBindi
             callee <- facts[at].call_definition;
             if ((callee != no_node() && (callee != demand[at].callee ||
                  inspect_invocation(nodes, revision, used, at, call) != OrdinaryInvocation)) ||
-                !checked_writer_operation(nodes, names, facts, views, at, callee)) {
+                !checked_function_operation(nodes, names, facts, views, at, callee)) {
                 (local[definition].available <- false):void
             } else {
                 event <- sites[at].event;
@@ -404,7 +404,7 @@ func collect_writer_operations(nodes:const ExprNodes in N, names:const NameBindi
                         (local[definition].numeric <- true):void
                     };
                     if (callee != no_node()) {
-                        operations[at].kind <- (WriterCall:ContractOperationKind);
+                        operations[at].kind <- (FunctionCall:ContractOperationKind);
                         operations[at].first <- callee;
                         operations[at].second <- operations[definition].first;
                         (operations[definition].first <- at):void
@@ -415,9 +415,9 @@ func collect_writer_operations(nodes:const ExprNodes in N, names:const NameBindi
     };
 }
 
-func apply_writer_operation(operations:const ContractOperations in P, local:const WriterEffectRows in L,
-    outcomes:WriterEffectRows in O, at:UInt64) -> void where {const owner P, const owner L, owner O} {
-    val body <- operations[at].kind == (WriterBody:ContractOperationKind);
+func apply_function_operation(operations:const ContractOperations in P, local:const FunctionEffectRows in L,
+    outcomes:FunctionEffectRows in O, at:UInt64) -> void where {const owner P, const owner L, owner O} {
+    val body <- operations[at].kind == (FunctionBody:ContractOperationKind);
     if (body && !local[at].available) return;
     val first <- operations[at].first;
     val second <- operations[at].second;
@@ -430,30 +430,30 @@ func apply_writer_operation(operations:const ContractOperations in P, local:cons
     (outcomes[at].available <- true):void;
 }
 
-func has_product_writer(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
+func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
-        if (prepared_product_writer(views, at)) return true
+        if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at)) return true
     };
     return false
 }
 
-export func finish_product_writers(nodes:const ExprNodes in N, names:const NameBindings in B,
+export func finish_closed_source_functions(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:SuppliedViews in V, facts:const OperandFacts in F,
     demand:const DeclarationDemands in D, sites:const CompletionSites in X, used:UInt64, revision:UInt64)
     -> void where {const owner N, const owner B, const owner W, owner V, const owner F, const owner D, const owner X} {
-    if (used > 4611686018427387903u64 || !has_product_writer(views, used)) return;
+    if (used > 4611686018427387903u64 || !has_closed_function_candidate(views, used)) return;
     ref operations = make ContractOperations(used, make ContractOperation {
         kind <- (NoContractOperation:ContractOperationKind); first <- no_node(); second <- no_node()
     });
-    ref local = make WriterEffectRows(used, make WriterEffects { available <- false; bounds <- false; numeric <- false });
-    collect_writer_operations(nodes, names, work, views, facts, demand, sites, operations, local, used, revision);
+    ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
+    collect_function_operations(nodes, names, work, views, facts, demand, sites, operations, local, used, revision);
     ref traversal = make ContractTraversals(used, make ContractTraversal {
         visit <- (Unvisited:ContractVisit); stack_site <- no_node(); ordered_site <- no_node()
     });
     val count <- order_contract_operations(operations, traversal, used);
-    ref outcomes = make WriterEffectRows(used, make WriterEffects { available <- false; bounds <- false; numeric <- false });
+    ref outcomes = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
     for (item in 0u64 .. count) {
-        apply_writer_operation(operations, local, outcomes, traversal[item].ordered_site)
+        apply_function_operation(operations, local, outcomes, traversal[item].ordered_site)
     };
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) && outcomes[at].available) {
@@ -461,6 +461,10 @@ export func finish_product_writers(nodes:const ExprNodes in N, names:const NameB
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void
+        };
+        if (prepared_scalar_predicate(views, at) && outcomes[at].available &&
+            !outcomes[at].bounds && !outcomes[at].numeric) {
+            (views[at] <- make CheckedScalarPredicate {}):void
         }
     };
 }

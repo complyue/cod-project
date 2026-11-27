@@ -152,7 +152,7 @@ export data ModuleInterfaceRow {
     exception_schema:ExceptionSchema;
     field_mode:FormalMode;
     scalar_object_body:bool;
-    literal_source_body:bool;
+    scalar_source_body:bool;
     array_read_completion:ArrayReadCompletion;
     source_numeric_fault:bool;
     source_product_writer:bool;
@@ -196,7 +196,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.exception_schema <- (OrdinarySchema:ExceptionSchema);
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
-    row.literal_source_body <- false;
+    row.scalar_source_body <- false;
     row.array_read_completion <- (NoArrayRead:ArrayReadCompletion);
     row.source_numeric_fault <- false;
     row.source_product_writer <- false;
@@ -225,7 +225,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:U
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -247,7 +247,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:UInt64, publi
         sum_payload <- make NoSumInterface {};
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); source_numeric_fault <- false; source_product_writer <- false;
+        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); source_numeric_fault <- false; source_product_writer <- false;
         object_view <- view;
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
