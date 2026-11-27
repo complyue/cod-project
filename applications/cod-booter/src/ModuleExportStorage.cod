@@ -39,7 +39,7 @@ export func constructor_type() -> UInt8 { return 40u8; }
 
 export enum AggregateStorage:UInt8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 export enum InterfaceCallableKind:UInt8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
-export enum SourceWriter:UInt8 { NoSourceWriter; ProductWriter; AggregateWriter; ParserWriter; }
+export enum SourceWriter:UInt8 { NoSourceWriter; ProductWriter; AggregateWriter; ParserWriter; RecordInspector; }
 export enum ArrayReadCompletion:UInt8 { NoArrayRead; CheckedArrayRead; ArrayReadMayFailBounds; }
 
 export data ByteArrayFailures {

@@ -1,7 +1,7 @@
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
-    InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal }
+    InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal, ReferenceLocal }
 };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
@@ -9,16 +9,16 @@ using "./ParserStorage.cod" ExprPayload {
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
-    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver
+    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, CheckedTypeAssertion
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_indexed_u64_reader,
-    prepared_parser_writer, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
+    prepared_parser_writer, prepared_record_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u64, borrowed_ref, void_result, never_result };
+using "./OperandChecking.cod" { declared_scalar, scalar_u64, scalar_kind, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -29,12 +29,12 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate, CheckedParserWriter, CheckedRecordInspector }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
 using "./ModuleExportStorage.cod" {
-    ArrayReadCompletion { NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds }
+    enum_type, ArrayReadCompletion { NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds }
 };
 
 enum ContractOperationKind:UInt8 {
@@ -335,9 +335,11 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
-            NamedConstruction -> at < intrinsic (len)(cases) &&
-                facts[at].allocation_owner == no_node() &&
-                (case cases[at] of { BitsConstruction -> true; _ -> false });
+            NamedConstruction -> facts[at].allocation_owner == no_node() &&
+                ((at < intrinsic (len)(cases) && (case cases[at] of { BitsConstruction -> true; _ -> false })) ||
+                 (scalar_kind(facts[at].kind) && facts[at].reception == borrowed_ref() &&
+                  facts[at].owner == names[at].scope && facts[at].reservation == no_node()));
+            CheckedTypeAssertion -> facts[at].kind == declared_scalar(enum_type());
             BracedInitializer -> true;
             InitializerTransfer -> names[at].kind == 0u8;
             CaseExpression -> true;
@@ -351,7 +353,8 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ArgumentItem -> true;
             ReturnVoid -> true;
             ReturnValue -> true;
-            LocalBinding { val mode <-; } -> mode == ValueLocal;
+            LocalBinding { val mode <-; } -> mode == ValueLocal ||
+                (mode == ReferenceLocal && scalar_kind(facts[at].kind) && facts[at].owner == names[at].scope);
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
@@ -382,7 +385,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             callable.function_form && !is_scope_block(nodes, callable.body) &&
             demand[definition].declared_failure == no_node() && facts[definition].reception != borrowed_ref()) {
             result <- facts[definition].kind;
-            if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64()) &&
+            if ((result == void_result() || result == scalar_bool() || result == declared_scalar(builtin_u8()) || result == scalar_u64() || result == declared_scalar(enum_type())) &&
                 !can_miss_return(nodes, facts, sites, definition, revision, used)) {
                 if (readonly_indexed_byte_reader(views, definition)) {
                     # The earlier completion pass already proved this leaf.
@@ -463,7 +466,7 @@ func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) 
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
             prepared_aggregate_writer(views, at) || prepared_indexed_u64_reader(views, at) ||
-            prepared_parser_writer(views, at)) return true
+            prepared_parser_writer(views, at) || prepared_record_inspector(views, at)) return true
     };
     return false
 }
@@ -496,6 +499,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         };
         if (prepared_aggregate_writer(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedAggregateWriter {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        };
+        if (prepared_record_inspector(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedRecordInspector {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void

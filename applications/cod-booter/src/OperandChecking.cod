@@ -1,7 +1,7 @@
 using "./NameResolution.cod" source_aggregate_formal;
 using "./NativeDeclarations.cod" checked_readonly_call;
 using "./NameResolution.cod" direct_source_using;
-using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter };
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, RecordInspector };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" OwnerConstraintSyntax {
     NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint
@@ -2397,6 +2397,26 @@ func lend_imported_fresh_sum(names:const NameBindings in B, facts:OperandFacts i
     return 0u8
 }
 
+func scoped_imported_product_actual(names:const NameBindings in B, facts:const OperandFacts in F,
+    cases:const ConstructorCaseFacts in C, at:UInt64, value:UInt64, argument:UInt64, writable:bool)
+    -> bool where {const owner B, const owner F, const owner C} {
+    if (names[value].kind == local_binding()) {
+        val declaration <- names[value].declaration;
+        return declaration < value && declaration < intrinsic (len)(cases) &&
+            (case cases[declaration] of {
+                LexicalProductReference { val owner_site <-; } ->
+                    owner_site == facts[value].owner && owner_site == names[at].scope;
+                _ -> false
+            })
+    };
+    return value < intrinsic (len)(cases) && facts[value].selection == value &&
+        (case cases[value] of {
+            IndexedProductLoan { val consumer <-; val write_access <- writable; } ->
+                consumer == argument && write_access == writable;
+            _ -> false
+        })
+}
+
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                          facts:OperandFacts in F, cases:const ConstructorCaseFacts in C, views:const SuppliedViews in H,
     at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
@@ -2462,12 +2482,8 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                 links[argument].imported_target_readonly == 0u8)
                 return expected_writable_place();
             if (expected == source_product_loan() && names[value].kind != formal_binding() &&
-                (value >= intrinsic (len)(cases) || facts[value].selection != value ||
-                 !(case cases[value] of {
-                    IndexedProductLoan { val consumer <-; val writable <-; } ->
-                        consumer == argument && writable == (links[argument].imported_target_readonly == 0u8);
-                    _ -> false
-                 }))) return unproved_owner();
+                !scoped_imported_product_actual(names, facts, cases, at, value, argument,
+                    links[argument].imported_target_readonly == 0u8)) return unproved_owner();
             if (value != argument) { copy_fact(facts, argument, value) };
             if (source_aggregate_loan) {
                 (facts[argument].target_readonly <- links[argument].imported_target_readonly):void
@@ -2808,6 +2824,36 @@ func checked_product_writer_header(contracts:const ModuleInterfaces in I, publis
             contracts[product].type_identity, record_type()) == CoDBitsAggregate
 }
 
+func checked_record_inspector_header(contracts:const ModuleInterfaces in I, published:UInt64,
+    header:UInt64) -> bool where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts) || published - header < 6u64 ||
+        contracts[header].entry_count != 5u64 || contracts[header].interface_kind != callable_binding() ||
+        contracts[header].source_writer != RecordInspector || contracts[header].result_kind != enum_type() ||
+        contracts[header].callable_kind != CheckedFunction || contracts[header].membership != FixedMethods ||
+        contracts[header].native_function != no_node() || contracts[header].target_readonly != 0u8 ||
+        contracts[header].owner_count != 2u64 || contracts[header].owner_role != no_node() ||
+        contracts[header].has_here != 0u8 || contracts[header].failure_identity != no_node() ||
+        contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8 ||
+        contracts[header].array_read_completion == NoArrayRead || !published_enum_domain(contracts, published, header))
+        return false;
+    val array <- header + 1u64;
+    val record <- header + 5u64;
+    if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 1u8) ||
+        !source_aggregate_formal(contracts, record, record_type(), 1u64, 0u8))
+        return false;
+    for (row in array + 1u64 .. record) {
+        if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) return false
+    };
+    val schema <- find_interface(contracts, published, contracts[array].type_module, contracts[array].type_identity);
+    return schema < published && contracts[schema].interface_kind == array_type() &&
+        contracts[schema].entry_count == 0u64 && contracts[schema].array_index_kind == builtin_u64() &&
+        contracts[schema].element_kind == sum_type() &&
+        checked_aggregate_storage(contracts, published, contracts[schema].type_module,
+            contracts[schema].type_identity, sum_type()) == CoDBitsAggregate &&
+        checked_aggregate_storage(contracts, published, contracts[record].type_module,
+            contracts[record].type_identity, record_type()) == CLayoutBitsRecord
+}
+
 func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3105,6 +3151,23 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         prepare_imported_product_loan(nodes, names, selected, contracts, interface_count,
             aggregate, cases, links[first].next, used, revision, true);
         remember_imported_call(links, contracts, at, header, true);
+        links[at].imported_array_read_completion <- contracts[header].array_read_completion;
+        links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+        (supplied[at] <- make CheckedWriterCall {}):void;
+        return true
+    };
+    if (source_only && header != no_node() && contracts[header].source_writer == RecordInspector) {
+        val module <- selected[site].origin_module;
+        if (obligation || !checked_record_inspector_header(contracts, interface_count, header) ||
+            selected[site].dependency_module != module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
+            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, module, header + 5u64, interface_count)) return true;
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
+            return operand_problem(report, at, wrong_argument_count());
+        remember_imported_call(links, contracts, at, header, true);
+        links[at].imported_type_module <- contracts[header].type_module;
+        links[at].imported_type_identity <- contracts[header].type_identity;
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
         (supplied[at] <- make CheckedWriterCall {}):void;

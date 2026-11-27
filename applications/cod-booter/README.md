@@ -267,7 +267,13 @@ A direct source-preserving selection prepares the two readonly array loans, the 
 
 In a body that needs operand checking, both source commands check an unplaced braced construction of an imported record with a completed finite-bits C layout. The selected type supplies the initializer fields, including through a rename. The checker verifies each field in written order. A writable field can receive another initializer. A readonly field is initialized exactly once. The local reference selects the completed target under the lexical owner and can restrict its access. A scalar member read or write uses the field of that exact target.
 
-The unchanged frontend now checks the `BindingSites` construction in `CallableSyntax`. Its first remaining stop is the imported `inspect_binding` call at `CallableSyntax.cod:113:9`. Executable object checking has a separate admission path.
+### Imported binding inspection
+
+Both source commands check the call to `ParserStorage.inspect_binding` in unchanged `CallableSyntax`. The defining visit completes the bound case operations and ordinary helper dependencies before publishing the inspector. Its signature keeps the readonly nominal AST array, three independent `UInt64` operands, the initialized writable record and the exact nominal `BindingSyntax` result. The call supplies separate possible bounds and fatal arithmetic outcomes. Cyclic or unsupported dependencies leave the contract unavailable.
+
+A direct source-preserving selection can use an initialized product formal or a checked reference to a fresh record in the calling lexical scope. The call prepares its operands in order, respects the selected target's access, and can update the caller's live record. The result carries no initialization promise. Linked seed coverage observes the exact fields for typed, bare and recovered bindings and preserves the record on an invalid index.
+
+The unchanged frontend next reaches the imported `is_here_formal` call at `CallableSyntax.cod:167:67`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
