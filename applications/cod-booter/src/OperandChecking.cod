@@ -476,6 +476,16 @@ func nominal_identity(names:const NameBindings in B, annotation:UInt64) -> UInt6
     return 0u64;
 }
 
+func imported_enum_selection(names:const NameBindings in B, selected:const SelectedExports in E,
+    marker:UInt64) -> UInt64 where {const owner B, const owner E} {
+    if (names[marker].kind != ordinary_selection()) return no_node();
+    val choice <- names[marker].declaration;
+    if (choice >= intrinsic (len)(selected) || selected[choice].kind != enum_export() ||
+        selected[choice].origin_module == 0u64 || selected[choice].origin_module == no_node() ||
+        selected[choice].identity == no_node()) return no_node();
+    return choice
+}
+
 func declared_borrow(names:const NameBindings in B, facts:const OperandFacts in F, annotation:UInt64) -> UInt8
     where {const owner B, const owner F} {
     if (names[annotation].kind == record_type() && facts[names[annotation].declaration].product_words != 0u64)
@@ -623,11 +633,18 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         if (form != ReferenceFormal && form != PointerFormal && !place && !slot)
             return unproved_operand();
         val target <- binding.target_type;
-        val borrowed_kind <- if (source_only && (names[target].kind == array_type() ||
-            (names[target].kind == ordinary_selection() &&
-                selected[names[target].declaration].kind == array_export()))) {
+        val imported_enum <- if (source_only && form == ReferenceFormal) {
+            imported_enum_selection(names, selected, target)
+        } else { no_node() };
+        val borrowed_kind <- if (imported_enum != no_node()) {
+            scalar_enum()
+        } else {
+            if (source_only && (names[target].kind == array_type() ||
+                (names[target].kind == ordinary_selection() &&
+                    selected[names[target].declaration].kind == array_export()))) {
                 source_array_loan()
-            } else { declared_borrow(names, facts, target) };
+            } else { declared_borrow(names, facts, target) }
+        };
         if (names[target].kind == record_type() && (borrowed_kind == 0u8 || form == PointerFormal))
             return unsupported_product_layout();
         if (place && (borrowed_kind != string_kind() || readonly != 0u8)) return unsupported_text_operation();
@@ -663,8 +680,12 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
             if (slot && facts[formal].array_slot != formal) return unproved_operand()
         } else {
             if (slot) return unproved_operand();
-            set_fact(facts, formal, borrowed_kind, reception, owner_site, nominal_identity(names,
-                target), 0u8)
+            val identity <- if (imported_enum != no_node()) { (selected[imported_enum].identity) }
+                else { nominal_identity(names, target) };
+            set_fact(facts, formal, borrowed_kind, reception, owner_site, identity, 0u8);
+            if (imported_enum != no_node()) {
+                (facts[formal].identity_module <- selected[imported_enum].origin_module):void
+            }
         };
         if (reception == nullable_ptr()) { (facts[formal].selection <- formal):void; } else {};
         facts[formal].target_readonly <- if (place) { 1u8 } else { readonly };
@@ -680,11 +701,9 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     if (form != ValueFormal && form != ExplicitValueFormal && form != ReferenceFormal &&
         form != PointerFormal) return unproved_operand();
     val declared <- names[annotation].kind;
-    if (declared == ordinary_selection() &&
-        (source_only || form == ValueFormal || form == ExplicitValueFormal)) {
-        val choice <- names[annotation].declaration;
-        if (choice < intrinsic (len)(selected) && selected[choice].kind == enum_export() &&
-            selected[choice].origin_module != 0u64 && selected[choice].identity != no_node()) {
+    if (source_only || form == ValueFormal || form == ExplicitValueFormal) {
+        val choice <- imported_enum_selection(names, selected, annotation);
+        if (choice != no_node()) {
             set_fact(facts, formal, scalar_enum(), local_place(), definition,
                      selected[choice].identity, 0u8);
             facts[formal].identity_module <- selected[choice].origin_module;
@@ -857,7 +876,7 @@ func valid_array_slot_element(element:ArraySlotElement, sum:UInt64, module:UInt6
 }
 
 func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
-    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, local:const LocalBindingSites in L) -> UInt8
+    facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64, source_only:bool, local:const LocalBindingSites in L) -> UInt8
     where {const owner N, const owner B, const owner E, owner F, const owner L} {
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
@@ -896,13 +915,12 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     val declared_kind <- if (type_name == no_node()) { 0u8 } else { declared_borrow(names, facts, type_name) };
     val identity <- if (type_name == no_node()) { (facts[initializer].identity) } else { nominal_identity(names, type_name) };
     val module <- if (type_name == no_node()) { (facts[initializer].identity_module) } else { 0u64 };
-    if (value_binding && type_name != no_node() && names[type_name].kind == ordinary_selection()) {
-        ref resolved = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64; };
-        if (describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, resolved) &&
-            resolved.kind == enum_type() && resolved.defining_module != 0u64 && resolved.identity != no_node()) {
+    if (type_name != no_node() && (value_binding || (source_only && local.mode == ReferenceLocal))) {
+        val choice <- imported_enum_selection(names, selected, type_name);
+        if (choice != no_node()) {
             declared_kind <- scalar_enum();
-            identity <- resolved.identity;
-            (module <- resolved.defining_module):void
+            identity <- selected[choice].identity;
+            (module <- selected[choice].origin_module):void
         }
     };
     if (declared_kind == product_kind() || facts[initializer].kind == product_kind()) {
@@ -5773,7 +5791,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     };
     ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false; };
     if (inspect_local_binding(nodes, revision, used, at, local) && local.mode != ExceptionLocal)
-        return check_local(nodes, names, selected, facts, at, used, revision, local);
+        return check_local(nodes, names, selected, facts, at, used, revision, source_only, local);
     ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
     if (inspect_field_selection(nodes, revision, used, at, field))
         return check_field_access(source, nodes, names, links, facts, fields, at, used, revision,

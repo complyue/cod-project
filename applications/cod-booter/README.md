@@ -291,7 +291,11 @@ Both source commands check `append_qualified_type`, `append_block_item`, `append
 
 The readonly query contract also checks `punct_pair_at`. It carries the two nominal array loans, the index and extent, and the two by-value bytes, including `ASCII` members with the exact backing type. The original short-circuit comparisons distinguish an absent token, a wrong first byte, and a wrong second byte.
 
-Both source commands accept unchanged `CallableSyntax`. The full frontend next stops at the writable imported enum formal at `ExpressionParser.cod:2514:50`. Executable object checking has a separate admission path.
+### Imported enum references
+
+Both source commands check ordinary owner-qualified enum reference formals and initialized typed reference locals, including renamed type selections. The reference keeps the enum's defining module and declaration identity, its target access, and its actual owner. A by-value use can read the exact backing scalar. A reference loan or write must match the nominal enum, and a readonly target cannot supply a writable loan.
+
+The linked parser recognizes all five augmented transfers and preserves the operator and operand spans. Both source commands accept unchanged `CallableSyntax` and reach the byte subtraction in `append_decimal_digit` at `ExpressionParser.cod:124:25` when checking the full frontend. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
