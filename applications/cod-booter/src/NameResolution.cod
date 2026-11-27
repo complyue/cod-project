@@ -39,7 +39,8 @@ using "./ParserStorage.cod" SignatureSyntax {
     TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
 using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
-using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PlaceFormal, InitializingPlaceFormal, HandleFormal, ReferenceSlotFormal };
+using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal,
+    PlaceFormal, InitializingPlaceFormal, HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { InvalidFormal, OrdinaryFormal, HereFormalSyntax };
 using "./ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding };
 using "./ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake };
@@ -3027,7 +3028,9 @@ func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNode
     formal:const FormalSites in F, binding:const BindingSites in F, names:FormalNameRole) -> void
     where {const owner S, const owner N, owner B, owner W, owner R, const owner F} {
     val fixed <- formal_binding_is_fixed(nodes, state.syntax_revision, state.syntax_used, parameter);
-    if (fixed && names != (OrdinaryParameters:FormalNameRole)) {
+    val field <- names == (AggregateFields:FormalNameRole);
+    if (fixed && names != (OrdinaryParameters:FormalNameRole) &&
+        !(field && (formal.mode == ReferenceFormal || formal.mode == PointerFormal))) {
         reject_name(state, parameter, unsupported_fixed_formal());
         return
     };

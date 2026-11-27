@@ -1345,8 +1345,9 @@ func valid_prefixed_formal(nodes:const ExprNodes in N, revision:UInt64, at:UInt6
     };
     if (inspect_binding(nodes, revision, at, binding, typed) != (TypedBinding:BindingSyntax)) return false;
     if (fixed) {
-        if (typed.owner_name == no_node()) return mode == (ExplicitValueFormal:FormalMode);
-        return mode == (ReferenceFormal:FormalMode);
+        if (mode == (ReferenceFormal:FormalMode)) return true;
+        return typed.owner_name == no_node() &&
+            (mode == (ExplicitValueFormal:FormalMode) || mode == (PointerFormal:FormalMode));
     };
     return mode == (ReferenceSlotFormal:FormalMode);
 }

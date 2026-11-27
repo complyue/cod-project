@@ -22,6 +22,7 @@ using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry }
 using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
+using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
 using "./ParserStorage.cod" ModuleSelectionMode {
     UseResource, ReexportResource, MixinResource, IdentityResource
@@ -30,14 +31,15 @@ using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal, ValueLocal };
 using "./ParserStorage.cod" FormalMode {
-    ValueFormal, ExplicitValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
+    ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, ExceptionFormal,
+    HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase } }
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
-    SignatureSites, inspect_signature, BindingSites, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
+    SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
     first_named_throw, NamedThrowSites, inspect_named_throw,
 };
 using "./SourceStorage.cod" SourceBytes;
@@ -224,6 +226,16 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:UInt64) ->
     };
 }
 
+func fixed_reference_field(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, binding:UInt64)
+    -> bool where {const owner N} {
+    ref field = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node();
+        owner_name <- no_node(); readonly <- false
+    };
+    return inspect_binding(nodes, revision, used, binding, field) == TypedBinding &&
+        field.owner_name == no_node()
+}
+
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     emit_object:bool, publish_defaults:bool, requires_operand_checks:bool in P) -> UInt8
@@ -295,13 +307,18 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 };
                 ReferenceIdentity -> unsupported_reference_identity();
                 ReturningCondition -> unsupported_returning_condition();
-                (Formal { val mode <- mode; val fixed <- binding_const; }) -> {
+                (Formal { val mode <- mode; val fixed <- binding_const; val binding <-; }) -> {
                     # The graph's source route validates this reception against a bound callable.
                     if (mode == ReferenceSlotFormal && (emit_object || !publish_defaults))
                         return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
                     if (fixed) {
-                        if (mode != ExplicitValueFormal) return unsupported_fixed_formal();
+                        if (mode != ExplicitValueFormal) {
+                            if (emit_object || (mode != ReferenceFormal && mode != PointerFormal) ||
+                                !fixed_reference_field(nodes, revision, used, binding.index))
+                                return unsupported_fixed_formal();
+                            return 0u8
+                        };
                         (requires_operand_checks <- true):void
                     };
                     if (mode == ExceptionFormal) { 29u8 } else { 0u8 }

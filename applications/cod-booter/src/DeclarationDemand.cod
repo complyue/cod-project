@@ -3,6 +3,7 @@ using "./ParserStorage.cod" {
     DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
     module_tail, AssignmentSites, inspect_assignment, predicate_operand, formal_binding_is_fixed,
+    FormalSites, inspect_formal, FormalSyntax { OrdinaryFormal }, FormalMode { ExplicitValueFormal },
     LocalBindingSites, inspect_local_binding, LocalMode { ValueLocal, ReferenceLocal },
     AssignmentSyntax { PlaceTransfer, FieldTransfer, InvalidAssignment },
 };
@@ -259,6 +260,7 @@ export func discover_declaration_demand(
     ref local = make LocalBindingSites {
         binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false
     };
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ExplicitValueFormal };
     val scope <- no_node();
     val definition <- no_node();
     val checked_call <- false;
@@ -341,7 +343,9 @@ export func discover_declaration_demand(
             predicate_operand(nodes, revision, used, site) != no_node() ||
             (inspect_local_binding(nodes, revision, used, site, local) && local.declaration_const &&
                 (local.mode == ValueLocal || local.mode == ReferenceLocal)) ||
-            formal_binding_is_fixed(nodes, revision, used, site)) {
+            (formal_binding_is_fixed(nodes, revision, used, site) &&
+                inspect_formal(nodes, revision, used, site, formal) == OrdinaryFormal &&
+                formal.mode == ExplicitValueFormal)) {
             if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
                 !require_body(demand, scope, count, used, scope != root)) {
                 problem <- site;
