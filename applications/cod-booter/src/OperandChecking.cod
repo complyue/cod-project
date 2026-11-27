@@ -6064,7 +6064,14 @@ func check_indexed_bits_transfer(names:const NameBindings in B, facts:OperandFac
         names[input].kind == local_binding() && declaration < input &&
         facts[input].kind == product_kind() && facts[input].target_presence == present_target() &&
         completed_lexical_bits_target(facts, input, names[declaration].scope);
-    if (!copied_product && (facts[input].kind != value_kind || facts[input].reception != independent_value() ||
+    val indexed_product <- type.kind == record_type() && facts[input].kind == source_product_loan() &&
+        facts[input].reception == borrowed_ref() && facts[input].target_presence == present_target() &&
+        facts[input].selection == input && facts[input].checks_array_bounds &&
+        (case cases[input] of {
+            IndexedAggregateLoan { val consumer <-; val writable <-; } -> consumer == at && !writable;
+            _ -> false
+        });
+    if (!copied_product && !indexed_product && (facts[input].kind != value_kind || facts[input].reception != independent_value() ||
         (case cases[input] of { BitsConstruction { val transfer <-; } -> transfer != at; _ -> true })))
         return wrong_operand_type();
     only_void(facts, at);

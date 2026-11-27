@@ -1023,7 +1023,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     } else {};
     val source_call_profile <- if (native) { no_node() } else { first_source_call_profile(views, used) };
     val case_capacity <- if (!native && (source_call_profile != no_node() ||
-        needs_constructor_case_plan(nodes, names, selected, used, revision))) { used } else { 0u64 };
+        needs_constructor_case_plan(nodes, names, selected, views, used, revision))) { used } else { 0u64 };
     ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
     ref first_case = make UInt64 { source_call_profile };
     if (!native && !prepare_graph_source_operands(source, nodes, names, selected, work,
