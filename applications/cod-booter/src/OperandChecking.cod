@@ -136,7 +136,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
-    CheckedWriterCall, CheckedHandleArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
+    CheckedWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -2912,7 +2912,7 @@ func source_scalar_value_row(row:const ModuleInterfaceRow in R, kind:UInt8) -> b
         row.native_reception == 0u8 && row.native_passes_owner == 0u8
 }
 
-func checked_handle_array_call_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
+func checked_array_procedure_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val arity <- contracts[header].entry_count;
@@ -2923,15 +2923,20 @@ func checked_handle_array_call_past(contracts:const ModuleInterfaces in I, publi
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].source_writer != NoSourceWriter || contracts[header].has_here != 0u8 ||
         contracts[header].owner_role != no_node() || contracts[header].target_readonly != 0u8 ||
-        contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
         contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
         contracts[header].failure_checked != 0u8 ||
         (contracts[header].array_read_completion != CheckedArrayRead &&
          contracts[header].array_read_completion != ArrayReadMayFailBounds) ||
-        (!source_call_scalar(result) && result != builtin_void())) return no_node();
+        (!source_call_scalar(result) && result != builtin_void() && result != enum_type())) return no_node();
+    if (result == enum_type()) {
+        if (!published_enum_domain(contracts, published, header)) return no_node()
+    } else {
+        if (contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
+    };
     val past <- header + 1u64 + arity;
     val handle <- false;
     val array <- false;
+    val output <- false;
     val kind <- 0u8;
     val role <- no_node();
     for (row in header + 1u64 .. past) {
@@ -2946,16 +2951,28 @@ func checked_handle_array_call_past(contracts:const ModuleInterfaces in I, publi
             (handle <- true):void
         } else {
             if (kind == array_type()) {
-                if (role >= owners || !checked_readonly_loan_row(contracts[row], kind, role)) return no_node();
-                (array <- true):void
+                if (role >= owners || contracts[row].interface_kind != 0u8 ||
+                    contracts[row].entry_count != 0u64 || contracts[row].field_mode != ReferenceFormal ||
+                    !has_nominal_identity(contracts[row]) || contracts[row].target_readonly > 1u8 ||
+                    contracts[row].owner_readonly > 1u8 ||
+                    (contracts[row].target_readonly == 0u8 && contracts[row].owner_readonly != 0u8) ||
+                    contracts[row].native_reception != 0u8 || contracts[row].native_passes_owner != 0u8 ||
+                    contracts[row].source_allocates) return no_node();
+                array <- true;
+                (output <- output || contracts[row].target_readonly == 0u8):void
             } else {
-                if (!source_call_scalar(kind) || !source_scalar_value_row(contracts[row], kind) ||
-                    contracts[row].type_module != 0u64 || contracts[row].type_identity != 0u64 ||
-                    contracts[row].source_allocates) return no_node()
+                if (!source_scalar_value_row(contracts[row], kind) || contracts[row].source_allocates)
+                    return no_node();
+                if (kind == enum_type()) {
+                    if (!published_enum_domain(contracts, published, row)) return no_node()
+                } else {
+                    if (!source_call_scalar(kind) || contracts[row].type_module != 0u64 ||
+                        contracts[row].type_identity != 0u64) return no_node()
+                }
             }
         }
     };
-    return if (handle && array) { past } else { no_node() }
+    return if (array && (handle || (output && result == builtin_void()))) { past } else { no_node() }
 }
 
 func checked_scalar_predicate_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
@@ -3582,7 +3599,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (array_read && contracts[header].callable_kind == CheckedProcedure) {
-        val past <- checked_handle_array_call_past(contracts, interface_count, header);
+        val past <- checked_array_procedure_past(contracts, interface_count, header);
         if (past != no_node()) {
             val module <- selected[site].origin_module;
             if (obligation || selected[site].dependency_module != module ||
@@ -3592,9 +3609,11 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, true, true))
                 return operand_problem(report, at, wrong_argument_count());
             remember_imported_call(links, contracts, at, header, true);
+            links[at].imported_type_module <- contracts[header].type_module;
+            links[at].imported_type_identity <- contracts[header].type_identity;
             links[at].imported_array_read_completion <- contracts[header].array_read_completion;
             links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-            (supplied[at] <- make CheckedHandleArrayCall {}):void;
+            (supplied[at] <- make CheckedArrayProcedureCall {}):void;
             if (required == no_node()) { (required <- at):void };
             return true
         }

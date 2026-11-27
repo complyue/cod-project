@@ -209,7 +209,7 @@ The source commands also check a local braced constructor written directly into 
 
 The same source commands can check a selected imported constructor in a discarded indexed write. They use the defining array’s published index and element types and the constructor’s published fields. Nested product constructors and copies from live readonly loans use each field’s exact nominal type. Both commands check the unchanged `ParserInput.append_syntax_node` in the module prefix, including its ordinary `len(nodes)` capacity guard.
 
-A lexical `make PackageResolutions(length, make MissingModule {})` uses the selected array's published `UInt64` index and exact finite-bits sum element. Both source commands check the fill against that element and can use an indexed value of the resulting local array as a case subject. The selected alternative supplies the case's by-value fields. Imported callable checking still limits the full package resolver.
+A lexical `make PackageResolutions(length, make MissingModule {})` uses the selected array's published `UInt64` index and exact finite-bits sum element. Both source commands check the fill against that element and can use an indexed value of the resulting local array as a case subject. The selected alternative supplies the case's by-value fields. Both commands check a direct call to `probe_package_roots` with readonly package inputs and an initialized writable result array. The probe's checked indexed transfers retain the ordered ambiguity fields, and its completion contract preserves bounds failure separately from the normal variants.
 
 ### Inline sum cases on borrowed records
 
@@ -370,6 +370,8 @@ This covers the unchanged `diagnostic_budget_full` call in `PackageDiagnostics`.
 ### Ordinary diagnostic calls with mixed loans
 
 Both source commands check the unchanged `PackageDiagnostics` module. It imports `report_rejection`, which writes through the diagnostic handle and borrows the source bytes and line rows under one readonly owner role. The defining visit completes the ordered signature and the body's reachable bounds and numeric outcomes before publication. The caller matches each loan to its nominal type and binds a repeated owner role consistently, including when a role is shared by an array and a handle. An abrupt operand prevents entry.
+
+Both commands also check a direct import of `report_package_path`. The defining visit checks the synchronous source callback and its local helper, including the selected native append and the nominal `CompilerStatus` result. A `const val` parameter remains immutable in the body and publishes an ordinary by-value input with its nominal type. The imported procedure profile carries bounds and numeric outcomes from completed body evidence. A body with an unrepresented effect supplies no such contract. Package graph self-check still reaches the mixed-slot interface at `load_for_edge`.
 
 ### Package-root loader source checking
 
