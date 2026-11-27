@@ -22,7 +22,7 @@ using "./ParserStorage.cod" {
     SequenceEntry, inspect_sequence_entry, SequenceSyntax { ArgumentSequence, BlockSequence, CaseReceiverSequence, FormalSequence },
     FieldSelectionSites, inspect_field_selection, name_syntax, NameSyntax { OrdinaryName },
     CallableSites, inspect_callable, CallableSyntax { ModuleCallable, LexicalCallable },
-    SignatureSites, inspect_signature, find_signature_clause, SignatureSyntax { SignatureHead }
+    SignatureSites, inspect_signature, find_signature_clause, is_function, SignatureSyntax { SignatureHead }
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
@@ -1114,10 +1114,21 @@ func prepare_fresh_sum_argument(nodes:const ExprNodes in N, names:const NameBind
     }
 }
 
+func prepared_readonly_product_actual(names:const NameBindings in B, facts:const ConstructorCaseFacts in F,
+    input:UInt64) -> bool where {const owner B, const owner F} {
+    val origin <- names[input].declaration;
+    if (origin >= input) return false;
+    if (names[input].kind == formal_binding()) {
+        return case facts[origin] of { InlineProductFormal -> true; _ -> false }
+    };
+    return names[input].kind == local_binding() &&
+        (case facts[origin] of { LexicalProductReference -> true; _ -> false })
+}
+
 func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W,
     interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
-    facts:ConstructorCaseFacts in F, call:UInt64, definition:UInt64, first_argument:UInt64, first_formal:UInt64,
+    facts:ConstructorCaseFacts in F, call:UInt64, definition:UInt64, function_form:bool, first_argument:UInt64, first_formal:UInt64,
     first:UInt64 in P, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
     where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A,
         owner F, owner P, owner R} {
@@ -1133,39 +1144,48 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
     for (unused in 0u64 .. used) {
         if (argument >= used || formal >= used) return true;
         if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
-        case facts[formal] of {
-            InlineProductFormal { val readonly <-; } -> {
-                # Imported arrays provide a completed nominal element schema.
-                # The argument checker still validates the actual loan.
-                if (describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
-                        record_type(), loan, record) && (loan.array_module == 0u64 || readonly) &&
-                    case_bits_type(record, aggregate, interfaces, published)) {
-                    remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
-                    if (first == no_node()) { (first <- call):void };
-                    if (readonly && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                        (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
+        if (!function_form) {
+            if ((case facts[formal] of { InlineProductFormal { val readonly <-; } -> readonly; _ -> false }) &&
+                prepared_readonly_product_actual(names, facts, entry.item)) {
+                facts[call] <- make ProductLoanInvocation { definition <- definition };
+                if (first == no_node()) { (first <- call):void };
+                return true
+            };
+        } else {
+            case facts[formal] of {
+                InlineProductFormal { val readonly <-; } -> {
+                    # Imported arrays provide a completed nominal element schema.
+                    # The argument checker still validates the actual loan.
+                    if (describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
+                            record_type(), loan, record) && (loan.array_module == 0u64 || readonly) &&
+                        case_bits_type(record, aggregate, interfaces, published)) {
+                        remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
+                        if (first == no_node()) { (first <- call):void };
+                        if (readonly && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                            (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
+                        }
                     }
+                };
+                _ -> {}
+            };
+            if (names[entry.item].kind == formal_binding()) {
+                actual <- names[entry.item].declaration;
+                if (actual < entry.item &&
+                    (case facts[actual] of {
+                        InlineProductFormal { val type <- value_type; } -> type.defining_module != 0u64;
+                        _ -> false
+                    }) &&
+                    (case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
+                    (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                    (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
                 }
             };
-            _ -> {}
-        };
-        if (names[entry.item].kind == formal_binding()) {
-            actual <- names[entry.item].declaration;
-            if (actual < entry.item &&
-                (case facts[actual] of {
-                    InlineProductFormal { val type <- value_type; } -> type.defining_module != 0u64;
-                    _ -> false
-                }) &&
-                (case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
-                (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
-            }
-        };
-        if (work[entry.item].inline_sum_initializer) {
-            if (!prepare_fresh_sum_argument(nodes, names, selected, work, interfaces, published, facts, call,
-                argument, formal, entry.item, used, revision, report)) return false;
-            facts[call] <- make FreshSumInvocation { definition <- definition; };
-            if (first == no_node()) { (first <- call):void }
+            if (work[entry.item].inline_sum_initializer) {
+                if (!prepare_fresh_sum_argument(nodes, names, selected, work, interfaces, published, facts, call,
+                    argument, formal, entry.item, used, revision, report)) return false;
+                facts[call] <- make FreshSumInvocation { definition <- definition; };
+                if (first == no_node()) { (first <- call):void }
+            };
         };
         argument <- work[argument].next;
         formal <- work[formal].next
@@ -1260,13 +1280,13 @@ func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const Na
             definition <- names[invocation.callee].declaration;
             if (definition < used && work[definition].next_method == no_node() &&
                 inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable &&
-                callable.function_form && callable.body != no_node() &&
+                callable.body != no_node() &&
                 find_signature_clause(nodes, revision, used, callable.signature, SignatureHead, header) &&
                 inspect_signature(nodes, revision, used, header, signature) == SignatureHead &&
                 first_sequence_entry(nodes, revision, used, signature.parameter_tail, FormalSequence, formal) &&
                 first_sequence_entry(nodes, revision, used, invocation.arguments, ArgumentSequence, argument)) {
                 if (!prepare_aggregate_loan_call(nodes, names, selected, work, interfaces, published, aggregate,
-                    facts, call, definition, argument, formal, first, used, revision, report)) return false
+                    facts, call, definition, callable.function_form, argument, formal, first, used, revision, report)) return false
             }
         }
     };
@@ -1734,7 +1754,8 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
     for (at in 0u64 .. used) {
         if (inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal && formal.mode == ReferenceFormal &&
             inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
-            !binding.readonly && binding.owner_name < used && binding.target_type < used &&
+            binding.owner_name < used && binding.target_type < used &&
+            (!binding.readonly || !is_function(nodes, names[at].scope)) &&
             names[binding.target_type].kind == ordinary_selection() &&
             selected[names[binding.target_type].declaration].kind == record_export()) return true;
         if (inspect_local_binding(nodes, revision, used, at, local) &&

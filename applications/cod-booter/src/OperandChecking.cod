@@ -1690,11 +1690,12 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
 
 func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in L,
     facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64,
-    allow_writable_array:bool) -> bool
+    allow_writable_array:bool, readonly_procedure:bool) -> bool
     where {const owner N, const owner L, const owner F} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
-        !callable.function_form || callable.body == no_node()) return false;
+        (!callable.function_form && !readonly_procedure) || callable.body == no_node()) return false;
+    val procedure_call <- !callable.function_form;
     val result <- facts[definition].kind;
     if (result != void_result() && !scalar_kind(result) && result != source_u32()) return false;
     if (facts[definition].reception == borrowed_ref()) return false;
@@ -1708,28 +1709,35 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
         if (parameter >= used) return false;
         kind <- facts[parameter].kind;
         reception <- facts[parameter].reception;
-        if (kind == product_kind()) {
-            product <- facts[parameter].identity;
-            if (reception != borrowed_ref() || facts[parameter].identity_module != 0u64 ||
-                product >= used || !facts[product].bits_product) return false
+        if (procedure_call && kind == source_handle_loan()) {
+            if (reception != borrowed_ref() || !owner_parameter(nodes, facts[parameter].owner)) return false
         } else {
-            if (scalar_kind(kind) || kind == source_u32()) {
-                if (reception != local_place() && reception != borrowed_ref()) return false
+            if (kind == product_kind()) {
+                product <- facts[parameter].identity;
+                if (reception != borrowed_ref() || facts[parameter].identity_module != 0u64 ||
+                    product >= used || !facts[product].bits_product ||
+                    (procedure_call && (facts[parameter].target_readonly == 0u8 ||
+                        owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint))) return false
             } else {
-                if ((kind != source_array_loan() && kind != source_sum_target() &&
-                     kind != source_product_loan() && kind != string_kind()) || reception != borrowed_ref())
-                    return false;
-                if (facts[parameter].target_readonly == 0u8) {
-                    if (kind != source_product_loan() &&
-                        (!allow_writable_array || kind != source_array_loan() ||
-                         inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
-                         syntax.mode != ReferenceFormal)) return false;
-                    if (owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
-                        return false
+                if (scalar_kind(kind) || kind == source_u32()) {
+                    if (reception != local_place() && (procedure_call || reception != borrowed_ref())) return false
                 } else {
-                    if (facts[parameter].target_readonly == 0u8 ||
-                        owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
-                        return false
+                    if ((kind != source_array_loan() && kind != source_sum_target() &&
+                         kind != source_product_loan() && kind != string_kind()) || reception != borrowed_ref())
+                        return false;
+                    if (procedure_call && kind != source_array_loan() && kind != source_product_loan()) return false;
+                    if (facts[parameter].target_readonly == 0u8) {
+                        if (procedure_call) return false;
+                        if (kind != source_product_loan() &&
+                            (!allow_writable_array || kind != source_array_loan() ||
+                             inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
+                             syntax.mode != ReferenceFormal)) return false;
+                        if (owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
+                            return false
+                    } else {
+                        if (owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
+                            return false
+                    }
                 }
             }
         };
@@ -1805,7 +1813,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (operand < used &&
         (facts[operand].kind == received_sum() || facts[operand].kind == received_product())) {
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, false))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, false, false))
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
     };
@@ -1820,7 +1828,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         # against its own actual when that argument is prepared.
         val allow_writable_array <- scoped_product_call && (forwarded || indexed);
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, allow_writable_array))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, allow_writable_array, scoped_product_call))
             return unproved_owner();
         if ((kind != source_product_loan() && kind != product_kind()) ||
             facts[formal].reception != borrowed_ref() ||

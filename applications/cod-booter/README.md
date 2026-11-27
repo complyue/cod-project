@@ -337,7 +337,9 @@ In a demanded body, the ordered native call checks also cover a same-revision fu
 
 For a builtin bits transfer to an indexed record field, the selected array must support a writable loan to the exact row, and the field must be writable. Reads retain their existing scalar projection rules. Both source commands check the production symbol-rejection routine in isolation, including both native diagnostic calls and its update to the retained count.
 
-The full CLI source commands first stop at the owner check for `write_single_report` in `NativeDiagnostics.cod:266:10`. The ordered-report reduction with the original position writer also stops at its protected call because that profile cannot represent the writer’s possible fatal arithmetic.
+In a demanded body, both source commands check synchronous calls to a same-revision procedure with readonly finite-bits product loans and an independent result or no result. The actual can be an initialized product formal or a checked lexical product reference. The checker prepares each operand in written order and checks its nominal type, access and actual owner. The procedure can also take checked handle loans, readonly arrays and by-value scalars in this profile. A failed operand prevents entry. Both source commands check the original `write_single_report` and its caller in the stored-rejection reduction.
+
+The full CLI source commands first stop at `NativeDiagnostics.cod:182:13`. The position writer is called from a protected body, and this profile cannot route its possible fatal arithmetic.
 
 ### Imported array length families
 
