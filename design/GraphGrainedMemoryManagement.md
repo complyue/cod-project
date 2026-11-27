@@ -1,10 +1,12 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 40 · 2026-11-27
+Design revision 41 · 2026-11-27
 
 ## Design authority
 
-At r40 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) records the [project user's exact-match and method-interface decision](../CHANGELOG.md#h-nominal-region-types-20261127) for specialized regions. P-786/P-787 connect the DSDS provider use case to nominal identity and the existing actual-owner rule. The examples under [opaque nominal region types](#opaque-nominal-region-types) specify acceptance. R39 structural root access and existing DBMR publication continue. The native ABI and service guarantees have separate scope.
+At r41 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) adopts the [confirmed provider build model](../CHANGELOG.md#h-native-package-toolchain-20261127) for constructors and methods. R40 exact nominal matching, absence of roots and actual-owner checks continue under P-786/P-787. Database service guarantees and compiler delivery remain open.
+
+At r40 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) records the [project user's exact-match and method-interface decision](../CHANGELOG.md#h-nominal-region-types-20261127) for specialized regions. P-786/P-787 connect the DSDS provider use case to nominal identity and the existing actual-owner rule. The examples under [opaque nominal region types](#opaque-nominal-region-types) specify acceptance. R39 structural root access and existing DBMR publication continue. R41 specifies the generated native interface. Service guarantees remain provider-specific.
 
 [D-10’s explicit reference symbols](SymbolicDynamicScope.md#owner-parameter-reference-symbols-and-implementation-cost) require valid target access through the actual owner during installation, capture and restoration. The [scope reconciliation](../CHANGELOG.md#k-design-scope-audit-20261124) applies this dependency to the whole-region holder comparison.
 
@@ -88,7 +90,7 @@ There is no implicit first-root selection or flattening of a referenced object's
 
 ## Opaque nominal region types
 
-`region type StockDB` declares a nominal region. It has no CoD roots. Its package declares the constructors and methods that C implements. CoD calls a declared constructor to create an instance and uses the method interface to operate on it. A parameter requiring `StockDB` matches the exact declared type identity. A renamed import of that declaration denotes the same type. Each opening still has its own actual owner.
+`region type StockDB` declares a nominal region. It has no CoD roots. Its package declares the constructors and methods in CoD and implements their [generated C interface](../applications/cod-booter/docs/LLVMInterop.md#native-package-providers-for-nominal-regions) in C or C++. CoD calls a declared constructor to create an instance and uses the method interface to operate on it. A parameter requiring `StockDB` matches the exact declared type identity. A renamed import of that declaration denotes the same type. Each opening still has its own actual owner.
 
 In this example the provider declares a niladic `available_count` function on `StockDB` returning `UInt64`.
 
@@ -105,7 +107,7 @@ func root_count(region s:const StockRoots) -> UInt64 { s.available }
 * `root_count(s)` accepts an intrinsic structural region with the required root. `root_count(db)` is a type error. A nominal region cannot satisfy a structural region requirement, even an empty subset. A combined requirement for `StockDB` and a named root is invalid.
 * Selecting `db.available` as a root or receiving `{ val n <- available } := db` is a type error. A package cannot project this nominal region as a structural view of its backing. The result of a declared method has the type and owner given by that method's contract.
 
-The [database service](../papers/DSDS.md#send-a-dml-program-to-the-records-it-changes) can thus give the catalog a directly traversable intrinsic schema and give the stock database a nominal interface for reservation. Its provider decides what a successful reservation commits and which failures it survives. Exact matching supplies neither a transaction protocol nor an on-disk compatibility check. The constructor ABI, concrete provider protocols and compiler delivery remain open.
+The [database service](../papers/DSDS.md#send-a-dml-program-to-the-records-it-changes) can thus give the catalog a directly traversable intrinsic schema and give the stock database a nominal interface for reservation. Its provider decides what a successful reservation commits and which failures it survives. Exact matching supplies neither a transaction protocol nor an on-disk compatibility check. Provider and adapter use the target C ABI for the same build. The database protocol and compiler delivery remain open.
 
 ## Relationships between regions
 

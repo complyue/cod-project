@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 32 · 2026-11-23 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 33 · 2026-11-27 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+At r33 the [project user's provider decision](../../../CHANGELOG.md#h-native-package-toolchain-20261127) extends the r32 generated native interface to [nominal region packages](#native-package-providers-for-nominal-regions) under [D-13-NOMINAL-REGIONS](../../../design/DesignAuthorityRegistry.md#d-13-nominal-regions). A C++ package implementation can reuse the declared C boundary. The existing booter providers and their ownership, failure and release rules continue. The package toolchain is planned production work.
 
 [The r32 continuity record](../../../CHANGELOG.md#k-booter-disposal-profile-20261123) applies the [first host contract](#declarations-and-the-first-host-call) to the [native handle overview](#native-handles-and-c-records), under [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles), C-80/C-65 and P-646/P-647. The caller can observe failure of an explicit operation while its owner is live. Check failure before publication and one disposal of each successfully acquired owner. General fallible destruction remains open.
 
@@ -44,6 +46,14 @@ Checked CoD declarations define the required C behavior interfaces. The seed and
 Calls in both directions use synchronous `here` semantics. A body can use direct lexical access in its own supplying activation while that activation is live. Preserve actual owners, access permissions, bounded backing and ordinary or abrupt completion through each call. A provider keeps all lent backing valid for the entire callback, including across nested calls. A callback and its confined views cannot outlive the activation that supplies them. Ordinary feedback, provider failure and CoD abrupt completion remain distinct. Completion crosses the boundary with its original CoD meaning and observes the ordinary cleanup rules.
 
 For [enum arguments, results and normal feedback](../../../design/TypedEnums.md#generated-c-exchange), generate an exact-width carrier and namespaced constants. Validate C-originating normal values before exposing them as CoD enum values. For the [compiler status workload](../../../design/TypedEnums.md#first-workload-and-acceptance), the launcher receives codes 0–7 through the ordinary result channel.
+
+### Native package providers for nominal regions
+
+Use the native handle constructor pattern for a nominal region's constructors and methods. The package declares the operations in CoD. The compiler generates the C header and adapter stubs from those declarations for the selected target. The author implements the declared entry points in separate C or C++ sources. Regenerating the interface preserves the implementation files.
+
+Compile the generated adapter as C. A C++ implementation includes the generated header with C linkage. C++ classes, templates and RAII can implement the resource internally. Catch any C++ exception at the provider boundary and use the failure path allowed by the declared operation. Only a successful owning construction publishes the owner. On failure the provider releases the resources it acquired. Each published owner is released once through its designated cleanup. The booter’s [source revision provider](../native/source_provider.c) illustrates the existing handle pattern.
+
+The generated parts and implementation agree on the target C ABI for that build. Rebuilding them together is the initial distribution model. Cross-release binary compatibility becomes a separate design question if an independently built provider needs to load into another release. The [nominal region contract](../../../design/GraphGrainedMemoryManagement.md#opaque-nominal-region-types) governs type identity and method-only access. [Production package toolchain](CompilerPipeline.md#codup-toolchain-for-native-packages)
 
 ### Native callable kind and C linkage
 

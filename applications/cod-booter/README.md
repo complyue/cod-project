@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 52 · Recorded: 2026-11-26 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 53 · Recorded: 2026-11-27 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r53 the [native package decision](../../CHANGELOG.md#h-native-package-toolchain-20261127) assigns the [production C, C++ and assembly toolset](docs/CompilerPipeline.md#codup-toolchain-for-native-packages) to the `codup` distribution under D-20-TARGET-TOOLCHAIN. The r52 repository roles, host/cross split and C implementation of the shared runtime continue.
 
 At r52 the [production target decision](../../CHANGELOG.md#h-production-cross-build-20261126) extends the `codup` distribution role under [D-20-REPOSITORIES](../../design/DesignAuthorityRegistry.md#d-20-repositories). It preserves r51’s single booter mode and assigns [cross-builds](docs/CompilerPipeline.md#production-cross-builds-and-target-runtimes) to `cfe`.
 
@@ -378,7 +380,7 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
 | `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and introduces the experimental `cfe` optimizing CLI. Version 2.0 formally supports `cfe`. Its [output-directory contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) governs the generated executable. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
-| `codup` | Installs and manages CoD toolchain versions, including the LLVM components they use and the tooling for supported `cfe` targets. [Production distribution contract](docs/CompilerPipeline.md#production-cross-builds-and-target-runtimes) |
+| `codup` | Installs matching CoD and LLVM tools, including `clang`, `clang++`, target assembly support and the link tools and target components used by host `cod` and cross-target `cfe`. [First native package toolset](docs/CompilerPipeline.md#codup-toolchain-for-native-packages) |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
 
 The `e-wrks/cod` toolchain will bundle `pcl.cod`, the parser combinator library that implements the parsing HLVM. The production CoD parser is one of its applications. Its DBMR grammar program ships as `cod.grammar` and runs on `pcl.cod` on the compiler’s normal source path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [CoD parser application case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm)
@@ -387,7 +389,7 @@ Future package management belongs in `e-wrks/cod`. The bootstrap consumes [manua
 
 After the split, a change to what a CoD program means belongs in `cod-lang`. Each compiler repository documents how it implements the rule, its current coverage and any known gaps.
 
-New CoD native components are written in C. The CoD native interface is C-based. The C++ seed, the booter, the future production compiler and foreign adapters consume the same interface. Specify each operation from the runtime behavior its callers need. C++ classes, templates and exception propagation are internal to C++ clients or dependencies. This choice covers CoD’s LLVM bindings as well as region support.
+New shared native runtime components are written in C. Package authors may implement the [generated C interface](docs/LLVMInterop.md#native-package-providers-for-nominal-regions) in C or C++. The C++ seed, the booter, the future production compiler and foreign adapters consume the same interface. Specify each operation from the runtime behavior its callers need. Package providers keep C++ classes, templates and exception handling inside their C++ components. This choice covers CoD’s LLVM bindings as well as region support.
 
 ### Shared runtime and independent component builds
 
