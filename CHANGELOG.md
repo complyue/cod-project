@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Reject duplicate fixed positional signatures exposed by defaults
+
+<a id="h-defaulted-method-conflict-20261127"></a>
+**H-DEFAULTED-METHOD-CONFLICT-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user corrected the proposed `pick(7)` outcome: “你这个例子应该在method定义角度reject”. For `choose`, where *both* fixed methods omit their distinct second parameters, the project user selected “Reject at family formation — both claim the same one-argument signature”. The [r277 example](https://github.com/complyue/cod-project/blob/0fcb9cb2180dbde224e567550c04a847e50d492f/design/SymbolicDynamicScope.md#L1685) used a call-time preference for `pick` and a call-time ambiguity for the two defaulted heads. [D-10r278](design/SymbolicDynamicScope.md#fixed-method-conflicts-from-trailing-defaults) rejects both pairs at their definitions, including when the common signature occurs only through omission. Verify both declaration orders and first composition without a call. [H-474](#h-474) continues for valid families. Ordinary type specialization, explicit default evaluation and fixed-plus-variadic coexistence keep their prior scope. Registry r1360→1361, P-405/P-406.
+
 ## 2026-11-27 — Prefer the matching fixed OO method for an ordinary indexed read
 
 <a id="h-fixed-arity-oo-indexed-reads-20261127"></a>

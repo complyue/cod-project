@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 277 · Recorded: 2026-11-27 · Phase: language/application co-design.
+Design revision: 278 · Recorded: 2026-11-27 · Phase: language/application co-design.
 
 ## Design authority
+
+At r278 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) rejects a [fixed-method definition conflict](#fixed-method-conflicts-from-trailing-defaults) when two fixed methods offer the same positional signature through trailing defaults. The [user decision](../CHANGELOG.md#h-defaulted-method-conflict-20261127) supersedes r277’s call-site outcomes for both `pick` and `tied`. P-405/P-406 continue the separate binding and evaluation phases, permitted type specialization and explicit pack selection.
 
 At r277 the [indexing terminology](CollectionsAndBuiltinContainers.md#indexing-terminology) names the existing bracket operations. The [D-10](DesignAuthorityRegistry.md#d-10) rules and acceptance at r276 continue.
 
@@ -1677,27 +1679,39 @@ Parsing records default syntax and its definition/caller lookup context. H-456's
 
 A generic variable needed only by defaulted parameters may remain unresolved during selection when the declared signature and supplied evidence still establish a unique overload. H-476 can then infer it from the selected default. If selecting among competing signatures would require inspecting their defaults, reject the unresolved/ambiguous call instead of inspecting those expressions. Ordinary rejection from supplied-argument or declared-signature constraints remains; unknown default contents cannot supply an applicability filter or a ranking advantage.
 
-**Default-count tie-break (H-474).** After binding supplied values and explicit default requests to each applicable declaration, apply ordinary type matching and specificity first. Only otherwise tied candidates are compared by how many formal parameters would be supplied by declared defaults: fewer is preferred. Remaining equal candidates are ambiguous irrespective of declaration order. A better type match cannot lose merely because it needs defaults, and fewer defaults cannot make an inapplicable candidate applicable or resolve incomparable type constraints.
+#### Fixed-method conflicts from trailing defaults
+
+A fixed method with trailing defaulted parameters offers its shorter positional signatures in the same method family. Compare each declared positional signature and each shorter signature offered by omitting trailing defaults. If two distinct fixed methods offer an identical signature, reject the family when the definitions first appear together. This applies in either declaration order and when composing contributions to the same family. Report the common signature and both definition sites, even in a module with no calls.
+
+```cod
+func pick(x:Int64) -> Int64 { 1 }
+func pick(x:Int64, y:Int64 { 0 }) -> Int64 { 2 }
+```
+
+Both definitions offer `pick(Int64)`. The same conflict can arise entirely from omission:
+
+```cod
+func choose(x:Int64, y:Int64 { 0 }) -> Int64 { 1 }
+func choose(x:Int64, flag:bool { false }) -> Int64 { 2 }
+```
+
+Both methods offer `choose(Int64)`. Their second parameters distinguish their full signatures. A module defining both fails even if every written call supplies two arguments. The check uses the declared parameter contracts and the presence of defaults. The default expressions themselves are checked and evaluated in their established phases.
+
+Compare positional signatures under the ordinary method-identity rules. Distinct parameter types can accept the same argument by widening and remain valid overloads. Reaching one definition through two import paths contributes one method. Fixed and variadic methods can coexist under the [pack rules](#runtime-array-expansion-and-one-variadic-parameter).
+
+**Default-count tie-break for a valid family (H-474).** After binding supplied values and explicit default requests to each applicable declaration, apply ordinary type matching and specificity first. Only otherwise tied candidates are compared by how many formal parameters would be supplied by declared defaults: fewer is preferred. Remaining equal candidates are ambiguous irrespective of declaration order. A better type match cannot lose merely because it needs defaults, and fewer defaults cannot make an inapplicable candidate applicable or resolve incomparable type constraints.
 
 Count used default slots, not how many defaults the declaration offers. An explicitly supplied argument counts as supplied even if its value equals the default. An explicit `-> parameter` request still counts as one used default, exactly as omission does. Definition-environment and caller-context defaults each count once per defaulted parameter; named-argument order, expression cost and constant folding do not change the count. Implicit variadic collection is not a declared parameter-default expression. Evaluate defaults only after selecting the candidate; do not execute them, inspect their runtime results or speculate their effects to choose an overload. H-476 permits type evidence from the selected overload's used defaults as described below. H-477 forbids obtaining that evidence during overload selection, even without executing the default; post-selection errors are diagnostics, not fallback selection.
 
 ```cod
-func pick(x:u64) -> u64 { return 1u64; }
-func pick(x:u64, y:u64 { 10u64 }) -> u64 { return 2u64; }
-pick(7u64);    # Equal type match; zero defaults beats one, result 1.
-
-func exact(x:u64) -> u64 { return 1u64; }
-func exact(x:u32, y:u64 { 10u64 }) -> u64 { return 2u64; }
-exact(7u32);   # Exact u32 beats widening to u64, despite using one default.
-
-func tied(x:u64, y:u32 { 0u32 }) -> u64 { return 1u64; }
-func tied(x:u64, z:bool { false }) -> u64 { return 2u64; }
-tied(7u64);    # Same explicit match and one default each: ambiguous.
+func exact(x:UInt64) -> UInt64 { 1 }
+func exact(x:UInt32, y:UInt64 { 10 }) -> UInt64 { 2 }
+exact(7u32)    # Exact UInt32 beats widening to UInt64, despite using one default.
 ```
 
 **Explicit default and empty-pack requests (H-475).** These forms bind to the family's declared
-slots. In the fixed-only `pick` family above, `pick(7u64, -> y)` selects the second method and
-evaluates its declared default. In the standalone `batch_id` example, `batch_id(7u64, []...)`
+slots. In the valid `exact` family above, `exact(7u32, -> y)` explicitly requests
+the second method’s declared default and returns 2. In the standalone `batch_id` example, `batch_id(7u64, []...)`
 supplies zero entries. Neither spelling can repair an invalid family.
 
 **Explicit named default request.** `-> parameter` is allowed only as a call-argument form. It contributes no value expression and is not a standalone default value, null, callable-owner projection or type witness. The destination binds to the declaration/origin contract, including through `typeof origin`; a target implementation's private names/defaults cannot satisfy it. Require a declared default, not merely an implicitly empty variadic tail.
@@ -1892,7 +1906,7 @@ Caller-default failure precedes input ownership transfer; callee-default failure
 
 **Further review:** complete block grammar; helper/type-name hygiene and dependency checks in caller-defaults; public declaration versus implementing-method parameter names; conflicting defaults across declarations; type-bound default context transport and explicit contract erasure; and broader named pack composition. H-474 covers type-first comparison and fewer defaults for fixed overloads. H-475 covers explicit default requests and empty-pack binding. H-476/H-477 admits established type evidence from used defaults only after unique overload selection, with circular/unresolved inference rejected; default analysis never filters competing candidates and a selected-default error never retries selection. The declaration is the public naming/default contract; implementation-local names cannot change it. Default effects and checked failures stay visible through the selected contract. D-16 remains unchanged.
 
-**Acceptance:** complete reordered bindings and default omission; accept positional arguments after an in-position label and reject them after a reordered label; reject duplicate, unknown and missing-required bindings; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers zero-versus-one default on equal type matches, exact matching with a default beating widening without one, equal-count ambiguity, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds explicit default and empty-pack binding, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional values after reordered requests and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Seed implementation coverage is recorded in the [language capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md).
+**Acceptance:** complete reordered bindings and default omission; accept positional arguments after an in-position label and reject them after a reordered label; reject duplicate, unknown and missing-required bindings; preserve written explicit evaluation/conversion order and mode/owner/access/init checks; distinguish named arrows from grouped borrowed-owner projection; evaluate defaults once per omission; observe definition-versus-caller locals and fixed symbolic identity with caller-current values; reject escaping default-local views and invalid effect use. Acceptance also requires mixed defaults observing caller-before-callee order, pre-entry versus post-entry failure/ownership cleanup, and registration-versus-invocation defaults in deferred calls. Acceptance also requires named-only default authorship, rejection of defaults in inline callable types/anonymous declarations, unevaluated typeof with retained declaration origin, unchanged definition-site symbolic identities, actual-invocation caller lookup, and rejection of omission through a plain structural view. Acceptance includes compatible targets with different local names/defaults, original-default versus direct-target behavior, full-signature obligations and rejection of missing default-context evidence. Acceptance also requires live reads through the original alias without precomputing its value or retargeting it after index changes, unchanged target-body captures, and preserved context/lifetime obligations on forwarding. Acceptance further requires complete multi-method coverage independent of the receiver's current uses, rejection of a missing signature or an incompatible/ambiguous intercepting overload, preservation of origin defaults/names, and valid caller-local adapters. Acceptance also covers definition-site conflicts for both `pick` and `choose` without a call present, in either declaration order or at first composition, exact matching with a default beating widening without one, ambiguity among distinct equally ranked candidates, named binding before counting, and no evaluation of losing defaults. H-475 acceptance adds explicit default and empty-pack binding, default-count/phase preservation for requests, and rejection of unknown/required/duplicate requests, positional values after reordered requests and unresolved empty-pack type/owner evidence. H-476/H-477 acceptance includes unique selection before omitted/requested-default inference, supplied-value inference with skipped defaults, established helper-result evidence without execution, preserved context/origin and phases, and rejection of contradictory or unanchored evidence. It also requires ambiguity without analyzing competing defaults, a missing-name diagnostic only for the selected needed default, no inspection of an excluded default, and no retry after selected-default failure. Physical type-context transport and detailed inference procedures remain under review; selected behavior still requires implementation and proof coverage. Seed implementation coverage is recorded in the [language capability reference](https://github.com/complyue/cod-project/blob/b7fd6327984f537e2256ca14383bbeedd7e833bd/tests/cod/language/README.md).
 
 ### Evaluated bits and storage places
 
