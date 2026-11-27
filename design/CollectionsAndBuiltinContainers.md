@@ -1,10 +1,10 @@
 # Collections and builtin containers
 
-Design revision 20 · 2026-11-27 · Source design draft
+Design revision 21 · 2026-11-27 · Source design draft
 
 ## Design authority
 
-At r20 the [user’s decision](../CHANGELOG.md#h-container-selected-ref-target-20261127) specifies the [target returned for a reference element](#container-pointer-results) under D-30, P-590. The r19 nullable result, shallow detachment, owner and access rules continue.
+At r21 the [value-only item decision](../CHANGELOG.md#h-value-only-container-items-20261127) qualifies [type arguments and item storage](#container-pointer-results) under D-30, P-589/P-590. It supersedes the r20 direct reference-element scope. The pointer result, live lookup, shallow detached pop, ordinary owner lifetime and deferred reuse policy continue.
 
 At r19 the [user’s clarification](../CHANGELOG.md#h-detached-pop-slot-20261127) confirms [shallow detachment on pop](#container-pointer-results) under D-30, P-589/P-590. The r18 rules for map lookup, actual owners and hash width continue.
 
@@ -51,16 +51,14 @@ The first public generic linked collection for the booter is a deque parameteriz
 
 ### Container pointer results
 
-Deque pop and map lookup return a nullable pointer. Empty or missing gives null. On success the pointer selects typed storage with its actual owner and access. A caller can handle either outcome by matching the result once in a [`case`](DomainLanguageDesign.md#case-expressions-and-branch-local-variables). Both operations follow the [ordinary reference lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy).
+An ordinary generic type argument supplies a type. Each field, parameter or result declaration determines how it uses that type. For example, a private link can store an item of type `T` by value and declare its next link as a `ptr`. The generic deque and map store value items. Supplying a binding mode such as `ref Node` or `ptr Node` as the element type is outside this contract. Using a type argument grants only the [construction and transfer operations](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) available for that type. A finite-bits sum such as the booter’s `PackageResolution` transfers its tag and active payload.
 
-For a **value element**, map lookup borrows the stored value. Later map operations may change what the caller reads there. A caller needing the observed value later copies its payload. Deque pop detaches the removed slot. After popping 7, pushing and popping 13 leaves the first slot at 7.
+Deque pop and map lookup return a nullable pointer to **item storage**. Empty or missing gives null. On success the caller receives the item slot with its actual owner and permitted access and may match the result once in a [case](DomainLanguageDesign.md#case-expressions-and-branch-local-variables).
 
-For a **non-null reference element** with target type `T`, lookup and pop both return a `ptr T` selecting the element’s target at the time of the operation. The result carries that target’s actual owner and permitted access. Ordinary [reference binding](CallableViewsAndCaptures.md#declared-place-aliases) gives the caller its own binding to the selected target.
+- **Map lookup.** The result borrows the stored value. Later map operations may change what the caller reads there. A caller needing the observed value later copies its payload while it is available.
+- **Deque pop.** The result borrows the detached slot. After popping 7, pushing and popping 13 leaves the first slot at 7. This guarantee covers the immediate slot value. Objects reached through a field retain their ordinary mutation semantics.
 
-- **Map lookup.** An entry refers to `A` when lookup returns `p`. Rebind the entry to `B`. The saved `p` still selects `A`, and a fresh lookup selects `B`.
-- **Deque pop.** Pop an entry referring to `A`, then push an entry referring to `B`. The first result still selects `A`. A permitted write to `A.count` through another alias remains visible through the popped result.
-
-The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
+If an admitted record contains a pointer field, lookup selects the record. A caller that separately binds that field while it selects A keeps A even if the field subsequently selects B. The field follows ordinary [reference binding](CallableViewsAndCaptures.md#declared-place-aliases). Every returned reference remains subject to its [actual owner’s lifetime](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy). The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
 
 ## Public hash result
 

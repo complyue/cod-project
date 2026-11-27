@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Generic containers store items by value
+
+<a id="h-value-only-container-items-20261127"></a>
+**H-VALUE-ONLY-CONTAINER-ITEMS-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed “容器始终实现 `val` 语义的item，pop/lookup 都返回ptr” and confirmed the proposal with “按此决定”. [D-30 r20→21](design/CollectionsAndBuiltinContainers.md#container-pointer-results) binds type parameters to types and chooses value or reference mode at each declaration. The deque and map store value items and return nullable pointers to item storage. This retires the [direct reference-element rule](https://github.com/complyue/cod-project/blob/fc5ff84cad54ceb5d4ac06b45fd6ccf721c90088/design/CollectionsAndBuiltinContainers.md#container-pointer-results) and drops the proposed parallel Maybe-returning methods. Live lookup, shallow detached pop, owner lifetime, hash width and ordinary reference fields are continued. The value-sum deque probe remains a bootstrap witness. P-589/P-590, registry r1373→1374.
+
 ## 2026-11-27 — Lookup and pop of a ref element select its current target
 
 <a id="h-container-selected-ref-target-20261127"></a>
