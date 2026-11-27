@@ -325,7 +325,7 @@ Both source commands check the original `parse_enum_integer_literal` call. The c
 
 Both source commands accept the unchanged `ModuleParser` and `Frontend`. The `parse_callable` contract includes the mutually recursive helpers that parse nested callables. From locally checked body facts and frozen call edges, the completion pass propagates unavailability, escaping bounds and fatal arithmetic independently to callers. A failed operand prevents entry. A cycle with completed dependencies supplies a bound on these outcomes without implying termination. The linked parser retains nested callable syntax and diagnoses a malformed declaration while keeping the valid suffix.
 
-The full CLI source check first stops at the `const` value local in `NativeDiagnostics.cod:61:5`. Executable object checking has a separate admission path.
+Both source commands on the full CLI first stop at the `make ReportIndices(count, 0u64)` array construction in `NativeDiagnostics.cod:163:21`. Executable object checking has its own supported profiles.
 
 ### Imported array length families
 
@@ -339,7 +339,9 @@ The declaration and C provider commands check the imported native package probe 
 
 Demanded source bodies can call a directly selected ordinary function proved to return one scalar literal. The defining module publishes this proof only for a complete empty signature and the exact checked body. Source selection through a rename preserves that contract. [Imported literal calls](docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal)
 
-### Fixed scalar value formals
+### Fixed scalar value bindings
+
+An initialized `const val` local evaluates its initializer once and holds an independent readonly scalar on normal completion. Both source commands check the initializer and enforce readonly access even in a private unused body. A readonly loan is allowed, and copying the value into a writable local gives that local independent storage. The source commands also check a fixed scalar initialized from a field of a supported indexed product formal, including the array owner and bounds at the read. The object command emits fixed locals with supported scalar initializers.
 
 Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls. Fixed reference formals and fixed formals in C and `here` signatures remain outside this profile. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)
 

@@ -1628,6 +1628,15 @@ func prepare_bits_initializers(source:const SourceBytes in S, nodes:const ExprNo
     return case_problem(report, at, unsupported_bits_construction())
 }
 
+func fixed_indexed_field_initializer(nodes:const ExprNodes in N, local:const LocalBindingSites in L,
+    at:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner L} {
+    if (local.mode != ValueLocal || !local.declaration_const || local.initializer >= at) return false;
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    return inspect_field_selection(nodes, revision, used, local.initializer, field) &&
+        inspect_index_selection(nodes, revision, used, field.receiver, indexed)
+}
+
 export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, used:UInt64, revision:UInt64)
     -> bool where {const owner N, const owner B, const owner E} {
@@ -1653,9 +1662,11 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
             !binding.readonly && binding.owner_name < used && binding.target_type < used &&
             names[binding.target_type].kind == ordinary_selection() &&
             selected[names[binding.target_type].declaration].kind == record_export()) return true;
-        if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
-            inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
-            construction.placement == no_node() && construction.queried_operand == no_node()) return true;
+        if (inspect_local_binding(nodes, revision, used, at, local) &&
+            ((local.mode == ReferenceLocal &&
+              inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
+              construction.placement == no_node() && construction.queried_operand == no_node()) ||
+             fixed_indexed_field_initializer(nodes, local, at, used, revision))) return true;
         if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
@@ -1702,17 +1713,21 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
         if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
-        if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
-            local.initializer < at) {
-            if (work[local.initializer].inline_sum_initializer) {
-                if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
-                    aggregate, facts, at, local, used, revision, report)) return false;
-                if (first == no_node()) { (first <- at):void }
+        if (inspect_local_binding(nodes, revision, used, at, local) && local.initializer < at) {
+            if (local.mode == ReferenceLocal) {
+                if (work[local.initializer].inline_sum_initializer) {
+                    if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
+                        aggregate, facts, at, local, used, revision, report)) return false;
+                    if (first == no_node()) { (first <- at):void }
+                } else {
+                    if (!prepare_lexical_product_reference(nodes, names, selected, work, interfaces, published,
+                        aggregate, facts, at, local, used, revision, report)) return false;
+                    if (first == no_node() &&
+                        (case facts[at] of { LexicalProductReference -> true; _ -> false })) { (first <- at):void }
+                }
             } else {
-                if (!prepare_lexical_product_reference(nodes, names, selected, work, interfaces, published,
-                    aggregate, facts, at, local, used, revision, report)) return false;
                 if (first == no_node() &&
-                    (case facts[at] of { LexicalProductReference -> true; _ -> false })) { (first <- at):void }
+                    fixed_indexed_field_initializer(nodes, local, at, used, revision)) { (first <- at):void }
             }
         };
         if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction)) {

@@ -28,7 +28,7 @@ using "./ParserStorage.cod" ModuleSelectionMode {
 };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal };
+using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal, ValueLocal };
 using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ExceptionFormal, HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
@@ -266,7 +266,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 };
                 (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
                     if (declaration_const) {
-                        if (mode != ReferenceLocal) return unsupported_const_local();
+                        if (mode != ReferenceLocal && mode != ValueLocal) return unsupported_const_local();
                         (requires_operand_checks <- true):void
                     };
                     if (mode == ExceptionLocal) return 28u8;

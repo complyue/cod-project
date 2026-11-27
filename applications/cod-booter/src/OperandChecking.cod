@@ -56,7 +56,7 @@ using "./ParserStorage.cod" {
     DeferSites, inspect_defer, syntax_first, syntax_past, owner_constraint_syntax, binds_local_storage,
     CallableSites, inspect_callable, SignatureSites, inspect_signature, find_signature_clause,
     DeclarationSites, inspect_declaration, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding, inspect_type_annotation,
-    LocalBindingSites, inspect_local_binding, fixed_reference_local, text_literal_syntax, DirectCallSites,
+    LocalBindingSites, inspect_local_binding, text_literal_syntax, DirectCallSites,
         direct_invocation, inspect_invocation,
     FieldSelectionSites, inspect_field_selection, ConditionalSites, inspect_conditional, BinarySites, inspect_binary,
     CaseSites, inspect_case, AssertionSites, inspect_type_assertion, module_tail,
@@ -884,8 +884,8 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     if (inspect_binding(nodes, revision, used, local.binding, binding) == InvalidBindingSyntax) return invalid_operand_tree();
     val initializer <- local.initializer;
     val type_name <- binding.target_type;
-    val readonly <- if (binding.readonly) { 1u8 } else { 0u8 };
     val value_binding <- local.mode == ValueLocal;
+    val readonly <- if (binding.readonly || (value_binding && local.declaration_const)) { 1u8 } else { 0u8 };
     val pointer <- local.mode == PointerLocal;
     if (value_binding && binding.owner_name != no_node()) return unproved_operand();
     val required_owner <- if (binding.owner_name == no_node()) { no_node() } else { (names[binding.owner_name].declaration) };

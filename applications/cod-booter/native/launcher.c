@@ -307,7 +307,7 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
     else if (diagnostic->stage == 3 && diagnostic->code == 116)
         fputs(": error: named region checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 117)
-        fputs(": error: const value local checking is outside the current compiler profile\n", stderr);
+        fputs(": error: this fixed local binding mode is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 118)
         fputs(": error: sum constructor initializers are outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 119)
