@@ -8,18 +8,16 @@ export data PackageResolution =
     SearchFailed { os_error:UInt64; } |
     AmbiguousModule { first_root:UInt64; second_root:UInt64; } |
     PackageModule { root:UInt64; };
-export array PackageResolutions[UInt64]:PackageResolution;
 
 export func absent_module() -> UInt64 { return 18446744073709551615u64 }
 
 export proc probe_package_roots(
     rows:const PackageSourceRoots in G, paths:const SourceBytes in G, row_count:UInt64, path_used:UInt64,
-    module:const SourceBytes in M, first:UInt64, past:UInt64, resolution:PackageResolutions in R)
-    -> void where {const owner G, const owner M, owner R} {
+    module:const SourceBytes in M, first:UInt64, past:UInt64)
+    -> val PackageResolution where {const owner G, const owner M} {
     if (row_count > intrinsic (len)(rows) || path_used > intrinsic (len)(paths) ||
         classify_module_path(module, first, past) != PackagePath) {
-        resolution[0u64] <- make SearchFailed { os_error <- 0u64; };
-        return
+        return make SearchFailed { os_error <- 0u64 }
     };
     val selected <- row_count;
     val competing <- row_count;
@@ -49,19 +47,15 @@ export proc probe_package_roots(
         }
     };
     if (failed) {
-        resolution[0u64] <- make SearchFailed { os_error <- error; };
-        return
+        return make SearchFailed { os_error <- error }
     };
     if (competing < row_count) {
-        resolution[0u64] <- make AmbiguousModule {
-            first_root <- selected; second_root <- competing;
-        };
-        return
+        return make AmbiguousModule {
+            first_root <- selected; second_root <- competing
+        }
     };
     if (selected < row_count) {
-        resolution[0u64] <- make PackageModule { root <- selected; };
-        return
+        return make PackageModule { root <- selected }
     };
-    resolution[0u64] <- make MissingModule {};
-    return
+    return make MissingModule {}
 }

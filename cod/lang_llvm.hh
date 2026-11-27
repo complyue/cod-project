@@ -85,11 +85,13 @@ class LLVMEmission {
     size_t lexical_here = 0;
     std::vector<size_t> array_owners{};
     bool exception_result = false;
+    bool aggregate_destination = false;
     size_t array_owners_begin() const { return operands + owners; }
     size_t result_index() const { return array_owners_begin() + array_owners.size(); }
-    size_t native_result_index() const { return result_index() + callable_destination; }
+    bool value_destination() const { return callable_destination || aggregate_destination; }
+    size_t native_result_index() const { return result_index() + value_destination(); }
     size_t exception_result_index() const { return native_result_index() + native_borrow_destination; }
-    bool has_result_destination() const { return callable_destination || native_borrow_destination || exception_result; }
+    bool has_result_destination() const { return value_destination() || native_borrow_destination || exception_result; }
     size_t here_index() const { return exception_result_index() + exception_result; }
     size_t here_count() const { return here_formals + lexical_here; }
     size_t parameter_count() const { return here_index() + here_count() + here_group; }
@@ -1075,8 +1077,11 @@ class LLVMEmission {
         implementation_gap(expr.at, "call without a prepared array allocator capability");
       prepared.push_back(llvm::Constant::getNullValue(array_capability_));
     }
-    if (layout.callable_destination) {
-      destination = slot(scalar_, "callable.result");
+    if (layout.value_destination()) {
+      if (layout.aggregate_destination) {
+        const auto &type = *instance.result.type;
+        destination = slot(inline_layout(type), "aggregate.result");
+      } else destination = slot(scalar_, "callable.result");
       prepared.push_back(destination);
     }
     if (layout.native_borrow_destination) prepared.push_back(slot(native_handle_pair(), "native.call.result"));
@@ -1096,7 +1101,10 @@ class LLVMEmission {
     if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
       throw std::logic_error("native call disagrees with its parameter roles");
     llvm::Value *result = b_.CreateCall(target, prepared);
-    if (destination) result = b_.CreateInsertValue(result, load(destination), 0);
+    if (destination) {
+      auto *value = layout.aggregate_destination ? pack_address(destination) : load(destination);
+      result = b_.CreateInsertValue(result, value, 0);
+    }
     return result;
   }
   llvm::Value *eager_builtin(const Expression &expr, const std::vector<llvm::Value *> &arguments, const EagerOperation &choice) {
@@ -2199,7 +2207,7 @@ class LLVMEmission {
     }
     b_.SetInsertPoint(normal);
   }
-  llvm::Value *case_view(llvm::Value *address) {
+  llvm::Value *pack_address(llvm::Value *address) {
     return b_.CreateInsertValue(empty_scalar(), b_.CreatePtrToInt(address, b_.getInt64Ty()), 0);
   }
   llvm::Value *emit_case(const Expression &expr, const Type &subject_type, bool borrowed, bool may_be_null,
@@ -2310,7 +2318,7 @@ class LLVMEmission {
               }
               if (!result_view) return emit_joined_bits(expr, body, discard);
               auto *address = emit_expression(body, Projection::target, discard);
-              return reachable() ? case_view(address) : nullptr;
+              return reachable() ? pack_address(address) : nullptr;
             }(paths);
             if (reachable()) {
               incoming.emplace_back(value, b_.GetInsertBlock());
@@ -2650,6 +2658,7 @@ class LLVMEmission {
       auto *result = invoke(expr, arguments, here_site, current_owners);
       if (here_site) result = consume_here_transfer(result, load(here_site));
       auto *value = propagate(result);
+      if (!fact.view && inline_aggregate_type(fact.type)) return view_address(value);
       if (!fact.borrowed_result) return value;
       auto *address = view_address(value);
       return !read ? address : discard ? empty_scalar() : load_place(checked_address(address, expr, expr.at), expr);
@@ -2675,7 +2684,7 @@ class LLVMEmission {
           const auto [borrow, source] = preparation;
           if (!borrow) return emit_projected_value(operand, source, false);
           auto *address = emit_expression(operand, Projection::target);
-          return reachable() ? case_view(address) : nullptr;
+          return reachable() ? pack_address(address) : nullptr;
         }(preparations);
       }
       if (!reachable()) return nullptr;
@@ -2815,6 +2824,15 @@ class LLVMEmission {
         auto *owner = construct_region(*make);
         if (!reachable()) return nullptr;
         value = b_.CreateInsertValue(value, b_.CreatePtrToInt(owner, b_.getInt64Ty()), 0);
+      } else if (!expr.children.empty() && inline_aggregate_type(fact.operand_type) && !fact.borrowed_result) {
+        const auto &source = *expr.children.front();
+        auto *input = emit_expression(source, checked_.at(&source).view ? Projection::target : Projection::value);
+        if (!reachable()) return nullptr;
+        // A pending return may be suspended while cleanup runs. Give each
+        // prepared return its own snapshot until the final outcome is known.
+        auto *pending = b_.CreateAlloca(inline_layout(fact.operand_type), nullptr, "aggregate.pending.return");
+        b_.CreateCall(bits_transfer(fact.operand_type), {pending, input});
+        value = pack_address(pending);
       } else if (!expr.children.empty()) {
         value = emit_expression(*expr.children.front(), fact.borrowed_result ? Projection::target : Projection::value);
         if (!reachable()) return nullptr;
@@ -3097,7 +3115,7 @@ class LLVMEmission {
     std::vector<llvm::Type *> parameters(layout.operands, scalar_);
     parameters.insert(parameters.end(), layout.owners, b_.getPtrTy());
     parameters.insert(parameters.end(), layout.array_owners.size(), array_capability_);
-    if (layout.callable_destination) parameters.push_back(b_.getPtrTy());
+    if (layout.value_destination()) parameters.push_back(b_.getPtrTy());
     if (layout.native_borrow_destination) parameters.push_back(b_.getPtrTy());
     if (layout.exception_result) parameters.push_back(b_.getPtrTy());
     parameters.insert(parameters.end(), layout.here_count(), here_);
@@ -3293,6 +3311,15 @@ class LLVMEmission {
       value = delivered;
     }
     if (call.callable_destination) b_.CreateStore(value, function->getArg(call.result_index()));
+    if (call.aggregate_destination) {
+      auto *ready = block("aggregate.return.publish"), *done = block("aggregate.return.complete");
+      b_.CreateCondBr(b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(1)), ready, done);
+      b_.SetInsertPoint(ready);
+      b_.CreateCall(bits_transfer(*layout.result.type), {function->getArg(call.result_index()), view_address(value)});
+      b_.CreateBr(done);
+      b_.SetInsertPoint(done);
+      value = empty_scalar();
+    }
     if (call.exception_result) {
       auto *owner = take_failure_owner(b_, pending_exception_result_);
       auto *normal = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(1));
@@ -3541,6 +3568,7 @@ public:
         const auto &required = *instance.array_allocator_roles;
         array_owners.insert(required.begin(), required.end());
         call.callable_destination |= !result.borrowed() && result.type->kind == Type::procedure;
+        call.aggregate_destination = result.mode == ResultMode::value && inline_aggregate_type(*result.type);
         call.native_borrow_destination |= result.native_borrow();
         call.exception_result |= result.owns_exception();
       }

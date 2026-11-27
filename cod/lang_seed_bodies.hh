@@ -337,7 +337,7 @@ class BodyExtraction {
            method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
            (method.result.type ?
             method.result.owns_region() || (method.result.mode == ResultMode::value &&
-              (scalar_type(*method.result.type) || method.result.type == Type::void_type)) :
+              (declarations_.declarations_.bits_payload(*method.result.type) || method.result.type == Type::void_type)) :
             allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
            at, "seed needs a fixed ordinary callable body");
     const auto [row, first] = selected_.try_emplace(method_id, bodies_.size());
@@ -525,6 +525,17 @@ class BodyExtraction {
     void takes_payload(const CheckedOperation &value, const Type &to, const Location &at) const {
       bits_payload_type(declarations(), value.type, to, at);
       expect(!inline_aggregate_type(to) || value.view, at, "aggregate bits transfer needs a source view");
+    }
+
+    bool direct_value_call(const Expression &expr) const {
+      const auto &call = ungrouped_expression(expr);
+      return call.kind == Kind::call && body_.instance.operations.at(&call).callee.has_value();
+    }
+
+    void takes_return_value(const Expression &expr, const CheckedOperation &value, const Type &to) const {
+      if (!inline_aggregate_type(to)) return takes_value(value, to, expr.at);
+      bits_payload_type(declarations(), value.type, to, expr.at);
+      expect(value.view || direct_value_call(expr), expr.at, "seed needs a complete aggregate return value");
     }
 
     static size_t single_owner(const CheckedOperation &view, const Location &at) {
@@ -1835,7 +1846,8 @@ class BodyExtraction {
 
     BoundCase bind_case(const Expression &expr, bool allow_scope = false) {
       const auto &subject = operand(expr, 0);
-      const bool sum = subject.type.kind == Type::sum && subject.view && declarations().bits_payload(subject.type);
+      const bool sum = subject.type.kind == Type::sum && declarations().bits_payload(subject.type) &&
+          (subject.view || direct_value_call(*expr.children.front()));
       const bool enumeration = subject.type.kind == Type::enumeration;
       expect((sum || enumeration || subject.type == Type::boolean) && !expr.case_resumes,
              expr.at, "seed needs a closed Boolean, enum or bits sum case without resumption");
@@ -2075,7 +2087,7 @@ class BodyExtraction {
           expect(body_.instance.result.type.has_value(), expr.at,
                  "seed needs a declared result for a value tail");
           const auto &result = *body_.instance.result.type;
-          takes_value(tail, result, expr.at);
+          takes_return_value(*expr.children.front(), tail, result);
           op.type = Type::never;
           op.operand_type = result;
         }
@@ -2098,7 +2110,7 @@ class BodyExtraction {
           if (remember(value, fresh_region(value)).type != *body_.instance.result.type)
             fail(value.at, "constructed region does not match the declared root schema");
         } else if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
-        else takes_value(operand(expr, 0), *body_.instance.result.type, expr.at);
+        else takes_return_value(*expr.children.front(), operand(expr, 0), *body_.instance.result.type);
         op.type = Type::never;
         op.operand_type = *body_.instance.result.type;
         return op;

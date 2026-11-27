@@ -22,7 +22,7 @@ using "./ParserStorage.cod" no_node;
 using "./PackageInputs.cod" PackageSourceRoots;
 using "./LoadPackageInputs.cod" load_package_inputs;
 using "./PackageModuleResolution.cod" {
-    PackageResolutions, probe_package_roots, absent_module,
+    probe_package_roots, absent_module,
     PackageResolution { MissingModule, SearchFailed, AmbiguousModule, PackageModule },
 };
 
@@ -197,11 +197,9 @@ proc prepare_resolved_module(
     paths:const SourceBytes in G, keys:const SourceBytes in G,
     spelling:const SourceBytes in F, edge:const PackageEdge in E, val row_count:UInt64, path_used:UInt64,
     run:DiagnosticRuns in G) -> UInt8 where {const owner S, owner D, owner P, owner G, const owner F, const owner E} {
-    ref resolution = make PackageResolutions(1u64, make MissingModule {});
-    probe_package_roots(rows, paths, row_count, path_used, spelling,
-        edge.spelling_first, edge.spelling_past, resolution);
     val selected <- row_count;
-    case resolution[0u64] of {
+    case probe_package_roots(rows, paths, row_count, path_used, spelling,
+        edge.spelling_first, edge.spelling_past) of {
         (MissingModule) -> {};
         (SearchFailed { val os_error <-; }) -> {
             return report_package_issue(
