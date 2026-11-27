@@ -1,0 +1,291 @@
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
+    BooleanSyntax { LiteralFalse, LiteralTrue },
+    GroupSyntax { ParenthesizedExpression },
+    LogicalSyntax { LogicalAnd, LogicalOr, LogicalNot },
+    RhsEvaluation { ConditionalRhs }
+};
+using "./NameResolution.cod" { NameBindings, NameWork };
+using "./NativeDeclarations.cod" {
+    SuppliedViews, forwarded_predicate_call,
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedTextPredicate }
+};
+using "./OperandChecking.cod" { OperandFacts, scalar_bool };
+using "./CompletionChecking.cod" { CompletionSites, can_continue };
+using "./ModuleExportStorage.cod" {
+    ArrayReadCompletion { NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds }
+};
+
+enum PredicateOperationKind:UInt8 {
+    NoPredicateOperation; PendingExpression; CheckedLeaf; FalseValue; TrueValue;
+    ForwardValue; NegateValue; ConjoinValues; DisjoinValues; ReturnFalseOrTail;
+}
+data PredicateOperation {
+    kind:PredicateOperationKind;
+    first:UInt64;
+    second:UInt64;
+}
+array PredicateOperations[UInt64]:PredicateOperation;
+
+func request_expression(operations:PredicateOperations in P, at:UInt64, formal:UInt64) -> void where {owner P} {
+    operations[at].kind <- (PendingExpression:PredicateOperationKind);
+    (operations[at].first <- formal):void
+}
+
+func collect_predicate_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, facts:const OperandFacts in F, sites:const CompletionSites in X,
+    operations:PredicateOperations in P, at:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, const owner F, const owner X, owner P} {
+    val formal <- operations[at].first;
+    operations[at].kind <- (NoPredicateOperation:PredicateOperationKind);
+    operations[at].first <- no_node();
+    if (facts[at].kind != scalar_bool()) return;
+    val literal <- boolean_literal(nodes, used, at);
+    if (literal == LiteralFalse || literal == LiteralTrue) {
+        operations[at].kind <- if (literal == LiteralTrue) {
+            (TrueValue:PredicateOperationKind)
+        } else { (FalseValue:PredicateOperationKind) };
+        return
+    };
+    val operand <- no_node();
+    if (inspect_group(nodes, revision, used, at, operand) == ParenthesizedExpression) {
+        operations[at].kind <- (ForwardValue:PredicateOperationKind);
+        operations[at].first <- operand;
+        request_expression(operations, operand, formal);
+        return
+    };
+    ref logical = make LogicalSites {
+        left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs
+    };
+    operations[at].kind <- case inspect_logical(nodes, revision, used, at, logical) of {
+        LogicalAnd -> (ConjoinValues:PredicateOperationKind);
+        LogicalOr -> (DisjoinValues:PredicateOperationKind);
+        LogicalNot -> (NegateValue:PredicateOperationKind);
+        _ -> (NoPredicateOperation:PredicateOperationKind)
+    };
+    if (operations[at].kind != (NoPredicateOperation:PredicateOperationKind)) {
+        operations[at].first <- logical.left_operand;
+        request_expression(operations, logical.left_operand, formal);
+        if (operations[at].kind != (NegateValue:PredicateOperationKind)) {
+            operations[at].second <- logical.right_operand;
+            request_expression(operations, logical.right_operand, formal)
+        };
+        return
+    };
+    val target <- forwarded_predicate_call(nodes, names, work, at, formal, used, revision);
+    if (target < used && facts[at].call_definition == target && can_continue(sites, at)) {
+        operations[at].kind <- (ForwardValue:PredicateOperationKind);
+        (operations[at].first <- target):void
+    };
+}
+
+# Extract source structure once. Ordinary checking has already prepared
+# the arguments and selected the call. No completed predicate is read here.
+func collect_predicate_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:const SuppliedViews in V, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, operations:PredicateOperations in P, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, const owner V, const owner F, const owner X, owner P} {
+    for (at in 0u64 .. used) {
+        case views[at] of {
+            ReadonlyTextPredicate -> {
+                if (sites[at].array_read_completion != NoArrayRead) {
+                    (operations[at].kind <- (CheckedLeaf:PredicateOperationKind)):void
+                }
+            };
+            ReadonlyTextPredicateBody { val formal <- first_formal; val test <-; val tail <-; val returns_true <-; } -> {
+                if (facts[at].kind == scalar_bool()) {
+                    if (test == no_node()) {
+                        operations[at].kind <- (ForwardValue:PredicateOperationKind);
+                        (operations[at].first <- tail):void
+                    } else {
+                        operations[at].kind <- if (returns_true) { (DisjoinValues:PredicateOperationKind) } else { (ReturnFalseOrTail:PredicateOperationKind) };
+                        operations[at].first <- test;
+                        operations[at].second <- tail;
+                        request_expression(operations, test, formal)
+                    };
+                    request_expression(operations, tail, formal)
+                }
+            };
+            _ -> {}
+        }
+    };
+    val at <- no_node();
+    for (offset in 0u64 .. used) {
+        at <- used - 1u64 - offset;
+        if (operations[at].kind == (PendingExpression:PredicateOperationKind)) {
+            collect_predicate_expression(nodes, names, work, facts, sites, operations, at, used, revision)
+        }
+    };
+}
+
+
+enum PredicateVisit:UInt8 { Unvisited; VisitingFirst; VisitingSecond; Leaving; Finished; Cyclic; }
+data PredicateTraversal {
+    visit:PredicateVisit;
+    stack_site:UInt64;
+    ordered_site:UInt64;
+}
+array PredicateTraversals[UInt64]:PredicateTraversal;
+
+func advance_predicate_order(operations:const PredicateOperations in P, scratch:PredicateTraversals in S,
+    depth:UInt64 in D, count:UInt64 in D, used:UInt64) -> void where {const owner P, owner S, owner D} {
+    val at <- scratch[depth - 1u64].stack_site;
+    val child <- no_node();
+    if (scratch[at].visit == (VisitingFirst:PredicateVisit)) {
+        child <- operations[at].first;
+        (scratch[at].visit <- (VisitingSecond:PredicateVisit)):void
+    } else {
+        if (scratch[at].visit == (VisitingSecond:PredicateVisit)) {
+            child <- operations[at].second;
+            (scratch[at].visit <- (Leaving:PredicateVisit)):void
+        } else {
+            scratch[at].visit <- (Finished:PredicateVisit);
+            scratch[count].ordered_site <- at;
+            count <- count + 1u64;
+            (depth <- depth - 1u64):void;
+            return
+        }
+    };
+    if (child >= used || operations[child].kind == (NoPredicateOperation:PredicateOperationKind)) return;
+    if (scratch[child].visit == (Unvisited:PredicateVisit)) {
+        scratch[child].visit <- (VisitingFirst:PredicateVisit);
+        scratch[depth].stack_site <- child;
+        (depth <- depth + 1u64):void;
+        return
+    };
+    if (scratch[child].visit != (Finished:PredicateVisit)) {
+        for (item in 0u64 .. depth) {
+            (scratch[scratch[item].stack_site].visit <- (Cyclic:PredicateVisit)):void
+        };
+        (depth <- 0u64):void
+    };
+}
+
+# Establish dependency order using only the recorded edges. An active back
+# edge leaves the unfinished chain unavailable. Propagate that limit to
+# all later users too, independently of source declaration order.
+func order_predicate_operations(operations:const PredicateOperations in P, scratch:PredicateTraversals in S,
+    used:UInt64) -> UInt64 where {const owner P, owner S} {
+    ref count = make UInt64 { 0u64 };
+    ref depth = make UInt64 { 0u64 };
+    val root <- 0u64;
+    # One root examination and at most three stack steps per operation.
+    for (step in 0u64 .. used * 4u64) {
+        if (depth == 0u64) {
+            if (root == used) return count;
+            if (operations[root].kind != (NoPredicateOperation:PredicateOperationKind) &&
+                scratch[root].visit == (Unvisited:PredicateVisit)) {
+                scratch[0u64].stack_site <- root;
+                scratch[root].visit <- (VisitingFirst:PredicateVisit);
+                (depth <- 1u64):void
+            };
+            (root <- root + 1u64):void
+        } else {
+            advance_predicate_order(operations, scratch, depth, count, used)
+        };
+    };
+    return count
+}
+
+# No completed normal Bool alternative means the profile could not prove
+# the operation. The admitted leaf conservatively allows both values.
+data PredicateOutcome { can_true:bool; can_false:bool; bounds:bool; numeric:bool; }
+array PredicateOutcomes[UInt64]:PredicateOutcome;
+
+func apply_predicate_operation(operation:const PredicateOperation in P, sites:const CompletionSites in X,
+    outcomes:PredicateOutcomes in O, at:UInt64) -> void where {const owner P, const owner X, owner O} {
+    val kind <- operation.kind;
+    if (kind == (CheckedLeaf:PredicateOperationKind)) {
+        outcomes[at].can_true <- true;
+        outcomes[at].can_false <- true;
+        outcomes[at].bounds <- sites[at].array_read_completion == ArrayReadMayFailBounds;
+        (outcomes[at].numeric <- sites[at].numeric_fault):void;
+        return
+    };
+    if (kind == (TrueValue:PredicateOperationKind) || kind == (FalseValue:PredicateOperationKind)) {
+        outcomes[at].can_true <- kind == (TrueValue:PredicateOperationKind);
+        (outcomes[at].can_false <- kind == (FalseValue:PredicateOperationKind)):void;
+        return
+    };
+    val first <- operation.first;
+    val yes <- outcomes[first].can_true;
+    val no <- outcomes[first].can_false;
+    if (!yes && !no) return;
+    val reaches_right <- if (kind == (ConjoinValues:PredicateOperationKind)) { yes } else { no };
+    val combines <- kind == (ConjoinValues:PredicateOperationKind) || kind == (DisjoinValues:PredicateOperationKind) || kind == (ReturnFalseOrTail:PredicateOperationKind);
+    val bounds <- outcomes[first].bounds;
+    val numeric <- outcomes[first].numeric;
+    if (combines) {
+        val tail_true <- false;
+        val tail_false <- false;
+        if (reaches_right) {
+            val second <- operation.second;
+            tail_true <- outcomes[second].can_true;
+            tail_false <- outcomes[second].can_false;
+            if (!tail_true && !tail_false) return;
+            bounds <- bounds || outcomes[second].bounds;
+            (numeric <- numeric || outcomes[second].numeric):void
+        };
+        if (kind == (ConjoinValues:PredicateOperationKind)) {
+            yes <- tail_true;
+            (no <- no || tail_false):void
+        } else {
+            if (kind == (DisjoinValues:PredicateOperationKind)) {
+                yes <- yes || tail_true;
+                (no <- tail_false):void
+            } else {
+                no <- yes || tail_false;
+                (yes <- tail_true):void
+            }
+        }
+    } else {
+        if (kind == (NegateValue:PredicateOperationKind)) {
+            val original_true <- yes;
+            yes <- no;
+            (no <- original_true):void
+        }
+    };
+    outcomes[at].can_true <- yes;
+    outcomes[at].can_false <- no;
+    outcomes[at].bounds <- bounds;
+    (outcomes[at].numeric <- numeric):void;
+}
+
+func has_predicate_body(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
+    for (at in 0u64 .. used) {
+        if (case views[at] of { ReadonlyTextPredicateBody -> true; _ -> false }) return true
+    };
+    return false
+}
+
+export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, owner V, const owner F, const owner X} {
+    if (used > 4611686018427387903u64 || !has_predicate_body(views, used)) return;
+    ref operations = make PredicateOperations(used, make PredicateOperation {
+        kind <- (NoPredicateOperation:PredicateOperationKind); first <- no_node(); second <- no_node()
+    });
+    collect_predicate_operations(nodes, names, work, views, facts, sites, operations, used, revision);
+    ref traversal = make PredicateTraversals(used, make PredicateTraversal {
+        visit <- (Unvisited:PredicateVisit); stack_site <- no_node(); ordered_site <- no_node()
+    });
+    val count <- order_predicate_operations(operations, traversal, used);
+    ref outcomes = make PredicateOutcomes(used, make PredicateOutcome {
+        can_true <- false; can_false <- false; bounds <- false; numeric <- false
+    });
+    val site <- no_node();
+    for (item in 0u64 .. count) {
+        site <- traversal[item].ordered_site;
+        apply_predicate_operation(operations[site], sites, outcomes, site)
+    };
+    for (at in 0u64 .. used) {
+        if ((outcomes[at].can_true || outcomes[at].can_false) &&
+            (case views[at] of { ReadonlyTextPredicateBody -> true; _ -> false })) {
+            (views[at] <- make CheckedTextPredicate {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        }
+    };
+}

@@ -1,7 +1,7 @@
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
 using "./SourceAccess.cod" same_bytes;
 using "./SourceStorage.cod" SourceBytes;
-using "./ParserStorage.cod" { boolean_literal, BooleanSyntax { OtherBooleanSyntax } };
+using "./ParserStorage.cod" { boolean_literal, BooleanSyntax { OtherBooleanSyntax, LiteralTrue, LiteralFalse } };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" { SourceSpan, BulkSelectionSites, inspect_bulk_selection,
     PublicView { DefaultPublic } };
@@ -10,7 +10,8 @@ using "./ParserStorage.cod" {
     HereSites, inspect_here_invocation, DirectCallSites, direct_invocation,
     SequenceEntry, inspect_sequence_entry, first_sequence_entry, is_scope_block, completion_syntax, completion_operand,
     checked_ref_argument,
-    ungrouped,
+    ungrouped, ConditionalSites, inspect_conditional, LogicalSites, inspect_logical,
+    LogicalSyntax { LogicalOr }, RhsEvaluation { ConditionalRhs },
     is_function, ConstructionSites, inspect_construction, AssignmentSites, inspect_assignment,
     AssignmentSyntax { PlaceTransfer },
     ConstructionSyntax { PositionalConstruction, BracedConstruction }, local_resource_name, IndexSites, inspect_index_selection,
@@ -1477,7 +1478,7 @@ export data SuppliedView =
     PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
     PreparedScalarLiteral { kind:UInt8; } |
     ReadonlyTextPredicate {} |
-    ReadonlyTextPredicateForward { callee:UInt64; invocation:UInt64; } |
+    ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
     CheckedTextPredicate { completion:ArrayReadCompletion; numeric_fault:bool; } |
     ImportedTextPredicateCandidate {} |
     PreparedArrayReaderLeaf { declared_array:UInt64; } |
@@ -1977,7 +1978,7 @@ export func prepared_array_length_call(views:const SuppliedViews in V, at:UInt64
 # The forwarding body contributes no operation except ordinary preparation
 # of its exact formals and one literal, then return of the result.
 func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, value:UInt64, first:UInt64, text:bool, used:UInt64, revision:UInt64)
+    work:const NameWork in W, value:UInt64, first:UInt64, used:UInt64, revision:UInt64)
     -> UInt64 where {const owner N, const owner B, const owner W} {
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
     if (direct_invocation(nodes, revision, used, value, call) != DirectInvocationReady ||
@@ -1987,12 +1988,11 @@ func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, argument))
         return no_node();
     val formal <- first;
-    val forwarded <- if (text) { 2u64 } else { 3u64 };
-    for (position in 0u64 .. forwarded + 1u64) {
+    for (position in 0u64 .. 4u64) {
         if (argument >= value || checked_ref_argument(nodes, argument) ||
             inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return no_node();
-        if (position < forwarded) {
+        if (position < 3u64) {
             if (names[entry.item].kind != formal_binding() || names[entry.item].declaration != formal ||
                 !(case nodes[entry.item] of {
                     Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -2002,11 +2002,7 @@ func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
                 })) return no_node();
             (formal <- work[formal].next):void
         } else {
-            if (text) {
-                if (text_literal_syntax(nodes, used, entry.item) == NotTextLiteral) return no_node()
-            } else {
-                if (boolean_literal(nodes, used, entry.item) == OtherBooleanSyntax) return no_node()
-            }
+            if (boolean_literal(nodes, used, entry.item) == OtherBooleanSyntax) return no_node()
         };
         argument <- work[argument].next
     };
@@ -2039,7 +2035,7 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
     val fourth <- work[third].next;
     if (fourth == no_node()) {
         val callee <- forwarded_read(nodes, names, work,
-            single_return_value(nodes, callable.body, used, revision), first, false, used, revision);
+            single_return_value(nodes, callable.body, used, revision), first, used, revision);
         if (callee < used) {
             (views[at] <- make PreparedArrayReaderForward { declared_array <- declared_array; callee <- callee }):void
         };
@@ -2077,6 +2073,74 @@ export func finish_array_reader_forward(views:SuppliedViews in V, definition:UIn
     -> void where {owner V} {
     views[definition] <- make CheckedArrayReaderForward { completion <- completion };
     return
+}
+
+# Record the selected direct forwarding shape. Ordinary operand checking
+# still owns nominal types, preparation and the actual owner substitutions.
+export func forwarded_predicate_call(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, value:UInt64, first:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N, const owner B, const owner W} {
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, value, call) != DirectInvocationReady ||
+        names[call.callee].kind != callable_binding()) return no_node();
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val argument <- no_node();
+    if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, argument))
+        return no_node();
+    val formal <- first;
+    for (position in 0u64 .. 2u64) {
+        if (formal >= used || argument >= value || checked_ref_argument(nodes, argument) ||
+            inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence ||
+            name_syntax(nodes, used, entry.item) != OrdinaryName ||
+            names[entry.item].kind != formal_binding() || names[entry.item].declaration != formal)
+            return no_node();
+        argument <- work[argument].next;
+        (formal <- work[formal].next):void
+    };
+    if (argument != no_node() &&
+        (argument >= value || checked_ref_argument(nodes, argument) || work[argument].next != no_node() ||
+         inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence ||
+         text_literal_syntax(nodes, used, entry.item) == NotTextLiteral)) return no_node();
+    return names[call.callee].declaration
+}
+
+# The compound profile has a final explicit return and at most one leading
+# conditional return of a literal. Other bodies keep their ordinary demand.
+func mark_text_predicate_body(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, definition:UInt64, body:UInt64,
+    first:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner W, owner V} {
+    val tail <- no_node();
+    ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val value <- no_node();
+    if (is_scope_block(nodes, body) || !block_tail(nodes, revision, used, body, tail) ||
+        inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
+        completion_syntax(nodes, item.item) != ReturnCompletion ||
+        !completion_operand(nodes, revision, used, item.item, value) || value >= item.item) return;
+    ref logical = make LogicalSites {
+        left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs
+    };
+    if (forwarded_predicate_call(nodes, names, work, value, first, used, revision) >= used &&
+        inspect_logical(nodes, revision, used, value, logical) != LogicalOr) return;
+    val test <- no_node();
+    val returns_true <- false;
+    if (item.previous != no_node()) {
+        ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node() };
+        val empty <- no_node();
+        val early <- no_node();
+        if (inspect_sequence_entry(nodes, revision, used, item.previous, item) != BlockSequence ||
+            item.previous != no_node() || !inspect_conditional(nodes, revision, used, item.item, branch) ||
+            !block_tail(nodes, revision, used, branch.alternative, empty) || empty != no_node() ||
+            completion_syntax(nodes, branch.consequent) != ReturnCompletion ||
+            !completion_operand(nodes, revision, used, branch.consequent, early)) return;
+        val literal <- boolean_literal(nodes, used, early);
+        if (literal != LiteralTrue && literal != LiteralFalse) return;
+        test <- branch.test;
+        (returns_true <- literal == LiteralTrue):void
+    };
+    (views[definition] <- make ReadonlyTextPredicateBody {
+        first_formal <- first; test <- test; tail <- value; returns_true <- returns_true
+    }):void;
 }
 
 # This source profile covers an immediate byte-array and bits-product
@@ -2138,11 +2202,7 @@ func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const Nam
     if (third_owner) {
         (views[at] <- make ReadonlyTextPredicate {}):void
     } else {
-        val invocation <- single_return_value(nodes, callable.body, used, revision);
-        val callee <- forwarded_read(nodes, names, work, invocation, first, true, used, revision);
-        if (callee < used) {
-            (views[at] <- make ReadonlyTextPredicateForward { callee <- callee; invocation <- invocation }):void
-        }
+        mark_text_predicate_body(nodes, names, work, views, at, callable.body, first, used, revision)
     };
     return
 }
@@ -2157,9 +2217,7 @@ export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64)
     if (site >= intrinsic (len)(views)) return false;
     return case views[site] of {
         ReadonlyTextPredicate -> true;
-        ReadonlyTextPredicateForward { val callee <-; } -> {
-            return readonly_text_predicate_leaf(views, callee)
-        };
+        ReadonlyTextPredicateBody -> true;
         _ -> false
     }
 }

@@ -84,8 +84,8 @@ using "./NameResolution.cod" {
     NameBinding, NameBindings, NameWorkSlot, NameWork, ProductTypeRecovery, record_type, project_module_selection_candidates,
     ModuleNameUse { LexicalName }, first_module_variadic_formal
 };
-using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_forward, readonly_text_predicate_leaf };
-using "./NativeDeclarations.cod" SuppliedView { ReadonlyTextPredicateForward, CheckedTextPredicate };
+using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_forward };
+using "./PredicateContracts.cod" finish_text_predicates;
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
     publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
@@ -777,24 +777,12 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
     };
     if (!analyze_bound_declaration_completion(nodes, names, work, facts, views, demand, sites, result))
         return false;
+    if (!executable) { finish_text_predicates(nodes, names, work, views, facts, sites, used, revision) };
     val callee <- no_node();
     for (at in 0u64 .. used) {
         callee <- forwarded_array_reader(views, at);
         if (callee < used && sites[callee].array_read_completion != NoArrayRead) {
             finish_array_reader_forward(views, at, sites[callee].array_read_completion)
-        };
-        case views[at] of {
-            ReadonlyTextPredicateForward { val target <- callee; val invocation <-; } -> {
-                if (invocation < at && target < used && facts[invocation].call_definition == target &&
-                    readonly_text_predicate_leaf(views, target) &&
-                    sites[target].array_read_completion != NoArrayRead) {
-                    (views[at] <- make CheckedTextPredicate {
-                        completion <- sites[target].array_read_completion;
-                        numeric_fault <- sites[target].numeric_fault
-                    }):void
-                }
-            };
-            _ -> {}
         };
         if (sites[at].array_read_completion != NoArrayRead) {
             finish_byte_function(views, at, sites[at].array_read_completion)

@@ -213,9 +213,15 @@ The indexed element loan is scoped to the field use or immediate call. The sourc
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
 
-Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls. The two source commands check the defining `Lexer.word_is` body and its direct wrappers, including the readonly byte-array and token loans, the literal passed as an immutable `String`, and the Boolean result. Both source commands now check the unchanged `parse_identifier` in its module prefix. The imported `not_word` call applies the published signature to the live byte-array loan and indexed token loan. The second loan comes from the selected array, index and actual owner, and expires with the synchronous call. A failed operand prevents entry.
+Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls.
 
-The defining visit publishes the Boolean result and possible catchable bounds outcome alongside the separate possibility of a fatal numeric fault. Bounds follow the ordinary exception route. A fatal numeric outcome can leave an unprotected activation directly. A call that may have that outcome retains a located limit where protected, supplied-body or active delayed cleanup would need a fatal route. The unchanged full `ParserInput.cod` and application entry now reach the unsupported `reserved_lexical_binder` call at `ParserInput.cod:180:41`.
+### Readonly lexer predicates
+
+The source commands check `Lexer.word_is`, its direct wrappers and the composed predicates used by `ParserInput.parse_binding`. Ordinary operand checking prepares the readonly byte-array and token loans and the optional immutable String literal. The defining visit records direct calls to the selected same-revision functions and the short-circuit continuations. It completes the recorded dependencies leaf first, including forward references and shared leaves. An early return ends that path. A skipped branch contributes no failure. Dependencies outside the represented call shapes and cyclic dependencies leave the profile unavailable.
+
+The published interface supplies the Boolean result, the possible catchable bounds outcome and the separate possibility of a fatal numeric fault. A direct imported call applies the signature to the live loans. The indexed token operand keeps its selected array, index and actual owner. Its bounds check precedes callee entry. A fatal numeric outcome can leave an unprotected activation. A protected, supplied-body or active delayed cleanup use still needs a route for that outcome.
+
+Both source commands accept the complete, unchanged `ParserInput.cod`. Checking the application entry reaches a separate indexed token construction in `TokenBuffer.cod`. These predicate interfaces are for declaration checking and provider generation. Executable object support has its own admission checks.
 
 ### Imported array length families
 
