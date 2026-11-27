@@ -119,7 +119,7 @@ using "./CaseSchemas.cod" {
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, InlineProductField, LocalSumConstruction,
         IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
-        FreshSumInvocation, ForwardedProductInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
+        FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -2373,7 +2373,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     val checks_scoped_call <- source_only && at < intrinsic (len)(cases) &&
         (case cases[at] of {
             FreshSumInvocation { val target <- definition; } -> target == definition;
-            ForwardedProductInvocation { val target <- definition; } -> target == definition;
+            ProductLoanInvocation { val target <- definition; } -> target == definition;
             _ -> false
         });
     val can_enter <- true;

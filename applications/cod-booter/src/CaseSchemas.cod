@@ -63,7 +63,7 @@ export data ConstructorCaseFact =
     LexicalProductReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
-    ForwardedProductInvocation { definition:UInt64; } |
+    ProductLoanInvocation { definition:UInt64; } |
     ImportedFreshSumInvocation {} |
     FreshSumArgument { invocation:UInt64; formal:UInt64; construction:UInt64; lexical_owner:UInt64; } |
     BitsConstruction {
@@ -1062,15 +1062,22 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
     for (unused in 0u64 .. used) {
         if (argument >= used || formal >= used) return true;
         if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
-        # Projecting a field from an imported array is a scoped read.
-        # Passing the whole indexed element still uses the local-array
-        # loan profile and its established callable body demand.
-        if ((case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
-            describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
-                record_type(), loan, record) && loan.array_module == 0u64 &&
-            case_bits_type(record, aggregate, interfaces, published)) {
-            remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
-            if (first == no_node()) { (first <- call):void }
+        case facts[formal] of {
+            InlineProductFormal { val readonly <-; } -> {
+                # Imported arrays provide a completed nominal element schema.
+                # The argument checker still validates the actual loan.
+                if (describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
+                        record_type(), loan, record) && (loan.array_module == 0u64 || readonly) &&
+                    case_bits_type(record, aggregate, interfaces, published)) {
+                    remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
+                    if (first == no_node()) { (first <- call):void };
+                    if (loan.array_module != 0u64 &&
+                        (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                        (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
+                    }
+                }
+            };
+            _ -> {}
         };
         if (names[entry.item].kind == formal_binding()) {
             actual <- names[entry.item].declaration;
@@ -1081,7 +1088,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                 }) &&
                 (case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
                 (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                (facts[call] <- make ForwardedProductInvocation { definition <- definition }):void
+                (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
             }
         };
         if (work[entry.item].inline_sum_initializer) {

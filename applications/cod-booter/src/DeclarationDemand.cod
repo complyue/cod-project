@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ForwardedProductInvocation, ImportedFreshSumInvocation } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -29,7 +29,7 @@ export data DeclarationDemand {
     receipt_pending:UInt64;
     declared_failure:UInt64;
     receipt_body:bool;
-    forwarded_product:bool;
+    product_body_dependency:bool;
     slot_body:bool;
     signature:bool;
     body:bool;
@@ -114,7 +114,10 @@ func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBi
         if (argument >= used || inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return false;
         if (entry.item < intrinsic (len)(cases) && (case cases[entry.item] of {
-            IndexedProductLoan { val consumer <-; } -> consumer == argument;
+            # An imported array loan depends on its callee only when the
+            # caller already has a source body check.
+            IndexedProductLoan { val consumer <-; val array_module <-; } ->
+                consumer == argument && array_module == 0u64;
             _ -> false
         })) return true;
         if (names[entry.item].kind == formal_binding()) {
@@ -178,7 +181,7 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if ((demand[call].forwarded_product || form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
+            if ((demand[call].product_body_dependency || form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
                 !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void
@@ -280,8 +283,8 @@ export func discover_declaration_demand(
             };
             demand[site].callee <- definition;
             if (site < intrinsic (len)(cases)) {
-                (demand[site].forwarded_product <- case cases[site] of {
-                    ForwardedProductInvocation { val target <- definition; } -> target == definition;
+                (demand[site].product_body_dependency <- case cases[site] of {
+                    ProductLoanInvocation { val target <- definition; } -> target == definition;
                     _ -> false
                 }):void
             };
