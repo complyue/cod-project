@@ -407,7 +407,7 @@ class BodyExtraction {
     struct ActiveCatch { size_t place, protected_depth; };
     std::vector<ActiveCatch> catches_;
     size_t protected_depth_ = 0;
-    std::map<size_t, size_t> writable_regions_;
+    std::map<size_t, size_t> region_controllers_;
     bool in_iteration_ = false;
     using Kind = Expression::Kind;
 
@@ -464,7 +464,14 @@ class BodyExtraction {
     }
 
     size_t named_owner(const std::string &name, const Location &at) const {
-      return name == "here" ? 0 : input_owner(owner_role(name, at));
+      if (name.empty() || name == "here") return 0;
+      if (const auto *binding = find(name)) {
+        const auto *local = std::get_if<Local>(binding);
+        expect(local && local->place && region_controller(local->owner) == local->place,
+               at, "seed needs an owning region or an input owner");
+        return local->owner;
+      }
+      return input_owner(owner_role(name, at));
     }
 
     const std::vector<OwnerParameter> &owners() const {
@@ -476,10 +483,18 @@ class BodyExtraction {
              owners().at(null_target - 1 - owner).read_only;
     }
 
+    std::optional<size_t> region_controller(size_t owner) const {
+      const auto found = region_controllers_.find(owner);
+      if (found == region_controllers_.end()) return {};
+      return found->second;
+    }
+
     std::optional<Allocator> allocator_for(size_t owner) const {
       if (!owner) return Allocator{Allocator::lexical};
-      if (const auto region = writable_regions_.find(owner); region != writable_regions_.end())
-        return Allocator{Allocator::region, region->second};
+      if (const auto place = region_controller(owner)) {
+        if (!body_.instance.storage.at(*place).read_only) return Allocator{Allocator::region, *place};
+        return {};
+      }
       if (is_symbol_owner(owner, declarations().symbols.size())) return std::nullopt;
       if (owner > first_symbol_owner && !const_input_owner(owner))
         return Allocator{Allocator::input, null_target - 1 - owner};
@@ -576,6 +591,15 @@ class BodyExtraction {
     static size_t single_owner(const CheckedOperation &view, const Location &at) {
       expect(view.view && view.owners.size() == 1, at, "seed needs a view with one established owner");
       return *view.owners.begin();
+    }
+
+    static bool admits_reference(const CheckedOperation &source, const Type &type, size_t owner,
+                                 bool nullable, bool read_only, const Location &at) {
+      const bool null = source.type == Type::null_ref;
+      return (source.type == type || (null && nullable)) &&
+             ((null && source.owners.empty()) || owner == single_owner(source, at)) &&
+             (nullable || !source.targets.contains(null_target)) &&
+             (read_only || !source.read_only);
     }
 
     void check_slot(const CheckedOperation &operation, const Location &at) const {
@@ -1380,21 +1404,8 @@ class BodyExtraction {
       CheckedOperation op;
       const auto owner = body_.instance.bindings.size() + 1;
       op.region_holder = declare(expr.at, expr.text, value.type, true, expr.read_only, true, owner).place;
-      if (!expr.read_only) writable_regions_.emplace(owner, *op.region_holder);
+      region_controllers_.emplace(owner, *op.region_holder);
       return op;
-    }
-
-    size_t array_owner(const Expression &expr) const {
-      if (expr.owner_name.empty()) return 0;
-      if (const auto *binding = find(expr.owner_name)) {
-        const auto *local = std::get_if<Local>(binding);
-        expect(local, expr.at, "array allocation needs an owning region or an input owner");
-        const auto &type = body_.instance.bindings.at(local->binding).type;
-        expect(type.kind == Type::region && type.owned && local->place,
-               expr.at, "array allocation needs an owning region or an input owner");
-        return local->owner;
-      }
-      return input_owner(owner_role(expr.owner_name, expr.at));
     }
 
     CheckedOperation::NativeAcquisition native_acquisition(const Expression &initializer, const Type &declared) {
@@ -1517,27 +1528,42 @@ class BodyExtraction {
     CheckedOperation make_product(const Expression &expr, const Type &type, bool local_storage) {
       expect(expr.kind == Kind::make_object && expr.annotation &&
              !expr.construction_type_query && !expr.constructor_arguments &&
-             expr.initializer_block && expr.owner_name.empty() &&
-             resolve_annotation(*expr.annotation, expr.at) == type &&
-             declarations().bits_payload(type),
-             expr.at, "seed needs a complete inline bits product initializer");
+             expr.initializer_block && resolve_annotation(*expr.annotation, expr.at) == type,
+             expr.at, "seed needs a complete braced product initializer");
+      const auto owner = named_owner(expr.owner_name, expr.at);
+      const auto controller = region_controller(owner);
+      if (owner) {
+        expect(local_storage && controller && !body_.instance.storage.at(*controller).read_only,
+               expr.at, "seed needs a writable lexical region for product construction");
+      } else {
+        expect(declarations().bits_payload(type), expr.at, "seed needs a complete inline bits product initializer");
+      }
       const auto &schema = declarations().schemas.at(type.identity);
       const auto order = product_initializers(schema, expr);
       expect(std::set(order.begin(), order.end()).size() == schema.fields.size(), expr.at,
              "seed needs an initializer for each product field");
       CheckedOperation op;
       op.type = op.operand_type = type;
-      if (local_storage) op.place = storage("$product", type, 0, false, false);
+      if (controller) op.regional_product_holder = controller;
+      else if (local_storage) op.place = storage("$product", type, 0, false, false);
       op.view = true;
-      op.owners.insert(0);
+      op.owners.insert(owner);
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.initializer_items()[i];
         const auto &field = schema.fields[order[i]];
         const auto &input = *item.children.back();
-        if (field.type.kind == Type::product) {
+        if (field.storage != PlaceKind::value) {
+          expect(admits_reference(extract(input), field.type, owner, field.storage == PlaceKind::pointer,
+                                  field.readonly_target(), input.at),
+                 input.at, "reference field initializer must preserve type, owner and target access");
+        } else if (field.type.kind == Type::product) {
           // The backend initializes this nested product in its destination.
           remember(input, make_product(input, field.type, false));
-        } else takes_payload(extract(input), field.type, input.at);
+        } else {
+          expect(declarations().bits_payload(field.type), item.at,
+                 "seed needs an inline bits field in a braced product initializer");
+          takes_payload(extract(input), field.type, input.at);
+        }
         CheckedOperation write;
         write.type = write.operand_type = field.type;
         write.product_field = order[i];
@@ -1629,7 +1655,7 @@ class BodyExtraction {
              expr.children.size() == 2 && !family(spelling),
              expr.at, "seed needs an ordinary array constructor");
       expect(!supplied_body(), expr.at, "seed does not allocate arrays inside a here literal");
-      const auto owner = array_owner(expr);
+      const auto owner = named_owner(expr.owner_name, expr.at);
       const auto allocator = allocator_for(owner);
       // Ordinary blocks use the enclosing full invocation's allocation owner.
       expect(allocator && (allocator->kind != Allocator::lexical || !in_iteration_), expr.at,
@@ -1671,15 +1697,17 @@ class BodyExtraction {
       op.view = true;
       op.owners = target.owners;
       if (expr.kind == Kind::rebind) {
-        check_slot(target, expr.at);
-        const bool nullable = body_.instance.bindings.at(*target.binding).nullable;
-        const bool null = source.type == Type::null_ref;
-        const auto owner = single_owner(target, expr.at);
-        expect((source.type == target.type || (null && nullable)) &&
-               ((null && source.owners.empty()) || owner == single_owner(source, expr.at)) &&
-               (nullable || !source.targets.contains(null_target)) &&
-               (target.read_only || !source.read_only), expr.at,
-               "reference rebinding must preserve type, owner and target access");
+        const auto &destination = body_.instance.operations.at(&ungrouped_expression(*expr.children.front()));
+        if (destination.regional_product_holder && destination.product_field) {
+          const auto &field = declarations().schemas.at(destination.operand_type.identity)
+              .fields.at(*destination.product_field);
+          expect(field.storage != PlaceKind::value && !destination.fixed_binding,
+                 expr.at, "seed needs a writable regional reference field slot");
+          op.regional_product_holder = destination.regional_product_holder;
+        } else check_slot(target, expr.at);
+        expect(admits_reference(source, target.type, single_owner(target, expr.at),
+                                target.targets.contains(null_target), target.read_only, expr.at),
+               expr.at, "reference rebinding must preserve type, owner and target access");
         op.targets = source.targets;
         op.read_only = target.read_only;
         op.arguments = {{ArgumentMode::borrowed_ptr, target.type, true}, {ArgumentMode::borrowed_ptr, source.type}};
@@ -1899,8 +1927,8 @@ class BodyExtraction {
       const auto &base = operand(expr, 0);
       if (base.type.kind == Type::exception) return exception_field(expr, base);
       const bool region_root = base.type.kind == Type::region && base.type.owned && base.type.target && base.place;
-      expect(region_root || (base.type.kind == Type::product && base.view && declarations().bits_payload(base.type)),
-             expr.at, "seed needs an inline field of a bits product or owned region");
+      expect(region_root || (base.type.kind == Type::product && base.view),
+             expr.at, "seed needs a field of a product or owned region");
       const auto &type = region_root ? *base.type.target : base.type;
       const auto &schema = declarations().schemas.at(type.identity);
       const auto index = product_field(schema, expr);
@@ -1910,9 +1938,16 @@ class BodyExtraction {
       op.operand_type = type;
       op.product_field = index;
       if (region_root) op.region_holder = base.place;
+      else if (!declarations().bits_payload(type)) {
+        op.regional_product_holder = region_controller(single_owner(base, expr.at));
+        expect(op.regional_product_holder && !member.direct_text_place(),
+               expr.at, "seed needs the lexical region for this reference-bearing product field");
+      }
       op.view = op.indexed_target = true;
-      op.read_only = base.read_only || readonly_field(member);
+      op.read_only = base.read_only || (member.stores_target() ? member.readonly_target() : readonly_field(member));
+      op.fixed_binding = base.read_only || member.source->fixed_binding;
       op.owners = base.owners;
+      if (member.storage == PlaceKind::pointer) op.targets.insert(null_target);
       return op;
     }
 
@@ -1921,9 +1956,11 @@ class BodyExtraction {
       const bool sum = subject.type.kind == Type::sum && declarations().bits_payload(subject.type) &&
           (subject.view || direct_value_call(*expr.children.front()));
       const bool enumeration = subject.type.kind == Type::enumeration;
-      const bool borrowed = subject.view && declarations().bits_payload(subject.type);
+      const bool borrowed = subject.view && (declarations().bits_payload(subject.type) ||
+          (subject.type.kind == Type::product && subject.owners.size() == 1 &&
+           region_controller(*subject.owners.begin())));
       expect((sum || enumeration || subject.type == Type::boolean || borrowed) && !expr.case_resumes,
-             expr.at, "seed needs a Boolean, enum, bits sum or borrowed bits subject without resumption");
+             expr.at, "seed needs a Boolean, enum, bits sum or an admitted borrowed case subject");
       std::set<std::uint64_t> covered;
       bool catch_all = false, covers_null = false, covers_present = false;
       BoundCase input{&expr, {}};

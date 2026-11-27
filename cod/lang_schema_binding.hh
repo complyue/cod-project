@@ -122,6 +122,7 @@ inline CasePattern bind_case_pattern(const CheckedProgram &program, const Type &
     fail(arm.at, "a bool case pattern requires true, false, null or a catch-all");
   }
   if (subject == Type::null_ref) fail(arm.at, "a null case subject requires a null pattern or a catch-all");
+  if (subject.kind != Type::enumeration) fail(arm.at, "seed needs a null, typed ref or catch-all pattern on this subject");
   if (const auto member = enum_member(program, subject, arm.text))
     return {K::code, program.enums.at(subject.identity).members.at(member->member).code};
   fail(arm.at, "unknown member '" + arm.text + "' of enum '" + subject.name + "'");

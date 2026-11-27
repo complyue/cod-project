@@ -320,7 +320,7 @@ class LLVMEmission {
     if (inserted) {
       std::vector<llvm::Type *> fields;
       for (const auto &field : program_->schemas.at(id).fields)
-        fields.push_back(field.stores_target() ? b_.getInt64Ty() : native_type(field.type));
+        fields.push_back(field.stores_target() ? b_.getInt64Ty() : inline_layout(field.type));
       if (fields.empty()) fields.push_back(b_.getInt8Ty());
       position->second = llvm::StructType::get(context_, fields);
     }
@@ -1645,13 +1645,13 @@ class LLVMEmission {
         {b_.getPtrTy(), b_.getInt64Ty(), b_.getInt64Ty()});
     return b_.CreateCall(address, {owner, offset, size});
   }
-  llvm::Value *regional_scalar_locator(llvm::Value *owner, llvm::Value *address) {
+  llvm::Value *regional_locator(llvm::Value *owner, llvm::Value *address) {
     auto *base = region_address(owner, integer(0), integer(0));
     auto *offset = b_.CreateSub(b_.CreatePtrToInt(address, b_.getInt64Ty()),
                                b_.CreatePtrToInt(base, b_.getInt64Ty()));
     return b_.CreateSelect(b_.CreateIsNull(address), integer(UINT64_MAX), offset);
   }
-  llvm::Value *regional_scalar_target(llvm::Value *owner, llvm::Value *offset, llvm::Type *layout) {
+  llvm::Value *regional_target(llvm::Value *owner, llvm::Value *offset, llvm::Type *layout) {
     auto *entry = b_.GetInsertBlock();
     auto *present = block("region.field.present"), *join = block("region.field.target");
     b_.CreateCondBr(b_.CreateICmpNE(offset, integer(UINT64_MAX)), present, join);
@@ -2015,8 +2015,8 @@ class LLVMEmission {
     }
     auto *target = view_address(arguments[1]);
     {
-      const std::optional<size_t> holder = checked_.at(expr.children.front().get()).regional_product_holder;
-      if (holder) b_.CreateStore(regional_scalar_locator(load(storage_.at(*holder)), target), destination);
+      const std::optional<size_t> holder = checked_.at(&expr).regional_product_holder;
+      if (holder) b_.CreateStore(regional_locator(load(storage_.at(*holder)), target), destination);
       else b_.CreateStore(target, destination);
       return target;
     }
@@ -2433,7 +2433,7 @@ class LLVMEmission {
       }
       auto *owner = load(storage_.at(holder));
       for (const auto &[selection, field] : edges)
-        b_.CreateStore(regional_scalar_locator(owner, load(selection)), field);
+        b_.CreateStore(regional_locator(owner, load(selection)), field);
       return destination;
     }
   }
@@ -2906,7 +2906,7 @@ class LLVMEmission {
         if (description.stores_target()) {
           auto *owner = load(storage_.at(*fact.regional_sum_holder));
           auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
-          target = regional_scalar_target(owner, offset, sum_layout(description.type.identity).storage);
+          target = regional_target(owner, offset, sum_layout(description.type.identity).storage);
         }
         return !read ? target : discard ? empty_scalar() : load_place(target, expr);
       }
@@ -2926,7 +2926,9 @@ class LLVMEmission {
           if (holder) {
             auto *owner = load(storage_.at(*holder));
             auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
-            field = regional_scalar_target(owner, offset, native_type(description.type));
+            auto *target_layout = description.type.kind == Type::product
+                ? regional_product_layout(description.type.identity) : inline_layout(description.type);
+            field = regional_target(owner, offset, target_layout);
           } else field = b_.CreateLoad(b_.getPtrTy(), slot);
         }
         if (!read) return field;
@@ -3025,6 +3027,7 @@ class LLVMEmission {
         auto *owner = load(storage_.at(*fact.regional_product_holder));
         auto *address = reserve_regional_row(owner, regional_product_layout(fact.operand_type.identity), expr.at);
         emit_product_initializers(expr, address, owner);
+        if (!reachable()) return nullptr;
         return discard ? empty_scalar() : address;
       }
       auto *address = storage_.at(*fact.place);
@@ -3095,7 +3098,7 @@ class LLVMEmission {
           } else {
             auto *target = emit_expression(input, Projection::target);
             if (!reachable()) return nullptr;
-            offset = regional_scalar_locator(regional_owner, target);
+            offset = regional_locator(regional_owner, target);
           }
           b_.CreateStore(offset, slot);
           return b_.getTrue();
