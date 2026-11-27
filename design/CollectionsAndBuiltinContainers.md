@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 19 · 2026-11-27 · Source design draft
+Design revision 20 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r20 the [user’s decision](../CHANGELOG.md#h-container-selected-ref-target-20261127) specifies the [target returned for a reference element](#container-pointer-results) under D-30, P-590. The r19 nullable result, shallow detachment, owner and access rules continue.
 
 At r19 the [user’s clarification](../CHANGELOG.md#h-detached-pop-slot-20261127) confirms [shallow detachment on pop](#container-pointer-results) under D-30, P-589/P-590. The r18 rules for map lookup, actual owners and hash width continue.
 
@@ -51,9 +53,12 @@ The first public generic linked collection for the booter is a deque parameteriz
 
 Deque pop and map lookup return a nullable pointer. Empty or missing gives null. On success the pointer selects typed storage with its actual owner and access. A caller can handle either outcome by matching the result once in a [`case`](DomainLanguageDesign.md#case-expressions-and-branch-local-variables). Both operations follow the [ordinary reference lifetime rule](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy).
 
-**Map lookup** borrows the selected value. Later map operations may change the contents observed through that pointer. To retain the value observed at lookup, copy the payload before an operation that can change it. Copying the pointer retains the same target. For a reference-bearing item, constructing an independent graph requires an admitted [graph transfer](CallableViewsAndCaptures.md#copying-moving-and-graph-transfer).
+For a **value element**, map lookup borrows the stored value. Later map operations may change what the caller reads there. A caller needing the observed value later copies its payload. Deque pop detaches the removed slot. After popping 7, pushing and popping 13 leaves the first slot at 7.
 
-**Deque pop** detaches the removed slot. Subsequent deque operations preserve the immediate value stored in that slot. For example, after popping 7, pushing and popping 13 leaves the first slot at 7. If the detached slot holds a reference to node `n`, it keeps that reference. Writing `n.count` through a writable alias changes the count seen through the popped result. The original owner and access permissions still apply.
+For a **non-null reference element** with target type `T`, lookup and pop both return a `ptr T` selecting the element’s target at the time of the operation. The result carries that target’s actual owner and permitted access. Ordinary [reference binding](CallableViewsAndCaptures.md#declared-place-aliases) gives the caller its own binding to the selected target.
+
+- **Map lookup.** An entry refers to `A` when lookup returns `p`. Rebind the entry to `B`. The saved `p` still selects `A`, and a fresh lookup selects `B`.
+- **Deque pop.** Pop an entry referring to `A`, then push an entry referring to `B`. The first result still selects `A`. A permitted write to `A.count` through another alias remains visible through the popped result.
 
 The first implementation can leave the removed node in its region. The later intra-region memory manager and library work will establish reuse criteria.
 
