@@ -333,7 +333,11 @@ For a same-revision native function with readonly array loans and no callback or
 
 In a demanded body, both source commands consume the completed `SourceAccess.locate_source_position` contract through a direct import, including a rename. The readonly byte and line arrays share one actual source owner. The independent offset and initialized writable position follow them in written order. The defining visit checks the recursive line search before publishing possible bounds failure and fatal arithmetic separately. A failed operand prevents entry and leaves the position untouched.
 
-The full CLI source commands first stop at the native `write_diagnostic` call in `NativeDiagnostics.cod:71:28`. The ordered-report reduction with the original position writer still stops at its protected call because that profile cannot represent the writer’s possible fatal arithmetic. The direct-position reduction passes its rows to the original native reporting function. The symbol-report reduction checks the native call with its four readonly byte-array loans.
+In a demanded body, the ordered native call checks also cover a same-revision function with one handle and by-value scalar operands. Existing declaration checks still validate calls outside that body profile. The checker keeps the actual handle owner and access, and applies the existing `UInt8` to `UInt32` widening at a scalar position. Failure preparing an operand prevents native entry.
+
+For a builtin bits transfer to an indexed record field, the selected array must support a writable loan to the exact row, and the field must be writable. Reads retain their existing scalar projection rules. Both source commands check the production symbol-rejection routine in isolation, including both native diagnostic calls and its update to the retained count.
+
+The full CLI source commands first stop at the owner check for `write_single_report` in `NativeDiagnostics.cod:266:10`. The ordered-report reduction with the original position writer also stops at its protected call because that profile cannot represent the writer’s possible fatal arithmetic.
 
 ### Imported array length families
 

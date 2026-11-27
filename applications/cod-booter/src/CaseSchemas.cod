@@ -47,6 +47,7 @@ export data ConstructorCaseFact =
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
     InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; demand_on_use:bool; } |
+    IndexedFieldDestination {} |
     InlineProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; readonly:bool; } |
     CaseConstructor { case_site:UInt64; defining_module:UInt64; declaration:UInt64; ordinal:UInt64; representative:UInt64; } |
     CaseFieldReceipt { case_site:UInt64; arm:UInt64; pattern:UInt64; field:UInt64; value_type:DeclaredType; } |
@@ -1063,7 +1064,8 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     interfaces, published, selection.field, used, revision, true, type, ordinal, readonly) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
-                    remember_indexed_product_loan(nodes, facts, site, loan, record, writable);
+                    remember_indexed_product_loan(nodes, facts, site, loan, record, writable ||
+                        (case facts[site] of { IndexedFieldDestination -> true; _ -> false }));
                     remember_inline_product_field(facts, site, selection.receiver,
                         selection.field, ordinal, readonly, record, type)
                 }
@@ -1271,10 +1273,16 @@ func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const Na
     return true
 }
 
-func indexed_braced_transfer(nodes:const ExprNodes in N, at:UInt64, used:UInt64, revision:UInt64,
-    assignment:AssignmentSites in A, construction:ConstructionSites in C) -> bool
-    where {const owner N, owner A, owner C} {
-    if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer) return false;
+func indexed_field_destination(nodes:const ExprNodes in N, at:UInt64, revision:UInt64,
+    destination:UInt64, field:FieldSelectionSites in F, index:IndexSites in I) -> bool
+    where {const owner N, owner F, owner I} {
+    return inspect_field_selection(nodes, revision, at, destination, field) &&
+        inspect_index_selection(nodes, revision, at, field.receiver, index)
+}
+
+func indexed_braced_transfer(nodes:const ExprNodes in N, at:UInt64, revision:UInt64,
+    assignment:const AssignmentSites in A, construction:ConstructionSites in C) -> bool
+    where {const owner N, const owner A, owner C} {
     ref index = make IndexSites { target <- no_node(); index <- no_node() };
     return inspect_index_selection(nodes, revision, at, assignment.destination, index) &&
         inspect_construction(nodes, revision, at, assignment.input, construction) == BracedConstruction &&
@@ -1734,7 +1742,10 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
               inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
               construction.placement == no_node() && construction.queried_operand == no_node()) ||
              fixed_indexed_field_initializer(nodes, local, at, used, revision))) return true;
-        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) ||
+        if ((inspect_assignment(nodes, revision, used, at, assignment) == PlaceTransfer &&
+            ((names[at].kind == 0u8 &&
+              indexed_field_destination(nodes, at, revision, assignment.destination, projection, indexed)) ||
+             indexed_braced_transfer(nodes, at, revision, assignment, construction))) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
              (name_syntax(nodes, used, choice.subject) == OrdinaryName ||
@@ -1776,6 +1787,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    val transfer <- PlaceTransfer;
     ref element = make DeclaredType { kind <- record_type(); defining_module <- 0u64; identity <- no_node() };
     for (at in 0u64 .. used) {
         case views[at] of {
@@ -1810,7 +1824,13 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
                     fixed_indexed_field_initializer(nodes, local, at, used, revision)) { (first <- at):void }
             }
         };
-        if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction)) {
+        transfer <- inspect_assignment(nodes, revision, used, at, assignment);
+        if (transfer == PlaceTransfer && names[at].kind == 0u8 &&
+            indexed_field_destination(nodes, at, revision, assignment.destination, field, indexed)) {
+            facts[assignment.destination] <- make IndexedFieldDestination {};
+            if (first == no_node()) { (first <- at):void }
+        };
+        if (transfer == PlaceTransfer && indexed_braced_transfer(nodes, at, revision, assignment, construction)) {
             if (names[construction.requested].kind == constructor_type() &&
                 names[construction.requested].declaration != no_node()) {
                 if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,

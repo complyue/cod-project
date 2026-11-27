@@ -13,7 +13,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, calla
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, has_prepared_native_loans, source_handle_callable,
+    SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, native_loan_requires_body, source_handle_callable,
     prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_record_inspector
 };
 using "./ModuleExports.cod" SelectedExports;
@@ -324,7 +324,7 @@ export func discover_declaration_demand(
                 _ -> false
             });
         if (links[site].case_schema_prepared || aggregate_operation || selects_caught_field(fields, site) || checked_call ||
-            has_prepared_native_loans(views, site) || read_acquisition_failure(views, site, failure) ||
+            native_loan_requires_body(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction) ||
             predicate_operand(nodes, revision, used, site) != no_node() ||
             (inspect_local_binding(nodes, revision, used, site, local) && local.declaration_const &&

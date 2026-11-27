@@ -1464,7 +1464,7 @@ export data SuppliedView =
     PreparedHandleFormal { marker:UInt64; owner_site:UInt64; readonly:bool; } |
     PreparedNativeOperation { definition:UInt64; actual_owner:UInt64; } |
     PreparedNativeLoanCall { module:UInt64; definition:UInt64; revision:UInt64;
-        activation:UInt64; arity:UInt64; } |
+        activation:UInt64; arity:UInt64; requires_body:bool; } |
     PreparedNativeOperand { call_site:UInt64; revision:UInt64; position:UInt64; input:UInt64;
         kind:UInt8; owner_role:UInt64; owner_site:UInt64; type_module:UInt64; type_identity:UInt64;
         target_readonly:bool; owner_readonly:bool; } |
@@ -2931,6 +2931,15 @@ export func has_prepared_native_loans(views:const SuppliedViews in V, at:UInt64)
     }
 }
 
+export func native_loan_requires_body(views:const SuppliedViews in V, at:UInt64) -> bool
+    where {const owner V} {
+    if (at >= intrinsic (len)(views)) return false;
+    return case views[at] of {
+        PreparedNativeLoanCall { val requires_body <-; } -> requires_body;
+        _ -> false
+    }
+}
+
 func remember_acquisition_failure(
     views:SuppliedViews in V, at:UInt64, failure:const ExceptionType in F) -> void
     where {owner V, const owner F} {
@@ -3751,6 +3760,15 @@ func checked_native_loan_result(contracts:const ModuleInterfaces in C, published
     return true
 }
 
+func native_owner_is_active(nodes:const ExprNodes in N, work:const NameWork in W,
+    owner_site:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner W} {
+    if (owner_site >= used) return false;
+    ref local = make BoundHandleSites { binding <- no_node(); initializer <- no_node(); readonly <- false };
+    if (inspect_handle_binding(nodes, revision, used, owner_site, local) != OwnHandleBinding) return true;
+    val acquisition <- ungrouped(nodes, revision, used, local.initializer);
+    return acquisition < owner_site && work[acquisition].active == owner_site
+}
+
 func active_native_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, input:UInt64,
     loan:HandleLoan in L, used:UInt64, revision:UInt64) -> bool
@@ -3759,14 +3777,8 @@ func active_native_loan(nodes:const ExprNodes in N, names:const NameBindings in 
     if (value >= used) return false;
     if (name_syntax(nodes, used, value) == SymbolicName)
         return trace_installed_handle(nodes, names, selected, work, value, loan, used, revision);
-    if (!trace_handle_loan(nodes, names, input, loan, used, revision) || loan.owner >= used)
-        return false;
-    ref local = make BoundHandleSites { binding <- no_node(); initializer <- no_node(); readonly <- false };
-    if (inspect_handle_binding(nodes, revision, used, loan.owner, local) == OwnHandleBinding) {
-        val acquisition <- ungrouped(nodes, revision, used, local.initializer);
-        return acquisition < loan.owner && work[acquisition].active == loan.owner
-    };
-    return true
+    return trace_handle_loan(nodes, names, input, loan, used, revision) &&
+        native_owner_is_active(nodes, work, loan.owner, used, revision)
 }
 
 export func inspect_acquired_handle_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -3894,7 +3906,7 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
     views[at] <- make PreparedNativeLoanCall {
         module <- contracts[head].defining_module; definition <- contracts[head].declaration;
         revision <- revision; activation <- enclosing_callable(nodes, names, names[at].scope);
-        arity <- arity
+        arity <- arity; requires_body <- true
     };
     return true
 }
@@ -3917,6 +3929,10 @@ func has_readonly_array_formal(nodes:const ExprNodes in N, names:const NameBindi
     return false
 }
 
+func native_loan_scalar_result(kind:UInt8) -> bool {
+    return kind == builtin_u8() || kind == builtin_u64() || kind == builtin_bool() || kind == enum_type()
+}
+
 func prepare_local_native_loans(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
     definition:UInt64, signature:UInt64, first_parameter:UInt64, first_argument:UInt64,
@@ -3926,7 +3942,7 @@ func prepare_local_native_loans(nodes:const ExprNodes in N, names:const NameBind
     val result <- work[at].value_kind;
     if (!find_signature_clause(nodes, revision, used, signature, ThrowsSignatureClause, failure) ||
         failure != no_node() ||
-        (result != builtin_u8() && result != builtin_u64() && result != builtin_bool() && result != enum_type())) {
+        !native_loan_scalar_result(result)) {
         reject_declaration(report, at, invalid_native_parameter());
         return false
     };
@@ -3941,7 +3957,7 @@ func prepare_local_native_loans(nodes:const ExprNodes in N, names:const NameBind
         if (argument == no_node() && parameter == no_node()) {
             views[at] <- make PreparedNativeLoanCall {
                 module <- 0u64; definition <- definition; revision <- revision;
-                activation <- enclosing_callable(nodes, names, names[at].scope); arity <- position;
+                activation <- enclosing_callable(nodes, names, names[at].scope); arity <- position; requires_body <- true;
             };
             return true
         };
@@ -4037,15 +4053,19 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             previous <- no_node(); name <- no_node(); annotation <- no_node();
             parameter_tail <- no_node(); readonly <- false;
         };
-        val checked_proc <- !callable.function_form && ordinary_native_handle_scalars(nodes, names,
-            selected, work,
-            callable.signature, parameter, used, revision);
+        val result <- work[at].value_kind;
+        val scalar_function <- callable.function_form && native_loan_scalar_result(result) &&
+            parameter < used && work[parameter].next < used;
+        val handle_and_scalars <- (!callable.function_form || scalar_function) &&
+            ordinary_native_handle_scalars(nodes, names, selected, work, callable.signature, parameter, used, revision);
+        val checked_proc <- !callable.function_form && handle_and_scalars;
         val checked_local <- callable.function_form || checked_proc;
+        val ordered <- scalar_function && handle_and_scalars;
         val expected <- 0u8;
         val owner <- no_node();
         val actual_owner <- no_node();
-        val result <- work[at].value_kind;
-        for (unused in 0u64 .. used) {
+        ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+        for (position in 0u64 .. used) {
             if (argument == no_node() || parameter == no_node()) {
                 if (checked_local && argument != parameter) {
                     reject_declaration(report, at, invalid_native_parameter());
@@ -4058,6 +4078,13 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
                         return false
                     };
                     remember_prepared_native_call(views, at, definition, actual_owner)
+                };
+                if (ordered) {
+                    views[at] <- make PreparedNativeLoanCall {
+                        module <- 0u64; definition <- definition; revision <- revision;
+                        activation <- enclosing_callable(nodes, names, names[at].scope);
+                        arity <- position; requires_body <- false
+                    }
                 };
                 return true
             };
@@ -4080,7 +4107,18 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
                     };
                     work[role.annotation].active <- at;
                     work[owner].active <- loan.owner;
-                    (actual_owner <- loan.owner):void
+                    actual_owner <- loan.owner;
+                    if (ordered && !native_owner_is_active(nodes, work, actual_owner, used, revision)) {
+                        (ordered <- false):void
+                    }
+                };
+                if (ordered) {
+                    if (inspect_sequence_entry(nodes, revision, at, argument, entry) != ArgumentSequence) {
+                        reject_declaration(report, argument, invalid_native_parameter());
+                        return false
+                    };
+                    remember_native_operand(views, argument, at, revision, position, entry.item,
+                        if (row.value_kind == c_handle_type()) { actual_owner } else { no_node() }, row)
                 }
             } else {
                 if (typed_formal(nodes, revision, used, parameter, formal, binding) &&
@@ -4329,7 +4367,7 @@ export func check_module_interfaces(
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
             if (!check_native_operation_call(nodes, names, selected, contracts, interface_count,
                 work, views, at, call, used, revision, report)) return false;
-            if (first_required == no_node() && has_prepared_native_loans(views, at)) {
+            if (first_required == no_node() && native_loan_requires_body(views, at)) {
                 (first_required <- at):void
             }
         };
