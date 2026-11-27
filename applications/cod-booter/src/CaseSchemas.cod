@@ -1342,11 +1342,13 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
     -> bool where {const owner N, const owner B, const owner E, const owner W, const owner G,
         const owner A, owner F, const owner S, owner R} {
     val requested <- construction.requested;
-    val imported_sum <- names[requested].kind == constructor_type() && names[requested].declaration == no_node();
+    val chosen <- names[requested].declaration;
+    val imported_sum <- names[requested].kind == constructor_type() && chosen == no_node();
+    val imported_record <- names[requested].kind == ordinary_selection() && chosen < used &&
+        selected[chosen].kind == record_export();
     # Scalar-only local products keep their existing profile and demand rules.
-    if (!imported_sum &&
-        !has_inline_aggregate_field(nodes, names, selected, work, names[requested].declaration, used, revision))
-        return true;
+    if (!imported_sum && !imported_record &&
+        !has_inline_aggregate_field(nodes, names, selected, work, chosen, used, revision)) return true;
     ref loan = make IndexedCaseLoan {
         expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
         array_module <- 0u64; array_type <- no_node();
@@ -1356,7 +1358,8 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
     if (names[transfer].kind != 0u8 || names[assignment.destination].kind != 0u8 ||
         !describe_indexed_case_loan(nodes, names, selected, interfaces, published, assignment.destination,
             used, revision, expected_kind, loan, type) ||
-        (!imported_sum && loan.array_module != 0u64) || !case_bits_type(type, aggregate, interfaces, published))
+        (!imported_sum && !imported_record && loan.array_module != 0u64) ||
+        !case_bits_type(type, aggregate, interfaces, published))
         return case_problem(report, assignment.destination, wrong_construction_type());
     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
         assignment.input, transfer, type, used, revision, report)) return false;
@@ -1537,7 +1540,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
                 if (first == no_node()) { (first <- at):void }
             } else {
                 if (names[construction.requested].kind == record_type() ||
-                    names[construction.requested].kind == constructor_type()) {
+                    names[construction.requested].kind == constructor_type() ||
+                    names[construction.requested].kind == ordinary_selection()) {
                     if (!prepare_indexed_bits_write(nodes, names, selected, work, interfaces, published,
                         aggregate, facts, at, assignment, construction, used, revision, report)) return false;
                     if (first == no_node() &&

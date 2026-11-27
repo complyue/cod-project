@@ -221,7 +221,13 @@ The source commands check `Lexer.word_is`, its direct wrappers and the composed 
 
 The published interface supplies the Boolean result, the possible catchable bounds outcome and the separate possibility of a fatal numeric fault. A direct imported call applies the signature to the live loans. The indexed token operand keeps its selected array, index and actual owner. Its bounds check precedes callee entry. A fatal numeric outcome can leave an unprotected activation. A protected, supplied-body or active delayed cleanup use still needs a route for that outcome.
 
-Both source commands accept the complete, unchanged `ParserInput.cod`. Checking the application entry reaches a separate indexed token construction in `TokenBuffer.cod`. These predicate interfaces are for declaration checking and provider generation. Executable object support has its own admission checks.
+Both source commands accept the complete, unchanged `ParserInput.cod`. These predicate interfaces are for declaration checking and provider generation. Executable object support has its own admission checks.
+
+### Imported records in indexed transfers
+
+The source commands check `TokenBuffer.mark_delimiter` in the unchanged module prefix. They select the imported `Token` constructor and the writable `Tokens` element using their defining schemas, including through renamed selections. In a discarded builtin transfer, the destination index and bounds check precede the written initializers. The token's scalar fields come from checked reads, and its delimiter field copies the bits of the readable sum under its actual owner. Only a completed fresh value replaces the destination row.
+
+The complete `TokenBuffer.cod` and the application entry reach the imported `punct_at` call in `TokenBuffer.cod:46:13`. The indexed construction check carries no object lowering evidence.
 
 ### Imported array length families
 
