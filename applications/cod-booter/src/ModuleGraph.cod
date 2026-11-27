@@ -1470,7 +1470,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
             reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
-            array_scalar <- 0u8; array_sum <- no_node(); loans_array_slot <- false; array_slot <- no_node();
+            array_scalar <- 0u8; array_element_module <- 0u64; array_element_identity <- no_node();
+            loans_array_slot <- false; array_slot <- no_node();
             loans_scoped_aggregate <- false; case_receipt <- no_node();
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;

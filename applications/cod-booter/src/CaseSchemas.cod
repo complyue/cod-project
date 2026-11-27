@@ -299,7 +299,7 @@ func remember_array_field_record_formal(nodes:const ExprNodes in N, names:const 
         owner_name <- no_node(); readonly <- false
     };
     ref array = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     if (inspect_declaration(nodes, revision, used, type.identity, record) != NominalRecord ||
         !first_sequence_entry(nodes, revision, used, record.entries, FormalSequence, field) ||

@@ -127,9 +127,12 @@ using "./ExceptionPayload.cod" {
 using "./NativeDeclarations.cod" {
     SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
     inspect_acquired_handle_loan,
-    prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array, published_record_array_storage,
+    prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_signature, published_record_array, published_record_array_storage,
 };
-using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement, BoolArrayElement } };
+using "./NativeDeclarations.cod" {
+    ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement, BoolArrayElement, EnumArrayElement },
+    published_enum_array_header, SourceArrayFormals { ArrayReferenceSlotFormal }
+};
 using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
@@ -154,7 +157,8 @@ export data OperandFact {
     case_receipt:UInt64;
     checks_array_bounds:bool;
     array_scalar:UInt8;
-    array_sum:UInt64;
+    array_element_module:UInt64;
+    array_element_identity:UInt64;
     loans_array_slot:bool;
     array_slot:UInt64;
     target_readonly:UInt8;
@@ -340,7 +344,8 @@ func set_fact(facts:OperandFacts in F, at:UInt64, kind:UInt8, reception:UInt8,
     facts[at].case_receipt <- no_node();
     facts[at].checks_array_bounds <- false;
     facts[at].array_scalar <- 0u8;
-    facts[at].array_sum <- no_node();
+    facts[at].array_element_module <- 0u64;
+    facts[at].array_element_identity <- no_node();
     facts[at].loans_array_slot <- false;
     facts[at].array_slot <- no_node();
     facts[at].target_readonly <- 0u8;
@@ -372,7 +377,8 @@ func copy_fact(facts:OperandFacts in F, destination:UInt64, source:UInt64) -> vo
              facts[source].identity, facts[source].checked_exception);
     facts[destination].identity_module <- facts[source].identity_module;
     facts[destination].array_scalar <- facts[source].array_scalar;
-    facts[destination].array_sum <- facts[source].array_sum;
+    facts[destination].array_element_module <- facts[source].array_element_module;
+    facts[destination].array_element_identity <- facts[source].array_element_identity;
     facts[destination].case_receipt <- facts[source].case_receipt;
     facts[destination].reservation <- facts[source].reservation;
     facts[destination].target_readonly <- facts[source].target_readonly;
@@ -677,13 +683,14 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                 case views[formal] of {
                     ArraySlotFormal {
                         val owner <- owner_site; val module <- type_module; val type <- type_identity;
-                        val aliases_slot <- slot; val element <-; val sum <- element_sum;
+                        val aliases_slot <- slot; val element <-; val element_module <-; val element_identity <-;
                     } -> {
                         if (owner != owner_site || module != facts[formal].identity_module ||
                             type != facts[formal].identity || slot != aliases_slot ||
-                            !valid_array_slot_element(element, sum, module, used)) return unproved_operand();
+                            !valid_array_slot_element(element, element_identity, element_module, used)) return unproved_operand();
                         facts[formal].array_scalar <- slot_scalar_kind(element);
-                        (facts[formal].array_sum <- sum):void;
+                        facts[formal].array_element_module <- element_module;
+                        (facts[formal].array_element_identity <- element_identity):void;
                         # An ordinary ref formal owns a local reference binding.
                         # Ref var instead aliases the slot selected by the caller.
                         (facts[formal].array_slot <- formal):void
@@ -901,19 +908,23 @@ export func allocated_source_array(facts:const OperandFacts in F, at:UInt64) -> 
 export func has_slot_array(facts:const OperandFacts in F, at:UInt64) -> bool
     where {const owner F} {
     return facts[at].kind == source_array_loan() &&
-        (facts[at].array_scalar != 0u8 || facts[at].array_sum != no_node())
+        (facts[at].array_scalar != 0u8 || facts[at].array_element_identity != no_node())
 }
 
 func slot_scalar_kind(element:ArraySlotElement) -> UInt8 {
     if (element == (ByteArrayElement:ArraySlotElement)) return scalar_u8();
     if (element == (UInt64ArrayElement:ArraySlotElement)) return scalar_u64();
     if (element == (BoolArrayElement:ArraySlotElement)) return scalar_bool();
+    if (element == (EnumArrayElement:ArraySlotElement)) return scalar_enum();
     return 0u8
 }
 
-func valid_array_slot_element(element:ArraySlotElement, sum:UInt64, module:UInt64, used:UInt64) -> bool {
-    return if (slot_scalar_kind(element) != 0u8 || element == (ProductArrayElement:ArraySlotElement)) { sum == no_node() }
-        else { element == (SumArrayElement:ArraySlotElement) && sum < used && module == 0u64 }
+func valid_array_slot_element(element:ArraySlotElement, identity:UInt64, module:UInt64, used:UInt64) -> bool {
+    if (element == (EnumArrayElement:ArraySlotElement))
+        return identity != no_node() && module != no_node() && (module != 0u64 || identity < used);
+    if (element == (SumArrayElement:ArraySlotElement)) return identity < used && module == 0u64;
+    return (slot_scalar_kind(element) != 0u8 || element == (ProductArrayElement:ArraySlotElement)) &&
+        identity == no_node() && module == 0u64
 }
 
 func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
@@ -1105,6 +1116,8 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
     if (diagnostic != 0u8) return diagnostic;
     if (facts[fill].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
     if (element_kind != 0u8) {
+        if (!compatible_operand_nominal(facts, fill, element_kind, element_identity, element_module))
+            return wrong_operand_type();
         diagnostic <- require_typed_bits(nodes, facts, fill, element_kind);
         if (diagnostic != 0u8) return diagnostic
     } else {
@@ -1116,7 +1129,10 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
     set_fact(facts, at, source_array_loan(), borrowed_ref(), owner_site, type_identity_id, 0u8);
     facts[at].identity_module <- type_module_id;
     facts[at].array_scalar <- element_kind;
-    facts[at].array_sum <- if (sum && element_module == 0u64) { element_identity } else { no_node() };
+    facts[at].array_element_module <- if (element_kind == scalar_enum()) { element_module } else { 0u64 };
+    facts[at].array_element_identity <- if (element_kind == scalar_enum() || (sum && element_module == 0u64)) {
+        element_identity
+    } else { no_node() };
     facts[at].allocation_owner <- owner_site;
     # An explicit owner role carries an allocator requirement to its caller.
     if (placement != no_node()) { (facts[owner_site].owner_chain <- 0u64):void };
@@ -1610,7 +1626,8 @@ func check_array_rebind(nodes:const ExprNodes in N, facts:OperandFacts in F,
     -> UInt8 where {const owner N, owner F} {
     if (facts[input].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
     if (facts[input].kind != source_array_loan() || facts[input].reception != borrowed_ref() ||
-        facts[input].array_sum != facts[destination].array_sum ||
+        facts[input].array_element_identity != facts[destination].array_element_identity ||
+        facts[input].array_element_module != facts[destination].array_element_module ||
         facts[input].target_presence != present_target() || facts[input].identity != facts[destination].identity ||
         facts[input].identity_module != facts[destination].identity_module) return wrong_operand_type();
     if (facts[input].owner != facts[destination].owner)
@@ -1981,7 +1998,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (receives_slot) {
             val slot <- bound_array_slot(nodes, names, links, facts, actual, invocation, used, revision);
             if (slot == no_node() ||
-                facts[actual].array_sum != facts[formal].array_sum || facts[actual].target_presence != present_target())
+                facts[actual].array_element_identity != facts[formal].array_element_identity || facts[actual].target_presence != present_target())
                 return expected_writable_place();
             # The receipt names the slot. Earlier ordinary array arguments
             # stay prepared as target loans even if this slot changes.
@@ -2522,8 +2539,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (source_only) {
         ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
         inspect_callable(nodes, revision, used, definition, callable);
-        (checks_slot_call <- prepared_array_slot_signature(nodes, links, views,
-            callable.signature, used, revision)):void
+        (checks_slot_call <- prepared_array_signature(nodes, links, views,
+            callable.signature, used, revision) == (ArrayReferenceSlotFormal:SourceArrayFormals)):void
     };
     val checks_scoped_call <- mixed_aggregate_loan || (source_only && at < intrinsic (len)(cases) &&
         (case cases[at] of {
@@ -3348,6 +3365,7 @@ func checked_readonly_array_inputs(contracts:const ModuleInterfaces in I, publis
             if (role >= owners || !checked_readonly_loan_row(contracts[row], array_type(), role) ||
                 (!published_sum_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
                  !published_record_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
+                 published_enum_array_header(contracts, published, contracts[row].type_module, contracts[row].type_identity) == no_node() &&
                  !checked_readonly_byte_loan(contracts, published, row, role))) return false;
             (role <- role + 1u64):void
         }
@@ -5538,7 +5556,7 @@ func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
     if (!has_slot_array(facts, target) || facts[target].reception != borrowed_ref() ||
         facts[target].target_presence != present_target() || facts[target].owner == no_node())
         return unproved_nonnull_borrow();
-    val sum <- facts[target].array_sum;
+    val element_identity <- facts[target].array_element_identity;
     val element_kind <- facts[target].array_scalar;
     val diagnostic <- if (element_kind == scalar_u8()) { require_bits(nodes, facts, index) } else {
         if (element_kind != 0u8) { require_typed_bits(nodes, facts, index, scalar_u64()) }
@@ -5548,15 +5566,19 @@ func check_slot_array_index(nodes:const ExprNodes in N, facts:OperandFacts in F,
     if (destination) {
         if (facts[target].target_readonly != 0u8) return expected_writable_place();
         if (element_kind != 0u8) {
-            set_fact(facts, at, element_kind, borrowed_ref(), facts[target].owner, 0u64, 0u8)
+            set_fact(facts, at, element_kind, borrowed_ref(), facts[target].owner,
+                if (element_kind == scalar_enum()) { element_identity } else { 0u64 }, 0u8)
         } else {
-            set_fact(facts, at, source_sum_target(), borrowed_ref(), facts[target].owner, sum, 0u8);
+            set_fact(facts, at, source_sum_target(), borrowed_ref(), facts[target].owner, element_identity, 0u8);
             (facts[at].selection <- at):void
         }
     } else {
-        if (element_kind != 0u8) { set_result(facts, at, element_kind) }
-        else { set_fact(facts, at, independent_sum_bits(), independent_value(), no_node(), sum, 0u8) }
+        if (element_kind != 0u8) {
+            set_fact(facts, at, element_kind, independent_value(), no_node(),
+                if (element_kind == scalar_enum()) { element_identity } else { 0u64 }, 0u8)
+        } else { set_fact(facts, at, independent_sum_bits(), independent_value(), no_node(), element_identity, 0u8) }
     };
+    facts[at].identity_module <- facts[target].array_element_module;
     facts[at].checks_array_bounds <- true;
     return 0u8
 }
@@ -6058,7 +6080,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     if (declared_element == no_node() || (element_module == 0u64 && declared_element >= used))
                         return invalid_operand_tree()
                 } else {
-                    if (element_module != 0u64 || !valid_array_slot_element(element, declared_element, module, used))
+                    if (!valid_array_slot_element(element, declared_element, element_module, used))
                         return invalid_operand_tree()
                 };
                 return check_prepared_array_construction(nodes, names, selected, facts, at, used, revision,
@@ -6382,7 +6404,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                         };
                         if (facts[target].array_scalar != 0u8)
                             return check_transfer(nodes, facts, at, destination, input, source_only);
-                        return check_slot_sum_transfer(cases, facts, at, destination, input, facts[target].array_sum)
+                        return check_slot_sum_transfer(cases, facts, at, destination, input, facts[target].array_element_identity)
                     }
                 };
                 _ -> {}

@@ -1467,10 +1467,13 @@ export data ArraySlotType {
     owner_site:UInt64;
     type_module:UInt64;
     type_identity:UInt64;
-    element_sum:UInt64;
+    element_module:UInt64;
+    element_identity:UInt64;
 }
 
-export enum ArraySlotElement:UInt8 { ByteArrayElement; SumArrayElement; UInt64ArrayElement; ProductArrayElement; BoolArrayElement; }
+export enum ArraySlotElement:UInt8 {
+    ByteArrayElement; SumArrayElement; UInt64ArrayElement; ProductArrayElement; BoolArrayElement; EnumArrayElement;
+}
 
 export data SuppliedView =
     NoSuppliedView {} |
@@ -1490,7 +1493,8 @@ export data SuppliedView =
         target_readonly:bool; owner_readonly:bool; } |
     ReadonlyByteRead { array_site:UInt64; index:UInt64; formal:UInt64; owner_site:UInt64;
         type_module:UInt64; type_identity:UInt64; } |
-    ArraySlotFormal { owner_site:UInt64; type_module:UInt64; type_identity:UInt64; slot:bool; element:ArraySlotElement; element_sum:UInt64; } |
+    ArraySlotFormal { owner_site:UInt64; type_module:UInt64; type_identity:UInt64; slot:bool;
+        element:ArraySlotElement; element_module:UInt64; element_identity:UInt64; } |
     CheckedArraySlotBody { failures:ByteArrayFailures; } |
     CheckedImportedArraySlotCall { failures:ByteArrayFailures; } |
     IndexedArrayDestination { assignment:UInt64; target:UInt64; index:UInt64; } |
@@ -1597,7 +1601,8 @@ export func describe_byte_array(nodes:const ExprNodes in N, names:const NameBind
     };
     proof.type_module <- module;
     proof.type_identity <- declaration;
-    proof.element_sum <- no_node();
+    proof.element_module <- 0u64;
+    proof.element_identity <- no_node();
     return true
 }
 
@@ -1630,6 +1635,23 @@ func published_sum_array_header(contracts:const ModuleInterfaces in C, published
 export func published_sum_array(contracts:const ModuleInterfaces in C, published:UInt64,
     module:UInt64, declaration:UInt64) -> bool where {const owner C} {
     return published_sum_array_header(contracts, published, module, declaration) != no_node()
+}
+
+func published_enum_element(contracts:const ModuleInterfaces in C, published:UInt64,
+    module:UInt64, identity:UInt64) -> bool where {const owner C} {
+    val head <- find_interface(contracts, published, module, identity);
+    return head < published && contracts[head].interface_kind == enum_type()
+}
+
+export func published_enum_array_header(contracts:const ModuleInterfaces in C, published:UInt64,
+    module:UInt64, declaration:UInt64) -> UInt64 where {const owner C} {
+    val head <- find_interface(contracts, published, module, declaration);
+    if (head >= published || contracts[head].interface_kind != array_type() ||
+        contracts[head].entry_count != 0u64 || contracts[head].array_index_kind != builtin_u64() ||
+        contracts[head].element_kind != enum_type() ||
+        !published_enum_element(contracts, published, contracts[head].type_module, contracts[head].type_identity))
+        return no_node();
+    return head
 }
 
 func checked_sum_array_type(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -1722,21 +1744,40 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
     where {const owner N, const owner B, const owner E, const owner C, const owner A, owner F} {
     if (marker >= used || used > intrinsic (len)(names)) return 0u8;
     if (names[marker].kind != array_type()) {
-        if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, proof))
-            return 0u8;
-        return builtin_u8()
+        if (describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, proof))
+            return builtin_u8();
+        val selection <- names[marker].declaration;
+        if (names[marker].kind != ordinary_selection() || selection >= used ||
+            selected[selection].kind != array_export()) return 0u8;
+        val module <- selected[selection].origin_module;
+        val identity <- selected[selection].identity;
+        val head <- published_enum_array_header(contracts, published, module, identity);
+        if (head == no_node()) return 0u8;
+        proof.type_module <- module;
+        proof.type_identity <- identity;
+        proof.element_module <- contracts[head].type_module;
+        proof.element_identity <- contracts[head].type_identity;
+        return enum_type()
     };
     val declaration <- names[marker].declaration;
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, element))
         return 0u8;
-    if (element.kind != builtin_u8() && element.kind != builtin_u64() && element.kind != builtin_bool() &&
-        (element.kind != sum_type() || element.defining_module != 0u64 || element.identity >= used ||
-         element.identity >= intrinsic (len)(aggregate) ||
-         aggregate[element.identity] != (CoDBitsAggregate:AggregateStorage))) return 0u8;
+    if (element.kind == enum_type()) {
+        if (element.defining_module != 0u64 &&
+            !published_enum_element(contracts, published, element.defining_module, element.identity)) return 0u8;
+        proof.element_module <- element.defining_module;
+        (proof.element_identity <- element.identity):void
+    } else {
+        if (element.kind != builtin_u8() && element.kind != builtin_u64() && element.kind != builtin_bool() &&
+            (element.kind != sum_type() || element.defining_module != 0u64 || element.identity >= used ||
+             element.identity >= intrinsic (len)(aggregate) ||
+             aggregate[element.identity] != (CoDBitsAggregate:AggregateStorage))) return 0u8;
+        proof.element_module <- 0u64;
+        (proof.element_identity <- if (element.kind == sum_type()) { (element.identity) } else { no_node() }):void
+    };
     proof.type_module <- 0u64;
     proof.type_identity <- declaration;
-    proof.element_sum <- if (element.kind == sum_type()) { (element.identity) } else { no_node() };
     return (element.kind)
 }
 
@@ -1765,6 +1806,7 @@ func slot_element(kind:UInt8) -> ArraySlotElement {
     if (kind == builtin_u64()) return (UInt64ArrayElement:ArraySlotElement);
     if (kind == builtin_bool()) return (BoolArrayElement:ArraySlotElement);
     if (kind == record_type()) return (ProductArrayElement:ArraySlotElement);
+    if (kind == enum_type()) return (EnumArrayElement:ArraySlotElement);
     return (SumArrayElement:ArraySlotElement)
 }
 
@@ -1782,7 +1824,7 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
         owner_name <- no_node(); readonly <- false
     };
     ref proof = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     if (!formal_binding_is_fixed(nodes, revision, used, at) &&
         inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
@@ -1801,12 +1843,12 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
                     (kind <- record_type()):void
                 }
             };
-            if (kind != 0u8 && (!slot || (kind != builtin_u64() && kind != builtin_bool() &&
+            if (kind != 0u8 && (!slot || (kind != builtin_u64() && kind != builtin_bool() && kind != enum_type() &&
                 source_slot_parameter(nodes, work, names[at].scope, at, used, revision)))) {
                 views[at] <- make ArraySlotFormal {
                     owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
                     slot <- slot; element <- slot_element(kind);
-                    element_sum <- proof.element_sum
+                    element_module <- proof.element_module; element_identity <- proof.element_identity
                 };
                 return true
             }
@@ -1819,24 +1861,33 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
     return true
 }
 
-export func prepared_array_slot_signature(nodes:const ExprNodes in N, work:const NameWork in W,
-    views:const SuppliedViews in V, signature:UInt64, used:UInt64, revision:UInt64) -> bool
+export enum SourceArrayFormals:UInt8 { NoSourceArrayFormal; EnumArrayLoanFormal; ArrayReferenceSlotFormal; }
+
+export func prepared_array_signature(nodes:const ExprNodes in N, work:const NameWork in W,
+    views:const SuppliedViews in V, signature:UInt64, used:UInt64, revision:UInt64) -> SourceArrayFormals
     where {const owner N, const owner W, const owner V} {
     ref head = make UInt64 { no_node() };
     ref at = make UInt64 { no_node() };
-    if (!signature_formals(nodes, revision, used, signature, head, at)) return false;
+    if (!signature_formals(nodes, revision, used, signature, head, at)) return (NoSourceArrayFormal:SourceArrayFormals);
     val next <- no_node();
+    val profile <- (NoSourceArrayFormal:SourceArrayFormals);
     for (unused in 0u64 .. used) {
-        if (at >= used || at >= intrinsic (len)(views)) return false;
+        if (at == no_node()) return profile;
+        if (at >= used || at >= intrinsic (len)(views)) return (NoSourceArrayFormal:SourceArrayFormals);
         case views[at] of {
-            ArraySlotFormal { val passes_slot <- slot; } -> { if (passes_slot) return true };
+            ArraySlotFormal { val passes_slot <- slot; val element <-; } -> {
+                if (passes_slot) return (ArrayReferenceSlotFormal:SourceArrayFormals);
+                if (element == (EnumArrayElement:ArraySlotElement)) {
+                    (profile <- (EnumArrayLoanFormal:SourceArrayFormals)):void
+                }
+            };
             _ -> {}
         };
         next <- work[at].next;
-        if (next <= at) return false;
+        if (next <= at) return (NoSourceArrayFormal:SourceArrayFormals);
         (at <- next):void
     };
-    return false
+    return (NoSourceArrayFormal:SourceArrayFormals)
 }
 
 func callable_allocation_role(nodes:const ExprNodes in N, definition:UInt64, owner_site:UInt64,
@@ -1912,12 +1963,12 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
         }
     };
     ref proof = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
         requested, used, revision, proof);
-    val element_identity <- proof.element_sum;
-    val element_module <- 0u64;
+    val element_identity <- proof.element_identity;
+    val element_module <- proof.element_module;
     if (kind == 0u8 && placement == no_node() && names[requested].kind == ordinary_selection()) {
         val selection <- names[requested].declaration;
         if (selection < used && selected[selection].kind == array_export()) {
@@ -1964,7 +2015,7 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
         return false
     };
     if (kind == sum_type() && !imported_sum && !prepare_empty_sum_array_fill(nodes, names, work, views, at,
-        fill.item, proof.element_sum, used, revision)) {
+        fill.item, proof.element_identity, used, revision)) {
         reject_declaration(report, fill.item, unsupported_ordinary_construction());
         return false
     };
@@ -2002,7 +2053,9 @@ export func first_array_slot_work(views:const SuppliedViews in V, used:UInt64) -
     for (at in 0u64 .. used) {
         case views[at] of {
             PreparedArrayConstruction -> { return at };
-            ArraySlotFormal { val aliases_slot <- slot; } -> { if (aliases_slot) return at };
+            ArraySlotFormal { val aliases_slot <- slot; val element <-; } -> {
+                if (aliases_slot || element == (EnumArrayElement:ArraySlotElement)) return at
+            };
             _ -> {}
         }
     };
@@ -2025,7 +2078,7 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
     val binding <- names[index.target].declaration;
     if (names[index.target].kind != formal_binding()) return;
     ref proof = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     if (describe_byte_array_formal(nodes, names, selected, contracts, published, binding, used, revision, proof)) {
         views[at] <- make ReadonlyByteRead {
@@ -2464,7 +2517,7 @@ func prepare_readonly_reader(nodes:const ExprNodes in N, names:const NameBinding
     val third <- work[second].next;
     val array_owner <- if (third_owner) { first_owner } else { previous_owner };
     val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
-    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
+    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node() };
     if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
     val record_owner <- if (third_owner) { previous_owner } else { last_owner };
     val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
@@ -2549,13 +2602,14 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref bytes = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     val formal <- clause.parameter_tail;
     val role <- signature;
     val marker <- no_node();
     val annotation <- no_node();
     val parameter_kind <- 0u8;
+    val array_kind <- 0u8;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return role == result;
         if (inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
@@ -2566,10 +2620,13 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly)
                 return false;
             marker <- readonly_formal_marker(nodes, names, formal, role, used, revision);
-            if (marker >= used ||
-                (!checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision) &&
-                 !readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision) &&
-                 !describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes))) return false;
+            if (marker >= used) return false;
+            array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+                marker, used, revision, bytes);
+            if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
+                !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision) &&
+                !readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision))
+                return false;
             (role <- clause.previous):void
         };
         (formal <- entry.previous):void
@@ -2744,7 +2801,7 @@ func prepare_product_writer(nodes:const ExprNodes in N, names:const NameBindings
     };
     if (target_storage != CoDBitsAggregate && (!reads_records || target_storage != CLayoutBitsRecord)) return;
     val marker <- readonly_formal_marker(nodes, names, first, byte_owner, used, revision);
-    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
+    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node() };
     if (describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) {
         if (helper) { (views[at] <- make PreparedProductWriterHelper {}):void }
         else { (views[at] <- make PreparedProductWriter {}):void }
@@ -2877,7 +2934,7 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     if (bytes_owner != no_node()) {
         val marker <- readonly_formal_marker(nodes, names, first, bytes_owner, used, revision);
         ref bytes = make ArraySlotType {
-            owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node();
+            owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node();
         };
         if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
         (input <- work[first].next):void
@@ -3042,7 +3099,7 @@ func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings 
     ref head = make UInt64 { no_node() };
     ref first = make UInt64 { no_node() };
     ref proof = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     if (!signature_formals(nodes, revision, used, callable.signature, head, first) ||
         !describe_byte_array_formal(nodes, names, selected, contracts, published, first, used, revision, proof))
