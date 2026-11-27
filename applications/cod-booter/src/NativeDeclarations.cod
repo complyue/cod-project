@@ -1469,7 +1469,6 @@ export data SuppliedView =
     PreparedNativeOperand { call_site:UInt64; revision:UInt64; position:UInt64; input:UInt64;
         kind:UInt8; owner_role:UInt64; owner_site:UInt64; type_module:UInt64; type_identity:UInt64;
         target_readonly:bool; owner_readonly:bool; } |
-    ImportedNativeU64 { call_site:UInt64; revision:UInt64; position:UInt64; input:UInt64; } |
     ReadonlyByteRead { array_site:UInt64; index:UInt64; formal:UInt64; owner_site:UInt64;
         type_module:UInt64; type_identity:UInt64; } |
     ArraySlotFormal { owner_site:UInt64; type_module:UInt64; type_identity:UInt64; slot:bool; element:ArraySlotElement; element_sum:UInt64; } |
@@ -1477,7 +1476,8 @@ export data SuppliedView =
     IndexedArrayDestination { assignment:UInt64; target:UInt64; index:UInt64; } |
     IndexedArraySource { assignment:UInt64; target:UInt64; index:UInt64; } |
     PreparedArrayConstruction { requested:UInt64; placement:UInt64; length:UInt64; fill:UInt64;
-        owner_site:UInt64; type_module:UInt64; type_identity:UInt64; element:ArraySlotElement; element_identity:UInt64; } |
+        owner_site:UInt64; type_module:UInt64; type_identity:UInt64; element:ArraySlotElement;
+        element_module:UInt64; element_identity:UInt64; } |
     EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
     PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
     PreparedScalarLiteral { kind:UInt8; } |
@@ -1657,6 +1657,36 @@ func readonly_record_array(nodes:const ExprNodes in N, names:const NameBindings 
         marker, used, revision) == CoDBitsAggregate
 }
 
+func describe_product_array_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64,
+    element:DeclaredType in T) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, owner T} {
+    if (marker >= used) return false;
+    if (names[marker].kind == array_type()) {
+        if (!describe_local_u64_array_element(nodes, names, selected, names[marker].declaration,
+            used, revision, element) || element.kind != record_type()) return false
+    } else {
+        val selection <- names[marker].declaration;
+        if (names[marker].kind != ordinary_selection() || selection >= used ||
+            selected[selection].kind != array_export()) return false;
+        val row <- find_interface(contracts, published, selected[selection].origin_module, selected[selection].identity);
+        if (row >= published || contracts[row].interface_kind != array_type() ||
+            contracts[row].entry_count != 0u64 || contracts[row].array_index_kind != builtin_u64() ||
+            contracts[row].element_kind != record_type()) return false;
+        element.kind <- record_type();
+        (element.defining_module <- contracts[row].type_module):void;
+        (element.identity <- contracts[row].type_identity):void
+    };
+    val storage <- if (element.defining_module == 0u64) {
+        if (element.identity >= used) return false;
+        (aggregate[element.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, element.defining_module, element.identity, record_type())
+    };
+    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate
+}
+
 func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64,
@@ -1705,6 +1735,7 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
 func slot_element(kind:UInt8) -> ArraySlotElement {
     if (kind == builtin_u8()) return (ByteArrayElement:ArraySlotElement);
     if (kind == builtin_u64()) return (UInt64ArrayElement:ArraySlotElement);
+    if (kind == record_type()) return (ProductArrayElement:ArraySlotElement);
     return (SumArrayElement:ArraySlotElement)
 }
 
@@ -1732,6 +1763,15 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
         if (owner_site < used && owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint) {
             val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 binding.target_type, used, revision, proof);
+            if (kind == 0u8 && slot) {
+                ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+                if (describe_product_array_element(nodes, names, selected, contracts, published, aggregate,
+                    binding.target_type, used, revision, element)) {
+                    proof.type_module <- type_module(names, selected, binding.target_type, 0u64);
+                    proof.type_identity <- type_identity(names, selected, binding.target_type);
+                    (kind <- record_type()):void
+                }
+            };
             if (kind != 0u8 && (!slot || (kind != builtin_u64() &&
                 source_slot_parameter(nodes, work, names[at].scope, at, used, revision)))) {
                 views[at] <- make ArraySlotFormal {
@@ -1848,18 +1888,20 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
     val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
         requested, used, revision, proof);
     val element_identity <- proof.element_sum;
-    if (placement == no_node() && kind == 0u8 && names[requested].kind == array_type()) {
-        val declaration <- names[requested].declaration;
+    val element_module <- 0u64;
+    if (kind == 0u8) {
         ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-        if (describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, type) &&
-            type.kind == record_type() && type.defining_module == 0u64 && type.identity < used &&
-            aggregate[type.identity] == CLayoutBitsRecord) {
+        if (describe_product_array_element(nodes, names, selected, contracts, published, aggregate,
+            requested, used, revision, type)) {
             kind <- record_type();
-            proof.type_identity <- declaration;
+            proof.type_module <- type_module(names, selected, requested, 0u64);
+            proof.type_identity <- type_identity(names, selected, requested);
+            element_module <- type.defining_module;
             (element_identity <- type.identity):void
         }
     };
-    if (placement == no_node() && (owner_site >= used || (kind != builtin_u64() && kind != record_type()))) {
+    if (placement == no_node() && (owner_site >= used ||
+        (kind != builtin_u8() && kind != builtin_u64() && kind != record_type()))) {
         reject_declaration(report, at, unsupported_ordinary_construction());
         return false
     };
@@ -1885,8 +1927,7 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
     views[at] <- make PreparedArrayConstruction {
         requested <- requested; placement <- placement; length <- count.item; fill <- fill.item;
         owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
-        element <- if (kind == record_type()) { (ProductArrayElement:ArraySlotElement) } else { slot_element(kind) };
-        element_identity <- element_identity
+        element <- slot_element(kind); element_module <- element_module; element_identity <- element_identity
     };
     return true
 }
@@ -3773,19 +3814,20 @@ func imported_native_loan_profile(contracts:const ModuleInterfaces in C, publish
     if (published > intrinsic (len)(contracts) || head >= published) return false;
     val arity <- contracts[head].entry_count;
     if (arity >= published - head) return false;
-    if (contracts[head].result_kind == builtin_u64() && arity == 6u64) {
-        return (contracts[head].callable_kind == CheckedFunction ||
-                contracts[head].callable_kind == CheckedProcedure) &&
-            contracts[head + 1u64].value_kind == array_type() &&
-            contracts[head + 4u64].value_kind == array_type()
-    };
-    if (contracts[head].callable_kind == CheckedFunction && contracts[head].result_kind == builtin_u8()) {
+    if (contracts[head].callable_kind == CheckedFunction) {
+        if (!native_loan_scalar_result(contracts[head].result_kind)) return false;
         for (row in head + 1u64 .. head + 1u64 + arity) {
-            if (contracts[row].value_kind == array_type()) return true
+            if (contracts[row].value_kind == array_type() || contracts[row].value_kind == c_handle_type())
+                return true
         };
         return false
     };
+    # Procedure calls keep the existing closed signature profiles.
     if (contracts[head].callable_kind != CheckedProcedure) return false;
+    if (contracts[head].result_kind == builtin_u64() && arity == 6u64) {
+        return contracts[head + 1u64].value_kind == array_type() &&
+            contracts[head + 4u64].value_kind == array_type()
+    };
     if (contracts[head].result_kind == builtin_u8() && arity == 2u64) {
         val second <- contracts[head + 2u64].value_kind;
         return contracts[head + 1u64].value_kind == c_handle_type() &&
@@ -3906,9 +3948,8 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
                    owner V, owner R} {
     val roles <- contracts[head].owner_count;
     val arity <- contracts[head].entry_count;
-    val byte_probe <- contracts[head].result_kind == builtin_u64();
-    val mixed_function <- contracts[head].callable_kind == CheckedFunction &&
-        contracts[head].result_kind == builtin_u8();
+    val function_form <- contracts[head].callable_kind == CheckedFunction;
+    val byte_procedure <- !function_form && contracts[head].result_kind == builtin_u64();
     if (contracts[head].failure_module != 0u64 || contracts[head].failure_identity != 0u64 ||
         contracts[head].failure_checked != 0u8 || roles == 0u64 || roles > arity ||
         contracts[head].owner_role != no_node() ||
@@ -3916,7 +3957,7 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
         reject_declaration(report, at, invalid_native_parameter());
         return false;
     };
-    if (byte_probe && (roles > 2u64 ||
+    if (byte_procedure && (roles > 2u64 ||
         (roles == 2u64 && contracts[head + 1u64].owner_role == contracts[head + 4u64].owner_role))) {
         reject_declaration(report, at, invalid_native_parameter());
         return false
@@ -3928,62 +3969,53 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
     val owner_site <- no_node();
     val kind <- 0u8;
     val type <- no_node();
+    val requires_body <- !function_form;
+    val value_parameter <- false;
     for (position in 0u64 .. arity) {
         row <- head + 1u64 + position;
         if (argument >= at ||
             inspect_sequence_entry(nodes, revision, at, argument, entry) != ArgumentSequence ||
             checked_ref_argument(nodes, argument)) {
             reject_declaration(report, at, invalid_native_parameter());
-            return false;
+            return false
         };
-        if (byte_probe && position != 0u64 && position != 3u64) {
-            if (contracts[row].value_kind != builtin_u64() || !checked_native_value_row(contracts[row])) {
-                reject_declaration(report, entry.item, invalid_native_parameter());
-                return false
-            };
-            views[argument] <- make ImportedNativeU64 {
-                call_site <- at; revision <- revision; position <- position; input <- entry.item
-            }
-        } else {
-            if (!(mixed_function && checked_native_value_row(contracts[row])) &&
-                !checked_native_loan_row(contracts[row], roles)) {
-                reject_declaration(report, entry.item, invalid_native_parameter());
-                return false
-            };
-            kind <- contracts[row].value_kind;
-            if (byte_probe && kind != array_type()) {
-                reject_declaration(report, entry.item, invalid_native_parameter());
-                return false
-            };
-            owner_site <- no_node();
-            if (kind == c_handle_type()) {
-                if (!active_native_loan(nodes, names, selected, work, entry.item, loan, used,
-                    revision)) {
-                    reject_declaration(report, entry.item, mismatched_actual_handle_owner());
-                    return false
-                };
-                if (!match_selected_handle(nodes, names, selected, contracts[row], entry.item, loan, report))
-                    return false;
-                (owner_site <- loan.owner):void
-            };
-            if (kind == array_type()) {
-                type <- find_interface(contracts, published, contracts[row].type_module,
-                    contracts[row].type_identity);
-                if (type == no_node() || contracts[type].interface_kind != array_type()) {
-                    reject_declaration(report, at, invalid_native_parameter());
-                    return false
-                };
-                # A checked C array parameter already requires a u64 index.
-                # Join that parameter's original identity to the exact element kind.
-                if (byte_probe && (contracts[type].entry_count != 0u64 ||
-                    contracts[type].element_kind != builtin_u8())) {
-                    reject_declaration(report, entry.item, invalid_native_parameter());
-                    return false
-                }
-            };
-            remember_native_operand(views, argument, at, revision, position, entry.item,
-                                            owner_site, contracts[row])
+        kind <- contracts[row].value_kind;
+        value_parameter <- checked_native_value_row(contracts[row]);
+        if (byte_procedure &&
+            (if (position == 0u64 || position == 3u64) { kind != array_type() }
+             else { kind != builtin_u64() || !value_parameter })) {
+            reject_declaration(report, entry.item, invalid_native_parameter());
+            return false
         };
+        if (!(value_parameter && (function_form || byte_procedure)) &&
+            !checked_native_loan_row(contracts[row], roles)) {
+            reject_declaration(report, entry.item, invalid_native_parameter());
+            return false
+        };
+        owner_site <- no_node();
+        if (kind == c_handle_type()) {
+            if (!active_native_loan(nodes, names, selected, work, entry.item, loan, used, revision)) {
+                reject_declaration(report, entry.item, mismatched_actual_handle_owner());
+                return false
+            };
+            if (!match_selected_handle(nodes, names, selected, contracts[row], entry.item, loan, report))
+                return false;
+            (owner_site <- loan.owner):void
+        };
+        if (kind == array_type()) {
+            type <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
+            if (type == no_node() || contracts[type].interface_kind != array_type() ||
+                contracts[type].entry_count != 0u64 || contracts[type].array_index_kind != builtin_u64()) {
+                reject_declaration(report, entry.item, invalid_native_parameter());
+                return false
+            };
+            if (byte_procedure && contracts[type].element_kind != builtin_u8()) {
+                reject_declaration(report, entry.item, invalid_native_parameter());
+                return false
+            };
+            (requires_body <- true):void
+        };
+        remember_native_operand(views, argument, at, revision, position, entry.item, owner_site, contracts[row]);
         (argument <- work[argument].next):void
     };
     if (argument != no_node()) {
@@ -3993,7 +4025,7 @@ func prepare_imported_native_loans(nodes:const ExprNodes in N, names:const NameB
     views[at] <- make PreparedNativeLoanCall {
         module <- contracts[head].defining_module; definition <- contracts[head].declaration;
         revision <- revision; activation <- enclosing_callable(nodes, names, names[at].scope);
-        arity <- arity; requires_body <- true
+        arity <- arity; requires_body <- requires_body
     };
     return true
 }

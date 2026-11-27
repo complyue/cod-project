@@ -1502,9 +1502,11 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             !text_initializer && !builder_initializer && !record_initializer &&
             ((kind == array_type() &&
               (construction.placement != no_node() || state.lexical_array_initializer == at)) ||
-             (construction.placement != no_node() && kind == ordinary_selection() &&
-              (bindings[definition].imported_kind == array_export() ||
-               bindings[requested].module_use == (SelectedType:ModuleNameUse))));
+             (kind == ordinary_selection() &&
+              (((construction.placement != no_node() || state.lexical_array_initializer == at) &&
+                bindings[definition].imported_kind == array_export()) ||
+               (construction.placement != no_node() &&
+                bindings[requested].module_use == (SelectedType:ModuleNameUse)))));
         if (!text_initializer && !builder_initializer && !record_initializer && !array_initializer &&
             !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());

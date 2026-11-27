@@ -133,7 +133,7 @@ using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArra
 using "./NativeDeclarations.cod" { source_literal_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
-    SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand, ImportedNativeU64,
+    SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
     CheckedWriterCall, CheckedHandleArrayCall, CheckedArrayReaderCall, ImportedProductWriter
@@ -887,7 +887,7 @@ func slot_scalar_kind(element:ArraySlotElement) -> UInt8 {
 }
 
 func valid_array_slot_element(element:ArraySlotElement, sum:UInt64, module:UInt64, used:UInt64) -> bool {
-    return if (slot_scalar_kind(element) != 0u8) { sum == no_node() }
+    return if (slot_scalar_kind(element) != 0u8 || element == (ProductArrayElement:ArraySlotElement)) { sum == no_node() }
         else { element == (SumArrayElement:ArraySlotElement) && sum < used && module == 0u64 }
 }
 
@@ -924,7 +924,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
                 return expected_writable_place()
         };
         copy_fact(facts, at, initializer);
-        if (!local.declaration_const && has_slot_array(facts, initializer)) { (facts[at].array_slot <- at):void };
+        if (!local.declaration_const) { (facts[at].array_slot <- at):void };
         if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
         return 0u8
     };
@@ -1039,7 +1039,8 @@ func require_prepared_widening_u64(facts:OperandFacts in F, operand:UInt64) -> U
 func check_prepared_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64,
     requested:UInt64, placement:UInt64, length:UInt64, fill:UInt64, owner_site:UInt64,
-    type_module_id:UInt64, type_identity_id:UInt64, element:ArraySlotElement, element_identity:UInt64) -> UInt8
+    type_module_id:UInt64, type_identity_id:UInt64, element:ArraySlotElement, element_module:UInt64,
+    element_identity:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, owner F} {
     ref syntax = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -1058,7 +1059,7 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
     val element_kind <- slot_scalar_kind(element);
     val product <- element == (ProductArrayElement:ArraySlotElement);
     if (placement == no_node()) {
-        if ((!product && element_kind != scalar_u64()) || names[at].scope != owner_site) return unproved_owner()
+        if ((!product && element_kind == 0u8) || names[at].scope != owner_site) return unproved_owner()
     } else {
         if (placement >= at || owner_site >= at || names[placement].declaration != owner_site ||
             owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint)
@@ -1082,9 +1083,9 @@ func check_prepared_array_construction(nodes:const ExprNodes in N, names:const N
         if (diagnostic != 0u8) return diagnostic
     } else {
         val expected <- if (product) { independent_product_bits() } else { independent_sum_bits() };
-        if (type_module_id != 0u64 || facts[fill].kind != expected ||
+        if (facts[fill].kind != expected ||
             facts[fill].reception != independent_value() || facts[fill].identity != element_identity ||
-            facts[fill].identity_module != 0u64) return wrong_operand_type()
+            facts[fill].identity_module != element_module) return wrong_operand_type()
     };
     set_fact(facts, at, source_array_loan(), borrowed_ref(), owner_site, type_identity_id, 0u8);
     facts[at].identity_module <- type_module_id;
@@ -1572,7 +1573,7 @@ func check_array_rebind(nodes:const ExprNodes in N, names:const NameBindings in 
     if (bound_array_slot(nodes, names, links, facts, destination, at, used, revision) == no_node())
         return expected_writable_place();
     if (facts[input].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
-    if (!has_slot_array(facts, input) || facts[input].reception != borrowed_ref() ||
+    if (facts[input].kind != source_array_loan() || facts[input].reception != borrowed_ref() ||
         facts[input].array_sum != facts[destination].array_sum ||
         facts[input].target_presence != present_target() || facts[input].identity != facts[destination].identity ||
         facts[input].identity_module != facts[destination].identity_module) return wrong_operand_type();
@@ -1888,14 +1889,14 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8)
             return expected_writable_place();
         val receives_slot <- false;
-        if (has_slot_array(facts, formal)) {
+        if (kind == source_array_loan() && facts[formal].array_slot != no_node()) {
             ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
             if (inspect_formal(nodes, revision, used, formal, parameter) != OrdinaryFormal) return invalid_operand_tree();
             (receives_slot <- parameter.mode == ReferenceSlotFormal):void
         };
         if (receives_slot) {
             val slot <- bound_array_slot(nodes, names, links, facts, actual, invocation, used, revision);
-            if (slot == no_node() || !has_slot_array(facts, actual) ||
+            if (slot == no_node() ||
                 facts[actual].array_sum != facts[formal].array_sum || facts[actual].target_presence != present_target())
                 return expected_writable_place();
             # The receipt names the slot. Earlier ordinary array arguments
@@ -1998,11 +1999,7 @@ func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBind
         };
         if (inspect_local_binding(nodes, revision, used, binding, local) && local.mode == ReferenceLocal &&
             local.initializer < binding && allocated_source_array(facts, local.initializer) &&
-            facts[local.initializer].owner == facts[value].owner &&
-            (case views[local.initializer] of {
-                PreparedArrayConstruction { val element <-; } -> element == (ProductArrayElement:ArraySlotElement);
-                _ -> false
-            })) return 0u8
+            facts[local.initializer].owner == facts[value].owner) return 0u8
     };
     if (names[value].kind != here_receiver_binding() || binding >= used) return unproved_owner();
     return case views[binding] of {
@@ -2039,7 +2036,11 @@ func prepare_native_scalar_operand(nodes:const ExprNodes in N, facts:OperandFact
     if (expected == 0u8) return wrong_operand_type();
     if (!compatible_operand_nominal(facts, input, expected, identity, module)) return wrong_operand_type();
     val diagnostic <- if (expected == source_u32()) { require_source_u32(nodes, facts, input, true) }
-        else { require_value_bits(nodes, facts, input, expected) };
+        else {
+            if (expected == scalar_u64() && facts[input].kind != scalar_enum()) {
+                require_widening_u64(nodes, facts, input)
+            } else { require_value_bits(nodes, facts, input, expected) }
+        };
     if (diagnostic != 0u8) return diagnostic;
     set_fact(facts, argument, expected, independent_value(), no_node(), identity, 0u8);
     facts[argument].identity_module <- module;
@@ -2056,23 +2057,6 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
     val view <- no_node();
     val diagnostic <- 0u8;
     return case views[argument] of {
-        ImportedNativeU64 {
-            val expected_call <- call_site; val origin <- revision; val ordinal <- position;
-            val expected_input <- input;
-        } -> {
-            if (expected_call != at || origin != revision || ordinal != position ||
-                expected_input != input) return unproved_call_target();
-            if (facts[input].kind == never_result()) {
-                set_result(facts, argument, never_result());
-                return 0u8
-            };
-            # Keep the original operand's type and record the prepared value separately.
-            diagnostic <- if (facts[input].kind == scalar_enum()) { require_value_bits(nodes, facts, input, scalar_u64()) }
-                else { require_widening_u64(nodes, facts, input) };
-            if (diagnostic != 0u8) return diagnostic;
-            set_result(facts, argument, scalar_u64());
-            0u8
-        };
         PreparedNativeOperand {
             val expected_call <- call_site; val origin <- revision; val ordinal <- position;
             val expected_input <- input; val kind <- kind; val role <- owner_role;
@@ -3761,7 +3745,7 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
                 contracts[row].value_kind <- c_handle_type();
                 publish_nominal_identity(facts, formal, module, contracts[row])
             } else {
-                if (has_slot_array(facts, formal)) {
+                if (facts[formal].kind == source_array_loan() && facts[formal].array_slot == formal) {
                     if ((syntax.mode != ReferenceFormal && syntax.mode != ReferenceSlotFormal) ||
                         facts[formal].identity == no_node() || facts[formal].array_slot != formal ||
                         (syntax.mode == ReferenceSlotFormal && facts[formal].target_readonly != 0u8)) return no_node();
@@ -5684,15 +5668,18 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             };
             PreparedArrayConstruction {
                 val requested <-; val placement <-; val length <-; val fill <-; val owner_site <-;
-                val module <- type_module; val identity <- type_identity; val element <-; val declared_element <- element_identity;
+                val module <- type_module; val identity <- type_identity; val element <-;
+                val element_module <-; val declared_element <- element_identity;
             } -> {
                 if (element == (ProductArrayElement:ArraySlotElement)) {
-                    if (placement != no_node() || declared_element >= used || module != 0u64) return invalid_operand_tree()
+                    if (declared_element == no_node() || (element_module == 0u64 && declared_element >= used))
+                        return invalid_operand_tree()
                 } else {
-                    if (!valid_array_slot_element(element, declared_element, module, used)) return invalid_operand_tree()
+                    if (element_module != 0u64 || !valid_array_slot_element(element, declared_element, module, used))
+                        return invalid_operand_tree()
                 };
                 return check_prepared_array_construction(nodes, names, selected, facts, at, used, revision,
-                    requested, placement, length, fill, owner_site, module, identity, element, declared_element)
+                    requested, placement, length, fill, owner_site, module, identity, element, element_module, declared_element)
             };
             EmptySumArrayFill { val parent <- construction; val sum <-; val arm <-; } -> {
                 return check_empty_sum_array_fill(nodes, names, facts, views, at, used, revision, parent, sum, arm)
@@ -5950,7 +5937,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
     if (mode == PlaceRebind) {
         val destination <- assignment.destination;
-        if (source_only && has_slot_array(facts, destination))
+        if (source_only && facts[destination].kind == source_array_loan() &&
+            (facts[destination].array_slot != no_node() || has_slot_array(facts, destination)))
             return check_array_rebind(nodes, names, links, facts, at, destination, assignment.input, used, revision);
         if (scalar_kind(facts[destination].kind))
             return check_local_rebind(nodes, names, facts, at, destination, assignment.input, used, revision);

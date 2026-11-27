@@ -367,7 +367,11 @@ This covers the unchanged `diagnostic_budget_full` call in `PackageDiagnostics`.
 
 Both source commands check the unchanged `PackageDiagnostics` module. It imports `report_rejection`, which writes through the diagnostic handle and borrows the source bytes and line rows under one readonly owner role. The defining visit completes the ordered signature and the body's reachable bounds and numeric outcomes before publication. The caller matches each loan to its nominal type and binds a repeated owner role consistently, including when a role is shared by an array and a handle. An abrupt operand prevents entry.
 
-Both source commands on the unchanged `ModuleGraph` and CLI now stop at the lexical byte-array construction in `LoadPackageInputs.cod:114:20`.
+### Package-root loader source checking
+
+Both source commands check the unchanged `LoadPackageInputs` definition. Lexical byte buffers use the current full lexical owner. The staged product and byte arrays use the loader's writable owner role. The checker keeps the nominal array and element identities separate, checks the fill against the element declaration, and keeps the two caller slots distinct. The native directory calls use the same ordered matcher for readonly arrays, borrowed handles and independent values.
+
+The unchanged `PackageGraphPaths` caller, `ModuleGraph` and CLI currently stop at the initial `MissingModule` fill in `PackageGraphPaths.cod:200:57`. A direct import of the loader reaches the separate cross-module rebind contract boundary. The defining visit publishes the existing checked failure bounds, and the caller also needs a completed account of the slot effects.
 
 ### Imported array length families
 

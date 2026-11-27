@@ -66,7 +66,7 @@ export data ConstructorCaseFact =
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalProductReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalProductArray {
-        owner_site:UInt64; array_type:UInt64; record:UInt64; readonly:bool;
+        owner_site:UInt64; array_module:UInt64; array_type:UInt64; record:DeclaredType; readonly:bool;
     } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
@@ -981,15 +981,16 @@ func prepare_lexical_product_array(nodes:const ExprNodes in N, names:const NameB
     return case views[input] of {
         PreparedArrayConstruction {
             val placement <-; val owner_site <-; val type_module <-; val type_identity <-;
-            val kind <- element; val identity <- element_identity;
+            val kind <- element; val module <- element_module; val identity <- element_identity;
         } -> {
-            if (kind != ProductArrayElement || placement != no_node() ||
-                owner_site != names[at].scope || type_module != 0u64 ||
+            if (kind != ProductArrayElement ||
+                (placement == no_node() && owner_site != names[at].scope) ||
                 inspect_binding(nodes, revision, used, local.binding, binding) == InvalidBindingSyntax)
                 return false;
             facts[at] <- make LexicalProductArray {
-                owner_site <- owner_site; array_type <- type_identity;
-                record <- identity; readonly <- binding.readonly
+                owner_site <- owner_site; array_module <- type_module; array_type <- type_identity;
+                record <- make DeclaredType { kind <- record_type(); defining_module <- module; identity <- identity };
+                readonly <- binding.readonly
             };
             true
         };
@@ -1007,16 +1008,16 @@ func describe_lexical_product_element(nodes:const ExprNodes in N, names:const Na
     val origin <- names[indexed.target].declaration;
     if (origin >= indexed.target) return false;
     return case facts[origin] of {
-        LexicalProductArray { val owner_site <-; val array_type <-; val record <-; val readonly <-; } -> {
+        LexicalProductArray { val owner_site <-; val array_module <-; val array_type <-; val record <-; val readonly <-; } -> {
             loan.expression <- expression;
             loan.array <- indexed.target;
             loan.index <- indexed.index;
             loan.owner_site <- owner_site;
-            loan.array_module <- 0u64;
+            loan.array_module <- array_module;
             loan.array_type <- array_type;
-            element.kind <- record_type();
-            element.defining_module <- 0u64;
-            element.identity <- record;
+            element.kind <- record.kind;
+            element.defining_module <- record.defining_module;
+            element.identity <- record.identity;
             writable <- !readonly;
             true
         };
@@ -1814,8 +1815,11 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     ref element = make DeclaredType { kind <- record_type(); defining_module <- 0u64; identity <- no_node() };
     for (at in 0u64 .. used) {
         case views[at] of {
-            PreparedArrayConstruction { val fill <-; val kind <- element; val identity <- element_identity; } -> {
+            PreparedArrayConstruction {
+                val fill <-; val kind <- element; val module <- element_module; val identity <- element_identity;
+            } -> {
                 if (kind == ProductArrayElement) {
+                    element.defining_module <- module;
                     element.identity <- identity;
                     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
                         fill, at, element, used, revision, report)) return false;
