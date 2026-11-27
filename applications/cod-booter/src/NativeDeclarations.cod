@@ -1575,14 +1575,19 @@ func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in
     return true
 }
 
+export func published_record_array_storage(contracts:const ModuleInterfaces in C, published:UInt64,
+    module:UInt64, declaration:UInt64) -> AggregateStorage where {const owner C} {
+    val header <- find_interface(contracts, published, module, declaration);
+    if (header >= published || contracts[header].interface_kind != array_type() ||
+        contracts[header].entry_count != 0u64 || contracts[header].array_index_kind != builtin_u64() ||
+        contracts[header].element_kind != record_type()) return UnprovedAggregate;
+    return checked_aggregate_storage(contracts, published, contracts[header].type_module,
+        contracts[header].type_identity, record_type())
+}
+
 export func published_record_array(contracts:const ModuleInterfaces in C, published:UInt64,
     module:UInt64, declaration:UInt64) -> bool where {const owner C} {
-    val header <- find_interface(contracts, published, module, declaration);
-    return header < published && contracts[header].interface_kind == array_type() &&
-        contracts[header].entry_count == 0u64 && contracts[header].array_index_kind == builtin_u64() &&
-        contracts[header].element_kind == record_type() &&
-        checked_aggregate_storage(contracts, published, contracts[header].type_module,
-            contracts[header].type_identity, record_type()) == CoDBitsAggregate
+    return published_record_array_storage(contracts, published, module, declaration) == CoDBitsAggregate
 }
 
 export func published_sum_array(contracts:const ModuleInterfaces in C, published:UInt64,
@@ -1617,25 +1622,35 @@ func checked_sum_array_type(nodes:const ExprNodes in N, names:const NameBindings
         published_sum_array(contracts, published, selected[selection].origin_module, selected[selection].identity)
 }
 
-func readonly_record_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+func readonly_record_array_storage(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
-    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> bool
+    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> AggregateStorage
     where {const owner N, const owner B, const owner E, const owner C, const owner A} {
     if (names[marker].kind == array_type()) {
         ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
         if (!describe_local_u64_array_element(nodes, names, selected, names[marker].declaration,
-            used, revision, element) || element.kind != record_type()) return false;
+            used, revision, element) || element.kind != record_type()) return UnprovedAggregate;
         return if (element.defining_module == 0u64) {
-            element.identity < used && aggregate[element.identity] == CoDBitsAggregate
+            if (element.identity >= used) return UnprovedAggregate;
+            (aggregate[element.identity])
         } else {
             checked_aggregate_storage(contracts, published, element.defining_module,
-                element.identity, record_type()) == CoDBitsAggregate
+                element.identity, record_type())
         }
     };
     val selection <- names[marker].declaration;
-    return names[marker].kind == ordinary_selection() && selection < used &&
-        selected[selection].kind == array_export() && published_record_array(contracts, published,
-            selected[selection].origin_module, selected[selection].identity)
+    if (names[marker].kind != ordinary_selection() || selection >= used ||
+        selected[selection].kind != array_export()) return UnprovedAggregate;
+    return published_record_array_storage(contracts, published, selected[selection].origin_module,
+        selected[selection].identity)
+}
+
+func readonly_record_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    return readonly_record_array_storage(nodes, names, selected, contracts, published, aggregate,
+        marker, used, revision) == CoDBitsAggregate
 }
 
 func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2523,14 +2538,22 @@ func prepare_product_writer(nodes:const ExprNodes in N, names:const NameBindings
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
         return;
-    val second <- work[first].next;
-    if (!independent_scalar_formal(nodes, names, second, used, revision, builtin_u64())) return;
-    val third <- work[second].next;
-    if (third >= used) return;
-    val helper <- work[third].next != no_node();
-    val target <- if (helper) { (work[third].next) } else { third };
+    val offset <- work[first].next;
+    val lines <- readonly_formal_marker(nodes, names, offset, byte_owner, used, revision);
+    val reads_records <- lines < used;
+    if (reads_records) {
+        val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published, aggregate,
+            lines, used, revision);
+        if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return;
+        (offset <- work[offset].next):void
+    };
+    if (!independent_scalar_formal(nodes, names, offset, used, revision, builtin_u64())) return;
+    val next <- work[offset].next;
+    if (next >= used) return;
+    val helper <- work[next].next != no_node();
+    val target <- if (helper) { (work[next].next) } else { next };
     if (target >= used || work[target].next != no_node() ||
-        (helper && !independent_scalar_formal(nodes, names, third, used, revision, builtin_u64()))) return;
+        (helper && (reads_records || !independent_scalar_formal(nodes, names, next, used, revision, builtin_u64())))) return;
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
@@ -2541,12 +2564,13 @@ func prepare_product_writer(nodes:const ExprNodes in N, names:const NameBindings
     ref product = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, product) ||
         product.kind != record_type()) return;
-    if (product.defining_module == 0u64) {
-        if (product.identity >= used || aggregate[product.identity] != CoDBitsAggregate) return
+    val target_storage <- if (product.defining_module == 0u64) {
+        if (product.identity >= used) return;
+        (aggregate[product.identity])
     } else {
-        if (checked_aggregate_storage(contracts, published, product.defining_module, product.identity,
-            record_type()) != CoDBitsAggregate) return
+        checked_aggregate_storage(contracts, published, product.defining_module, product.identity, record_type())
     };
+    if (target_storage != CoDBitsAggregate && (!reads_records || target_storage != CLayoutBitsRecord)) return;
     val marker <- readonly_formal_marker(nodes, names, first, byte_owner, used, revision);
     ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
     if (describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) {
@@ -4623,7 +4647,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             return no_node();
         if ((source_array_reader && source_writer == NoSourceWriter && owner_count >= 2u64 && result_kind == builtin_bool() &&
              next == count + 2u64 && work[parameter].next == no_node()) ||
-            (source_writer == ProductWriter && next == count + 3u64) ||
+            (source_writer == ProductWriter && work[parameter].next == no_node()) ||
             (source_writer == AggregateWriter && next == count + 2u64) ||
             (source_writer == ParserWriter && next == count + owner_count) ||
             (source_writer == RecordInspector && next == count + 5u64)) {

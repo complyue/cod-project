@@ -127,7 +127,7 @@ using "./ExceptionPayload.cod" {
 using "./NativeDeclarations.cod" {
     SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
     inspect_acquired_handle_loan,
-    prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array,
+    prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array, published_record_array_storage,
 };
 using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement } };
 using "./NativeDeclarations.cod" { source_literal_kind, has_prepared_native_loans };
@@ -2896,8 +2896,10 @@ func checked_scalar_predicate_header(contracts:const ModuleInterfaces in I, publ
 
 func checked_product_writer_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> bool where {const owner I} {
-    if (header >= published || published > intrinsic (len)(contracts) || published - header <= 3u64 ||
-        contracts[header].entry_count != 3u64 || contracts[header].source_writer != ProductWriter ||
+    if (header >= published || published > intrinsic (len)(contracts)) return false;
+    val arity <- contracts[header].entry_count;
+    if ((arity != 3u64 && arity != 4u64) || arity >= published - header ||
+        contracts[header].source_writer != ProductWriter ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].result_kind != builtin_void() || contracts[header].type_module != 0u64 ||
@@ -2908,8 +2910,15 @@ func checked_product_writer_header(contracts:const ModuleInterfaces in I, publis
         (contracts[header].array_read_completion != CheckedArrayRead &&
          contracts[header].array_read_completion != ArrayReadMayFailBounds)) return false;
     val bytes <- header + 1u64;
-    val input <- header + 2u64;
-    val product <- header + 3u64;
+    val product <- header + arity;
+    val input <- product - 1u64;
+    if (arity == 4u64) {
+        val records <- bytes + 1u64;
+        if (!checked_readonly_loan_row(contracts[records], array_type(), 0u64)) return false;
+        val storage <- published_record_array_storage(contracts, published, contracts[records].type_module,
+            contracts[records].type_identity);
+        if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return false
+    };
     if (!checked_readonly_loan_row(contracts[bytes], array_type(), 0u64) ||
         !source_scalar_value_row(contracts[input], builtin_u64()) || contracts[input].source_allocates ||
         contracts[input].type_module != 0u64 || contracts[input].type_identity != 0u64 ||
@@ -2920,11 +2929,12 @@ func checked_product_writer_header(contracts:const ModuleInterfaces in I, publis
         contracts[product].target_readonly != 0u8 || contracts[product].native_reception != 0u8 ||
         contracts[product].native_passes_owner != 0u8 || contracts[product].source_allocates) return false;
     val array <- find_interface(contracts, published, contracts[bytes].type_module, contracts[bytes].type_identity);
+    val target_storage <- checked_aggregate_storage(contracts, published, contracts[product].type_module,
+        contracts[product].type_identity, record_type());
     return array < published && contracts[array].interface_kind == array_type() &&
         contracts[array].entry_count == 0u64 && contracts[array].array_index_kind == builtin_u64() &&
         contracts[array].element_kind == builtin_u8() &&
-        checked_aggregate_storage(contracts, published, contracts[product].type_module,
-            contracts[product].type_identity, record_type()) == CoDBitsAggregate
+        (target_storage == CoDBitsAggregate || (arity == 4u64 && target_storage == CLayoutBitsRecord))
 }
 
 func checked_record_inspector_header(contracts:const ModuleInterfaces in I, published:UInt64,
@@ -3319,7 +3329,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             selected[site].dependency_module != selected[site].origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
             !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header + 3u64, interface_count))
+            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header + contracts[header].entry_count, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
@@ -3328,8 +3338,12 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        supplied[at] <- make ImportedProductWriter {};
-        if (required == no_node()) { (required <- at):void };
+        if (contracts[header].entry_count == 3u64) {
+            supplied[at] <- make ImportedProductWriter {};
+            if (required == no_node()) { (required <- at):void }
+        } else {
+            (supplied[at] <- make CheckedWriterCall {}):void
+        };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == AggregateWriter) {

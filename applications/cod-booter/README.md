@@ -331,7 +331,9 @@ Both source commands also check a lexically allocated named array with `UInt64` 
 
 For a same-revision native function with readonly array loans and no callback or declared failure, both source commands check the ordered operands against the selected signature. The supported operands include handles, by-value scalars, existing formal views and direct lexical arrays of checked C-layout rows. Each array loan keeps its nominal type, prepared backing and actual owner. Repeated roles require the same actual owner. A failed operand prevents the call. The supported calls borrow synchronously.
 
-The full CLI source commands first stop at the imported `locate_source_position` call in `NativeDiagnostics.cod:69:5`. The ordered-report reduction supplies positions directly and passes the prepared rows to the original native reporting function. The symbol-report reduction checks the native call with its four readonly byte-array loans.
+In a demanded body, both source commands consume the completed `SourceAccess.locate_source_position` contract through a direct import, including a rename. The readonly byte and line arrays share one actual source owner. The independent offset and initialized writable position follow them in written order. The defining visit checks the recursive line search before publishing possible bounds failure and fatal arithmetic separately. A failed operand prevents entry and leaves the position untouched.
+
+The full CLI source commands first stop at the native `write_diagnostic` call in `NativeDiagnostics.cod:71:28`. The ordered-report reduction with the original position writer still stops at its protected call because that profile cannot represent the writer’s possible fatal arithmetic. The direct-position reduction passes its rows to the original native reporting function. The symbol-report reduction checks the native call with its four readonly byte-array loans.
 
 ### Imported array length families
 
