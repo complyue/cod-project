@@ -114,10 +114,10 @@ using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAsse
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type };
 using "./CaseSchemas.cod" {
-    ConstructorCaseFacts, prepare_imported_product_loan,
+    ConstructorCaseFacts, prepare_imported_product_loan, published_array_field_record,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, InlineProductField, LocalSumConstruction, SumValueResult,
+        InlineProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField, LocalSumConstruction, SumValueResult,
         IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
@@ -596,6 +596,15 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                     binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
                     !owner_parameter(nodes, owner_site)) return unproved_owner();
                 set_fact(facts, formal, source_sum_target(), borrowed_ref(), owner_site, type.identity, 0u8);
+                facts[formal].identity_module <- type.defining_module;
+                facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
+                return 0u8
+            };
+            ArrayFieldRecordFormal { val bound <- definition; val owner_site <-; val type <- value_type; val readonly <-; } -> {
+                if (bound != definition || form != ReferenceFormal || binding.readonly != readonly ||
+                    binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
+                    !owner_parameter(nodes, owner_site)) return unproved_owner();
+                set_fact(facts, formal, source_product_loan(), borrowed_ref(), owner_site, type.identity, 0u8);
                 facts[formal].identity_module <- type.defining_module;
                 facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
                 return 0u8
@@ -1596,11 +1605,9 @@ func bound_array_slot(nodes:const ExprNodes in N, names:const NameBindings in B,
     return no_node()
 }
 
-func check_array_rebind(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, facts:OperandFacts in F, at:UInt64, destination:UInt64, input:UInt64,
-    used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B, const owner L, owner F} {
-    if (bound_array_slot(nodes, names, links, facts, destination, at, used, revision) == no_node())
-        return expected_writable_place();
+func check_array_rebind(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    at:UInt64, destination:UInt64, input:UInt64, target_readonly:bool)
+    -> UInt8 where {const owner N, owner F} {
     if (facts[input].kind == never_result()) { set_result(facts, at, never_result()); return 0u8 };
     if (facts[input].kind != source_array_loan() || facts[input].reception != borrowed_ref() ||
         facts[input].array_sum != facts[destination].array_sum ||
@@ -1608,8 +1615,7 @@ func check_array_rebind(nodes:const ExprNodes in N, names:const NameBindings in 
         facts[input].identity_module != facts[destination].identity_module) return wrong_operand_type();
     if (facts[input].owner != facts[destination].owner)
         return owner_conflict(nodes, facts[input].owner, facts[destination].owner);
-    if (facts[input].target_readonly != 0u8 && facts[destination].target_readonly == 0u8)
-        return expected_writable_place();
+    if (facts[input].target_readonly != 0u8 && !target_readonly) return expected_writable_place();
     # The checked slot invariant survives a rebind. This result describes
     # the selected array, with no reusable slot or exact-target refinement.
     copy_fact(facts, at, destination);
@@ -1842,7 +1848,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L,
     facts:OperandFacts in F, owners:CallOwners in O, cases:const ConstructorCaseFacts in C, argument:UInt64, formal:UInt64,
     invocation:UInt64, used:UInt64, revision:UInt64, allow_owned_loan:bool,
-    definition:UInt64, first:UInt64, source_only:bool, scoped_product_call:bool) -> UInt8
+    definition:UInt64, first:UInt64, source_only:bool, scoped_product_call:bool, slot_call:bool) -> UInt8
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O, const owner C} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
@@ -1866,6 +1872,18 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, false, false))
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
+    };
+    if (slot_call && formal < intrinsic (len)(cases) &&
+        (case cases[formal] of { ArrayFieldRecordFormal -> true; _ -> false })) {
+        if (operand >= used || checked_ref_argument(nodes, argument) || names[operand].kind != formal_binding() ||
+            facts[operand].kind != source_product_loan() || facts[operand].reception != borrowed_ref() ||
+            facts[operand].target_presence != present_target() || facts[operand].identity != facts[formal].identity ||
+            facts[operand].identity_module != facts[formal].identity_module) return wrong_operand_type();
+        if (facts[operand].target_readonly != 0u8 && facts[formal].target_readonly == 0u8)
+            return expected_writable_place();
+        copy_fact(facts, argument, operand);
+        facts[argument].target_readonly <- facts[formal].target_readonly;
+        return record_owner_argument(nodes, facts, owners, formal, facts[operand].owner, argument, invocation)
     };
     if (operand < used && facts[operand].kind == source_product_loan()) {
         val forwarded <- names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
@@ -2516,7 +2534,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         };
         if (can_enter) {
             diagnostic <- check_argument(nodes, names, selected, links, facts, owners, cases, argument,
-                formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only, checks_scoped_call);
+                formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only,
+                checks_scoped_call, checks_slot_call);
             if (diagnostic != 0u8) return diagnostic;
             loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
             loans_scoped_aggregate <- loans_scoped_aggregate || facts[argument].loans_scoped_aggregate;
@@ -3538,8 +3557,10 @@ func checked_array_slot_call_past(contracts:const ModuleInterfaces in I, publish
                         if (!has_nominal_identity(contracts[row])) return no_node()
                     } else {
                         if (kind == record_type()) {
-                            if (!checked_readonly_loan_row(contracts[row], kind, role) ||
-                                !published_bits_record(contracts, published, row)) return no_node()
+                            if (!published_array_field_record(contracts, published,
+                                    contracts[row].type_module, contracts[row].type_identity) &&
+                                (!checked_readonly_loan_row(contracts[row], kind, role) ||
+                                 !published_bits_record(contracts, published, row))) return no_node()
                         } else {
                             if (kind != builtin_u64() && kind != builtin_u8() && kind != builtin_bool())
                                 return no_node()
@@ -3978,9 +3999,10 @@ func interface_scalar(kind:UInt8) -> UInt8 {
 }
 
 func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWork in L,
-    facts:const OperandFacts in F, contracts:ModuleInterfaces in I, header:UInt64, module:UInt64,
+    facts:const OperandFacts in F, cases:const ConstructorCaseFacts in C,
+    contracts:ModuleInterfaces in I, header:UInt64, module:UInt64,
     definition:UInt64, first:UInt64, used:UInt64, revision:UInt64, owner_count:UInt64 in R) -> UInt64
-    where {const owner N, const owner L, const owner F, owner I, owner R} {
+    where {const owner N, const owner L, const owner F, const owner C, owner I, owner R} {
     owner_count <- 0u64;
     ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     val formal <- first;
@@ -4020,8 +4042,10 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
                         (kind <- array_type()):void
                     } else {
                         if (loan == source_product_loan() || loan == product_kind()) {
-                            if (facts[formal].target_readonly == 0u8 ||
-                                owner_constraint_syntax(nodes, facts[formal].owner) != ReadonlyOwnerConstraint)
+                            if (!(formal < intrinsic (len)(cases) &&
+                                  (case cases[formal] of { ArrayFieldRecordFormal -> true; _ -> false })) &&
+                                (facts[formal].target_readonly == 0u8 ||
+                                 owner_constraint_syntax(nodes, facts[formal].owner) != ReadonlyOwnerConstraint))
                                 return no_node();
                             (kind <- record_type()):void
                         } else {
@@ -4058,9 +4082,10 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
 
 export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
-    exports:ModuleExports in E, export_count:UInt64, contracts:ModuleInterfaces in I,
+    cases:const ConstructorCaseFacts in C, exports:ModuleExports in E, export_count:UInt64,
+    contracts:ModuleInterfaces in I,
     module:UInt64, start:UInt64, used:UInt64, revision:UInt64, report:OperandCheckResult in R) -> UInt64
-    where {const owner N, const owner B, const owner L, const owner F, const owner V, owner E, owner I, owner R} {
+    where {const owner N, const owner B, const owner L, const owner F, const owner V, const owner C, owner E, owner I, owner R} {
     if (used > intrinsic (len)(views) || export_count > intrinsic (len)(exports) ||
         start > intrinsic (len)(contracts) || module == 0u64 || module == no_node()) return no_node();
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -4089,7 +4114,7 @@ export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const
                             operand_problem(report, definition, unsupported_imported_call());
                             return no_node()
                         };
-                        past <- stage_array_slot_parameters(nodes, links, facts, contracts, count,
+                        past <- stage_array_slot_parameters(nodes, links, facts, cases, contracts, count,
                             module, definition, first, used, revision, owner_count);
                         if (past == no_node()) {
                             operand_problem(report, definition, unsupported_imported_call());
@@ -5165,7 +5190,7 @@ func check_group(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64,
     val kind <- facts[inner].kind;
     if (kind == product_kind()) return unsupported_product_layout();
     if (kind == void_result() || kind == never_result() || kind == exception_type() || immutable_text_kind(kind) ||
-        facts[inner].reception == nullable_ptr()) {
+        has_slot_array(facts, inner) || facts[inner].reception == nullable_ptr()) {
         copy_fact(facts, at, inner);
         return 0u8;
     };
@@ -5269,6 +5294,7 @@ func check_range_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
 
 func check_explicit_discard(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UInt64, operand:UInt64) -> UInt8
     where {const owner N, owner F} {
+    if (has_slot_array(facts, operand)) { only_void(facts, at); return 0u8 };
     val kind <- result_kind(nodes, facts, operand, false);
     if (kind == 0u8) return unproved_operand();
     set_result(facts, at, if (kind == never_result()) { kind } else { void_result() });
@@ -6048,6 +6074,21 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 return check_case_projection(nodes, names, facts, at, used, revision,
                     receiver, field, receipt, arm, record, sum)
             };
+            StoredArrayField {
+                val receiver <-; val record <-; val array_module <-; val array_identity <-; val target_readonly <-;
+            } -> {
+                if (!source_only || receiver >= at) return unsupported_product_layout();
+                if (facts[receiver].kind == never_result()) { copy_fact(facts, at, receiver); return 0u8 };
+                if (facts[receiver].kind != source_product_loan() || facts[receiver].reception != borrowed_ref() ||
+                    facts[receiver].target_presence != present_target() || facts[receiver].owner == no_node() ||
+                    facts[receiver].identity != record.identity ||
+                    facts[receiver].identity_module != record.defining_module) return unproved_owner();
+                set_fact(facts, at, source_array_loan(), borrowed_ref(), facts[receiver].owner, array_identity, 0u8);
+                facts[at].identity_module <- array_module;
+                facts[at].array_scalar <- scalar_u8();
+                facts[at].target_readonly <- if (target_readonly) { 1u8 } else { (facts[receiver].target_readonly) };
+                return 0u8
+            };
             InlineProductField {
                 val receiver <- receiver; val field <- field; val ordinal <- ordinal;
                 val record <- record; val readonly <-; val schema <- value_type;
@@ -6230,9 +6271,26 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
     if (mode == PlaceRebind) {
         val destination <- assignment.destination;
+        if (source_only && destination < intrinsic (len)(cases)) {
+            case cases[destination] of {
+                StoredArrayField { val receiver <-; val fixed <-; val target_readonly <-; } -> {
+                    if (facts[destination].kind == never_result()) {
+                        copy_fact(facts, at, destination);
+                        return 0u8
+                    };
+                    if (fixed || facts[receiver].target_readonly != 0u8) return expected_writable_place();
+                    return check_array_rebind(nodes, facts, at, destination, assignment.input, target_readonly)
+                };
+                _ -> {}
+            }
+        };
         if (source_only && facts[destination].kind == source_array_loan() &&
-            (facts[destination].array_slot != no_node() || has_slot_array(facts, destination)))
-            return check_array_rebind(nodes, names, links, facts, at, destination, assignment.input, used, revision);
+            (facts[destination].array_slot != no_node() || has_slot_array(facts, destination))) {
+            if (bound_array_slot(nodes, names, links, facts, destination, at, used, revision) == no_node())
+                return expected_writable_place();
+            return check_array_rebind(nodes, facts, at, destination, assignment.input,
+                facts[destination].target_readonly != 0u8)
+        };
         if (scalar_kind(facts[destination].kind))
             return check_local_rebind(nodes, names, facts, at, destination, assignment.input, used, revision);
         return check_text_installation(nodes, facts, at, destination, assignment.input)

@@ -1,12 +1,12 @@
 using "./NativeDeclarations.cod" {
-    SuppliedViews, prepared_writable_product_formal,
+    SuppliedViews, prepared_writable_product_formal, describe_byte_array, ArraySlotType,
     SuppliedView { PreparedArrayConstruction }, ArraySlotElement { ProductArrayElement, SumArrayElement }
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
 using "./ParserStorage.cod" {
     ExprNodes, no_node, checked_ref_argument, block_tail, ungrouped, binds_local_storage, syntax_first, syntax_past, DeclarationSites, inspect_declaration,
-    SumArmSites, inspect_sum_arm, first_sequence_entry, FormalSites, inspect_formal,
+    SumArmSites, inspect_sum_arm, first_sequence_entry, FormalSites, inspect_formal, formal_binding_is_fixed,
     BindingSites, inspect_binding, DeclarationSyntax { ArrayTypeDeclaration, NativeRecord, NominalRecord, NominalSum },
     SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
     FormalSyntax { OrdinaryFormal }, BindingSyntax { BareBinding, TypedBinding, InvalidBindingSyntax },
@@ -27,7 +27,7 @@ using "./ParserStorage.cod" {
     CompletionSyntax { ReturnCompletion }
 };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
+    NameBindings, NameWork, builtin_u8, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
     owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable, local_sum_value_type
 };
 using "./ModuleExports.cod" { SelectedExports, array_export, record_export, callable_export, ordinary_callable_shape };
@@ -35,7 +35,7 @@ using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describ
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
-    AggregateStorage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord },
+    AggregateStorage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
     SumInterfacePayload { ConstructorField }, ArrayReadCompletion { NoArrayRead }
 };
 
@@ -50,6 +50,14 @@ export data ConstructorCaseFact =
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
     InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; demand_on_use:bool; } |
+    ArrayFieldRecordFormal {
+        definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool;
+        field:UInt64; array_module:UInt64; array_identity:UInt64; fixed:bool; target_readonly:bool;
+    } |
+    StoredArrayField {
+        receiver:UInt64; record:DeclaredType; array_module:UInt64; array_identity:UInt64;
+        fixed:bool; target_readonly:bool;
+    } |
     IndexedFieldDestination {} |
     InlineProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; readonly:bool; } |
     CaseConstructor { case_site:UInt64; defining_module:UInt64; declaration:UInt64; ordinal:UInt64; representative:UInt64; } |
@@ -246,6 +254,67 @@ func remember_inline_product_formal(facts:ConstructorCaseFacts in F, formal:UInt
     return
 }
 
+# This profile admits a product whose only field is a non-null named byte-array reference.
+# The record owns the field slot; the array loan uses the record's substituted owner.
+export func published_array_field_record(interfaces:const ModuleInterfaces in I, published:UInt64,
+    module:UInt64, declaration:UInt64) -> bool where {const owner I} {
+    val record <- find_interface(interfaces, published, module, declaration);
+    if (record == no_node() || interfaces[record].interface_kind != record_type() ||
+        interfaces[record].aggregate_storage != NonBitsAggregate || interfaces[record].entry_count != 1u64)
+        return false;
+    val field <- record + 1u64;
+    if (interfaces[field].field_mode != ReferenceFormal || interfaces[field].value_kind != array_type() ||
+        interfaces[field].target_readonly > 1u8) return false;
+    val array <- find_interface(interfaces, published, interfaces[field].type_module, interfaces[field].type_identity);
+    return array != no_node() && interfaces[array].interface_kind == array_type() &&
+        interfaces[array].entry_count == 0u64 && interfaces[array].array_index_kind == builtin_u64() &&
+        interfaces[array].element_kind == builtin_u8()
+}
+
+func remember_array_field_record_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, formal:UInt64, definition:UInt64,
+    owner_site:UInt64, readonly:bool, type:const DeclaredType in T, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner I, const owner A, owner F, const owner T} {
+    if (type.kind != record_type() || owner_constraint_syntax(nodes, owner_site) == NotOwnerConstraint) return false;
+    if (type.defining_module != 0u64) {
+        if (!published_array_field_record(interfaces, published, type.defining_module, type.identity)) return false;
+        facts[formal] <- make ArrayFieldRecordFormal {
+            definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly;
+            field <- no_node(); array_module <- 0u64; array_identity <- no_node();
+            fixed <- true; target_readonly <- true
+        };
+        return true
+    };
+    if (type.identity >= used || aggregate[type.identity] != NonBitsAggregate) return false;
+    ref record = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    ref field = make UInt64 { no_node() };
+    ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node();
+        owner_name <- no_node(); readonly <- false
+    };
+    ref array = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+    };
+    if (inspect_declaration(nodes, revision, used, type.identity, record) != NominalRecord ||
+        !first_sequence_entry(nodes, revision, used, record.entries, FormalSequence, field) ||
+        field != record.entries || inspect_formal(nodes, revision, used, field, syntax) != OrdinaryFormal ||
+        syntax.mode != ReferenceFormal || inspect_binding(nodes, revision, used, syntax.binding, binding) != TypedBinding ||
+        binding.owner_name != no_node() ||
+        !describe_byte_array(nodes, names, selected, interfaces, published, binding.target_type, used, revision, array))
+        return false;
+    facts[formal] <- make ArrayFieldRecordFormal {
+        definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly;
+        field <- field; array_module <- array.type_module; array_identity <- array.type_identity;
+        fixed <- formal_binding_is_fixed(nodes, revision, used, field); target_readonly <- binding.readonly
+    };
+    return true
+}
+
 func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
     aggregate:const AggregateFacts in A, work:NameWork in W, facts:ConstructorCaseFacts in F,
@@ -279,10 +348,13 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
             binding.name < used && binding.owner_name < used &&
             names[binding.name].kind == formal_binding() &&
             names[binding.name].declaration == formal && names[binding.owner_name].kind == owner_binding() &&
-            describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) &&
-            case_bits_type(type, aggregate, interfaces, published)) {
+            describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type)) {
             owner_site <- names[binding.owner_name].declaration;
-            if (owner_site < used) {
+            if (owner_site < used && remember_array_field_record_formal(nodes, names, selected, interfaces,
+                published, aggregate, facts, formal, definition, owner_site, binding.readonly, type, used, revision)) {
+                if (first == no_node()) { (first <- formal):void }
+            } else {};
+            if (owner_site < used && case_bits_type(type, aggregate, interfaces, published)) {
                 if (type.kind == sum_type()) {
                     remember_sum_formal(facts, formal, definition, owner_site, binding.readonly, type);
                     (work[definition].sum_loan_formals <- true):void
@@ -1080,6 +1152,25 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                           names[selection.receiver].kind == formal_binding()) {
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
+            if (origin < site) {
+                case facts[origin] of {
+                    ArrayFieldRecordFormal {
+                        val field <-; val record <- value_type; val array_module <-; val array_identity <-;
+                        val fixed <-; val target_readonly <-;
+                    } -> {
+                        ordinal <- no_node();
+                        if (field != no_node() &&
+                            locate_named_field(source, nodes, work, field, selection.field, revision, used, ordinal) == field &&
+                            ordinal == 0u64) {
+                            (facts[site] <- make StoredArrayField {
+                                receiver <- selection.receiver; record <- record; array_module <- array_module;
+                                array_identity <- array_identity; fixed <- fixed; target_readonly <- target_readonly
+                            }):void
+                        }
+                    };
+                    _ -> {}
+                }
+            };
             loan.expression <- no_node();
             access <- (NoLexicalArray:LexicalArrayAccess);
             described <- origin < site && describe_inline_product(facts, origin, type);
@@ -1803,8 +1894,9 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
             inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
             binding.owner_name < used && binding.target_type < used &&
             (!binding.readonly || !is_function(nodes, names[at].scope)) &&
-            names[binding.target_type].kind == ordinary_selection() &&
-            selected[names[binding.target_type].declaration].kind == record_export()) return true;
+            (names[binding.target_type].kind == record_type() ||
+                (names[binding.target_type].kind == ordinary_selection() &&
+                 selected[names[binding.target_type].declaration].kind == record_export()))) return true;
         if (inspect_local_binding(nodes, revision, used, at, local) &&
             ((local.mode == ReferenceLocal &&
               inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&

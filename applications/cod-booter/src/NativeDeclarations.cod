@@ -1460,7 +1460,7 @@ func check_here_receiver(nodes:const ExprNodes in N, names:const NameBindings in
     return true;
 }
 
-data ArraySlotType {
+export data ArraySlotType {
     owner_site:UInt64;
     type_module:UInt64;
     type_identity:UInt64;
@@ -1571,7 +1571,7 @@ func describe_local_u64_array_element(nodes:const ExprNodes in N, names:const Na
         describe_type(nodes, names, selected, schema.value_type, 0u64, revision, used, element)
 }
 
-func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in B,
+export func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     marker:UInt64, used:UInt64, revision:UInt64, proof:ArraySlotType in F) -> bool
     where {const owner N, const owner B, const owner E, const owner C, owner F} {

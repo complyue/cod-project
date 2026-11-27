@@ -1149,7 +1149,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         return Rejected
     };
     if (interfaces != no_node() && array_slot_work != no_node()) {
-        (interfaces <- append_array_slot_interfaces(nodes, names, work, facts, views, staged, count,
+        (interfaces <- append_array_slot_interfaces(nodes, names, work, facts, views, cases, staged, count,
             staged_interfaces, publication.module_identity, interfaces, used, revision, operands)):void
     };
     if (interfaces != no_node() && (native || declared != no_node())) {
