@@ -2015,11 +2015,14 @@ class LLVMEmission {
   llvm::Value *assign_prepared(const Expression &expr, const std::vector<llvm::Value *> &arguments) {
     auto *destination = view_address(arguments[0]);
     if (expr.kind == Expression::Kind::transfer) {
-      assign_place(destination, arguments[1], expr);
+      const auto &type = checked_.at(&expr).operand_type;
+      if (inline_aggregate_type(type))
+        b_.CreateCall(bits_transfer(type), {destination, view_address(arguments[1])});
+      else assign_place(destination, arguments[1], expr);
       return destination;
     }
     auto *target = view_address(arguments[1]);
-    if (checked_.at(&expr).regional_product)
+    if (checked_.at(&expr).regional_storage)
       b_.CreateStore(regional_locator(selected_owner(expr), target), destination);
     else b_.CreateStore(target, destination);
     return target;
@@ -2810,7 +2813,10 @@ class LLVMEmission {
         const auto arguments = prepare_arguments(expr);
         if (!reachable()) return nullptr;
         auto *address = assign_prepared(expr, arguments);
-        if (expr.kind == K::transfer) return read ? load_place(address, expr) : address;
+        if (expr.kind == K::transfer) {
+          if (!read) return address;
+          return discard && inline_aggregate_type(fact.type) ? empty_scalar() : load_place(address, expr);
+        }
         return !read ? address : discard ? empty_scalar() : load_place(checked_address(address, expr, expr.at), expr);
       };
       return assignment(expr.kind == K::transfer && (fact.callee || fact.arguments.front().binding_slot));
@@ -2920,12 +2926,12 @@ class LLVMEmission {
         address = checked_address(address, parent, expr.at);
         const auto schema = fact.operand_type.identity;
         const auto number = *fact.product_field;
-        auto *layout = fact.regional_product ? regional_product_layout(schema) : product_layout(schema);
+        auto *layout = fact.regional_storage ? regional_product_layout(schema) : product_layout(schema);
         auto *slot = b_.CreateStructGEP(layout, address, number);
         const auto &description = program_->schemas[schema].fields[number];
         llvm::Value *field = slot;
         if (projection != Projection::slot && description.stores_target()) {
-          if (fact.regional_product) {
+          if (fact.regional_storage) {
             auto *owner = selected_owner(expr);
             auto *offset = b_.CreateLoad(b_.getInt64Ty(), slot);
             auto *target_layout = description.type.kind == Type::product
@@ -2978,7 +2984,9 @@ class LLVMEmission {
       }
       if (fact.sum_constructor) {
         const auto constructor = *fact.sum_constructor;
-        auto *address = storage_.at(*fact.place);
+        const auto &layout = sum_layout(constructor.sum);
+        auto *address = fact.regional_storage ? reserve_regional_row(selected_owner(expr), layout.storage, expr.at)
+                                              : storage_.at(*fact.place);
         const auto items = expr.initializer_items();
         for (size_t i = 0; i < fact.sum_initializers.size(); ++i) {
           const auto &item = *items[i];
@@ -2992,7 +3000,6 @@ class LLVMEmission {
           if (aggregate) b_.CreateCall(bits_transfer(type), {field, checked_address(value, input, input.at)});
           else assign_place(field, convert_result(item, input, value), item, &CheckedOperation::operand_type);
         }
-        const auto &layout = sum_layout(constructor.sum);
         const auto tag = layout.alternatives.at(constructor.alternative).tag;
         b_.CreateStore(integer(tag), b_.CreateStructGEP(layout.storage, address, 0));
         return discard ? empty_scalar() : address;
@@ -3025,7 +3032,7 @@ class LLVMEmission {
         b_.SetInsertPoint(ready);
         return discard ? empty_scalar() : value;
       }
-      if (fact.regional_product) {
+      if (fact.regional_storage) {
         auto *owner = selected_owner(expr);
         auto *address = reserve_regional_row(owner, regional_product_layout(fact.operand_type.identity), expr.at);
         emit_product_initializers(expr, address, owner);

@@ -128,8 +128,8 @@ struct CheckedOperation {
   std::optional<size_t> exception_owner;
   bool owns_exception_result = false;
   std::optional<size_t> region_holder;
-  // Interpret the selected owner's word as a region controller for this product.
-  bool regional_product = false;
+  // Interpret the selected owner's word as a region controller for this operation.
+  bool regional_storage = false;
   std::optional<size_t> regional_sum_holder;
   bool allocates_scalar_field = false;
   std::vector<size_t> region_initializers;

@@ -532,6 +532,11 @@ class BodyExtraction {
       return !const_input_owner(owner);
     }
 
+    void require_regional_allocation(size_t owner, const Location &at) const {
+      expect(product_placement(owner) == ProductPlacement::region && product_allocation_permitted(owner),
+             at, "seed needs a writable regional owner for placed construction");
+    }
+
     std::optional<Allocator> allocator_for(size_t owner) const {
       if (!owner) return Allocator{Allocator::lexical};
       if (const auto place = region_controller(owner)) {
@@ -1593,10 +1598,9 @@ class BodyExtraction {
              expr.initializer_block && resolve_annotation(*expr.annotation, expr.at) == type,
              expr.at, "seed needs a complete braced product initializer");
       const auto owner = named_owner(expr.owner_name, expr.at);
-      const bool regional = product_placement(owner) == ProductPlacement::region;
       if (owner) {
-        expect(local_storage && regional && product_allocation_permitted(owner),
-               expr.at, "seed needs a writable regional owner for placed product construction");
+        expect(local_storage, expr.at, "seed needs an inline initializer for a nested product");
+        require_regional_allocation(owner, expr.at);
       } else {
         expect(declarations().bits_payload(type) ||
                (local_storage && !in_iteration_ && extraction_.reference_product(type)),
@@ -1608,8 +1612,8 @@ class BodyExtraction {
              "seed needs an initializer for each product field");
       CheckedOperation op;
       op.type = op.operand_type = type;
-      op.regional_product = regional;
-      if (!regional && local_storage) op.place = storage("$product", type, 0, false, false);
+      op.regional_storage = owner != 0;
+      if (!owner && local_storage) op.place = storage("$product", type, 0, false, false);
       op.view = true;
       op.owners.insert(owner);
       for (size_t i = 0; i < order.size(); ++i) {
@@ -1685,11 +1689,13 @@ class BodyExtraction {
         const auto selected = found->second;
         const auto &sum = declarations().sums.at(selected.sum);
         const auto &arm = sum.alternatives.at(selected.alternative);
-        expect(expr.initializer_block && expr.owner_name.empty() && !sum.regional_only &&
-               arm.initializers.empty() && !family(spelling),
-               expr.at, "seed needs an inline sum initializer");
+        expect(expr.initializer_block && !sum.regional_only && arm.initializers.empty() && !family(spelling),
+               expr.at, "seed needs a complete braced bits sum initializer");
+        const auto owner = named_owner(expr.owner_name, expr.at);
+        if (owner) require_regional_allocation(owner, expr.at);
         op.type = Type{Type::sum, sum.source->name, selected.sum};
-        op.place = storage("$sum", op.type, 0, false, false);
+        op.regional_storage = owner != 0;
+        if (!owner) op.place = storage("$sum", op.type, 0, false, false);
         op.sum_constructor = selected;
         std::set<size_t> supplied;
         for (const auto &item : expr.initializer_items()) {
@@ -1707,7 +1713,7 @@ class BodyExtraction {
         }
         expect(supplied.size() == arm.fields.size(), expr.at, "sum construction has a field without an initializer");
         op.view = true;
-        op.owners.insert(0);
+        op.owners.insert(owner);
         return op;
       }
       const auto type = resolve_annotation(*expr.annotation, expr.at);
@@ -1767,7 +1773,7 @@ class BodyExtraction {
               .fields.at(*destination.product_field);
           expect(field.storage != PlaceKind::value && !destination.fixed_binding,
                  expr.at, "seed needs a writable stored reference field slot");
-          op.regional_product = destination.regional_product;
+          op.regional_storage = destination.regional_storage;
         } else check_slot(target, expr.at);
         expect(admits_reference(source, target.type, single_owner(target, expr.at),
                                 target.targets.contains(null_target), target.read_only, expr.at),
@@ -1779,8 +1785,12 @@ class BodyExtraction {
       }
       expect(target.view && !target.read_only && (target.indexed_target || target.binding),
              expr.at, "bits transfer needs a writable place");
-      takes_value(source, target.type, expr.at);
-      op.arguments = {{ArgumentMode::borrowed_ptr, target.type}, {ArgumentMode::value, target.type}};
+      const bool aggregate = inline_aggregate_type(target.type);
+      if (aggregate) takes_payload(source, target.type, expr.at);
+      else takes_value(source, target.type, expr.at);
+      const auto mode = aggregate ? ArgumentMode::borrowed_read : ArgumentMode::value;
+      op.arguments = {{ArgumentMode::borrowed_ptr, target.type}, {mode, target.type}};
+      op.read_only = true;
       return op;
     }
 
@@ -2006,7 +2016,7 @@ class BodyExtraction {
         const auto placement = product_placement(single_owner(base, expr.at));
         expect(placement.has_value() && extraction_.reference_product(type) && !member.direct_text_place(),
                expr.at, "seed needs an established placement for this reference-bearing product field");
-        op.regional_product = *placement == ProductPlacement::region;
+        op.regional_storage = *placement == ProductPlacement::region;
       }
       op.view = op.indexed_target = true;
       op.read_only = base.read_only || (member.stores_target() ? member.readonly_target() : readonly_field(member));

@@ -974,8 +974,8 @@ class ModuleBinder {
         storage == PlaceKind::value && type == Type::string;
     if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
       implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
-    if (type.kind == Type::sum && storage != PlaceKind::value)
-      implementation_gap(field.at, "stored sum reference fields");
+    if (type.kind == Type::sum && storage != PlaceKind::value && !program_.bits_payload(type))
+      implementation_gap(field.at, "stored references to a reference-bearing sum");
     schema.has_enum_storage |= type.kind == Type::enumeration;
     schema.bits &= storage == PlaceKind::value && !text_place;
     schema.fields.push_back({&field, std::move(type), storage});
