@@ -110,6 +110,8 @@ Build the initial booter with statically linked C providers generated from resol
 
 **Group related operands that share an owner.** [`bind_graph_module`](src/ModuleGraph.cod) receives its syntax, name, publication and checking tables through one `ModuleBindingWorkspace` under `W`. Its fixed reference fields select the existing tables. The nodes and object prefixes retain readonly target access. The synchronous source loan captures one fixed workspace reference, while its source views, diagnostic destination, catalog and graph storage keep their own owner contracts. [Reference binding and bits transfer](../../design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer)
 
+The three [compiler commands](src/ObjectCompiler.cod) lend one `GraphProgress` product from their graph region to the shared traversal. The traversal forwards its selected fields to the graph checker and reads the resulting counts from the same storage.
+
 ### Bootstrap executable and entry names
 
 The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)

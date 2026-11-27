@@ -47,7 +47,7 @@ using "./CompilerStatus.cod" CompilerStatus {
 using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs, DefaultMemberRange };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 
-region GraphRoot {
+data GraphProgress {
     used:UInt64;
     key_used:UInt64;
     next_revision:UInt64;
@@ -62,6 +62,10 @@ region GraphRoot {
     package_ready:bool;
     package_rows:UInt64;
     package_bytes:UInt64;
+}
+
+region GraphRoot {
+    progress:GraphProgress;
 }
 
 proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows in G,
@@ -132,10 +136,12 @@ proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spel
 func fresh_graph() -> own region :GraphRoot {
     const val graph_budget <- 64u64 * 1024u64 * 1024u64;
     return make region GraphRoot(graph_budget -> capacity) {
-        used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
-        export_used <- 0u64; default_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
-        command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
-        package_ready <- false; package_rows <- 0u64; package_bytes <- 0u64;
+        progress <- make GraphProgress {
+            used <- 0u64; key_used <- 0u64; next_revision <- 1u64;
+            export_used <- 0u64; default_used <- 0u64; interface_used <- 0u64; spelling_used <- 0u64;
+            command_used <- 0u64; unit_used <- 0u64; literal_used <- 0u64; function_used <- 0u64;
+            package_ready <- false; package_rows <- 0u64; package_bytes <- 0u64;
+        };
     };
 }
 
@@ -146,11 +152,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
                                 functions:UInt64, visit_count:UInt64, interface_count:UInt64) -> CompilerStatus,
                     handle input:Path in A, handle diagnostic:DiagnosticDestination in D, purpose:GraphPurpose,
                     builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in B,
-                    initial_keys:SourceBytes in G, used:UInt64 in G, key_used:UInt64 in G, next_revision:UInt64 in G,
-                    export_used:UInt64 in G, default_used:UInt64 in G, interface_used:UInt64 in G, spelling_used:UInt64 in G,
-                    command_used:UInt64 in G, unit_used:UInt64 in G, literal_used:UInt64 in G,
-                        function_used:UInt64 in G,
-                    package_ready:bool in G, package_rows:UInt64 in G, package_bytes:UInt64 in G)
+                    initial_keys:SourceBytes in G, progress:GraphProgress in G)
     -> CompilerStatus where {const owner A, owner D, const owner B, owner G} {
     ref visits = make Visits(0u64, make Vacant {}) in G;
     ref keys = initial_keys;
@@ -196,16 +198,18 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         limit <- limit; retained <- 0u64; package_input_failure <- no_node()
     }) in G;
     val compiled <- compile_graph(input, diagnostic, purpose, builtin_spellings, builtins, visits, keys,
-                                  used, key_used, next_revision, exports, defaults, interfaces, spellings, commands, units, literals,
-                                  export_used, default_used, interface_used, spelling_used, command_used,
-                                      unit_used,
-                                  literal_used, function_used, package_ready, package_rows,
-                                      package_bytes, run);
+                                  progress.used, progress.key_used, progress.next_revision,
+                                  exports, defaults, interfaces, spellings, commands, units, literals,
+                                  progress.export_used, progress.default_used, progress.interface_used, progress.spelling_used,
+                                  progress.command_used, progress.unit_used, progress.literal_used, progress.function_used,
+                                  progress.package_ready, progress.package_rows, progress.package_bytes, run);
     if (compiled != Complete) return compiled;
-    val profile <- complete_graph_profile(diagnostic, visits, keys, used, key_used, interface_used, run);
+    val profile <- complete_graph_profile(diagnostic, visits, keys, progress.used, progress.key_used,
+                                          progress.interface_used, run);
     if (profile != Complete) return profile;
-    return finish(commands, units, literals, spellings, keys, visits, interfaces, command_used, unit_used, literal_used,
-                  spelling_used, key_used, function_used, used, interface_used);
+    return finish(commands, units, literals, spellings, keys, visits, interfaces, progress.command_used, progress.unit_used,
+                  progress.literal_used, progress.spelling_used, progress.key_used, progress.function_used, progress.used,
+                  progress.interface_used);
 }
 
 proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination in D,
@@ -213,12 +217,7 @@ proc check_graph(handle input:Path in A, handle diagnostic:DiagnosticDestination
     where {const owner A, const owner B, owner D} {
     own region graph:GraphRoot <- fresh_graph();
     ref keys = make SourceBytes(0u64, 0u8) in graph;
-    return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
-                          keys, graph.used, graph.key_used, graph.next_revision,
-                          graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
-                          graph.command_used, graph.unit_used, graph.literal_used,
-                              graph.function_used,
-                          graph.package_ready, graph.package_rows, graph.package_bytes)
+    return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, graph.progress)
         (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
          spelling_size, name_size, functions, visit_count, interface_count) => { continue Complete; };
 }
@@ -244,12 +243,7 @@ export proc compile_object(handle input:Path in A, output:const String in A,
     try {
         own region graph:GraphRoot <- fresh_graph();
         ref keys = make SourceBytes(0u64, 0u8) in graph;
-        return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins,
-                              keys, graph.used, graph.key_used, graph.next_revision,
-                              graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
-                              graph.command_used, graph.unit_used, graph.literal_used,
-                                  graph.function_used,
-                              graph.package_ready, graph.package_rows, graph.package_bytes)
+        return traverse_graph(input, diagnostic, NativeObject, builtin_spellings, builtins, keys, graph.progress)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_object(commands, units, literals, spellings, names, command_count, unit_count, literal_count,
@@ -270,12 +264,7 @@ export proc compile_providers(handle input:Path in A, handle directory:Path in P
     try {
         own region graph:GraphRoot <- fresh_graph();
         ref keys = make SourceBytes(0u64, 0u8) in graph;
-        return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins,
-                              keys, graph.used, graph.key_used, graph.next_revision,
-                              graph.export_used, graph.default_used, graph.interface_used, graph.spelling_used,
-                              graph.command_used, graph.unit_used, graph.literal_used,
-                                  graph.function_used,
-                              graph.package_ready, graph.package_rows, graph.package_bytes)
+        return traverse_graph(input, diagnostic, Declarations, builtin_spellings, builtins, keys, graph.progress)
             (commands, units, literals, spellings, names, visits, interfaces, command_count, unit_count, literal_count,
              spelling_size, name_size, functions, visit_count, interface_count) => {
                 continue write_providers(visits, names, spellings, interfaces, visit_count, name_size, spelling_size,
