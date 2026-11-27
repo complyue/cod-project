@@ -2,7 +2,7 @@
 
 ## Design authority
 
-Revision 2, 2026-11-27. The [perfect-match decision](../CHANGELOG.md#h-perfect-numeric-overload-matches-20261127) revises r1’s overload tie example. Standalone literals keep source-ordered defaults. At a call, otherwise tied lossless matches remain ambiguous. [Contextual numeric literals](DesignAuthorityRegistry.md#d-11-literal-defaults) covers typing, defaults and diagnostics. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) covers syntax and formatting. The [project user's decisions](../CHANGELOG.md#h-numeric-literals-and-signs-20261127) add these scopes to the [scalar](ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening) and [operator grouping](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) contracts. Ordinary numbers can be written once while their interpretation stays reproducible from the source and selected vocabulary. P-782–P-785 record the value and dependency edges. The examples below give the acceptance cases. Existing typed arithmetic, nominal identities and checked failures continue. General untyped constant arithmetic and implementation scheduling have separate scope.
+Revision 3, 2026-11-27. The [floating-literal decision](../CHANGELOG.md#h-floating-literal-signature-matching-20261127) makes floating-signature matching independent of precision loss. The [perfect-match decision](../CHANGELOG.md#h-perfect-numeric-overload-matches-20261127) revises r1’s overload tie example. Standalone literals keep source-ordered defaults. At a call, otherwise tied lossless matches remain ambiguous. [Contextual numeric literals](DesignAuthorityRegistry.md#d-11-literal-defaults) covers typing, defaults and diagnostics. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) covers syntax and formatting. The [project user's decisions](../CHANGELOG.md#h-numeric-literals-and-signs-20261127) add these scopes to the [scalar](ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening) and [operator grouping](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) contracts. Ordinary numbers can be written once while their interpretation stays reproducible from the source and selected vocabulary. P-782–P-785 record the value and dependency edges. The examples below give the acceptance cases. Existing typed arithmetic, nominal identities and checked failures continue. General untyped constant arithmetic and implementation scheduling have separate scope.
 
 ## Write the number the program means
 
@@ -25,7 +25,7 @@ val c <- 255 + 1
 
 Read the bindings independently. `a` has type `UInt8` and `b` has type `UInt64`. Both operands of the ordinary checked addition in `c` fit `UInt8`. The expression has type `UInt8` and raises overflow when evaluated. A future enhanced diagnostic should warn that overflow is certain and suggest `255u64 + 1` when 256 is intended. Constant folding must preserve the selected operation and failure. Report an unresolved numeric ambiguity as an error with the competing choices. For a permitted interpretation with material precision risk, explain the source value and the chosen representation.
 
-**Lossless matches during overload selection.** Compare a bare numeral’s mathematical value with each candidate’s independently known numeric formal. Every admissible type that can represent the value losslessly is a perfect match for that literal, regardless of its position or presence in the default list. Ordinary applicability and specificity still apply to the methods and the other arguments. If otherwise equally good methods both match the unresolved literals perfectly, diagnose ambiguity at the call. This comparison never consults the module’s numeric defaults.
+**Integer literals during overload selection.** Compare a bare integer numeral’s mathematical value with each candidate’s independently known numeric formal. Every admissible type that can represent the value losslessly is a perfect match for that literal, regardless of its position or presence in the default list. Ordinary applicability and specificity still apply to the methods and the other arguments. If otherwise equally good methods both match the unresolved literals perfectly, diagnose ambiguity at the call. This comparison never consults the module’s numeric defaults.
 
 ```cod
 func tag(x:Int64)  -> Int64 { 1 }
@@ -55,6 +55,22 @@ choose(1, 2)    # Static error at the call: both methods match perfectly.
 Here both literals fit exactly into each method’s respective parameter types. Removing the directive gives the same ambiguity. The first method uses positions 1 and 4 of the list and the second uses positions 2 and 2. Both are perfect matches. A sum of ranks or a count of first-choice matches would incorrectly pick a body. Both signatures are valid. With `choose(1, 2i64)` only the first method can receive the typed second argument. The call `choose(1u32, 2)` selects the second. A standalone literal still uses the source list in order once other type evidence is exhausted.
 
 **Scope.** The written site owns the numeric policy. An earlier function retains its defaults when called after a later directive or from another module. In a formal default expression `width = 7`, the `7` follows the defining site even when argument preparation runs at the caller. A caller writing `draw(7)` supplies a new literal under its own policy. Where `import` adapts a callable family, normal selection still uses that view, with each literal's source policy intact.
+
+### Floating literals in overloaded calls
+
+For a bare floating literal, every otherwise admissible floating formal matches, whether its format represents the value exactly or rounds it. If multiple methods remain after ordinary signature matching in the eligible dispatch group, report a static ambiguity at the call. Numeric defaults supply no preference between these candidates.
+
+```cod
+func sample(x:Float32) -> Int64 { 32 }
+func sample(x:Float64) -> Int64 { 64 }
+
+default Float32
+sample(0.5)           # Ambiguous: exact in both formats.
+sample(0.1)           # Ambiguous: rounds in both formats.
+sample(16777217.0)    # Ambiguous: exact only in Float64.
+```
+
+Check these calls independently. If only the first method is visible, `sample(0.1)` selects it and the argument rounds to `Float32`. With both methods visible, `val x <- 0.1` under `default Float32` gives the standalone binding a type. A subsequent `sample(x)` selects the exact `Float32` signature under the rules for typed arguments. Rounding and precision diagnostics apply when preparing the chosen type.
 
 ## Group first, then recognize a sign
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Keep floating-point rounding out of overload selection
+
+<a id="h-floating-literal-signature-matching-20261127"></a>
+**H-FLOATING-LITERAL-SIGNATURE-MATCHING-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user specified “浮点literal值是否有损，完全不该影响dispatch签名匹配，匹配上了就是备选，多个备选匹配就reject，同样不涉及default规则”. [D-11-LITERAL-DEFAULTS r3](design/NumericLiterals.md#floating-literals-in-overloaded-calls) rejects an ambiguous call to `Float32` and `Float64` methods whether both, neither or only one represents the literal exactly. The [r2 integer and standalone rules](https://github.com/complyue/cod-project/blob/f6c1c726f4a2ed2131c8baca6a6d3040a7afd3ba/design/NumericLiterals.md#numeric-defaults-in-source-order) and typed-value conversion rules continue. P-782/P-783, registry r1362→1363.
+
 ## 2026-11-27 — Use the written call form to order OO and free overloads
 
 <a id="h-dispatch-by-call-form-20261127"></a>
