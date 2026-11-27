@@ -1,6 +1,6 @@
 # Building a Database Service in CoD — From Indexed DBMR Reads to DML Packets
 
-*Design-stage application guide, draft 2.* Build a facsimile fulfillment service that answers “Which sheets make up edition E42?” and accepts “Reserve one complete set for order 100.” The first question needs a shared catalog. The second changes stock and creates an obligation to one customer. The exercise specifies expected observations for a local interpreter and a future Actor service. [Companion working paper](../papers/DSDS.md)
+*Design-stage application guide, draft 3.* Build a facsimile fulfillment service that answers “Which sheets make up edition E42?” and accepts “Reserve one complete set for order 100.” The first question needs a shared catalog. The second changes stock and creates an obligation to one customer. The exercise specifies expected observations for a local interpreter and a future Actor service. [Companion working paper](../papers/DSDS.md) · [Design authority and scope](../design/DesignAuthorityRegistry.md#d-dbmr-service-research)
 
 ## 1. Publish the catalog that both readers need
 
@@ -21,6 +21,14 @@ Start the local exercise with private writable working storage. The proposed adv
 ### Choose the packages and their maintainers
 
 Keep the edition vocabulary and reservation rule in the domain package. Index maintenance, schema and packet compatibility, multiprocess concurrency control, and crash recovery can come from CoD packages maintained by other teams or a contracted database specialist. For this service, choose a transaction provider whose commit and recovery contract covers stock, reservations and request outcomes together. A specialist can supply and operate that whole component. Record which schema revisions its compatibility tools accept and which failures its durable receipt survives. When replacing or upgrading a provider, use the two-order race and lost-reply exercise below to accept the assembled service.
+
+### Build the stock provider
+
+In the planned package workflow, declare `region type StockDB` and its constructor and reservation methods in CoD. Only that exact nominal type matches the stock operations. The stock database has no CoD roots. A helper that walks the catalog’s named roots can keep working directly on the catalog. [Nominal region types](../design/GraphGrainedMemoryManagement.md#opaque-nominal-region-types)
+
+1. Generate the C header and adapter stubs from the declarations. Keep the handwritten stock provider in a separate C or C++ file that includes the generated header. For a C++ engine, implement the entry points declared with `extern "C"` in the header and translate any C++ exception at that boundary. If opening the journal fails after mapping the stock file, release the mapping and return the declared failure. The caller receives no database owner on that path.
+2. Use the toolchain supplied by `codup`. The package build compiles the generated adapter as C and the engine in its source language, then links both with the CoD program and the target libraries the engine uses. Use `cod` to run the host exercise. Use `cfe` when delivering a saved executable for another supported target. Regenerating the header and stubs leaves the engine source intact. [Native package build plan](../applications/cod-booter/docs/CompilerPipeline.md#codup-toolchain-for-native-packages)
+3. On a successful open, run the two-order race below through the reservation method. Drop the reply after commit and retry the same request. Check the returned receipt, the remaining stock and release of the acquired owner. A successful link checks the calling interface. The race and retry exercise the stock provider’s transaction promises.
 
 ## 3. Run one data manipulation program locally, then send it
 

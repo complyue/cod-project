@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 16 · 2026-11-26 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 17 · 2026-11-27 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r17 [D-20-TARGET-TOOLCHAIN](../../../design/DesignAuthorityRegistry.md#d-20-target-toolchain) records the [project user's first native package toolset](../../../CHANGELOG.md#h-native-package-toolchain-20261127). A package can ship its provider sources alongside CoD and build them for the same target. P-754/P-755 continue the r16 host, cross-build and freestanding contracts. The [mixed-package examples](#codup-toolchain-for-native-packages) specify production acceptance. Package manifest syntax and additional language toolchains have separate scope.
 
 At r16 the [ordinary call selector](#ordinary-overloads-on-an-enum-and-its-backing-type) applies the existing [enum by-value contract](../../../design/TypedEnums.md#using-an-enum-as-its-backing-value) to completed family signatures. [Design review and scope](../../../CHANGELOG.md#k-booter-enum-overloads-20261126)
 
@@ -49,11 +51,23 @@ Programs built with `cfe` preserve the observable semantics and applicable runti
 
 ### Production cross-builds and target runtimes
 
-Only `cfe` offers cross-builds. `codup` manages the production CoD installation and its compatible LLVM components so a developer can use it on a host without a system LLVM installation. Both commands use that toolchain. Building a final executable needs a linker. LLD can supply it as a bundled executable or an embedded library. Building a package that supplies C source also needs a C frontend and the selected target’s headers. Code generation, C ABI layout, startup objects, compiler builtins and linked libraries must agree on the target. Platform SDK requirements belong to each supported target. [LLD](https://lld.llvm.org/) · [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html)
+Only `cfe` offers cross-builds. `codup` manages the production CoD installation and its compatible LLVM components so a developer can use it on a host without a system LLVM installation. Both commands use that toolchain. Building a final executable needs a linker. LLD can supply it as a bundled executable or an embedded library. Code generation, C ABI layout, startup objects, compiler builtins and linked libraries must agree on the target. Platform SDK requirements belong to each supported target. [LLD](https://lld.llvm.org/) · [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html)
 
 A hosted package may link a compatible C runtime. Static musl is the preferred option for a self-contained Linux executable when the package’s native dependencies support it. For a freestanding SoC, startup, memory and any output the program actually uses can come from the board runtime. For example, a board can provide a bounded, aligned RAM span for region storage and a serial writer for diagnostics. Region reservations must preserve capacity, offset alignment, owner lifetime, failure before publication and release through the provider that owns the backing. The system call, allocator API, board list and package layout remain implementation choices. [Region storage contract](../../../design/RegionalOwnership.md) · [Current native reservation](../../../include/cod_region_storage.h)
 
-For hosted acceptance, use a `codup` installation on a host without system LLVM. Run a small program locally with `cod`. Use `cfe` to build a CoD package with a C component for another supported target and run the saved artifact there. For a freestanding target, exercise region exhaustion and an observable board output, and inspect the final link inputs and symbols for a CRT dependency. A static executable can contain libc. Cross-target delivery dates and the first supported board remain open.
+#### codup toolchain for native packages
+
+The production installation managed by `codup` includes matching `clang` and `clang++` drivers and Clang’s assembler for supported targets. The package build uses these tools for the following inputs.
+
+| Package input | Build and link behavior |
+| --- | --- |
+| Generated provider adapters and handwritten C | Compile as C for the selected target. Checked CoD declarations supply the generated header and adapter stubs. |
+| Handwritten C++ | Compile the provider’s `.cpp` sources with `clang++` using the target’s C++ headers. Export the declared entry points with C linkage. For the final link use the C++ driver or supply the equivalent target libraries, including ABI and unwind support as needed. A C-only build has no C++ runtime requirement of its own. |
+| Target assembly | Assemble `.s` directly or preprocess `.S` before assembly. A board package can supply its reset entry this way. The selected target determines which assembly it can use. |
+
+`codup` manages the compiler tools and matching target components. Platform SDKs and board-supplied startup or libraries follow each target’s requirements. The production CoD package build selects its inputs and links the resulting objects with the CoD output. Both `cod` and `cfe` use the chosen installation. Rust, Zig and Fortran source toolchains are deferred until a package needs one. Packages may link externally built libraries through a compatible target C interface when their required link dependencies are available. [Clang toolchain components](https://clang.llvm.org/docs/Toolchain.html) · [Generated provider interface](LLVMInterop.md#native-package-providers-for-nominal-regions)
+
+For hosted acceptance, start with the planned `codup` installation on a host without system LLVM. Build one package containing CoD, a generated C adapter and a C++ provider that uses the standard library. Run it with `cod`, then build it for a supported cross target with `cfe` and run the saved executable there. The same declared method must return the expected value in both cases. For a freestanding target, link a board startup routine from assembly, exercise region exhaustion and observable board output, and inspect the final link for the promised CRT independence. A static executable can contain libc. Cross-target delivery dates and the first supported board remain open.
 
 ## Independently selectable compiler operations
 

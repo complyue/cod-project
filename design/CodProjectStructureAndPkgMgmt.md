@@ -2,6 +2,8 @@
 
 ## Design authority
 
+At r5 the [native package decision](../CHANGELOG.md#h-native-package-toolchain-20261127) adds a production build reference under [D-20-TARGET-TOOLCHAIN](DesignAuthorityRegistry.md#d-20-target-toolchain). The r4 bootstrap layout and package-management responsibilities continue.
+
 At r4 the [repository-name correction](../CHANGELOG.md#h-package-repository-name-20261125) identifies the production repository. The r3 scope continues. The [project-local layout decision](../CHANGELOG.md#h-manual-bootstrap-packages-20261125) retires `codp` from the bootstrap. [D-03](DesignAuthorityRegistry.md#d-03) assigns future package management to `e-wrks/cod`. [D-15-MODULE-PATH](DesignAuthorityRegistry.md#d-15-module-path) and P-690/P-691 govern how a compiler uses the supplied trees. Deterministic selection, observable ambiguity and the toolchain fallback apply to both compilers. The [prior package-manager draft](https://github.com/complyue/cod-project/blob/3545f504243558aeb923ba2fadc84c6de054715b/design/CodProjectStructureAndPkgMgmt.md) is archived.
 
 ## Directory layout
@@ -47,4 +49,4 @@ The C++ seed built from `2bd8b365` ran the two files above from an unrelated wor
 
 A **package** is a dependency and versioning unit. A **project root** supplies the project's own namespace tree. A **staged dependency root** supplies one more namespace tree. A **module** has its own declarations and module world. A namespace can contain several modules or an entry. [Namespace and entry selection](ModuleWorlds.md#packages-namespaces-and-entry-selection)
 
-Source acquisition and version selection happen before the bootstrap compiler runs. The user prepares the directories directly. Future package acquisition, resolution and tools belong in `e-wrks/cod`. Its commands, metadata formats and version policy are future design work.
+Source acquisition and version selection happen before the bootstrap compiler runs. The user prepares the directories directly. Future package acquisition, resolution and tools belong in `e-wrks/cod`. Its dependency commands, metadata formats and version policy are future design work. For packages with native sources, the production build uses the [toolchain installed by `codup`](../applications/cod-booter/docs/CompilerPipeline.md#codup-toolchain-for-native-packages).

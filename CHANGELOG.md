@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Build native package providers with the CoD toolchain
+
+<a id="h-native-package-toolchain-20261127"></a>
+**H-NATIVE-PACKAGE-TOOLCHAIN-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user requested “支持 CoD pkg 内含 C++ 代码（只要跟CoD的接口始终是C）” and confirmed the proposed toolset and provider model with “好的，按此决定，更新相关文档： 论文、产品指南、特性规划，包括codup的”. The [production distribution plan](applications/cod-booter/docs/CompilerPipeline.md#codup-toolchain-for-native-packages) covers C, C++ and target assembly, host execution via `cod`, and cross-builds via `cfe`. Source builds for Rust, Zig and Fortran are deferred. [Nominal region constructors and methods](applications/cod-booter/docs/LLVMInterop.md#native-package-providers-for-nominal-regions) use generated C headers and adapters, separate authored sources and the target C ABI. A stable provider binary interface across releases requires a separate consumer. The [r40 nominal type boundary](https://github.com/complyue/cod-project/blob/3627a2d0b1a8fa6f91b775479763c4b484f69e77/design/GraphGrainedMemoryManagement.md#opaque-nominal-region-types) and [prior host/target contract](https://github.com/complyue/cod-project/blob/3627a2d0b1a8fa6f91b775479763c4b484f69e77/applications/cod-booter/docs/CompilerPipeline.md#production-cross-builds-and-target-runtimes) continue. DSDS draft 4 and guide draft 3 apply the decision to the reservation provider. Registry r1365→1366, P-753–P-755 and P-786/P-787. Toolchain and provider implementation remain planned.
+
 ## 2026-11-27 — Nominal regions have exact types and method-only interfaces
 
 <a id="h-nominal-region-types-20261127"></a>
