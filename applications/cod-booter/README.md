@@ -325,7 +325,9 @@ Both source commands check the original `parse_enum_integer_literal` call. The c
 
 Both source commands accept the unchanged `ModuleParser` and `Frontend`. The `parse_callable` contract includes the mutually recursive helpers that parse nested callables. From locally checked body facts and frozen call edges, the completion pass propagates unavailability, escaping bounds and fatal arithmetic independently to callers. A failed operand prevents entry. A cycle with completed dependencies supplies a bound on these outcomes without implying termination. The linked parser retains nested callable syntax and diagnoses a malformed declaration while keeping the valid suffix.
 
-Both source commands on the full CLI first stop at the `make ReportIndices(count, 0u64)` array construction in `NativeDiagnostics.cod:163:21`. Executable object checking has its own supported profiles.
+Both source commands check named `UInt64` arrays with `UInt64` indices in the same module. A direct reference initializer without a receiving owner uses its lexical scope. An explicit placement uses the named writable owner role. The checker uses the selected nominal array schema to check length and fill in order. After successful construction the array supports indexed reads and writes and synchronous ordinary reference parameters. Bounds failure, allocation failure and attempted writes through readonly loans follow the existing checks. Executable object emission for these arrays remains outside the supported profile.
+
+Both source commands on the full CLI first stop at the `SourceDiagnosticRows` product fill in `NativeDiagnostics.cod:174:20`. The preceding ordering array and its heap helpers pass in a reduction that keeps the original helpers and the imported parser operations.
 
 ### Imported array length families
 

@@ -154,7 +154,7 @@ export data NameWorkSlot {
     enclosing_case_arm:UInt64;
     arm_case:UInt64;
     sum_loan_formals:bool;
-    slot_array_construction:bool;
+    array_construction:bool;
     inline_sum_initializer:bool;
     selected_constructor:bool;
     selected_aggregate_writer:UInt64;
@@ -209,6 +209,7 @@ data NameState {
     source_only:bool;
     local_sum_input:UInt64;
     inline_field_input:UInt64;
+    lexical_array_initializer:UInt64;
     runtime_floor:UInt64;
     transfer_binding:UInt64;
     transfer_resolved:bool;
@@ -837,7 +838,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:UInt6
         work[at].enclosing_case_arm <- no_node();
         work[at].arm_case <- no_node();
         work[at].sum_loan_formals <- false;
-        work[at].slot_array_construction <- false;
+        work[at].array_construction <- false;
         work[at].product_type_diagnostic <- 0u8;
         work[at].product_type_site <- no_node();
         work[at].imported_interface <- no_node();
@@ -1168,7 +1169,17 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     if (state.source_only && mode == ReferenceLocal && selected_inline_sum(nodes, work, state, initializer.index)) {
         (state.inline_field_input <- initializer.index):void
     };
+    val previous_array <- state.lexical_array_initializer;
+    if (state.source_only && mode == ReferenceLocal) {
+        ref receiver = make BindingSites {
+            name <- no_node(); annotation <- no_node(); target_type <- no_node();
+            owner_name <- no_node(); readonly <- false
+        };
+        if (inspect_binding(nodes, state.syntax_revision, state.syntax_used, binding.index, receiver) != InvalidBindingSyntax &&
+            receiver.owner_name == no_node()) { (state.lexical_array_initializer <- initializer.index):void }
+    };
     resolve_expression(source, nodes, bindings, work, state, initializer.index);
+    state.lexical_array_initializer <- previous_array;
     state.inline_field_input <- previous_inline;
     if (state.diagnostic != 0u8) return;
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, state.syntax_revision, state.syntax_used, binding.index), at, local_binding(), duplicate_binding());
@@ -1489,9 +1500,11 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
         array_initializer <- state.source_only && shape == PositionalConstruction &&
             !text_initializer && !builder_initializer && !record_initializer &&
-            construction.placement != no_node() && (kind == array_type() ||
-            (kind == ordinary_selection() && (bindings[definition].imported_kind == array_export() ||
-                bindings[requested].module_use == (SelectedType:ModuleNameUse))));
+            ((kind == array_type() &&
+              (construction.placement != no_node() || state.lexical_array_initializer == at)) ||
+             (construction.placement != no_node() && kind == ordinary_selection() &&
+              (bindings[definition].imported_kind == array_export() ||
+               bindings[requested].module_use == (SelectedType:ModuleNameUse))));
         if (!text_initializer && !builder_initializer && !record_initializer && !array_initializer &&
             !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
@@ -1521,7 +1534,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             reject_name(state, at, unsupported_ordinary_construction());
             return;
         } else {};
-        work[at].slot_array_construction <- array_initializer;
+        work[at].array_construction <- array_initializer;
         val previous_input <- state.local_sum_input;
         if (array_initializer && bindings[requested].kind == array_type()) {
             ref fill = make SequenceEntry { previous <- no_node(); item <- no_node() };
@@ -3220,7 +3233,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
         module_candidates <- state.module_candidates;
-        source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node();
+        source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_array_initializer <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
@@ -3724,7 +3737,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
         module_candidates <- selected_used != 0u64;
-        source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node();
+        source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_array_initializer <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
         delayed <- no_node(); guard <- no_node(); finalizer <- no_node(); loop_arm <- false; repeated <- false;
         here_group <- false; handoff <- no_node(); case_target <- no_node(); case_arm <- no_node();

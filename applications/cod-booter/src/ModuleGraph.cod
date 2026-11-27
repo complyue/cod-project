@@ -1415,7 +1415,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_installation <- no_node();
             case_schema_prepared <- false; declaring_sum <- no_node();
             enclosing_case_arm <- no_node(); arm_case <- no_node();
-            sum_loan_formals <- false; slot_array_construction <- false; inline_sum_initializer <- false;
+            sum_loan_formals <- false; array_construction <- false; inline_sum_initializer <- false;
             selected_constructor <- false; selected_aggregate_writer <- no_node();
             product_type_diagnostic <- 0u8; product_type_site <- no_node();
             active <- no_node(); module_selection <- no_node(); module_kind <- 0u8; module_scalar <- 0u8;
@@ -1437,7 +1437,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
             reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
-            byte_array <- false; array_sum <- no_node(); loans_array_slot <- false; array_slot <- no_node();
+            array_scalar <- 0u8; array_sum <- no_node(); loans_array_slot <- false; array_slot <- no_node();
             loans_scoped_aggregate <- false; case_receipt <- no_node();
             target_presence <- 0u8; selection <- no_node(); discarded_result <- 0u8; arm_result <- 0u8;
             case_item <- 0u8; case_match <- 0u8; case_body <- 0u8; case_guard <- 0u8; case_resume <- 0u8;

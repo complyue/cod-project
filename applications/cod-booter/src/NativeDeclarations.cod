@@ -1452,7 +1452,7 @@ data ArraySlotType {
     element_sum:UInt64;
 }
 
-export enum ArraySlotElement:UInt8 { ByteArrayElement; SumArrayElement; }
+export enum ArraySlotElement:UInt8 { ByteArrayElement; SumArrayElement; UInt64ArrayElement; }
 
 export data SuppliedView =
     NoSuppliedView {} |
@@ -1653,7 +1653,7 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_local_u64_array_element(nodes, names, selected, declaration, used, revision, element))
         return 0u8;
-    if (element.kind != builtin_u8() &&
+    if (element.kind != builtin_u8() && element.kind != builtin_u64() &&
         (element.kind != sum_type() || element.defining_module != 0u64 || element.identity >= used ||
          element.identity >= intrinsic (len)(aggregate) ||
          aggregate[element.identity] != (CoDBitsAggregate:AggregateStorage))) return 0u8;
@@ -1693,6 +1693,7 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
 
 func slot_element(kind:UInt8) -> ArraySlotElement {
     if (kind == builtin_u8()) return (ByteArrayElement:ArraySlotElement);
+    if (kind == builtin_u64()) return (UInt64ArrayElement:ArraySlotElement);
     return (SumArrayElement:ArraySlotElement)
 }
 
@@ -1720,8 +1721,8 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
         if (owner_site < used && owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint) {
             val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 binding.target_type, used, revision, proof);
-            if (kind != 0u8 && (!slot || source_slot_parameter(nodes, work, names[at].scope, at,
-                used, revision, kind == sum_type()))) {
+            if (kind != 0u8 && (!slot || (kind != builtin_u64() &&
+                source_slot_parameter(nodes, work, names[at].scope, at, used, revision, kind == sum_type())))) {
                 views[at] <- make ArraySlotFormal {
                     owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
                     slot <- slot; element <- slot_element(kind);
@@ -1804,7 +1805,7 @@ func prepare_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBi
     return true
 }
 
-func prepare_slot_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
+func prepare_source_array_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W,
     views:SuppliedViews in V, at:UInt64, used:UInt64, revision:UInt64,
@@ -1817,21 +1818,28 @@ func prepare_slot_array_construction(nodes:const ExprNodes in N, names:const Nam
         return false
     };
     val placement <- construction.placement;
-    if (placement >= at || names[placement].kind != owner_binding()) {
-        reject_declaration(report, at, unsupported_ordinary_construction());
-        return false
-    };
-    val owner_site <- names[placement].declaration;
-    val definition <- enclosing_callable(nodes, names, names[at].scope);
-    if (owner_site >= at || !callable_allocation_role(nodes, definition, owner_site, used, revision)) {
-        reject_declaration(report, placement, unsupported_ordinary_construction());
-        return false
+    val owner_site <- names[at].scope;
+    if (placement != no_node()) {
+        if (placement >= at || names[placement].kind != owner_binding()) {
+            reject_declaration(report, at, unsupported_ordinary_construction());
+            return false
+        };
+        owner_site <- names[placement].declaration;
+        val definition <- enclosing_callable(nodes, names, names[at].scope);
+        if (owner_site >= at || !callable_allocation_role(nodes, definition, owner_site, used, revision)) {
+            reject_declaration(report, placement, unsupported_ordinary_construction());
+            return false
+        }
     };
     ref proof = make ArraySlotType {
         owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
     };
     val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
         requested, used, revision, proof);
+    if (placement == no_node() && (owner_site >= used || kind != builtin_u64())) {
+        reject_declaration(report, at, unsupported_ordinary_construction());
+        return false
+    };
     if (kind == 0u8) {
         reject_declaration(report, requested, unsupported_ordinary_construction());
         return false
@@ -4049,12 +4057,12 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         if (literal_kind != 0u8) {
             (views[at] <- make PreparedScalarLiteral { kind <- literal_kind }):void
         };
-        if (work[at].slot_array_construction) {
+        if (work[at].array_construction) {
             if (inspect_construction(nodes, revision, used, at, construction) != PositionalConstruction) {
                 reject_declaration(report, at, unsupported_ordinary_construction());
                 return false
             };
-            if (!prepare_slot_array_construction(nodes, names, selected, contracts, interface_count,
+            if (!prepare_source_array_construction(nodes, names, selected, contracts, interface_count,
                 aggregate, work, views, at, used, revision, construction, report)) return false
         };
         if (inspect_index_selection(nodes, revision, used, at, indexed)) {
