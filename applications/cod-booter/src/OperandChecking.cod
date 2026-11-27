@@ -1792,10 +1792,17 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
     };
     if (operand < used && facts[operand].kind == source_product_loan()) {
-        val forwarded <- scoped_product_call &&
-            names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
+        val forwarded <- names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
+        val indexed <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
+            (case cases[operand] of {
+                IndexedProductLoan { val consumer <-; val writable <-; } -> consumer == argument && !writable;
+                _ -> false
+            });
+        # Each writable array formal is still an ordinary target loan, checked
+        # against its own actual when that argument is prepared.
+        val allow_writable_array <- scoped_product_call && (forwarded || indexed);
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, forwarded))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, allow_writable_array))
             return unproved_owner();
         if ((kind != source_product_loan() && kind != product_kind()) ||
             facts[formal].reception != borrowed_ref() ||

@@ -209,6 +209,8 @@ The declaration and C provider commands check `case row.payload of { … }` on a
 
 The indexed element loan is scoped to the field use or immediate call. The source checks require compatible readonly formals and owner substitutions and reject deferred use of the loan. These checks cover `ModuleExportStorage` on both source routes. Both commands also check the unchanged guarded `tokens[opening].delimiter` case in `ParserInput.closing_token`, including `len(tokens)`. Object emission for these sum cases still reaches its existing profile boundary.
 
+A same-revision call can prepare an indexed readonly record loan alongside ordinary writable array and record loans. Both source commands check the unchanged `append_case_pattern` call with its selected token, writable syntax array and initialized parse result. Each writable loan has its own nominal type, access check and actual owner. The targets can share an actual owner. A failed operand prevents entry, preserving earlier preparation. This profile uses ordinary array references.
+
 ### Fresh sum arguments
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
@@ -307,7 +309,7 @@ The checked readonly byte-reader contract carries possible fatal arithmetic sepa
 
 Both source commands check the unchanged calls to `recover_syntax` and `recover_syntax_until`. The completed parser contract carries the readonly token array, the writable syntax array and initialized result record, and the independent value inputs. `recover_syntax` also receives the readonly source bytes. A by-value recovery role keeps the canonical identity of its enum. The call evaluates operands in written order, and a failed operand prevents entry.
 
-The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return. Both source routes reach the call to `append_case_pattern` in `ExpressionParser.cod:1296:17`. Executable object checking has a separate admission path.
+The readonly array-query contract covers `closing_token` with the published finite-bits record array and the two independent indices. The linked parser retains separate located reports for malformed block items and conditions, records their expected roles, and keeps the following return. Both source routes reach the imported void-returning `parse_scoped_procedure_signature` call at `ExpressionParser.cod:1540:5`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

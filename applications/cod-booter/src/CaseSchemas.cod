@@ -1071,8 +1071,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                     case_bits_type(record, aggregate, interfaces, published)) {
                     remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
                     if (first == no_node()) { (first <- call):void };
-                    if (loan.array_module != 0u64 &&
-                        (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                    if (readonly && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
                         (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
                     }
                 }
