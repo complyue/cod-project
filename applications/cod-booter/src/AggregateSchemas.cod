@@ -7,12 +7,12 @@ using "./ParserStorage.cod" {
     FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal },
 };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, record_type, ordinary_selection, native_scalar, builtin_string,
+    NameBindings, NameWork, record_type, array_type, ordinary_selection, native_scalar, builtin_string,
     has_exception_parent, lexical_builder_record,
 };
-using "./ModuleExports.cod" { SelectedExports, record_export, enum_export, sum_export };
+using "./ModuleExports.cod" { SelectedExports, record_export, array_export, enum_export, sum_export };
 using "./ModuleExportStorage.cod" {
-    ModuleInterfaces, checked_aggregate_storage, enum_type, sum_type,
+    ModuleInterfaces, find_interface, checked_aggregate_storage, enum_type, sum_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 
@@ -59,6 +59,17 @@ func imported_storage(interfaces:const ModuleInterfaces in I, interface_used:UIn
     if (type_kind == 0u8 || selected[selection].origin_module == 0u64) return UnprovedAggregate;
     return checked_aggregate_storage(interfaces, interface_used, selected[selection].origin_module,
                                      selected[selection].identity, type_kind);
+}
+
+func imported_array_referent(interfaces:const ModuleInterfaces in I, interface_used:UInt64,
+                             selected:const SelectedExports in E, selection:UInt64) -> bool
+    where {const owner I, const owner E} {
+    if (selection >= intrinsic (len)(selected) || selected[selection].kind != array_export() ||
+        selected[selection].origin_module == 0u64) return false;
+    val head <- find_interface(interfaces, interface_used, selected[selection].origin_module,
+        selected[selection].identity);
+    return head < interface_used && interfaces[head].interface_kind == array_type() &&
+        interfaces[head].entry_count == 0u64;
 }
 
 export func array_element_storage(names:const NameBindings in B, selected:const SelectedExports in E,
@@ -145,6 +156,13 @@ func collect_field_input(nodes:const ExprNodes in N, names:const NameBindings in
     val reference <- formal.mode == ReferenceFormal || formal.mode == PointerFormal;
     if ((!reference && formal.mode != ValueFormal && formal.mode != ExplicitValueFormal) || binding.owner_name != no_node())
         return;
+    # A stored array reference stops here. Local array declarations still
+    # undergo their own index and element checks before publication.
+    if (reference && ((kind == array_type() && target < used) ||
+        (kind == ordinary_selection() && imported_array_referent(interfaces, interface_used, selected, target)))) {
+        receipt.storage <- NonBitsAggregate;
+        return;
+    };
     val storage <- UnprovedAggregate;
     if (native_scalar(kind)) { (storage <- CLayoutBitsRecord):void; };
     if (kind == builtin_string() && !reference && declarations[schema].referent)

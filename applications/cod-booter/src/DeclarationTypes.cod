@@ -1,7 +1,9 @@
 using "./ParserStorage.cod" DeclarationSyntax {
     NominalRecord, NativeRecord, EnumTypeDeclaration, NominalSum
 };
-using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, PlaceFormal, InitializingPlaceFormal };
+using "./ParserStorage.cod" FormalMode {
+    ValueFormal, ExplicitValueFormal, PlaceFormal, InitializingPlaceFormal, ReferenceFormal, PointerFormal
+};
 using "./ParserStorage.cod" FormalSyntax { OrdinaryFormal };
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./ParserStorage.cod" LocalMode { ValueLocal, ExceptionLocal };
@@ -43,13 +45,13 @@ using "./ParserStorage.cod" {
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
-    ordinary_selection, record_type, native_scalar, enum_value, find_enum_member, find_enum_code,
+    ordinary_selection, record_type, array_type, native_scalar, enum_value, find_enum_member, find_enum_code,
     is_lexical_builder, lexical_builder_record, lexical_builder_type,
     builtin_i64, builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
 using "./ModuleExports.cod" {
-    SelectedExports, record_export, enum_export, enum_spelling, sum_export
+    SelectedExports, record_export, array_export, enum_export, enum_spelling, sum_export
 };
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, write_interface_header, write_sum_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
@@ -810,6 +812,25 @@ export func prepare_native_operand_types(source:const SourceBytes in S, nodes:co
     };
 }
 
+func describe_schema_field(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+                           binding:const BindingSites in A, mode:FormalMode, module:UInt64, revision:UInt64,
+                           used:UInt64, result:DeclaredType in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner A, owner R} {
+    if (mode == ReferenceFormal || mode == PointerFormal) {
+        val marker <- binding.target_type;
+        val kind <- names[marker].kind;
+        val selection <- names[marker].declaration;
+        if (kind == array_type() ||
+            (kind == ordinary_selection() && selection < intrinsic (len)(selected) && selected[selection].kind == array_export())) {
+            result.kind <- array_type();
+            result.defining_module <- type_module(names, selected, marker, module);
+            result.identity <- type_identity(names, selected, marker);
+            return true;
+        };
+    };
+    return describe_type(nodes, names, selected, binding.annotation, module, revision, used, result)
+}
+
 func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                   work:const NameWork in W, record:UInt64, defining_module:UInt64, count:UInt64, revision:UInt64, used:UInt64,
                   storage:AggregateStorage, declaration:const DeclarationSites in D, interfaces:ModuleInterfaces in I)
@@ -842,7 +863,7 @@ func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, sel
         } else {};
         if (next >= limit || inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
             inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
-            !describe_type(nodes, names, selected, binding.annotation, defining_module, revision, used, type))
+            !describe_schema_field(nodes, names, selected, binding, formal.mode, defining_module, revision, used, type))
             return no_node();
         write_interface_header(interfaces[next], 0u64, 0u64, 0u8, 0u8, 0u64);
         interfaces[next].value_kind <- type.kind;
@@ -925,7 +946,7 @@ func stage_constructor(nodes:const ExprNodes in N, names:const NameBindings in B
         };
         if (next >= limit || inspect_formal(nodes, revision, used, field, formal) != OrdinaryFormal ||
             inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
-            !describe_type(nodes, names, selected, binding.annotation, defining_module, revision, used, type))
+            !describe_schema_field(nodes, names, selected, binding, formal.mode, defining_module, revision, used, type))
             return no_node();
         stage_constructor_field(interfaces, next, syntax_first(nodes, used, binding.name),
                                 syntax_past(nodes, used, binding.name), type, formal.mode, binding.readonly);
