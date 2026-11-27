@@ -2,7 +2,15 @@
 
 ## Design authority
 
-Revision 3, 2026-11-27. The [floating-literal decision](../CHANGELOG.md#h-floating-literal-signature-matching-20261127) makes floating-signature matching independent of precision loss. The [perfect-match decision](../CHANGELOG.md#h-perfect-numeric-overload-matches-20261127) revises r1’s overload tie example. Standalone literals keep source-ordered defaults. At a call, otherwise tied lossless matches remain ambiguous. [Contextual numeric literals](DesignAuthorityRegistry.md#d-11-literal-defaults) covers typing, defaults and diagnostics. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) covers syntax and formatting. The [project user's decisions](../CHANGELOG.md#h-numeric-literals-and-signs-20261127) add these scopes to the [scalar](ScalarUnitsAndIndexTypes.md#quantity-types-and-lossless-widening) and [operator grouping](JuliaPackagePortability.md#operator-grouping-belongs-to-the-selected-vocabulary) contracts. Ordinary numbers can be written once while their interpretation stays reproducible from the source and selected vocabulary. P-782–P-785 record the value and dependency edges. The examples below give the acceptance cases. Existing typed arithmetic, nominal identities and checked failures continue. General untyped constant arithmetic and implementation scheduling have separate scope.
+Revision 4, 2026-11-27. [D-11-LITERAL-DEFAULTS](DesignAuthorityRegistry.md#d-11-literal-defaults) records the [project user's dispatch and inference order](../CHANGELOG.md#h-dispatch-before-literal-typing-20261127). A program can use an ordinary numeral wherever a signature supplies its type and can rely on a diagnostic when two signatures fit equally well. The [integer](../CHANGELOG.md#h-perfect-numeric-overload-matches-20261127) and [floating](../CHANGELOG.md#h-floating-literal-signature-matching-20261127) applicability rules, written-site defaults, typed arithmetic and checked failures continue from r3 under P-782/P-783. [Signed literal grouping](DesignAuthorityRegistry.md#d-10-literal-sign) retains its separate scope under P-784/P-785. The examples below specify acceptance. General untyped constant arithmetic and compiler delivery have separate scope.
+
+## Dispatch before literal typing
+
+1. Match the call with each unsuffixed numeric literal still untyped. Use its spelling and mathematical value for the applicable integer or floating matching rule, alongside the other arguments and the ordinary dispatch rules for the call form. If no candidate applies, report a no-match error. Multiple candidates still tied after specificity give a static ambiguity.
+2. Once dispatch selects a unique signature, infer each literal argument’s type from its corresponding parameter and the available constraints. For a concrete formal the parameter type determines the representation, including any rounding of a floating literal during argument preparation.
+3. Consult the written site’s ordered numeric `default` list only for a literal whose type is still undetermined after all other type inference is exhausted. This includes a standalone binding with no other type evidence. A failed or ambiguous dispatch ends at step 1.
+
+For example, under `default UInt8`, a sole `send(x:UInt64)` receives `send(7)` as `UInt64`. Adding an equally applicable `send(x:UInt8)` makes the same call ambiguous. Writing `val n <- 7` separately gives `n` type `UInt8` by default, so `send(n)` selects the `UInt8` method.
 
 ## Write the number the program means
 
@@ -14,7 +22,7 @@ The parser records the literal's spelling, span, integer or decimal form, sign a
 
 `default UInt8, UInt64` records an ordered list of numeric type names. It applies to subsequent occurrences in the module until another numeric directive takes effect. Bind the written names semantically, including transparent synonyms. The braced `default { ... }` form selects [default exports](ModuleWorlds.md#default-and-complete-public-selections). Each form has its own syntax node.
 
-First use ordinary applicability, specificity and the available type constraints. A uniquely inferred type wins before consulting the directive. For an unresolved literal select an admissible type from the ordered defaults. An explicitly listed floating type can receive an integer spelling exactly. Thus `default Float32` can give a standalone `1` type `Float32`. With `default Float32, UInt64`, `16777217` takes `UInt64` because `Float32` would lose a unit. Decimal literals admit floating rounding. An integer-only directive leaves the ordinary decimal default available for `0.5`. An integer too large for the declared integer choices needs a wider stated type.
+When inference leaves the literal untyped, choose the first admissible type in the ordered list. An explicitly listed floating type can receive an integer spelling exactly. Thus `default Float32` can give a standalone `1` type `Float32`. With `default Float32, UInt64`, `16777217` takes `UInt64` because `Float32` would lose a unit. Decimal literals admit floating rounding. An integer-only directive leaves the ordinary decimal default available for `0.5`. An integer too large for the declared integer choices needs a wider stated type.
 
 ```cod
 default UInt8, UInt64
@@ -23,7 +31,7 @@ val b <- 256
 val c <- 255 + 1
 ```
 
-Read the bindings independently. `a` has type `UInt8` and `b` has type `UInt64`. Both operands of the ordinary checked addition in `c` fit `UInt8`. The expression has type `UInt8` and raises overflow when evaluated. A future enhanced diagnostic should warn that overflow is certain and suggest `255u64 + 1` when 256 is intended. Constant folding must preserve the selected operation and failure. Report an unresolved numeric ambiguity as an error with the competing choices. For a permitted interpretation with material precision risk, explain the source value and the chosen representation.
+Read the bindings independently. `a` has type `UInt8` and `b` has type `UInt64`. For `c`, assume ordinary checked addition has already been selected and only its common operand type is undetermined. Both operands fit the first listed type, `UInt8`. If the visible `+` overloads instead leave two equally applicable signatures, the expression is ambiguous at the operator. The expression has type `UInt8` and raises overflow when evaluated. A future enhanced diagnostic should warn that overflow is certain and suggest `255u64 + 1` when 256 is intended. Constant folding must preserve the selected operation and failure. Report an unresolved numeric ambiguity as an error with the competing choices. For a permitted interpretation with material precision risk, explain the source value and the chosen representation.
 
 **Integer literals during overload selection.** Compare a bare integer numeral’s mathematical value with each candidate’s independently known numeric formal. Every admissible type that can represent the value losslessly is a perfect match for that literal, regardless of its position or presence in the default list. Ordinary applicability and specificity still apply to the methods and the other arguments. If otherwise equally good methods both match the unresolved literals perfectly, diagnose ambiguity at the call. This comparison never consults the module’s numeric defaults.
 
@@ -40,8 +48,6 @@ default Int64, UInt64
 tag(7)                 # Still ambiguous.
 tag(7u64)              # Returns 2.
 ```
-
-A sole `send(x:UInt8)` gives `send(7)` a unique numeric context. Adding `send(x:UInt64)` makes this call ambiguous even under `default UInt8`, assuming no other evidence distinguishes the methods.
 
 Compare the unresolved numeric positions across all arguments within the eligible dispatch group. For `default UInt32, UInt64` and `f(1, 2)`, the signatures `(UInt32, UInt64)` and `(UInt64, UInt32)` tie. Swapping the argument positions together with their formals preserves the outcome. A suffix can supply the missing type evidence.
 
