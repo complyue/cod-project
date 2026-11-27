@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 21 · 2026-11-27 · Source design draft
+Design revision 22 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r22 the [deque construction decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) specifies the public empty constructor for the [bootstrap deque](#bootstrap-linked-deque) under D-30 and D-20-BOOTSTRAP. Its callers receive a ready container. The same decision places the item of `Maybe[T]` under the r21 value-only rule. P-589/P-590 continue the r21 item and pointer-result guarantees.
 
 At r21 the [value-only item decision](../CHANGELOG.md#h-value-only-container-items-20261127) qualifies [type arguments and item storage](#container-pointer-results) under D-30, P-589/P-590. It supersedes the r20 direct reference-element scope. The pointer result, live lookup, shallow detached pop, ordinary owner lifetime and deferred reuse policy continue.
 
@@ -49,9 +51,17 @@ At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns 
 
 The first public generic linked collection for the booter is a deque parameterized by its element type, implemented in CoD with private nodes. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public list. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
 
+A caller constructs a ready empty deque using the library's zero-argument initializer. For example:
+
+```cod
+ref queue = make deque[UInt64]() in r
+```
+
+Omitting `in r` selects the ordinary lexical destination. The initializer establishes the empty endpoints and bookkeeping in the supplied destination. Caller-written field initialization is outside the deque interface. The library can declare its initializer as `func deque() -> ref deque[T] in R where {T, owner R}`. The construction head determines `T` even with zero explicit arguments. The result annotation identifies the supplied destination. Popping the newly constructed deque yields null.
+
 ### Container pointer results
 
-An ordinary generic type argument supplies a type. Each field, parameter or result declaration determines how it uses that type. For example, a private link can store an item of type `T` by value and declare its next link as a `ptr`. The generic deque and map store value items. Supplying a binding mode such as `ref Node` or `ptr Node` as the element type is outside this contract. Using a type argument grants only the [construction and transfer operations](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) available for that type. A finite-bits sum such as the booter’s `PackageResolution` transfers its tag and active payload.
+An ordinary generic type argument supplies a type. Each field, parameter or result declaration determines how it uses that type. For example, a private link can store an item of type `T` by value and declare its next link as a `ptr`. The generic deque and map store value items. The [optional container `Maybe[T]`](DomainLanguageDesign.md#positional-and-labeled-sum-payloads) uses the same rule for the item in `Just`. Its `Nothing` alternative holds zero items. Supplying a binding mode such as `ref Node` or `ptr Node` as the element type is outside this contract. Using a type argument grants only the [construction and transfer operations](ConstructionAndAcquisition.md#storage-eligibility-and-payload-transfer) available for that type. A finite-bits sum such as the booter’s `PackageResolution` transfers its tag and active payload.
 
 Deque pop and map lookup return a nullable pointer to **item storage**. Empty or missing gives null. On success the caller receives the item slot with its actual owner and permitted access and may match the result once in a [case](DomainLanguageDesign.md#case-expressions-and-branch-local-variables).
 

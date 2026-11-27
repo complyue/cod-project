@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 74 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 75 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r75 the [fieldless alternative decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) narrows [D-22-RESERVATION](#typed-reservation-and-completed-construction), P-500–P-502. An empty payload and an empty initializer family suffice for successful bare allocation to deliver the completed alternative. H-562's identity, owner, failure and staged initialization rules continue wherever fields or constructor obligations remain.
 
 At r74 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) specifies that only intrinsic structural regions can supply roots to a receiving specification. R73 acquisition, publication and structural reception continue. [Method-only nominal interface](GraphGrainedMemoryManagement.md#opaque-nominal-region-types)
 
@@ -760,10 +762,11 @@ H-562 fixes the distinction through the existing initializer-block syntax. In th
 
 | Form | Completion contract |
 | --- | --- |
-| Bare `make T [in o]` | Reserve suitably typed storage with a selected owner and a non-null target identity on successful allocation. Establish no payload initialization merely from allocation. |
+| Bare `make DCtor [in o]` for a fieldless sum alternative with zero initializer overloads | Complete the selected alternative exactly as with empty braces. Allocation still requires its ordinary owner capability and may fail. |
+| Other bare ordinary `make T [in o]` | Reserve suitably typed storage with a selected owner and a non-null target identity on successful allocation. Required field initialization and constructor obligations must be satisfied before readable publication. |
 | `make T [in o] { ... }` | Reserve and initialize storage, then provide a completed result. An empty block still requests completion and must satisfy the type's initialization requirements. |
 
-This distinction concerns the bare ordinary allocation form. Existing constructor-argument calls and intrinsic resource/exception construction retain their own completion contracts; absence of a trailing block does not reinterpret `make region` or an exception constructor as incomplete raw storage. Type layout and owner allocation capability must be established before reservation. Physical zero-filled bytes are not evidence of initialized fields or valid typed values.
+Test the [selected alternative and its visible initializer family](DomainLanguageDesign.md#positional-and-labeled-sum-payloads). An inapplicable overload still prevents the fieldless shorthand. A constructor on a sibling alternative has no effect on the shorthand. This distinction concerns the bare ordinary allocation form. Existing constructor-argument calls and intrinsic resource/exception construction retain their own completion contracts; absence of a trailing block does not reinterpret `make region` or an exception constructor as incomplete raw storage. Type layout and owner allocation capability must be established before reservation. Physical zero-filled bytes are not evidence of initialized fields or valid typed values.
 
 A ptr may retain a reserved target's identity under the existing initialization-flow rules. Fresh allocation supplies non-nullness, not readable payload. Projection of a known field destination, reference-identity assignment and `is` observations require their own owner/layout/reference-slot facts but need not read the target payload. Ordinary readable-ref uses, payload copies, captures or calls cannot erase outstanding initialization restrictions.
 

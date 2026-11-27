@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 233
+Discussion revision: 234
 
 Recorded: 2026-11-27
 
@@ -8,7 +8,9 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-At r233 the [generic bracket decision](../CHANGELOG.md#h-generic-type-brackets-20261127) confirms [nominal type parameters and applications](#brackets-in-generic-type-heads) for the linked deque. P-18/P-229 continue for readable type syntax and existing generic callable declarations. P-590 continues the D-30r21 item, owner and transfer rules. Expression assertions followed by brackets and positional sum fields remain separate questions.
+At r234 the [constructor and sum decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) qualifies [positional and labeled sum payloads](#positional-and-labeled-sum-payloads), their case reception and the fieldless construction shorthand under D-07-SUM-CONSTRUCTORS/D-07-CASE, P-601/P-602/P-625/P-626. The r233 bracket syntax and existing constructor-family, placement and case rules continue.
+
+At r233 the [generic bracket decision](../CHANGELOG.md#h-generic-type-brackets-20261127) confirms [nominal type parameters and applications](#brackets-in-generic-type-heads) for the linked deque. P-18/P-229 continue for readable type syntax and existing generic callable declarations. P-590 continues the D-30r21 item, owner and transfer rules. Expression assertions followed by brackets remain a separate question.
 
 At r232 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) distinguishes the outer lookup group for a dotted name from that for indexing. [D-07-NAMED-FALLBACK](DesignAuthorityRegistry.md#d-07-named-fallback) retains the production diagnostic and [D-30-INDEX-FAMILIES](DesignAuthorityRegistry.md#d-30-index-families) retains the three operation identities, argument order and access rules.
 
@@ -381,7 +383,7 @@ data Pair[A, B] { first:A; second:B }
 ref link:Link[UInt64] in r = make Link[UInt64] in r { item <- 7; next = null }
 ```
 
-Here the field and the call site select the same concrete `Link[UInt64]`. The declaration supplies the field modes. `Link[ptr UInt64]` cannot select a different mode for `item`. The same grammar admits `deque[UInt64]`, `map[K,V]` and a lexical construction such as `make deque[UInt64] { ... }` with its required initialization. A type application must resolve a generic declaration and supply its declared arity.
+Here the field and the call site select the same concrete `Link[UInt64]`. The declaration supplies the field modes. `Link[ptr UInt64]` cannot select a different mode for `item`. The same grammar admits `deque[UInt64]`, `map[K,V]` and the [public deque constructor](CollectionsAndBuiltinContainers.md#bootstrap-linked-deque) in `make deque[UInt64]()`. A type application must resolve a generic declaration and supply its declared arity.
 
 Brackets are delimiters. Parsing these positions needs no change to symbolic operator runs. A value expression such as `q[i]` uses indexing. A named array declaration still introduces its index domain after the array name, and allocating a named array still takes its length and fill through the existing construction form. The existing `where {T, owner R}` method binders keep their meaning. The choice for an unparenthesized expression such as `x:T[i]` lies outside these declared-type and construction positions. [Value-only generic items](CollectionsAndBuiltinContainers.md#container-pointer-results) · [Operator tokens](SymbolicDynamicScope.md#symbolic-operator-tokens)
 
@@ -417,6 +419,37 @@ The object under construction has no initialized instance receiver anywhere in t
 
 Within the type’s merged constructor family, check for user-declared initializer overloads **for the named dctor, before testing applicability**. With the declaration above, `make Accepted in batch { id <- 0u64; prior = null; }` rejects and `make Accepted() in batch` reports a missing applicable overload. A `proc` initializer still counts when the call site only permits a `func`. Skipped has no initializer overload, so its empty block supplies a complete payload. An initializer-free alternative with required fields must initialize each on every normally completing path. For a sum, reserve a named alternative under the [sum construction rule](#sum-object-construction-and-reference-storage). A constructor-backed alternative needs its initializer before it can become an ordinary readable result.
 
+#### Positional and labeled sum payloads
+
+Each sum alternative declares its own payload form. Types listed in braces declare positional fields in public order. Labeled fields have their established names and modes. The two forms can occur in different alternatives of the same sum. A use must follow the selected alternative's form.
+
+```cod
+data Maybe[T] = Nothing {} | Just { T }
+data Limits = Both { Int64, Int64 } | Bounds { low:Int64; high:Int64 }
+
+ref n:Maybe[Int64] in r = make Nothing in r
+ref j:Maybe[Int64] in r = make Just in r { 7 }
+ref pair:Limits in r = make Both in r { 3, 9 }
+ref bounds:Limits in r = make Bounds in r { high <- 9; low <- 3 }
+```
+
+`Maybe[T]` is a value-item container. Its positional `Just { T }` stores one `T` by value. `Nothing {}` stores no item. For example, construct a `Just` from an `Int64` cell holding 7, then write 13 to the source cell. Receiving `Just { val x }` yields 7. `Maybe[ref Node]` and `Maybe[ptr Node]` are invalid type applications. Borrowing a `Maybe[T]` object or an addressable field follows the ordinary owner and access rules. Instantiation supplies no new way to transfer a reference-bearing ADT. [Value-item contract](CollectionsAndBuiltinContainers.md#container-pointer-results)
+
+For direct positional construction supply one operand per field, in declaration order. Evaluate each reached operand once from left to right. A singleton needs no trailing comma. Labeled initialization retains its field writes, ordinary initializer blocks and readiness rules. The declaration determines how to interpret a single expression in braces. Both forms require an empty initializer family for the selected alternative in the current method world. Parentheses invoke a constructor method. A user-defined initializer may validate or transform its input before it publishes the alternative.
+
+Case reception reads the stored fields after matching the tag. For example, the two `Limits` arms can both return the lower limit:
+
+```cod
+return case limits of {
+    Both { val lo, _ } -> lo;
+    Bounds { val lo <- low } -> lo
+}
+```
+
+A positional receiving spec accounts for each position, with `_` skipping an unneeded field. A labeled spec can select any subset in any written order. The existing tag-only head, such as `Just -> found()`, needs no payload spec. A one-field positional arm can bind `Just { val x } -> x`. Reject a label on `Just`, a positional list on `Bounds`, and a mix of selectors and positions within one spec. Apply the same shape check to direct initialization. Preserve ordinary transfer, target selection, owner, access and readiness for each field. Matching reads the stored result even when a constructor method computed it.
+
+For a fieldless alternative with no initializer overload in the selected family, `make Nothing in r` and `make Nothing in r {}` complete the same tagged object in `r`, with the same allocation and failure behavior. The ordinary lexical placement follows the same rule. A generic use still needs a determined nominal sum instance. A constructor-backed alternative requires its selected initializer to complete, even when it has no fields. [Typed reservation and completion](ConstructionAndAcquisition.md#typed-reservation-and-completed-construction)
+
 #### Sum object construction and reference storage
 
 For a nominal sum, the operand naming the object in `make` must select a data constructor. With the declaration below, `Node` is the type accepted by variables, parameters and reference fields. `Link` and `End` select layouts for construction. Reject `make Node in graph`, `make Node() in graph` and `make Node in graph { ... }` even when the receiving type or some field names are known. A product such as `data Pair { left:u64; right:u64; }` retains its existing `make Pair` spelling: the product name also identifies its sole constructor. Scalar allocation and intrinsic resource construction retain their own forms.
@@ -434,7 +467,7 @@ b.next = a;
 ref first:Node in graph = a;  # The required component is ready here.
 ```
 
-Bare `make Link in graph` reserves one target with a known alternative and a stable identity. Forming destinations for its Link fields uses that construction evidence. Binding another edge can use the identity before the payload is readable. An ordinary payload read still requires initialization. `make End in graph {}` completes a fieldless alternative with zero overloads. `make DCtor(args) in graph`, including a call with zero arguments, selects an initializer by the ordinary overload rules. If Link has an overload, scattered field writes cannot substitute for it. For a ref group with explicitly reserved targets, [`init a(args)`](ConstructionAndAcquisition.md#in-place-construction-in-a-ref-group) invokes that alternative’s initializer on the existing target. A constructor can bind a same-owner edge to a peer supplied as `not init ref`. Its fields become ordinarily readable when the required component is ready.
+Bare `make Link in graph` reserves one target with a known alternative and a stable identity. Forming destinations for its Link fields uses that construction evidence. Binding another edge can use the identity before the payload is readable. An ordinary payload read still requires initialization. `make End in graph` and `make End in graph {}` both complete the fieldless alternative when End has zero initializer overloads. `make DCtor(args) in graph`, including a call with zero arguments, selects an initializer by the ordinary overload rules. If Link has an overload, scattered field writes cannot substitute for it. For a ref group with explicitly reserved targets, [`init a(args)`](ConstructionAndAcquisition.md#in-place-construction-in-a-ref-group) invokes that alternative’s initializer on the existing target. A constructor can bind a same-owner edge to a peer supplied as `not init ref`. Its fields become ordinarily readable when the required component is ready.
 
 A declaration such as `ref r:Node in graph;` makes a local binding whose eventual non-null target must belong to graph. `ptr p:Node in graph = null;` gives a local binding an initialized absence with that same target owner. An uninitialized slot has no readable reference identity. Neither declaration allocates a Node. Named roots and fields can already store references, and `var edge -> graph.head;` can name an existing root slot.
 
@@ -533,7 +566,7 @@ proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
 }
 ```
 
-**Entry order.** Evaluate the subject once. An independent bits value retains its bits. A borrowed subject retains its selected target, actual owner and locator. Rebinding the source variable cannot redirect this selection. Try headers in source order. A constructor test uses the identity and active alternative established by `isa`. Overload selection, initializer arguments and their effects play no part. Only after the test succeeds may the spec receive fields of that alternative. Check the spec as a group using ordinary field-label, initialization, owner/access and overlap rules, then evaluate the optional Boolean guard once. A pattern miss or a false guard skips that body and resumes at the next source item. An ordinary statement reached between arms executes under the enclosing lexical permissions. An unguarded match or true guard enters the body once. Normal body completion finishes the entire case immediately. An executed `fallthrough;` leaves the arm and resumes at the next source item. Each later header runs its own test, reception and guard if reached.
+**Entry order.** Evaluate the subject once. An independent bits value retains its bits. A borrowed subject retains its selected target, actual owner and locator. Rebinding the source variable cannot redirect this selection. Try headers in source order. A constructor test uses the identity and active alternative established by `isa`. Overload selection, initializer arguments and their effects play no part. Only after the test succeeds may the spec receive fields of that alternative. Check the spec as a group using the [declared positional or labeled shape](#positional-and-labeled-sum-payloads) and ordinary initialization, owner/access and overlap rules, then evaluate the optional Boolean guard once. A pattern miss or a false guard skips that body and resumes at the next source item. An ordinary statement reached between arms executes under the enclosing lexical permissions. An unguarded match or true guard enters the body once. Normal body completion finishes the entire case immediately. An executed `fallthrough;` leaves the arm and resumes at the next source item. Each later header runs its own test, reception and guard if reached.
 
 **Branch-local variables and effects.** A declaration in the spec introduces a branch-local variable. Its name is visible to this guard and body, and remains unavailable to statements between arms, sibling arms and code after the case. Simultaneous receiving items resolve their inputs and existing destinations in the preceding environment. Reusing the same local spelling in a sibling introduces a fresh binding. As with loop controls, a header can introduce its pattern bindings with either body spelling. A single-brace arm body forbids direct variable declarations, including through nested ordinary groups. A double-brace body may declare new variables local to that invocation. Its new declarations become visible in ordinary source order inside the body; the guard cannot see them. The arm has direct access to its enclosing lexical context, with the enclosing callable’s ordinary effect permissions and control destinations. Single braces supply no independent callable, cleanup scope, or implicit storage owner. Ordinary exits end the branch bindings. Escaping references, including deferred uses, need their own lifetime proof.
 
