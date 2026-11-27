@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Dispatch with numeric literals still untyped
+
+<a id="h-dispatch-before-literal-typing-20261127"></a>
+**H-DISPATCH-BEFORE-LITERAL-TYPING-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) the project user specified “untyped literal 先参与 dispatch，确定唯一候选后，再按参数签名推断类型” and “其它类型推断穷尽仍无果以后，才参考 `default` 规则”. [D-11-LITERAL-DEFAULTS r4](design/NumericLiterals.md#dispatch-before-literal-typing) makes that order explicit for numeric arguments, including operator calls. [D-10r280](design/SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) incorporates it in public signature selection. The [r3 baseline](https://github.com/complyue/cod-project/blob/8fc2731781370a0186ac592dfdd011985ddc9041/design/NumericLiterals.md) continues for integer representability, floating applicability and standalone defaults. P-782/P-783, registry r1363→1364.
+
 ## 2026-11-27 — Keep floating-point rounding out of overload selection
 
 <a id="h-floating-literal-signature-matching-20261127"></a>
