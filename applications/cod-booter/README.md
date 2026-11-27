@@ -201,19 +201,23 @@ Both source commands also check `reserve_visits`. The visit-array profile requir
 
 The source commands also check a local braced constructor written directly into a writable element of a finite-bits sum array. They verify each initializer and the exact nominal element type, including nested inline bits fields. The isolated `mark_failed_visit` body passes both commands with its original schema. Object lowering and uses that consume the transfer's result remain outside this profile. [Indexed sum transfers](docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer)
 
-The same source commands can check a selected imported constructor in a discarded indexed write. They use the defining array’s published index and element types and the constructor’s published fields. Nested product constructors and copies from live readonly loans use each field’s exact nominal type. The source checks admit the body of `ParserInput.append_syntax_node` with an explicit intrinsic length query. The original helper’s selected `len(nodes)` call still reaches an unsupported source signature.
+The same source commands can check a selected imported constructor in a discarded indexed write. They use the defining array’s published index and element types and the constructor’s published fields. Nested product constructors and copies from live readonly loans use each field’s exact nominal type. Both commands check the unchanged `ParserInput.append_syntax_node` in the module prefix, including its ordinary `len(nodes)` capacity guard.
 
 ### Inline sum cases on borrowed records
 
 The declaration and C provider commands check `case row.payload of { … }` on a readonly, nonnull loan of a finite-bits record. A direct selection from a local or imported `UInt64`-indexed record array can serve as the receiver. Passing the whole indexed record as a loan to an ordinary same-revision function retains the local-array profile. Each use keeps the defining module and nominal identity of the record and sum. The projected field retains the receiver’s owner. An indexed selection evaluates its index once and must succeed before the case reads its tag or the call enters. Constructor selection, field reception and case coverage follow the ordinary sum rules.
 
-The indexed element loan is scoped to the field use or immediate call. The source checks require compatible readonly formals and owner substitutions and reject deferred use of the loan. These checks cover `ModuleExportStorage` on both source routes. Both commands also accept the guarded `tokens[opening].delimiter` case in `ParserInput.closing_token` when the reduction uses the intrinsic length query. The unchanged helper reaches the unsupported ordinary `len(tokens)` signature. Object emission for these sum cases still reaches its existing profile boundary.
+The indexed element loan is scoped to the field use or immediate call. The source checks require compatible readonly formals and owner substitutions and reject deferred use of the loan. These checks cover `ModuleExportStorage` on both source routes. Both commands also check the unchanged guarded `tokens[opening].delimiter` case in `ParserInput.closing_token`, including `len(tokens)`. Object emission for these sum cases still reaches its existing profile boundary.
 
 ### Fresh sum arguments
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
 
-Both commands check the `OwnerQualifiedType` argument to `ParserInput.append_syntax_node` in a reduction that supplies the offsets directly and uses the intrinsic length query. The unchanged source still requires checked imported signatures for the length and offset helpers. The full entry now reaches the unsupported selected `len(tokens)` call in `ParserInput.closing_token`.
+Both commands check the `OwnerQualifiedType` argument to `ParserInput.append_syntax_node` in a reduction that supplies the offsets directly. The unchanged `ParserInput.cod` and application entry now reach the unsupported `syntax_first` call in `append_qualified_type` at `ParserInput.cod:91:39`.
+
+### Imported array length families
+
+In demanded source bodies, a direct `using` selection can call a fixed ordinary family whose methods each return the builtin length of their sole readonly array formal as an independent `UInt64`. The defining module publishes all methods with their exact nominal array types and completed body evidence together. A rename preserves that selection. The caller prepares the live array and its actual owner once, then selects the unique method for that array. A writable actual can supply the readonly formal. Argument failure precedes entry. Extended views, deferred calls and object emission remain outside this profile.
 
 ### Package probe and literal call contracts
 

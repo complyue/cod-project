@@ -94,7 +94,7 @@ using "./ModuleExports.cod" {
     native_handle_export, scalar_type_export, permits_module_family_extension,
 };
 using "./ModuleExportStorage.cod" {
-    enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface,
+    enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface, array_length_family_interface,
     FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
@@ -2600,7 +2600,9 @@ func published_family_membership(interfaces:const ModuleInterfaces in I, publish
     if (kind != callable_export() || shape != ordinary_callable_shape() || module == 0u64)
         return (UnprovedMembership:FamilyMembership);
     val row <- find_interface(interfaces, published, module, declaration);
-    if (row == no_node() || interfaces[row].interface_kind != callable_binding())
+    if (row == no_node()) return (UnprovedMembership:FamilyMembership);
+    val interface_kind <- interfaces[row].interface_kind;
+    if (interface_kind != callable_binding() && interface_kind != array_length_family_interface())
         return (UnprovedMembership:FamilyMembership);
     if (interfaces[row].membership == (VariadicMethod:FamilyMembership) &&
         interfaces[row].native_function != no_node()) return (UnprovedMembership:FamilyMembership);

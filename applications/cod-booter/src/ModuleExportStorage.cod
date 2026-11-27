@@ -66,6 +66,7 @@ export data CallableObjectView =
     };
 
 export func callable_view_interface() -> UInt8 { return 41u8 }
+export func array_length_family_interface() -> UInt8 { return 42u8 }
 
 export data CallableUseProof =
     UnselectedCallable {} |

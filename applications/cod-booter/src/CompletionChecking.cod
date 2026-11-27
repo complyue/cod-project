@@ -72,7 +72,7 @@ using "./ModuleExportStorage.cod" ByteArrayFailures;
 using "./ModuleExportStorage.cod" ByteFunctionCompletion {
     NoByteFunction, CheckedByteFunction, ByteFunctionMayFailBounds
 };
-using "./NativeDeclarations.cod" prepared_byte_function;
+using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
 
 export data CompletionSite {
     event:UInt8;
@@ -833,6 +833,11 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     if (inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation) {
+        if (prepared_array_length_call(views, at)) {
+            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
+                return unproved_deferred_error();
+            return 0u8
+        };
         if (links[at].imported_interface != no_node()) {
             val diagnostic <- check_call_completion(nodes, names, links, facts, sites, at,
                 links[at].imported_failure_module, links[at].imported_failure,

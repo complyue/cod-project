@@ -995,7 +995,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     ref required = make UInt64 { no_node() };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_imported_calls(nodes, names, selected, work, published_interfaces, interface_count,
-        catalog_exports, callable_uses, visits, visit_count, used, revision, !native, required, operands)) {
+        catalog_exports, callable_uses, views, visits, visit_count, used, revision, !native, required, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,

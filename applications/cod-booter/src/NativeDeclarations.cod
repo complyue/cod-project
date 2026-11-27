@@ -17,7 +17,7 @@ using "./ParserStorage.cod" {
 };
 using "./ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
-using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, HereReceiverSequence };
+using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, HereReceiverSequence };
 using "./ParserStorage.cod" CompletionSyntax {
     ReturnCompletion, ContinueCompletion, BreakCompletion
 };
@@ -26,7 +26,7 @@ using "./ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction, LocalBindingSites, inspect_local_binding,
     published_syntax_id, inspect_type_annotation, syntax_first, syntax_past, module_item_publication,
     ModuleSelectionSites, inspect_module_selection,
-    FormalMode, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding,
+    FormalMode, FormalSites, inspect_formal, formal_binding_is_fixed, formal_variadic_at, BindingSites, inspect_binding,
     SignatureSites, inspect_signature, find_signature_clause, CallableSites, inspect_callable, owner_constraint_syntax,
 };
 using "./ParserStorage.cod" DeclarationSyntax {
@@ -49,7 +49,7 @@ using "./ParserStorage.cod" SignatureSyntax {
 using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
-    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition
+    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength
 };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
@@ -89,6 +89,7 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type,
+    array_length_family_interface,
     SumInterfacePayload { NoSumInterface }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
@@ -1473,6 +1474,8 @@ export data SuppliedView =
         owner_site:UInt64; type_module:UInt64; type_identity:UInt64; element:ArraySlotElement; element_sum:UInt64; } |
     EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
     PreparedByteFunction { enum_result:bool; completion:ByteFunctionCompletion; } |
+    PreparedArrayLengthMethod { type_module:UInt64; type_identity:UInt64; } |
+    ImportedArrayLengthCall { first:UInt64; past:UInt64; argument:UInt64; input:UInt64; } |
     PreparedAcquisitionFailure { nominal:ExceptionType; };
 export array SuppliedViews[UInt64]:SuppliedView;
 
@@ -1830,6 +1833,74 @@ func independent_u64_formal(nodes:const ExprNodes in N, names:const NameBindings
     return typed_formal(nodes, revision, used, formal, shape, binding) &&
         (shape.mode == ValueFormal || shape.mode == ExplicitValueFormal) &&
         binding.owner_name == no_node() && names[binding.target_type].kind == builtin_u64()
+}
+
+func returns_formal_length(nodes:const ExprNodes in N, names:const NameBindings in B,
+    body:UInt64, formal:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B} {
+    val tail <- no_node();
+    ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val value <- no_node();
+    if (!block_tail(nodes, revision, used, body, tail) ||
+        inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
+        item.previous != no_node() || completion_syntax(nodes, item.item) != ReturnCompletion ||
+        !completion_operand(nodes, revision, used, item.item, value) || value >= used)
+        return false;
+    return case nodes[value] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            ArrayLength { val target <-; } -> published_syntax_id(nodes, revision, value, target) &&
+                names[target.index].kind == formal_binding() && names[target.index].declaration == formal;
+            _ -> false
+        };
+        Vacant -> false
+    }
+}
+
+func prepare_array_length_method(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, views:SuppliedViews in V, at:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner E, owner V} {
+    if (names[at].kind != callable_binding()) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form)
+        return;
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val owner_site <- callable.signature;
+    if (inspect_signature(nodes, revision, used, owner_site, clause) != OwnerSignatureClause ||
+        !clause.readonly) return;
+    if (inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+        names[clause.annotation].kind != builtin_u64()) return;
+    if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val parameter <- clause.parameter_tail;
+    if (inspect_sequence_entry(nodes, revision, used, parameter, entry) != FormalSequence ||
+        entry.previous != no_node() || formal_variadic_at(nodes, revision, used, parameter) != no_node()) return;
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (!typed_formal(nodes, revision, used, parameter, formal, binding) ||
+        formal.mode != ReferenceFormal || !binding.readonly || binding.owner_name >= used ||
+        names[binding.owner_name].kind != owner_binding() ||
+        names[binding.owner_name].declaration != owner_site) return;
+    val marker <- binding.target_type;
+    if (marker >= used || (names[marker].kind != array_type() &&
+        imported_kind(names, selected, marker) != array_export())) return;
+    if (!returns_formal_length(nodes, names, callable.body, parameter, used, revision)) return;
+    views[at] <- make PreparedArrayLengthMethod {
+        type_module <- type_module(names, selected, marker, 0u64);
+        type_identity <- type_identity(names, selected, marker)
+    };
+    return
+}
+
+export func prepared_array_length_call(views:const SuppliedViews in V, at:UInt64)
+    -> bool where {const owner V} {
+    return at < intrinsic (len)(views) && (case views[at] of {
+        ImportedArrayLengthCall -> true;
+        _ -> false
+    })
 }
 
 func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -3104,6 +3175,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                 remember_indexed_array_source(views, assignment.input, at, indexed)
             }
         };
+        prepare_array_length_method(nodes, names, selected, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
@@ -3638,6 +3710,61 @@ func stage_array_interface(names:const NameBindings in B, selected:const Selecte
 
 # The checked declarations retain their identity even when their names are
 # private. Only ModuleExports contributes names to another module's lookup.
+# Every selectable member must have the independently proved length body.
+# The family header identifies the exact interpretation published by this module.
+func array_length_method_count(names:const NameBindings in B, work:const NameWork in W,
+    views:const SuppliedViews in V, head:UInt64, used:UInt64) -> UInt64
+    where {const owner B, const owner W, const owner V} {
+    val count <- 0u64;
+    val method <- head;
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) return count;
+        if (method >= used || names[method].declaration != head) return 0u64;
+        case views[method] of {
+            PreparedArrayLengthMethod -> {};
+            _ -> { return 0u64 }
+        };
+        count <- count + 1u64;
+        method <- work[method].next_method
+    };
+    return 0u64
+}
+
+func stage_array_length_family(names:const NameBindings in B, work:const NameWork in W,
+    views:const SuppliedViews in V, head:UInt64, used:UInt64, defining_module:UInt64,
+    contracts:ModuleInterfaces in C, first:UInt64) -> UInt64
+    where {const owner B, const owner W, const owner V, owner C} {
+    val count <- array_length_method_count(names, work, views, head, used);
+    if (count == 0u64) return first;
+    val limit <- intrinsic (len)(contracts);
+    if (first >= limit || count >= limit - first) return no_node();
+    write_interface_header(contracts[first], defining_module, head,
+        array_length_family_interface(), builtin_u64(), count);
+    contracts[first].owner_count <- 1u64;
+    contracts[first].callable_kind <- CheckedFunction;
+    contracts[first].membership <- FixedMethods;
+    contracts[first].failure_identity <- no_node();
+    val method <- head;
+    val past <- first + 1u64 + count;
+    for (row in first + 1u64 .. past) {
+        case views[method] of {
+            PreparedArrayLengthMethod { val module <- type_module; val identity <- type_identity; } -> {
+                write_interface_header(contracts[row], defining_module, method, 0u8, 0u8, 0u64);
+                contracts[row].value_kind <- array_type();
+                contracts[row].type_module <- if (module == 0u64) { defining_module } else { module };
+                contracts[row].type_identity <- identity;
+                contracts[row].owner_role <- 0u64;
+                contracts[row].target_readonly <- 1u8;
+                contracts[row].owner_readonly <- 1u8;
+                (contracts[row].field_mode <- ReferenceFormal):void
+            };
+            _ -> { return no_node() }
+        };
+        method <- work[method].next_method
+    };
+    return past
+}
+
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
                                views:const SuppliedViews in V, used:UInt64, revision:UInt64,
@@ -3692,26 +3819,33 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     (ordinary && failure == no_node()) || callback != no_node() || source_handle ||
                     (form == ModuleCallablePromise && names[at].declaration == at))) {
                     first <- count;
-                    byte_completion <- byte_function_completion(views, at);
-                    if (prepared_byte_function(views, at, true) && byte_completion == NoByteFunction) {
-                        reject_declaration(report, at, invalid_native_parameter());
-                        return no_node()
+                    if (ordinary && failure == no_node()) {
+                        (count <- stage_array_length_family(names, work, views, at, used,
+                            defining_module, contracts, count)):void
                     };
-                    (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                                               at, at, kind, callback, byte_completion, used, revision)):void;
-                    if (callback != no_node() && (count == no_node() ||
-                        !stage_checked_here_contract(nodes, names, selected, views,
-                            contracts[first],
-                                                     callback, failure, defining_module,
-                                                     used, revision))) {
-                        reject_declaration(report, at, unproved_imported_here_signature());
-                        return no_node()
-                    };
-                    if (source_handle && (count == no_node() ||
-                        !stage_checked_source_failure(nodes, names, selected, contracts[first],
-                            failure, defining_module, used, revision))) {
-                        reject_declaration(report, at, invalid_native_failure());
-                        return no_node()
+                    if (count == no_node()) return no_node();
+                    if (count == first) {
+                        byte_completion <- byte_function_completion(views, at);
+                        if (prepared_byte_function(views, at, true) && byte_completion == NoByteFunction) {
+                            reject_declaration(report, at, invalid_native_parameter());
+                            return no_node()
+                        };
+                        (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
+                                                   at, at, kind, callback, byte_completion, used, revision)):void;
+                        if (callback != no_node() && (count == no_node() ||
+                            !stage_checked_here_contract(nodes, names, selected, views,
+                                contracts[first],
+                                                         callback, failure, defining_module,
+                                                         used, revision))) {
+                            reject_declaration(report, at, unproved_imported_here_signature());
+                            return no_node()
+                        };
+                        if (source_handle && (count == no_node() ||
+                            !stage_checked_source_failure(nodes, names, selected, contracts[first],
+                                failure, defining_module, used, revision))) {
+                            reject_declaration(report, at, invalid_native_failure());
+                            return no_node()
+                        }
                     }
                 } else {};
             };

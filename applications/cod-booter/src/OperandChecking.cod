@@ -107,6 +107,7 @@ using "./ModuleExportStorage.cod" ByteFunctionCompletion {
     NoByteFunction, CheckedByteFunction, ByteFunctionMayFailBounds
 };
 using "./ModuleIndex.cod" { Visits, contains_checked_interface };
+using "./ModuleExportStorage.cod" array_length_family_interface;
 using "./ParserStorage.cod" { completion_syntax, CompletionSyntax { ReturnCompletion } };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
@@ -130,6 +131,7 @@ using "./NativeDeclarations.cod" {
 };
 using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement } };
 using "./NativeDeclarations.cod" SuppliedView {
+    ImportedArrayLengthCall,
     SuppliedArrayView, PreparedImportedNativeOperation, ImportedNativeOperand, ImportedNativeU64,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody
@@ -2763,16 +2765,50 @@ export func mark_literal_source_bodies(nodes:const ExprNodes in N, names:const N
     return true
 }
 
+# This is a complete published family view. Its rows are signatures, not
+# prepared operands. The demanded caller will select against its one actual.
+func array_length_family_past(contracts:const ModuleInterfaces in I, published:UInt64,
+    visits:const Visits in G, visit_count:UInt64, header:UInt64, module:UInt64) -> UInt64
+    where {const owner I, const owner G} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val entries <- contracts[header].entry_count;
+    if (entries == 0u64 || entries >= published - header ||
+        contracts[header].interface_kind != array_length_family_interface() ||
+        contracts[header].membership != FixedMethods || contracts[header].callable_kind != CheckedFunction ||
+        contracts[header].result_kind != builtin_u64() || contracts[header].owner_count != 1u64 ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].native_function != no_node() || contracts[header].failure_identity != no_node() ||
+        contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8)
+        return no_node();
+    val last <- header + entries;
+    if (!contains_checked_interface(visits, visit_count, module, header, published) ||
+        !contains_checked_interface(visits, visit_count, module, last, published)) return no_node();
+    val past <- last + 1u64;
+    for (row in header + 1u64 .. past) {
+        if (contracts[row].defining_module != module || contracts[row].declaration == no_node() ||
+            contracts[row].interface_kind != 0u8 || contracts[row].entry_count != 0u64 ||
+            contracts[row].value_kind != array_type() || contracts[row].field_mode != ReferenceFormal ||
+            contracts[row].type_module == 0u64 || contracts[row].type_module == no_node() ||
+            contracts[row].type_identity == no_node() || contracts[row].owner_role != 0u64 ||
+            contracts[row].target_readonly != 1u8 || contracts[row].owner_readonly != 1u8 ||
+            contracts[row].native_reception != 0u8 || contracts[row].native_passes_owner != 0u8 ||
+            contracts[row].source_allocates)
+            return no_node()
+    };
+    return past
+}
+
 func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, links:NameWork in L,
                             contracts:const ModuleInterfaces in I, interface_count:UInt64,
                             catalog:const ModuleExports in C, views:const CallableUseProofs in U,
+                            supplied:SuppliedViews in H,
                             visits:const Visits in G, visit_count:UInt64,
                             used:UInt64, revision:UInt64, source_only:bool, required:UInt64 in D,
                             at:UInt64, call:const DirectCallSites in V,
                                 report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C,
-           const owner U, const owner G, owner D, const owner V, owner R} {
+           const owner U, const owner G, owner H, owner D, const owner V, owner R} {
     val callee <- call.callee;
     if (names[callee].kind != ordinary_selection()) return true;
     val site <- names[callee].declaration;
@@ -2783,6 +2819,23 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     val obligation <- selected[site].checked != 0u8;
     val header <- find_interface(contracts, interface_count, selected[site].origin_module,
         selected[site].identity);
+    if (source_only && header != no_node() &&
+        contracts[header].interface_kind == array_length_family_interface()) {
+        val module <- selected[site].origin_module;
+        if (obligation || selected[site].dependency_module != module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision)) return true;
+        val past <- array_length_family_past(contracts, interface_count, visits, visit_count, header, module);
+        ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+        val argument <- call.arguments;
+        if (past != no_node() && argument < at &&
+            inspect_sequence_entry(nodes, revision, used, argument, entry) == ArgumentSequence &&
+            entry.previous == no_node() && entry.item < argument && !checked_ref_argument(nodes, argument)) {
+            (supplied[at] <- make ImportedArrayLengthCall {
+                first <- header + 1u64; past <- past; argument <- argument; input <- entry.item
+            }):void
+        };
+        return true
+    };
     val handles <- source_only && source_handle_call(contracts, interface_count, header);
     val bytes <- source_only && header != no_node() && contracts[header].byte_completion != NoByteFunction;
     if (source_only && header != no_node() && contracts[header].literal_source_body) {
@@ -2849,17 +2902,18 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
                                   selected:const SelectedExports in E, links:NameWork in L,
                                   contracts:const ModuleInterfaces in I, interface_count:UInt64,
                                   catalog:const ModuleExports in C, views:const CallableUseProofs in V,
+                                  supplied:SuppliedViews in H,
                                   visits:const Visits in G, visit_count:UInt64,
                                   used:UInt64, revision:UInt64, source_only:bool, required:UInt64 in D,
                                   report:OperandCheckResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C, const owner V,
-        const owner G, owner D, owner R} {
+        const owner G, owner H, owner D, owner R} {
     required <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     for (at in 0u64 .. used) {
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady &&
             !prepare_imported_call(nodes, names, selected, links, contracts, interface_count,
-                catalog, views, visits, visit_count, used, revision, source_only, required, at, call, report)) return false
+                catalog, views, supplied, visits, visit_count, used, revision, source_only, required, at, call, report)) return false
     };
     return true
 }
@@ -4834,18 +4888,48 @@ func check_indexed_bits_transfer(facts:OperandFacts in F, cases:const Constructo
     return 0u8
 }
 
+func check_imported_array_length(nodes:const ExprNodes in N, interfaces:const ModuleInterfaces in I,
+    facts:OperandFacts in F, at:UInt64, first:UInt64, past:UInt64, argument:UInt64, input:UInt64)
+    -> UInt8 where {const owner N, const owner I, owner F} {
+    if (input >= argument || argument >= at) return invalid_operand_tree();
+    if (facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (facts[input].kind != source_array_loan() || facts[input].reception != borrowed_ref() ||
+        facts[input].target_presence != present_target()) return wrong_operand_type();
+    val selected <- no_node();
+    for (row in first .. past) {
+        if (facts[input].identity_module == interfaces[row].type_module &&
+            facts[input].identity == interfaces[row].type_identity) {
+            if (selected != no_node()) return ambiguous_value_call();
+            (selected <- row):void
+        }
+    };
+    if (selected == no_node()) return wrong_operand_type();
+    val diagnostic <- check_owner_access(nodes, facts[input].owner, false);
+    if (diagnostic != 0u8) return diagnostic;
+    copy_fact(facts, argument, input);
+    facts[argument].target_readonly <- 1u8;
+    scalar_fact(facts, at, independent_value(), no_node());
+    return 0u8
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H,
-                   cases:const ConstructorCaseFacts in C,
+                   cases:const ConstructorCaseFacts in C, interfaces:const ModuleInterfaces in I,
                        source_only:bool,
                    at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
-        owner O, const owner X, const owner H, const owner C} {
+        owner O, const owner X, const owner H, const owner C, const owner I} {
     if (at >= used) return invalid_operand_tree();
     if (links[at].enum_assertion == FoldedEnumOperand) return 0u8;
     if (source_only && at < intrinsic (len)(views)) {
         case views[at] of {
+            ImportedArrayLengthCall { val first <-; val past <-; val argument <-; val input <-; } -> {
+                return check_imported_array_length(nodes, interfaces, facts, at, first, past, argument, input)
+            };
             PreparedArrayConstruction {
                 val requested <-; val placement <-; val length <-; val fill <-; val owner_site <-;
                 val module <- type_module; val identity <- type_identity; val element <-; val sum <- element_sum;
@@ -5286,7 +5370,7 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
                                 at, used, revision, context)) return false;
             } else {
                 diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners,
-                    fields, views, cases, intrinsic (len)(demand) != 0u64, at, used, revision);
+                    fields, views, cases, interfaces, intrinsic (len)(demand) != 0u64, at, used, revision);
                 if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
             };
             complete_enum_backing(links, interfaces, published, facts, at, used);
