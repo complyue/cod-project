@@ -1644,10 +1644,19 @@ func remember_transfer(facts:OperandFacts in F, at:UInt64, destination:UInt64) -
 }
 
 func check_transfer(nodes:const ExprNodes in N, facts:OperandFacts in F,
-                    at:UInt64, destination:UInt64, supplied:UInt64) -> UInt8 where {const owner N, owner F} {
+                    at:UInt64, destination:UInt64, supplied:UInt64, source_only:bool)
+    -> UInt8 where {const owner N, owner F} {
     val diagnostic <- check_transfer_destination(nodes, facts, destination);
     if (diagnostic != 0u8) return diagnostic;
-    diagnostic <- require_matching_value_bits(nodes, facts, supplied, destination);
+    if (facts[supplied].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    val input <- facts[supplied].kind;
+    val widen <- facts[destination].kind == scalar_u64() &&
+        (input == scalar_u8() || (source_only && input == source_u32()));
+    diagnostic <- if (widen) { require_widening_u64(nodes, facts, supplied) }
+        else { require_matching_value_bits(nodes, facts, supplied, destination) };
     if (diagnostic != 0u8) return diagnostic;
     remember_transfer(facts, at, destination);
     return 0u8;
@@ -3291,6 +3300,30 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
     return past
 }
 
+func checked_readonly_byte_loan(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64, role:UInt64)
+    -> bool where {const owner I} {
+    if (!checked_readonly_loan_row(contracts[row], array_type(), role)) return false;
+    val array <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
+    return array < published && contracts[array].interface_kind == array_type() &&
+        contracts[array].entry_count == 0u64 && contracts[array].array_index_kind == builtin_u64() &&
+        contracts[array].element_kind == builtin_u8()
+}
+
+func checked_readonly_array_inputs(contracts:const ModuleInterfaces in I, published:UInt64,
+    first:UInt64, past:UInt64, owners:UInt64) -> bool where {const owner I} {
+    val role <- 0u64;
+    for (row in first .. past) {
+        if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) {
+            if (role >= owners || !checked_readonly_loan_row(contracts[row], array_type(), role) ||
+                (!published_sum_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
+                 !published_record_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
+                 !checked_readonly_byte_loan(contracts, published, row, role))) return false;
+            (role <- role + 1u64):void
+        }
+    };
+    return role == owners
+}
+
 func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3299,12 +3332,10 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
     val record_predicate <- result == builtin_bool() && parameters == 1u64;
     val owner_count <- contracts[header].owner_count;
     val record_key <- result == builtin_bool() && parameters == 4u64 && owner_count == 2u64;
-    val single_index <- result == builtin_u64() && parameters == 2u64;
-    if ((!record_predicate && !single_index && parameters != 3u64 && parameters != 4u64) ||
-        parameters >= published - header ||
+    if (parameters >= published - header || owner_count == 0u64 ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
-        contracts[header].target_readonly != 0u8 || (owner_count != 1u64 && !record_key) ||
+        contracts[header].target_readonly != 0u8 ||
         contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
         contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
         contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead ||
@@ -3316,6 +3347,12 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
             contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
     };
     val array <- header + 1u64;
+    val past <- array + parameters;
+    if (result != enum_type() && checked_readonly_array_inputs(contracts, published, array, past, owner_count))
+        return past;
+    val enum_query <- result == enum_type() && owner_count == 1u64 &&
+        (parameters == 3u64 || parameters == 4u64);
+    if (!(record_predicate && owner_count == 1u64) && !record_key && !enum_query) return no_node();
     if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 1u8)) return no_node();
     val module <- contracts[array].type_module;
     val identity <- contracts[array].type_identity;
@@ -3324,13 +3361,7 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
         if (storage != CoDBitsAggregate && storage != CLayoutBitsRecord) return no_node();
         return array + 1u64
     };
-    if (!published_sum_array(contracts, published, module, identity)) {
-        if (record_key || single_index || result != builtin_u64()) return no_node();
-        if (!published_record_array(contracts, published, module, identity) &&
-            (parameters != 3u64 || !checked_readonly_byte_loan(contracts, published, array, 0u64)))
-            return no_node()
-    };
-    val past <- array + parameters;
+    if (!published_sum_array(contracts, published, module, identity)) return no_node();
     val scalar_past <- if (record_key) { past - 1u64 } else { past };
     for (row in array + 1u64 .. scalar_past) {
         if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) return no_node()
@@ -3342,15 +3373,6 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
         if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return no_node()
     };
     return past
-}
-
-func checked_readonly_byte_loan(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64, role:UInt64)
-    -> bool where {const owner I} {
-    if (!checked_readonly_loan_row(contracts[row], array_type(), role)) return false;
-    val array <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
-    return array < published && contracts[array].interface_kind == array_type() &&
-        contracts[array].entry_count == 0u64 && contracts[array].array_index_kind == builtin_u64() &&
-        contracts[array].element_kind == builtin_u8()
 }
 
 func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
@@ -3375,15 +3397,6 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
     val second <- header + 2u64;
     if (!checked_readonly_byte_loan(contracts, published, bytes, 0u64)) return no_node();
     val past <- header + 1u64 + parameters;
-    if (output == builtin_bool() && parameters == 6u64 && contracts[second].value_kind == builtin_u64()) {
-        val right <- second + 2u64;
-        if (!source_aggregate_formal(contracts, second, builtin_u64(), no_node(), 0u8) ||
-            !source_aggregate_formal(contracts, second + 1u64, builtin_u64(), no_node(), 0u8) ||
-            !checked_readonly_byte_loan(contracts, published, right, 1u64) ||
-            !source_aggregate_formal(contracts, right + 1u64, builtin_u64(), no_node(), 0u8) ||
-            !source_aggregate_formal(contracts, right + 2u64, builtin_u64(), no_node(), 0u8)) return no_node();
-        return past
-    };
     if (text_predicate) {
         if (!checked_readonly_loan_row(contracts[second], record_type(), 1u64) ||
             checked_aggregate_storage(contracts, published, contracts[second].type_module,
@@ -6339,7 +6352,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                             set_result(facts, at, never_result());
                             return 0u8
                         };
-                        if (facts[target].array_scalar != 0u8) return check_transfer(nodes, facts, at, destination, input);
+                        if (facts[target].array_scalar != 0u8)
+                            return check_transfer(nodes, facts, at, destination, input, source_only);
                         return check_slot_sum_transfer(cases, facts, at, destination, input, facts[target].array_sum)
                     }
                 };
@@ -6348,7 +6362,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         };
         if (facts[destination].kind == product_kind())
             return check_transfer_call(nodes, names, links, facts, owners, at, destination, input, false, used, revision);
-        if (!immutable_text_kind(facts[destination].kind)) return check_transfer(nodes, facts, at, destination, input);
+        if (!immutable_text_kind(facts[destination].kind))
+            return check_transfer(nodes, facts, at, destination, input, source_only);
         if (facts[destination].writable_text_place == 0u8) return expected_writable_place();
         # Reborrowing an init formal as an initialized place would expose its
         # current value before the caller's first-write proof.
