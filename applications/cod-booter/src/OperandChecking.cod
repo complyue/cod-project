@@ -3609,7 +3609,7 @@ func publishes_checked_call(exports:const ModuleExports in E, count:UInt64, modu
     return false
 }
 
-func publish_enum_domain(facts:const OperandFacts in F, value:UInt64, module_id:UInt64, row:ModuleInterfaceRow in I)
+func publish_nominal_identity(facts:const OperandFacts in F, value:UInt64, module_id:UInt64, row:ModuleInterfaceRow in I)
     -> void where {const owner F, owner I} {
     row.type_module <- if (facts[value].identity_module == 0u64) { module_id } else { (facts[value].identity_module) };
     row.type_identity <- facts[value].identity;
@@ -3648,21 +3648,23 @@ func stage_array_slot_parameters(nodes:const ExprNodes in N, links:const NameWor
             if (kind == 0u8 || (syntax.mode != ValueFormal && syntax.mode != ExplicitValueFormal)) return no_node();
             (contracts[row].value_kind <- kind):void
         } else {
-            if (facts[formal].reception != borrowed_ref() ||
-                (syntax.mode != ReferenceFormal && syntax.mode != ReferenceSlotFormal)) return no_node();
-            if (has_slot_array(facts, formal)) {
-                if (facts[formal].identity == no_node() ||
-                    facts[formal].array_slot != formal ||
-                    (syntax.mode == ReferenceSlotFormal && facts[formal].target_readonly != 0u8)) return no_node();
-                contracts[row].value_kind <- array_type();
-                contracts[row].type_identity <- facts[formal].identity;
-                contracts[row].type_module <- if (facts[formal].identity_module == 0u64) {
-                    module
-                } else { (facts[formal].identity_module) };
-                (has_slot <- has_slot || syntax.mode == ReferenceSlotFormal):void
+            if (facts[formal].reception != borrowed_ref()) return no_node();
+            if (syntax.mode == HandleFormal) {
+                if (facts[formal].kind != source_handle_loan() || facts[formal].identity == no_node()) return no_node();
+                contracts[row].value_kind <- c_handle_type();
+                publish_nominal_identity(facts, formal, module, contracts[row])
             } else {
-                if (kind == 0u8 || kind == builtin_u32() || syntax.mode != ReferenceFormal) return no_node();
-                (contracts[row].value_kind <- kind):void
+                if (has_slot_array(facts, formal)) {
+                    if ((syntax.mode != ReferenceFormal && syntax.mode != ReferenceSlotFormal) ||
+                        facts[formal].identity == no_node() || facts[formal].array_slot != formal ||
+                        (syntax.mode == ReferenceSlotFormal && facts[formal].target_readonly != 0u8)) return no_node();
+                    contracts[row].value_kind <- array_type();
+                    publish_nominal_identity(facts, formal, module, contracts[row]);
+                    (has_slot <- has_slot || syntax.mode == ReferenceSlotFormal):void
+                } else {
+                    if (kind == 0u8 || kind == builtin_u32() || syntax.mode != ReferenceFormal) return no_node();
+                    (contracts[row].value_kind <- kind):void
+                }
             };
             owner_site <- facts[formal].owner;
             if (owner_site >= used || !owner_parameter(nodes, owner_site)) return no_node();
@@ -3697,15 +3699,18 @@ export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const
     ref failure = make UInt64 { no_node() };
     ref owner_count = make UInt64 { 0u64 };
     val count <- start;
+    val kind <- 0u8;
     val result <- 0u8;
     val past <- no_node();
     for (definition in 0u64 .. used) {
         if (inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
             case views[definition] of {
                 CheckedArraySlotBody { val failures <-; } -> {
-                    result <- if (facts[definition].kind == void_result()) { builtin_void() }
-                        else { interface_scalar(facts[definition].kind) };
-                    if (result == 0u8 || facts[definition].reception == borrowed_ref() ||
+                    kind <- facts[definition].kind;
+                    result <- if (kind == void_result()) { builtin_void() }
+                        else { if (kind == scalar_enum()) { enum_type() } else { interface_scalar(kind) } };
+                    if (result == 0u8 || (kind == scalar_enum() && facts[definition].identity == no_node()) ||
+                        facts[definition].reception == borrowed_ref() ||
                         names[definition].declaration != definition || links[definition].next_method != no_node() ||
                         count >= intrinsic (len)(contracts) ||
                         !callable_formals(nodes, revision, used, definition, true, first) ||
@@ -3722,6 +3727,9 @@ export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const
                     };
                     write_interface_header(contracts[count], module, definition, callable_binding(),
                         result, past - count - 1u64);
+                    if (kind == scalar_enum()) {
+                        publish_nominal_identity(facts, definition, module, contracts[count])
+                    };
                     contracts[count].owner_count <- owner_count;
                     contracts[count].membership <- FixedMethods;
                     contracts[count].callable_kind <- if (callable.function_form) {
@@ -3810,7 +3818,7 @@ export func append_callable_interfaces(nodes:const ExprNodes in N, names:const N
                 write_interface_header(contracts[count], module_id, at, callable_binding(), facts[at].kind, arity);
                 contracts[count].membership <- (FixedMethods:FamilyMembership);
                 if (facts[at].kind == scalar_enum()) {
-                    publish_enum_domain(facts, at, module_id, contracts[count])
+                    publish_nominal_identity(facts, at, module_id, contracts[count])
                 };
                 if (!source_only) { (contracts[count].native_function <- base + at):void };
                 contracts[count].callable_kind <- if (callable.function_form) {
@@ -3853,7 +3861,7 @@ func publish_native_parameter(nodes:const ExprNodes in N, links:const NameWork i
     row.native_reception <- facts[formal].reception;
     row.target_readonly <- facts[formal].target_readonly;
     if (row.native_reception == local_place()) {
-        if (row.value_kind == scalar_enum()) { publish_enum_domain(facts, formal, module_id, row) };
+        if (row.value_kind == scalar_enum()) { publish_nominal_identity(facts, formal, module_id, row) };
         return
     };
     val binder <- facts[formal].owner;

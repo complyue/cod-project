@@ -1679,7 +1679,7 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
 }
 
 func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
-    definition:UInt64, member:UInt64, used:UInt64, revision:UInt64, single_slot:bool) -> bool
+    definition:UInt64, member:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner W} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     val form <- inspect_callable(nodes, revision, used, definition, callable);
@@ -1687,18 +1687,10 @@ func source_slot_parameter(nodes:const ExprNodes in N, work:const NameWork in W,
     ref header = make UInt64 { no_node() };
     ref at = make UInt64 { no_node() };
     if (!signature_formals(nodes, revision, used, callable.signature, header, at)) return false;
-    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
-    val seen <- false;
     val next <- no_node();
     for (unused in 0u64 .. used) {
-        if (at == no_node()) return seen;
-        if (at >= used || (!single_slot && at > member)) return false;
-        if (at == member && !single_slot) return true;
-        if (single_slot && inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal &&
-            formal.mode == ReferenceSlotFormal) {
-            if (at != member || seen) return false;
-            (seen <- true):void
-        };
+        if (at > member || at >= used) return false;
+        if (at == member) return true;
         next <- work[at].next;
         if (next <= at) return false;
         (at <- next):void
@@ -1737,7 +1729,7 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
             val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 binding.target_type, used, revision, proof);
             if (kind != 0u8 && (!slot || (kind != builtin_u64() &&
-                source_slot_parameter(nodes, work, names[at].scope, at, used, revision, kind == sum_type())))) {
+                source_slot_parameter(nodes, work, names[at].scope, at, used, revision)))) {
                 views[at] <- make ArraySlotFormal {
                     owner_site <- owner_site; type_module <- proof.type_module; type_identity <- proof.type_identity;
                     slot <- slot; element <- slot_element(kind);

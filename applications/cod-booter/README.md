@@ -199,6 +199,8 @@ The declaration and C provider commands check `reserve_keys` with its original `
 
 The checker records the possible escaping bounds and allocation failures of a completed slot body. A failed argument prevents callee entry. The staged interface records the formal modes, owner roles and allocation requirements. Imported reference-slot calls still require a cross-module rebind contract before they can be checked. [Key-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-key-array)
 
+The source commands check the two distinct slots in `insert_visit` in a same-module reduction with the original bodies. Each slot keeps its own saved place and exact nominal array. Both use the actual allocator for the shared owner role. The staged callable keeps the separate path-handle role and the nominal `CompilerStatus` result. In the linked seed witness, a bounds failure during the second growth leaves the first growth and its copied visit visible. The original keys backing and publication counts survive that failure.
+
 Both source commands also check `reserve_visits`. The visit-array profile requires a locally declared `UInt64`-indexed array whose exact sum element has a completed finite bits schema. The fieldless fill must belong to that sum. The checker prepares the indexed destination before the source, including both bounds checks, and admits the whole-value transfer in discarded position. The final rebind follows the copy loop. Mixed-slot signatures and object emission remain separate profiles. [Visit-array checking contract](docs/ModuleGraph.md#checking-growth-of-the-module-visit-array)
 
 The source commands also check a local braced constructor written directly into a writable element of a finite-bits sum array. They verify each initializer and the exact nominal element type, including nested inline bits fields. The isolated `mark_failed_visit` body passes both commands with its original schema. Object lowering and uses that consume the transfer's result remain outside this profile. [Indexed sum transfers](docs/ModuleGraph.md#checking-a-local-sum-constructor-in-an-indexed-transfer)
@@ -339,7 +341,7 @@ For a builtin bits transfer to an indexed record field, the selected array must 
 
 In a demanded body, both source commands check synchronous calls to a same-revision procedure with readonly finite-bits product loans and an independent result or no result. The actual can be an initialized product formal or a checked lexical product reference. The checker prepares each operand in written order and checks its nominal type, access and actual owner. The procedure can also take checked handle loans, readonly arrays and by-value scalars in this profile. A failed operand prevents entry. Both source commands check the original `write_single_report` and its caller in the stored-rejection reduction.
 
-Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`. The unchanged full CLI first stops at the reference-slot formal of the two-slot `insert_visit` in `ModuleIndex.cod:145:26`.
+Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`. The unchanged `ModuleIndex` and full CLI first stop at the checked export for `lookup_path` in `ModuleIndex.cod:121:8`. Its mixed borrowed signature has a separate interface limit.
 
 ### Imported array length families
 
