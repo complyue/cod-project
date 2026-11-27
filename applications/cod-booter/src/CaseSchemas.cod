@@ -5,10 +5,11 @@ using "./ParserStorage.cod" {
     SumArmSites, inspect_sum_arm, first_sequence_entry, FormalSites, inspect_formal,
     BindingSites, inspect_binding, DeclarationSyntax { ArrayTypeDeclaration, NominalRecord, NominalSum },
     SequenceSyntax { SumSequence }, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal },
-    FormalSyntax { OrdinaryFormal }, BindingSyntax { TypedBinding },
+    FormalSyntax { OrdinaryFormal }, BindingSyntax { BareBinding, TypedBinding },
+    LocalBindingSites, inspect_local_binding, LocalMode { ReferenceLocal, ValueLocal },
     IndexSites, inspect_index_selection, owner_constraint_syntax,
     DirectCallSites, direct_invocation, DirectInvocationSyntax { DirectInvocationReady },
-    AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer, FieldTransfer },
+    AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer },
     ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
     OwnerConstraintSyntax { ReadonlyOwnerConstraint, NotOwnerConstraint },
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
@@ -57,6 +58,8 @@ export data ConstructorCaseFact =
         transfer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_module:UInt64; array_type:UInt64;
         element:DeclaredType; index_binds_storage:bool;
     } |
+    LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
+    LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
     FreshSumArgument { invocation:UInt64; formal:UInt64; construction:UInt64; lexical_owner:UInt64; } |
     BitsConstruction {
@@ -1235,6 +1238,80 @@ func prepare_bits_construction(nodes:const ExprNodes in N, names:const NameBindi
     return true
 }
 
+func prepare_lexical_sum_reference(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:UInt64, local:const LocalBindingSites in L, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A,
+        owner F, const owner L, owner R} {
+    val input <- local.initializer;
+    val lexical_owner <- names[at].scope;
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    if (input >= at || lexical_owner >= used || names[input].scope != lexical_owner ||
+        inspect_construction(nodes, revision, at, input, syntax) != BracedConstruction)
+        return case_problem(report, input, unsupported_bits_construction());
+    val chosen <- selected[syntax.requested].constructor_selection;
+    if (chosen >= used) return case_problem(report, syntax.requested, unselected_case_constructor());
+    val head <- selected[chosen].sum_head;
+    if (head >= published || interfaces[head].interface_kind != sum_type())
+        return case_problem(report, syntax.requested, unselected_case_constructor());
+    ref type = make DeclaredType {
+        kind <- sum_type(); defining_module <- interfaces[head].defining_module; identity <- interfaces[head].declaration;
+    };
+    if (!case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, input, unsupported_bits_construction());
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    val shape <- inspect_binding(nodes, revision, at, local.binding, binding);
+    if ((shape != BareBinding && shape != TypedBinding) || binding.owner_name != no_node())
+        return case_problem(report, local.binding, unsupported_bits_construction());
+    if (shape == TypedBinding) {
+        ref annotation = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node(); };
+        if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, annotation) ||
+            annotation.kind != sum_type() || annotation.defining_module != type.defining_module ||
+            annotation.identity != type.identity)
+            return case_problem(report, binding.annotation, wrong_construction_type())
+    };
+    if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+        input, at, type, used, revision, report)) return false;
+    facts[at] <- make LexicalSumReference { construction <- input; owner_site <- lexical_owner; readonly <- binding.readonly; };
+    return true
+}
+
+func prepare_lexical_sum_rebind(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
+    published:UInt64, facts:ConstructorCaseFacts in F, at:UInt64, assignment:const AssignmentSites in A,
+    used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner N, const owner B, const owner E, const owner W, const owner G,
+        owner F, const owner A, owner R} {
+    val destination <- assignment.destination;
+    val input <- assignment.input;
+    if (destination >= at || input >= at || names[destination].kind != local_binding())
+        return case_problem(report, at, unsupported_bits_construction());
+    val slot <- names[destination].declaration;
+    if (slot >= destination) return case_problem(report, destination, unsupported_bits_construction());
+    return case facts[slot] of {
+        LexicalSumReference { val initializer <- construction; val owner_site <-; } -> {
+            if (owner_site != names[at].scope || owner_site != names[input].scope)
+                return case_problem(report, input, unsupported_bits_construction());
+            case facts[initializer] of {
+                BitsConstruction { val type <- value_type; } -> {
+                    if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+                        input, at, type, used, revision, report)) return false;
+                    facts[at] <- make LexicalSumRebind { destination <- destination; construction <- input; owner_site <- owner_site; };
+                    return true
+                };
+                _ -> { return case_problem(report, input, unsupported_bits_construction()) }
+            }
+        };
+        _ -> case_problem(report, destination, unsupported_bits_construction())
+    }
+}
+
 func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
     published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, transfer:UInt64,
@@ -1363,6 +1440,9 @@ func prepare_bits_initializers(source:const SourceBytes in S, nodes:const ExprNo
 
 export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64, revision:UInt64)
     -> bool where {const owner N} {
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
+    };
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
     ref projection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
@@ -1373,6 +1453,9 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64,
         initializer <- no_node(); contents <- no_node()
     };
     for (at in 0u64 .. used) {
+        if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
+            inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
+            construction.placement == no_node() && construction.queried_operand == no_node()) return true;
         if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
@@ -1406,6 +1489,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             if (work[at].sum_loan_formals && first == no_node()) { (first <- at):void }
         }
     };
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
+    };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -1415,6 +1501,12 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         if (!prepare_sum_case(source, nodes, names, selected, work, spellings, spelling_used,
             interfaces, published, aggregate, facts, at, used, revision, report)) return false;
         if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
+        if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
+            local.initializer < at && work[local.initializer].inline_sum_initializer) {
+            if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
+                aggregate, facts, at, local, used, revision, report)) return false;
+            if (first == no_node()) { (first <- at):void }
+        };
         if (indexed_braced_transfer(nodes, at, used, revision, assignment, construction)) {
             if (names[construction.requested].kind == constructor_type() &&
                 names[construction.requested].declaration != no_node()) {
@@ -1439,6 +1531,10 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     val site <- no_node();
     for (offset in 0u64 .. used) {
         site <- used - 1u64 - offset;
+        if (inspect_assignment(nodes, revision, used, site, assignment) == PlaceRebind &&
+            assignment.input < site && work[assignment.input].inline_sum_initializer &&
+            !prepare_lexical_sum_rebind(nodes, names, selected, work, interfaces, published, facts,
+                site, assignment, used, revision, report)) return false;
         case facts[site] of {
             BitsConstruction {
                 val fields <- schema; val type <- value_type; val begin <- first_initializer; val end <- last_initializer;

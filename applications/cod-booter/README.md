@@ -189,6 +189,8 @@ An ordinary scalar reference local can rebind to an existing initialized target 
 
 The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `UInt64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
 
+Both source commands also check lexical references initialized by an unplaced braced constructor of a selected imported finite-bits sum. A mutable slot can select a fresh target of that nominal sum under the same lexical owner, including a slot declared with readonly target access. A failed constructor leaves the previous target selected. At a conditional continuation, the checker retains the common type, owner, access and readiness. Copying the selected bits into an inline field works in the `append_block_item` and `append_block` reduction with an intrinsic length query. A fixed slot cannot rebind.
+
 ### Array growth and reference-slot calls
 
 The declaration and C provider commands check `reserve_keys` with its original `SourceBytes` type and `growth_capacity` helper. Within the same module, a `ref var` formal can forward the caller's initialized writable slot. An ordinary reference formal lends its own local slot. Rebinding requires the same nominal array and actual owner, and construction separately requires a writable allocator role. Fixed slots, readonly targets and temporary arrays cannot supply a writable reference slot.
@@ -211,7 +213,7 @@ The indexed element loan is scoped to the field use or immediate call. The sourc
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
 
-Both commands check the `OwnerQualifiedType` argument to `ParserInput.append_syntax_node` in a reduction that supplies the offsets directly and uses the intrinsic length query. The unchanged source still requires checked imported signatures for the length and offset helpers. The full entry now reaches name binding of the lexical `NoLink` initializer in `ParserInput.append_block_item`.
+Both commands check the `OwnerQualifiedType` argument to `ParserInput.append_syntax_node` in a reduction that supplies the offsets directly and uses the intrinsic length query. The unchanged source still requires checked imported signatures for the length and offset helpers. The full entry now reaches the unsupported selected `len(tokens)` call in `ParserInput.closing_token`.
 
 ### Package probe and literal call contracts
 

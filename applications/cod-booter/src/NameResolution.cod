@@ -45,7 +45,7 @@ using "./ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHand
 using "./ParserStorage.cod" GuardClauseSyntax { InvalidGuardClause, HandlerClause, CleanupClause };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion };
 using "./ParserStorage.cod" GroupSyntax { InvalidGroup, ParenthesizedExpression };
-using "./ParserStorage.cod" LocalMode { ExceptionLocal };
+using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, ExceptionLocal };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
 using "./ParserStorage.cod" SelectionSyntax { InvalidSelection, SelectionReady };
@@ -929,6 +929,17 @@ export func enclosing_callable(nodes:const ExprNodes in N, names:const NameBindi
     return no_node();
 }
 
+func selected_inline_sum(nodes:const ExprNodes in N, work:const NameWork in W,
+    state:const NameState in R, at:UInt64) -> bool where {const owner N, const owner W, const owner R} {
+    ref syntax = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    return inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, syntax) == BracedConstruction &&
+        syntax.placement == no_node() && syntax.queried_operand == no_node() &&
+        work[syntax.requested].selected_constructor
+}
+
 # Lists link forward in the temporary workspace. Traversing a wide block or
 # parameter list does not recurse through its preceding siblings.
 func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -944,10 +955,6 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         return;
     };
     val saved_inline <- state.inline_field_input;
-    ref construction = make ConstructionSites {
-        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
-        initializer <- no_node(); contents <- no_node();
-    };
     for (unused in 0u64 .. syntax_len(nodes)) {
         if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, item, entry) != kind) {
             reject_name(state, tail, invalid_module_tree());
@@ -955,9 +962,7 @@ func resolve_list(source:const SourceBytes in S, nodes:const ExprNodes in N, bin
         };
         bindings[item].scope <- state.scope_node;
         if (inline_actuals && kind == ArgumentSequence &&
-            inspect_construction(nodes, state.syntax_revision, item, entry.item, construction) == BracedConstruction &&
-            construction.placement == no_node() && construction.queried_operand == no_node() &&
-            work[construction.requested].selected_constructor) {
+            selected_inline_sum(nodes, work, state, entry.item)) {
             (state.inline_field_input <- entry.item):void
         };
         resolve_expression(source, nodes, bindings, work, state, entry.item);
@@ -1146,7 +1151,7 @@ func local_declaration_allowed(nodes:const ExprNodes in N, state:NameState in R,
 
 func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                    work:NameWork in W, state:NameState in R, at:UInt64, binding:const NodeId in BIND,
-                   initializer:const NodeId in INIT) -> void
+                   initializer:const NodeId in INIT, mode:LocalMode) -> void
     where {const owner S, const owner N, owner B, owner W, owner R, const owner BIND, const owner INIT} {
     if (!local_declaration_allowed(nodes, state, at)) return;
     if (!published_syntax_id(nodes, state.syntax_revision, at, binding) ||
@@ -1156,7 +1161,12 @@ func resolve_local(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     };
     resolve_annotation(source, nodes, bindings, work, state, binding.index);
     if (state.diagnostic != 0u8) return;
+    val previous_inline <- state.inline_field_input;
+    if (state.source_only && mode == ReferenceLocal && selected_inline_sum(nodes, work, state, initializer.index)) {
+        (state.inline_field_input <- initializer.index):void
+    };
     resolve_expression(source, nodes, bindings, work, state, initializer.index);
+    state.inline_field_input <- previous_inline;
     if (state.diagnostic != 0u8) return;
     declare_name(source, nodes, bindings, work, state, binder_name(nodes, state.syntax_revision, state.syntax_used, binding.index), at, local_binding(), duplicate_binding());
     if (state.diagnostic == 0u8 && state.guard != no_node()) {
@@ -1819,6 +1829,7 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
     if (transfer) { resolve_transfer_family(source, nodes, bindings, work, state, at); };
     resolve_expression(source, nodes, bindings, work, state, assignment.destination);
     if (state.diagnostic != 0u8) return;
+    val previous_inline <- state.inline_field_input;
     if (mode == PlaceRebind) {
         val name <- ungrouped(nodes, state.syntax_revision, state.syntax_used, assignment.destination);
         if (name < state.syntax_used && bindings[name].kind == local_binding() &&
@@ -1829,10 +1840,19 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
         if (native_handle_destination(nodes, bindings, assignment.destination, state.syntax_revision, state.syntax_used)) {
             reject_name(state, assignment.destination, unsupported_handle_rebind());
             return
+        };
+        if (state.source_only && name == assignment.destination && bindings[name].kind == local_binding()) {
+            ref local = make LocalBindingSites {
+                binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false
+            };
+            if (inspect_local_binding(nodes, state.syntax_revision, state.syntax_used, bindings[name].declaration, local) &&
+                local.mode == ReferenceLocal && local.initializer < at && work[local.initializer].inline_sum_initializer &&
+                selected_inline_sum(nodes, work, state, assignment.input)) {
+                (state.inline_field_input <- assignment.input):void
+            }
         }
     };
     val previous_input <- state.local_sum_input;
-    val previous_inline <- state.inline_field_input;
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     if (state.source_only && mode == PlaceTransfer && bindings[at].kind == 0u8 &&
         inspect_index_selection(nodes, state.syntax_revision, at, assignment.destination, indexed)) {
@@ -1998,7 +2018,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 };
                 (LocalBinding { val binding <- binding; val initializer <- initializer; val mode <- mode; }) -> {
                     if (mode == ExceptionLocal) { reject_name(state, at, invalid_module_tree()); return; };
-                    resolve_local(source, nodes, bindings, work, state, at, binding, initializer);
+                    resolve_local(source, nodes, bindings, work, state, at, binding, initializer, mode);
                     return;
                 };
                 (OwningHandleBinding) -> { resolve_handle_local(source, nodes, bindings, work, state, at); return; };

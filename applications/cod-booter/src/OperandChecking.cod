@@ -117,7 +117,8 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, InlineProductField, LocalSumConstruction,
-        IndexedProductRead, IndexedAggregateDestination, FreshSumInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
+        IndexedProductRead, IndexedAggregateDestination, LexicalSumReference, LexicalSumRebind,
+        FreshSumInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -4733,6 +4734,42 @@ func check_indexed_aggregate_element(facts:OperandFacts in F, at:UInt64, array:U
     return 0u8
 }
 
+func check_lexical_sum_reference(facts:OperandFacts in F, at:UInt64, input:UInt64,
+    owner_site:UInt64, readonly:bool) -> UInt8 where {owner F} {
+    if (input >= at || owner_site == no_node()) return invalid_operand_tree();
+    if (facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (facts[input].kind != independent_sum_bits() || facts[input].reception != independent_value())
+        return wrong_operand_type();
+    set_fact(facts, at, source_sum_target(), borrowed_ref(), owner_site, facts[input].identity, 0u8);
+    facts[at].identity_module <- facts[input].identity_module;
+    facts[at].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
+    return 0u8
+}
+
+func check_lexical_sum_rebind(facts:OperandFacts in F, at:UInt64, destination:UInt64,
+    input:UInt64, owner_site:UInt64) -> UInt8 where {owner F} {
+    if (destination >= at || input >= at) return invalid_operand_tree();
+    if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if (facts[destination].kind != source_sum_target() || facts[destination].reception != borrowed_ref() ||
+        facts[destination].owner != owner_site || facts[destination].target_presence != present_target())
+        return unproved_nonnull_borrow();
+    if (facts[input].kind != independent_sum_bits() || facts[input].reception != independent_value() ||
+        facts[input].identity != facts[destination].identity ||
+        facts[input].identity_module != facts[destination].identity_module) return wrong_operand_type();
+    # The slot contract is unchanged on either completion. Its selected
+    # backing can differ on paths that complete the rebind.
+    set_fact(facts, at, source_sum_target(), borrowed_ref(), owner_site, facts[input].identity, 0u8);
+    facts[at].identity_module <- facts[input].identity_module;
+    facts[at].target_readonly <- facts[destination].target_readonly;
+    return 0u8
+}
+
 func check_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
     cases:const ConstructorCaseFacts in C, at:UInt64, type:const DeclaredType in T, count:UInt64,
     begin:UInt64, last:UInt64, used:UInt64) -> UInt8
@@ -4847,6 +4884,14 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 if (!source_only) return unsupported_product_layout();
                 return check_indexed_aggregate_element(facts, at, array, index, owner_site, array_module, declared_array,
                     element, index_binds_storage, true)
+            };
+            LexicalSumReference { val construction <-; val owner_site <-; val readonly <-; } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_lexical_sum_reference(facts, at, construction, owner_site, readonly)
+            };
+            LexicalSumRebind { val destination <-; val construction <-; val owner_site <-; } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_lexical_sum_rebind(facts, at, destination, construction, owner_site)
             };
             BitsConstruction {
                 val type <- value_type; val count <- field_count;
