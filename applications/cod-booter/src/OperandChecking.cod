@@ -3299,7 +3299,8 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
     val record_predicate <- result == builtin_bool() && parameters == 1u64;
     val owner_count <- contracts[header].owner_count;
     val record_key <- result == builtin_bool() && parameters == 4u64 && owner_count == 2u64;
-    if ((!record_predicate && parameters != 3u64 && parameters != 4u64) ||
+    val single_index <- result == builtin_u64() && parameters == 2u64;
+    if ((!record_predicate && !single_index && parameters != 3u64 && parameters != 4u64) ||
         parameters >= published - header ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
@@ -3323,9 +3324,12 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
         if (storage != CoDBitsAggregate && storage != CLayoutBitsRecord) return no_node();
         return array + 1u64
     };
-    if (!published_sum_array(contracts, published, module, identity) &&
-        (record_key || result != builtin_u64() || !published_record_array(contracts, published, module, identity)))
-        return no_node();
+    if (!published_sum_array(contracts, published, module, identity)) {
+        if (record_key || single_index || result != builtin_u64()) return no_node();
+        if (!published_record_array(contracts, published, module, identity) &&
+            (parameters != 3u64 || !checked_readonly_byte_loan(contracts, published, array, 0u64)))
+            return no_node()
+    };
     val past <- array + parameters;
     val scalar_past <- if (record_key) { past - 1u64 } else { past };
     for (row in array + 1u64 .. scalar_past) {

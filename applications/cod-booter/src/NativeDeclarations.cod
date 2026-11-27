@@ -2610,15 +2610,30 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
         };
         return
     };
-    val valid_array <- checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
-        marker, used, revision) || (result == builtin_u64() &&
-        readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision));
-    if (!valid_array) return;
+    val sum_array <- checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
+        marker, used, revision);
+    if (!sum_array) {
+        if (result != builtin_u64()) return;
+        if (!readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
+            ref bytes = make ArraySlotType {
+                owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node()
+            };
+            if (describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes) &&
+                independent_scalar_formal(nodes, names, input, used, revision, builtin_u64()) &&
+                independent_scalar_formal(nodes, names, work[input].next, used, revision, builtin_u64()) &&
+                work[work[input].next].next == no_node()) {
+                (views[at] <- make PreparedReadonlyQuery {}):void
+            };
+            return
+        }
+    };
     for (position in 0u64 .. 3u64) {
         if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
         input <- work[input].next;
         if (input == no_node()) {
-            if (position != 0u64) { (views[at] <- make PreparedReadonlyQuery {}):void };
+            if (position != 0u64 || (sum_array && result == builtin_u64())) {
+                (views[at] <- make PreparedReadonlyQuery {}):void
+            };
             return
         }
     }
