@@ -59,7 +59,7 @@ using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./Lexer.cod" {
     exception_word, own_word, handle_word, ref_word, make_word, typeof_word, from_word,
     rethrow_word, reserved_value_name, intrinsic_word, len_word, reserved_lexical_binder, reserved_module_name, proc_word,
-    func_word, region_word, capacity_word, identifier, integer_literal, defer_word,
+    func_word, region_word, capacity_word, identifier, integer_literal, real_literal, defer_word,
     catch_word, finally_word, try_word, const_word, behave_word, throw_word, symbol_name, in_word,
     ptr_word, val_word, null_word, return_word, void_word, if_word, returning_word, for_word, continue_word,
     break_word, else_word, true_word, false_word, c_linkage, not_word, case_word, of_word, fallthrough_word, effect_word,
@@ -71,7 +71,7 @@ using "./ParserStorage.cod" SyntaxRole {
 };
 using "./SourceStorage.cod" { SourceBytes, Token };
 
-enum BlockItemMode:UInt8 { OrdinaryBlockItem; ConstructorInitializerItem; DirectCaseArmItem; }
+enum BlockItemMode:UInt8 { OrdinaryBlockItem; ConstructorInitializerItem; CaseBodyItem; DirectCaseArmItem; }
 
 data ParseControls { supplied_here:bool; case_control:bool }
 
@@ -246,6 +246,27 @@ func parse_constructor_initializer_item(source:const SourceBytes in S, tokens:co
     else { parse_initializer_assignment(source, tokens, nodes, result, past, label) }
 }
 
+func follows_braced_if(source:const SourceBytes in S, tokens:const Tokens in T,
+    nodes:const ExprNodes in A, start:UInt64, next:UInt64, past:UInt64,
+    expression:UInt64) -> bool where {const owner S, const owner T, const owner A} {
+    if (!if_word(source, tokens[start]) || punct_at(source, tokens, start + 1u64, next) != LEFT_PAREN)
+        return false;
+    val close <- closing_token(tokens, start + 1u64, next);
+    if (close == no_node() || punct_at(source, tokens, close + 1u64, next) != LEFT_BRACE) return false;
+    val kind <- tokens[next].kind;
+    val punct <- punct_at(source, tokens, next, past);
+    if (kind != identifier() && kind != symbol_name() && kind != integer_literal() &&
+        kind != real_literal() && kind != quoted_text() &&
+        punct != LEFT_BRACE && punct != LEFT_PAREN && punct != MINUS && punct != EXCLAMATION) return false;
+    # A postfix or binary operation wrapping the conditional still needs a separator.
+    return case nodes[expression] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of { Conditional -> true; _ -> false }
+        };
+        _ -> false
+    };
+}
+
 func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
                       nodes:ExprNodes in A, result:ParseResult in R,
                       past:UInt64, previous:UInt64, mode:BlockItemMode) -> bool
@@ -258,6 +279,7 @@ func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
     case mode of {
         OrdinaryBlockItem -> { parse_next_expression(source, tokens, nodes, result, past) };
         ConstructorInitializerItem -> { parse_constructor_initializer_item(source, tokens, nodes, result, past) };
+        CaseBodyItem -> { parse_next_expression(source, tokens, nodes, result, past) };
         DirectCaseArmItem -> { parse_case_arm(source, tokens, nodes, result, past) }
     };
     if (result.diagnostic != 0u8) {
@@ -272,6 +294,8 @@ func parse_block_item(source:const SourceBytes in S, tokens:const Tokens in T,
         val delimiter <- punct_at(source, tokens, separator, past);
         if (delimiter != SEMICOLON && delimiter != RIGHT_BRACE &&
             !braced_reference_group(nodes, result.revision, result.used, expression) &&
+            !(mode == (OrdinaryBlockItem:BlockItemMode) &&
+              follows_braced_if(source, tokens, nodes, start, separator, past, expression)) &&
             !recover_block_separator(source, tokens, nodes, result, first_new, past, expected_block_separator(),
                                      starts_recoverable_block_item(source, tokens[separator]))) return false;
         if (punct_at(source, tokens, result.next, past) == SEMICOLON) {
@@ -1385,7 +1409,7 @@ func parse_case_items(source:const SourceBytes in S, tokens:const Tokens in T, n
     if (punct_at(source, tokens, open, past) != LEFT_BRACE) { result.diagnostic <- expected_block(); return; } else {};
     val last <- no_node();
     val close <- open;
-    val mode <- (OrdinaryBlockItem:BlockItemMode);
+    val mode <- (CaseBodyItem:BlockItemMode);
     result.next <- open + 1u64;
     for (unused in result.next .. past + 1u64) {
         close <- result.next;
@@ -1396,7 +1420,7 @@ func parse_case_items(source:const SourceBytes in S, tokens:const Tokens in T, n
         } else {};
         if (close >= past) { result.diagnostic <- expected_block_close(); return; } else {};
         mode <- if (starts_case_arm(source, tokens, close, past)) { (DirectCaseArmItem:BlockItemMode) }
-            else { (OrdinaryBlockItem:BlockItemMode) };
+            else { (CaseBodyItem:BlockItemMode) };
         if (!parse_block_item(source, tokens, nodes, result, past, last, mode)) return;
         last <- result.root;
     };

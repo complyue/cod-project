@@ -1500,6 +1500,8 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
         record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
+        val imported_enum <- state.source_only && shape == BracedConstruction && kind == ordinary_selection() &&
+            bindings[definition].imported_kind == enum_export();
         array_initializer <- state.source_only && shape == PositionalConstruction &&
             !text_initializer && !builder_initializer && !record_initializer &&
             ((kind == array_type() &&
@@ -1509,7 +1511,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
                 bindings[definition].imported_kind == array_export()) ||
                (construction.placement != no_node() &&
                 bindings[requested].module_use == (SelectedType:ModuleNameUse)))));
-        if (!text_initializer && !builder_initializer && !record_initializer && !array_initializer &&
+        if (!text_initializer && !builder_initializer && !record_initializer && !array_initializer && !imported_enum &&
             !native_scalar(kind) && kind != builtin_void() && kind != enum_type()) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
