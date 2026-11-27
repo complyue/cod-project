@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Bootstrap recovery acceptance after seed retirement
+
+<a id="k-bootstrap-recovery-acceptance-20261127"></a>
+**K-BOOTSTRAP-RECOVERY-ACCEPTANCE-20261127.** Editorial continuity for [D-ARCH-REVIEW r228→r229](design/DesignAuthorityRegistry.md#d-arch-review), P-682/P-683, registry r1366→1367. The [prior review](https://github.com/complyue/cod-project/blob/70e456f507b69cf2e9a034ea87238e2d42b177c7/design/ImplementationArchitecture.md#whole-file-recovery-in-the-bootstrap-compilers) still prescribed paired runs. The [project user’s switch retirement](#h-seed-shared-switch-retirement-20261126), [single-build scope](#k-bootstrap-verification-scope-20261125) and [terminal verifier removal](https://github.com/complyue/cod-project/commit/42ca800c8f212340dd687e4b871678f78db385b5) govern the current commands. Recovery still requires valid suffixes, located diagnostics, safe handoff and preserved outputs. The independent-body recipe is archived.
+
 ## 2026-11-27 — Build native package providers with the CoD toolchain
 
 <a id="h-native-package-toolchain-20261127"></a>
