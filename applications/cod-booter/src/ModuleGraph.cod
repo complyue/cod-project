@@ -892,22 +892,53 @@ proc report_symbol_binder(source:const SourceBytes in S, lines:const SourceLines
     }
 }
 
+data ModuleBindingWorkspace {
+    const ref nodes:const ExprNodes;
+    const ref selected:SelectedExports;
+    const ref names:NameBindings;
+    const ref work:NameWork;
+    const ref staged:ModuleExports;
+    const ref export_names:StagedExportNames;
+    const ref export_uses:StagedExportUses;
+    const ref defaults:StagedDefaultExports;
+    const ref checked_selections:CheckedSelections;
+    const ref callable_uses:CallableUseProofs;
+    const ref object_prefixes:const ObjectPrefixes;
+    const ref progress:ModuleProgressRows;
+    const ref staged_interfaces:ModuleInterfaces;
+    const ref facts:OperandFacts;
+    const ref owners:CallOwners;
+    const ref sites:CompletionSites;
+    const ref commands:NativeCommands;
+}
+
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
-                       handle diagnostic:DiagnosticDestination in D, nodes:const ExprNodes in W,
-                       selected:SelectedExports in W, names:NameBindings in W, work:NameWork in W,
-                       staged:ModuleExports in W, export_names:StagedExportNames in W, export_uses:StagedExportUses in W,
-                       defaults:StagedDefaultExports in W, checked_selections:CheckedSelections in W,
-                       callable_uses:CallableUseProofs in W, object_prefixes:const ObjectPrefixes in W,
-                       progress:ModuleProgressRows in W,
+                       handle diagnostic:DiagnosticDestination in D, workspace:ModuleBindingWorkspace in W,
                        catalog_spellings:const SourceBytes in B, catalog_exports:const ModuleExports in B,
                        spellings:const SourceBytes in G, published:const ModuleExports in G, spelling_size:UInt64, export_count:UInt64,
                        visits:const Visits in G, visit_count:UInt64, units:const NativeUnitRows in G,
                        published_defaults:const DefaultExportRefs in G, published_default_count:UInt64,
-                       staged_interfaces:ModuleInterfaces in W, published_interfaces:const ModuleInterfaces in G, interface_count:UInt64,
-                       facts:OperandFacts in W, owners:CallOwners in W, sites:CompletionSites in W,
-                       commands:NativeCommands in W, keys:const SourceBytes in G, const val key_first:UInt64,
+                       published_interfaces:const ModuleInterfaces in G, interface_count:UInt64,
+                       keys:const SourceBytes in G, const val key_first:UInt64,
                        const val key_past:UInt64, const val key_used:UInt64, run:DiagnosticRuns in G) -> CompilerStatus
     where {const owner S, owner D, owner W, const owner B, owner G} {
+    const ref nodes = workspace.nodes;
+    const ref selected = workspace.selected;
+    const ref names = workspace.names;
+    const ref work = workspace.work;
+    const ref staged = workspace.staged;
+    const ref export_names = workspace.export_names;
+    const ref export_uses = workspace.export_uses;
+    const ref defaults = workspace.defaults;
+    const ref checked_selections = workspace.checked_selections;
+    const ref callable_uses = workspace.callable_uses;
+    const ref object_prefixes = workspace.object_prefixes;
+    const ref progress = workspace.progress;
+    const ref staged_interfaces = workspace.staged_interfaces;
+    const ref facts = workspace.facts;
+    const ref owners = workspace.owners;
+    const ref sites = workspace.sites;
+    const ref commands = workspace.commands;
     val delivered <- Complete;
     ref result = make ModuleBindingResult {
         frontend <- make FrontendResult {
@@ -1631,13 +1662,18 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         allocating <- false;
         const val binding_finding <- run[0u64].retained;
         const val diagnostic_key_used <- key_used;
+        const ref binding_workspace = make ModuleBindingWorkspace {
+            nodes = nodes; selected = selected; names = names; work = work;
+            staged = staged; export_names = export_names; export_uses = export_uses; defaults = staged_defaults;
+            checked_selections = checked_selections; callable_uses = callable_uses; object_prefixes = object_prefixes;
+            progress = progress; staged_interfaces = staged_interfaces; facts = facts;
+            owners = owners; sites = sites; commands = staged_commands;
+        };
         val bound <- with_source(opened) (source, lines) => {
-            continue bind_graph_module(source, lines, diagnostic, nodes, selected, names, work,
-                staged, export_names, export_uses, staged_defaults, checked_selections,
-                callable_uses, object_prefixes, progress, builtin_spellings, builtins, spellings, exports,
-                spelling_size, export_count, visits, visit_count, units, defaults, default_count,
-                staged_interfaces, interfaces, interface_count,
-                facts, owners, sites, staged_commands, keys, key_first, key_past, diagnostic_key_used, run)
+            continue bind_graph_module(source, lines, diagnostic, binding_workspace,
+                builtin_spellings, builtins, spellings, exports, spelling_size, export_count,
+                visits, visit_count, units, defaults, default_count, interfaces, interface_count,
+                keys, key_first, key_past, diagnostic_key_used, run)
         };
         if (bound != Complete) {
             if (run[0u64].retained > binding_finding) { (failure.finding <- binding_finding):void };

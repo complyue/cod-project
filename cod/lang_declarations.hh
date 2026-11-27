@@ -972,7 +972,8 @@ class ModuleBinder {
     if (type.kind == Type::region_schema) fail(field.at, "a region schema does not name a field payload type");
     const bool text_place = !schema.source->c_data && schema.source->kind == Form::Kind::data &&
         storage == PlaceKind::value && type == Type::string;
-    if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place)
+    const bool array_reference = type.kind == Type::array && storage != PlaceKind::value;
+    if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && !text_place && !array_reference)
       implementation_gap(field.at, "field representation for type '" + type_name(type) + "'");
     if (type.kind == Type::sum && storage != PlaceKind::value && !program_.bits_payload(type))
       implementation_gap(field.at, "stored references to a reference-bearing sum");

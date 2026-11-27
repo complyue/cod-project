@@ -522,8 +522,13 @@ class BodyExtraction {
       if (!owner) return ProductPlacement::lexical;
       if (region_controller(owner)) return ProductPlacement::region;
       const auto found = body_.input_products.find(owner);
-      if (found == body_.input_products.end()) return {};
-      return found->second;
+      if (found != body_.input_products.end()) return found->second;
+      // An outlined input may retain its supplier's full lexical owner.
+      if (const auto &outline = body_.outline; outline && owner < null_target) {
+        const auto role = null_target - 1 - owner;
+        if (role < outline->owners.size() && outline->owners[role] == 0) return ProductPlacement::lexical;
+      }
+      return {};
     }
 
     bool product_allocation_permitted(size_t owner) const {
@@ -665,7 +670,8 @@ class BodyExtraction {
       const bool slot = parameter.selects_caller_ref_slot();
       const bool native_handle = mode == ArgumentMode::borrowed_handle && type.kind == Type::native_handle;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
-      const bool product_loan = body_.input_products.contains(owner) && reference_product_loan(parameter, mode, type);
+      const bool product_loan = reference_product_loan(parameter, mode, type) &&
+          (body_.input_products.contains(owner) || (capture && product_placement(owner) == ProductPlacement::lexical));
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) :
@@ -688,6 +694,8 @@ class BodyExtraction {
       const bool live_view = source.type.kind == Type::array ||
           ((supplied_body() || form_.implicit_scope) && source.type.kind == Type::product &&
            declarations().bits_payload(source.type));
+      const bool fixed_product = supplied_body() && !original.owner && source.fixed &&
+          extraction_.reference_product(source.type);
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
       const bool builder = form_.implicit_scope && declarations().builder_type(source.type);
@@ -699,9 +707,9 @@ class BodyExtraction {
                    input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
           });
       expect(!source.nullable &&
-             (live_view || builder || lexical_text || incoming_loan ||
+             (live_view || fixed_product || builder || lexical_text || incoming_loan ||
               (scalar_type(source.type) && (source.value_binding || source.fixed))),
-             expr.at, "seed needs an admitted scalar place, bits view, builder or incoming text or handle loan in a lexical capture");
+             expr.at, "seed needs an admitted lexical capture");
       if (outlined.handler && scalar_type(source.type))
         expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
                "seed needs a readonly scalar or fixed scalar reference capture in a live handler");
@@ -710,8 +718,8 @@ class BodyExtraction {
       const auto known = std::ranges::find(outlined.owners, original.owner);
       const auto role = static_cast<size_t>(known - outlined.owners.begin());
       if (known == outlined.owners.end()) {
-        const auto &method = extraction_.declarations_.method(supplier.method);
-        const bool read_only = original.owner && method.input_owners().at(null_target - 1 - original.owner).read_only;
+        const bool read_only = original.owner && extraction_.declarations_.method(supplier.method)
+            .input_owners().at(null_target - 1 - original.owner).read_only;
         outlined.owners.push_back(original.owner);
         outlined.owner_parameters.push_back({"$scope.owner." + std::to_string(role), {}, expr.at, false, read_only});
       }
@@ -1621,6 +1629,8 @@ class BodyExtraction {
         const auto &field = schema.fields[order[i]];
         const auto &input = *item.children.back();
         if (field.storage != PlaceKind::value) {
+          expect(!op.regional_storage || field.type.kind != Type::array, item.at,
+                 "seed needs lexical storage for an array reference field");
           expect(admits_reference(extract(input), field.type, owner, field.storage == PlaceKind::pointer,
                                   field.readonly_target(), input.at),
                  input.at, "reference field initializer must preserve type, owner and target access");
@@ -2017,6 +2027,8 @@ class BodyExtraction {
         expect(placement.has_value() && extraction_.reference_product(type) && !member.direct_text_place(),
                expr.at, "seed needs an established placement for this reference-bearing product field");
         op.regional_storage = *placement == ProductPlacement::region;
+        expect(!op.regional_storage || member.type.kind != Type::array, expr.at,
+               "seed needs lexical storage for an array reference field");
       }
       op.view = op.indexed_target = true;
       op.read_only = base.read_only || (member.stores_target() ? member.readonly_target() : readonly_field(member));
