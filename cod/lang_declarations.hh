@@ -1745,11 +1745,13 @@ class ModuleBinder {
       if (prepared.result.type && text_type(*prepared.result.type) &&
           (prepared.result.mode != ResultMode::borrowed_ref || !prepared.result.read_only))
         fail(form->at, "text results require a readonly, non-null owner-qualified reference");
-      const bool aggregate_value_result = prepared.result.type && form->result_kind == "val" &&
-          prepared.result.owner.empty() && inline_aggregate_type(*prepared.result.type) &&
+      const bool ordinary_bits_aggregate = prepared.result.type && inline_aggregate_type(*prepared.result.type) &&
           program_.bits_payload(*prepared.result.type) && !form->c_linkage && !form->symbolic &&
           !form->implicit_scope && operation.empty() && !constructor && form->type_parameters.empty() &&
           std::ranges::none_of(form->parameters, [](const auto &parameter) { return parameter.here != nullptr; });
+      const bool aggregate_value_result = ordinary_bits_aggregate && form->result_kind == "val" &&
+          prepared.result.owner.empty();
+      const bool aggregate_borrowed_result = ordinary_bits_aggregate && prepared.result.borrowed();
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type) &&
           !aggregate_value_result)
         implementation_gap(form->at, "explicit val results for non-scalar or generic types");
@@ -1759,7 +1761,7 @@ class ModuleBinder {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
       if (prepared.result.type && !handle_result && !prepared.result.owns_region() &&
-          !prepared.result.owns_exception() && !aggregate_value_result)
+          !prepared.result.owns_exception() && !aggregate_value_result && !aggregate_borrowed_result)
         signature_type(prepared, *prepared.result.type, form->at, true, prepared.result.borrowed());
       if (prepared.result.type) require_ordinary_callable_type(*prepared.result.type, form->at);
       for (const auto &type : form->throws_types) {

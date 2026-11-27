@@ -2241,6 +2241,10 @@ class LLVMEmission {
         if (may_be_null) b_.CreateCondBr(b_.CreateIsNull(selected), selected_arm, next);
         else b_.CreateBr(next);
         break;
+      case P::present:
+        if (may_be_null) b_.CreateCondBr(b_.CreateIsNotNull(selected), selected_arm, next);
+        else b_.CreateBr(selected_arm);
+        break;
       case P::code:
         if (may_be_null) {
           auto *present = block("case.present");
@@ -2263,6 +2267,10 @@ class LLVMEmission {
       }
 
       b_.SetInsertPoint(selected_arm);
+      if (pattern.kind == P::present) {
+        const auto &binding = checked_.at(item.case_bindings.front().get());
+        b_.CreateStore(selected, bindings_.at(*binding.binding).reference_slot);
+      }
       for (size_t i = 0; i < checked.case_payload_fields.size(); ++i) {
         const auto &receiver = *item.case_bindings[i];
         const auto &binding = checked_.at(&receiver);

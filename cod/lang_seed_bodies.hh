@@ -151,6 +151,7 @@ class BodyExtraction {
     const Expression *site;
     std::vector<CaseArm> arms;
     bool reaches_end = false;
+    bool nullable_subject = false;
   };
   struct CaseResult {
     Type type = Type::never;
@@ -262,6 +263,7 @@ class BodyExtraction {
     CheckedOperation op;
     op.type = result.type;
     op.case_reaches_end = input.reaches_end;
+    op.case_subject_may_be_null = input.nullable_subject;
     op.scalar_value_join = result.scalar_value_join;
     return op;
   }
@@ -325,18 +327,22 @@ class BodyExtraction {
     op.view = true;
     op.read_only = binding.read_only;
     op.fixed_binding = binding.fixed;
+    if (binding.nullable) op.targets.insert(null_target);
     return op;
   }
 
   size_t select_body(size_t method_id, const Location &at, bool allow_omitted_void = false) {
     const auto &method = declarations_.method(method_id);
     const auto &source = *method.source;
+    const bool borrowed_result = method.result.borrowed() && !method.result.native_borrow() &&
+        !source.c_linkage && method.here.empty() && method.result.type &&
+        declarations_.declarations_.bits_payload(*method.result.type);
     expect(source.body && !source.implicit_scope && !source.supplied_scope && !source.supplied_group &&
            !source.case_scan_scope && !source.symbolic && !method.interpretation &&
            !method.regional_initializer && method.operation.empty() &&
            method.here.size() <= 1 && method.type_parameters.empty() && source.captures.empty() &&
            (method.result.type ?
-            method.result.owns_region() || (method.result.mode == ResultMode::value &&
+            borrowed_result || method.result.owns_region() || (method.result.mode == ResultMode::value &&
               (declarations_.declarations_.bits_payload(*method.result.type) || method.result.type == Type::void_type)) :
             allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
            at, "seed needs a fixed ordinary callable body");
@@ -457,6 +463,10 @@ class BodyExtraction {
       return static_cast<size_t>(found - parameters.begin());
     }
 
+    size_t named_owner(const std::string &name, const Location &at) const {
+      return name == "here" ? 0 : input_owner(owner_role(name, at));
+    }
+
     const std::vector<OwnerParameter> &owners() const {
       return method_ ? method_->input_owners() : body_.outline->owner_parameters;
     }
@@ -498,6 +508,7 @@ class BodyExtraction {
       result.binding = source.binding;
       result.place = source.place;
       result.owners = source.owners;
+      result.targets = source.targets;
       result.read_only = source.read_only;
       result.fixed_binding = source.fixed_binding;
       result.view = source.view;
@@ -517,7 +528,8 @@ class BodyExtraction {
       if (declarations().builder_type(type))
         return (mode == ArgumentMode::borrowed_ref || mode == ArgumentMode::borrowed_read) &&
                !parameter.selects_caller_place();
-      return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref) &&
+      return (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref ||
+              mode == ArgumentMode::borrowed_ptr) &&
              (type.kind == Type::array || scalar_type(type) ||
               (inline_aggregate_type(type) && declarations().bits_payload(type)));
     }
@@ -536,6 +548,29 @@ class BodyExtraction {
       if (!inline_aggregate_type(to)) return takes_value(value, to, expr.at);
       bits_payload_type(declarations(), value.type, to, expr.at);
       expect(value.view || direct_value_call(expr), expr.at, "seed needs a complete aggregate return value");
+    }
+
+    void prepare_return(const Expression &expr, const CheckedOperation &value, CheckedOperation &exit) const {
+      const auto &contract = body_.instance.result;
+      exit.operand_type = *contract.type;
+      if (!contract.borrowed()) return takes_return_value(expr, value, *contract.type);
+      exit.borrowed_result = true;
+      if (value.type == Type::never) return;
+      const auto owner = input_owner(owner_role(contract.owner, expr.at));
+      if (value.type == Type::null_ref) {
+        if (!contract.nullable()) fail(expr.at, "a ref result requires a present target");
+        if (!value.owners.empty() && single_owner(value, expr.at) != owner)
+          fail(expr.at, "null result has a different owner from the declared result");
+        return;
+      }
+      if (value.type != *contract.type || !value.view)
+        fail(expr.at, "borrowed result requires a target of its declared type");
+      if (single_owner(value, expr.at) != owner)
+        fail(expr.at, "borrowed result has a different owner from the declared result");
+      if (value.read_only && !contract.read_only)
+        fail(expr.at, "a readonly target cannot supply a writable result");
+      if (value.targets.contains(null_target) && !contract.nullable())
+        fail(expr.at, "a ref result requires a present target");
     }
 
     static size_t single_owner(const CheckedOperation &view, const Location &at) {
@@ -559,10 +594,11 @@ class BodyExtraction {
       auto &frame = body_.instance.frame;
       const auto owner = parameter.owner.empty() ? size_t{0} : input_owner(owner_role(parameter.owner, parameter.at));
       if (owner) frame.owners.try_emplace(owner, frame.inputs.size());
-      const bool value = mode != ArgumentMode::borrowed_ref && !native_handle;
+      const bool value = mode != ArgumentMode::borrowed_ref && mode != ArgumentMode::borrowed_ptr && !native_handle;
       const auto local = declare(parameter.at, parameter.name, type, value,
                                  parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
                                  parameter.fixed_binding || native_handle || type == Type::string, owner, true, capture);
+      body_.instance.bindings.at(local.binding).nullable = mode == ArgumentMode::borrowed_ptr;
       frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
     }
 
@@ -1148,10 +1184,13 @@ class BodyExtraction {
           const bool native_handle = mode == ArgumentMode::borrowed_handle && formal.kind == Type::native_handle;
           expect(role != roles.end() && !role->root && !role->explicit_parameter &&
                  !parameter.not_init_ref && (!parameter.selects_caller_place() || parameter.selects_caller_ref_slot()) &&
-                 (native_handle || ordinary_loan(parameter, mode, formal)) && arg.type == formal &&
+                 (native_handle || ordinary_loan(parameter, mode, formal)) &&
+                 (arg.type == formal || (mode == ArgumentMode::borrowed_ptr && arg.type == Type::null_ref)) &&
                  (parameter.read_only || !arg.read_only),
                  at, "seed needs the declared ordinary borrow and access");
           if (parameter.selects_caller_ref_slot()) check_slot(arg, at);
+          if (mode != ArgumentMode::borrowed_ptr && arg.targets.contains(null_target))
+            fail(at, "a non-null formal requires a present target");
           const auto owner = single_owner(arg, at);
           if (native_handle && !role->read_only && const_input_owner(owner))
             fail(at, "const owner cannot supply a writable native handle owner");
@@ -1177,6 +1216,17 @@ class BodyExtraction {
       body_.calls.push_back(std::move(edge));
       op.type = *target.result.type;
       op.callee = callee;
+      if (target.result.borrowed()) {
+        const auto &roles = target.input_owners();
+        const auto role = std::ranges::find(roles, target.result.owner, &OwnerParameter::name);
+        const auto actual = actual_owners.find(static_cast<size_t>(role - roles.begin()));
+        expect(actual != actual_owners.end() && !is_symbol_owner(actual->second, declarations().symbols.size()),
+               expr.at, "seed needs an established ordinary result owner");
+        op.borrowed_result = op.view = true;
+        op.read_only = target.result.read_only;
+        op.owners.insert(actual->second);
+        if (target.result.nullable()) op.targets.insert(null_target);
+      }
       if (expr.has_here_body()) {
         const auto &contract = target.here.front();
         const auto owner = actual_owners.find(here_input_owner(contract, expr.at) - 1);
@@ -1622,10 +1672,16 @@ class BodyExtraction {
       op.owners = target.owners;
       if (expr.kind == Kind::rebind) {
         check_slot(target, expr.at);
-        expect(source.type == target.type &&
-               single_owner(target, expr.at) == single_owner(source, expr.at) &&
+        const bool nullable = body_.instance.bindings.at(*target.binding).nullable;
+        const bool null = source.type == Type::null_ref;
+        const auto owner = single_owner(target, expr.at);
+        expect((source.type == target.type || (null && nullable)) &&
+               ((null && source.owners.empty()) || owner == single_owner(source, expr.at)) &&
+               (nullable || !source.targets.contains(null_target)) &&
                (target.read_only || !source.read_only), expr.at,
                "reference rebinding must preserve type, owner and target access");
+        op.targets = source.targets;
+        op.read_only = target.read_only;
         op.arguments = {{ArgumentMode::borrowed_ptr, target.type, true}, {ArgumentMode::borrowed_ptr, source.type}};
         return op;
       }
@@ -1656,17 +1712,33 @@ class BodyExtraction {
 
     CheckedOperation declaration(const Expression &expr, bool fixed) {
       const bool value = expr.declaration_kind == "val";
-      expect((value || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
-             expr.owner_name.empty() && !expr.read_only,
-             expr.at, "seed needs an initialized ref or scalar val");
+      const bool nullable = expr.declaration_kind == "ptr";
+      expect((value || nullable || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
+             (!value || (expr.owner_name.empty() && !expr.read_only)) && (!nullable || expr.binding == "="),
+             expr.at, "seed needs an initialized ref, ptr with '=' or scalar val");
       const auto &initial = operand(expr, 0);
       const auto type = expr.annotation ? resolve_annotation(*expr.annotation, expr.at) : initial.type;
-      if (!value && type != initial.type)
+      const bool null = initial.type == Type::null_ref;
+      if (!value && type != initial.type && !(nullable && null))
         fail(expr.at, "reference initializer does not match the declared target type");
       expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
-      const auto owner = value ? size_t{0} : single_owner(initial, expr.at);
-      if (value) takes_value(initial, type, expr.at);
-      const auto local = declare(expr.at, expr.text, type, value, value ? fixed : initial.read_only, fixed, owner);
+      size_t owner = 0;
+      if (value) {
+        takes_value(initial, type, expr.at);
+      } else {
+        if (!nullable && initial.targets.contains(null_target))
+          fail(expr.at, "a ref initializer requires a present target");
+        if (null && !expr.annotation) fail(expr.at, "a null ptr initializer requires a target type");
+        if (null && initial.owners.empty() && !expr.owner_name.empty())
+          owner = named_owner(expr.owner_name, expr.at);
+        else
+          owner = single_owner(initial, expr.at);
+        if (!expr.owner_name.empty() && owner != named_owner(expr.owner_name, expr.at))
+          fail(expr.at, "reference initializer has a different owner from its declaration");
+      }
+      const auto local = declare(expr.at, expr.text, type, value,
+                                 value ? fixed : expr.read_only || initial.read_only, fixed, owner);
+      body_.instance.bindings.at(local.binding).nullable = nullable;
       CheckedOperation op;
       op.binding = local.binding;
       op.type = op.operand_type = type;
@@ -1849,11 +1921,13 @@ class BodyExtraction {
       const bool sum = subject.type.kind == Type::sum && declarations().bits_payload(subject.type) &&
           (subject.view || direct_value_call(*expr.children.front()));
       const bool enumeration = subject.type.kind == Type::enumeration;
-      expect((sum || enumeration || subject.type == Type::boolean) && !expr.case_resumes,
-             expr.at, "seed needs a closed Boolean, enum or bits sum case without resumption");
+      const bool borrowed = subject.view && declarations().bits_payload(subject.type);
+      expect((sum || enumeration || subject.type == Type::boolean || borrowed) && !expr.case_resumes,
+             expr.at, "seed needs a Boolean, enum, bits sum or borrowed bits subject without resumption");
       std::set<std::uint64_t> covered;
-      bool catch_all = false;
+      bool catch_all = false, covers_null = false, covers_present = false;
       BoundCase input{&expr, {}};
+      input.nullable_subject = subject.targets.contains(null_target);
       const auto incoming = supplied_;
       for (const auto &entry : std::span(expr.children).subspan(1)) {
         supplied_ = incoming;
@@ -1862,15 +1936,30 @@ class BodyExtraction {
                (arm.children.size() == 1 || arm.children.size() == 2), arm.at,
                "seed needs a case arm without resumption");
         const bool guarded = arm.children.size() == 2;
-        const auto pattern = bind_case_pattern(declarations(), subject.type, arm, names().constructors);
+        const bool ref_arm = !arm.receiving && !arm.case_bindings.empty();
+        const auto pattern = ref_arm ? CasePattern{CasePattern::Kind::present} :
+            bind_case_pattern(declarations(), subject.type, arm, names().constructors);
         std::vector<size_t> payload_fields;
-        expect(pattern.kind != CasePattern::Kind::null, arm.at, "seed needs a non-null case pattern");
         if (!guarded) {
           if (pattern.kind == CasePattern::Kind::any) catch_all = true;
+          else if (pattern.kind == CasePattern::Kind::null) covers_null = true;
+          else if (pattern.kind == CasePattern::Kind::present) covers_present = true;
           else covered.insert(pattern.code);
         }
         scopes_.emplace_back();
-        if (arm.receiving) {
+        if (ref_arm) {
+          const auto &binding = *arm.case_bindings.front();
+          expect(borrowed && resolve_annotation(*binding.annotation, binding.at) == subject.type,
+                 binding.at, "seed needs an exact typed ref pattern on a borrowed target");
+          const auto owner = single_owner(subject, binding.at);
+          if (!binding.owner_name.empty() && named_owner(binding.owner_name, binding.at) != owner)
+            fail(binding.at, "ref pattern requires the subject's actual owner");
+          if (subject.read_only && !binding.read_only)
+            fail(binding.at, "a readonly target cannot supply a writable ref pattern");
+          const auto local = declare(binding.at, binding.text, subject.type, false, binding.read_only,
+                                     binding.fixed_binding, owner);
+          remember(binding, place_operand(body_.instance, local));
+        } else if (arm.receiving) {
           const auto constructor = *pattern.constructor;
           const auto &alternative = declarations().sums.at(constructor.sum).alternatives.at(constructor.alternative);
           const auto receiving = bind_case_fields(declarations(), arm, alternative, [&](const Type &type) {
@@ -1910,13 +1999,15 @@ class BodyExtraction {
       }
       supplied_ = incoming;
       if (!catch_all) {
-        if (sum) input.reaches_end = covered.size() != declarations().sums.at(subject.type.identity).alternatives.size();
-        else if (enumeration) {
+        if (sum) covers_present |= covered.size() == declarations().sums.at(subject.type.identity).alternatives.size();
+        if (enumeration) {
           const auto &domain = declarations().enums.at(subject.type.identity);
-          input.reaches_end = std::ranges::any_of(domain.members, [&](const auto &member) {
-            return !covered.contains(member.code);
+          covers_present |= std::ranges::all_of(domain.members, [&](const auto &member) {
+            return covered.contains(member.code);
           });
-        } else input.reaches_end = covered.size() != 2;
+        }
+        if (subject.type == Type::boolean) covers_present |= covered.size() == 2;
+        input.reaches_end = !covers_present || (input.nullable_subject && !covers_null);
       }
       return input;
     }
@@ -1959,6 +2050,12 @@ class BodyExtraction {
       case Kind::boolean:
         op.type = Type::boolean;
         op.integer = expr.text == "true";
+        return op;
+      case Kind::null_ref:
+        op.type = Type::null_ref;
+        op.view = true;
+        op.targets.insert(null_target);
+        if (!expr.owner_name.empty()) op.owners.insert(named_owner(expr.owner_name, expr.at));
         return op;
       case Kind::name: return name(expr);
       case Kind::symbol: case Kind::touch: return scalar_symbol(expr, selected_symbol(expr));
@@ -2080,16 +2177,14 @@ class BodyExtraction {
       }
       case Kind::return_tail: {
         expect(!supplied_body() && !body_.instance.result.owns_region(), expr.at,
-               "seed needs an independent callable result at the tail");
+               "seed needs an ordinary callable result at the tail");
         const auto &tail = operand(expr, 0);
         op.type = tail.type;
         if (tail.type != Type::never && tail.type != Type::void_type) {
           expect(body_.instance.result.type.has_value(), expr.at,
                  "seed needs a declared result for a value tail");
-          const auto &result = *body_.instance.result.type;
-          takes_return_value(*expr.children.front(), tail, result);
+          prepare_return(*expr.children.front(), tail, op);
           op.type = Type::never;
-          op.operand_type = result;
         }
         return op;
       }
@@ -2110,7 +2205,7 @@ class BodyExtraction {
           if (remember(value, fresh_region(value)).type != *body_.instance.result.type)
             fail(value.at, "constructed region does not match the declared root schema");
         } else if (expr.children.empty()) expect(body_.instance.result.type == Type::void_type, expr.at, "return needs a value");
-        else takes_return_value(*expr.children.front(), operand(expr, 0), *body_.instance.result.type);
+        else prepare_return(*expr.children.front(), operand(expr, 0), op);
         op.type = Type::never;
         op.operand_type = *body_.instance.result.type;
         return op;

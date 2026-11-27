@@ -1886,7 +1886,16 @@ class Parser {
     using K = Expression::Kind;
     auto arm = make(K::case_arm, short_head ? peek() : expect("("));
     if (!short_head && is(")")) arm->text = "_";
-    else {
+    else if (!short_head && is("ref") && is(":", 2) && tokens_[cursor_ + 1].kind == TokenKind::identifier) {
+      expect("ref");
+      auto binding = make(K::pointer, value_name());
+      binding->declaration_kind = "ref";
+      expect(":");
+      binding->read_only = take("const");
+      binding->annotation = parse_type();
+      if (take("in")) binding->owner_name = ordinary_name().text;
+      arm->case_bindings.push_back(finish(std::move(binding)));
+    } else {
       if (short_head) arm->text = ordinary_name().text;
       else {
         const auto pattern = peek();

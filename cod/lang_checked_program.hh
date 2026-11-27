@@ -110,7 +110,7 @@ struct SumConstructor {
 };
 
 struct CasePattern {
-  enum class Kind { any, null, code };
+  enum class Kind { any, null, code, present };
   Kind kind = Kind::any;
   std::uint64_t code = 0;
   std::optional<SumConstructor> constructor = {};
