@@ -189,10 +189,17 @@ class BodyExtraction {
   const Declarations &declarations_;
   const std::map<size_t, Type> reference_targets_;
   std::map<size_t, size_t> selected_;
+  struct Specialization {
+    CheckedMethod method;
+    std::vector<Type> arguments;
+  };
+  using TypeKey = std::pair<Type::Kind, size_t>;
+  std::map<std::pair<size_t, std::vector<TypeKey>>, size_t> specialization_ids_;
+  std::map<size_t, Specialization> specializations_;
   std::deque<BoundBody> bodies_;
   std::vector<LocalDefinition> local_definitions_;
   std::set<size_t> handler_layouts_;
-  size_t outlined_methods_ = 0;
+  size_t generated_methods_ = 0;
 
   explicit BodyExtraction(const Declarations &declarations)
       : declarations_(declarations), reference_targets_(singleton_reference_targets(declarations.declarations_)) {}
@@ -340,8 +347,32 @@ class BodyExtraction {
     return type.kind == Type::product && !program.bits_payload(type) && !program.builder_type(type);
   }
 
+  const CheckedMethod &method(size_t id) const {
+    if (const auto found = specializations_.find(id); found != specializations_.end())
+      return found->second.method;
+    return declarations_.method(id);
+  }
+
+  // Complete a signature from the frozen definition and concrete operand types.
+  // Body extraction subsequently consumes this record and never revises it.
+  size_t specialize(size_t base, std::span<const Type> actuals, const Location &at) {
+    const auto &source = declarations_.method(base);
+    auto arguments = Declarations::infer_direct_types(source, actuals, at);
+    std::vector<TypeKey> keys;
+    keys.reserve(arguments.size());
+    for (const auto &type : arguments) keys.emplace_back(type.kind, type.identity);
+    const auto next = declarations_.declarations_.methods.size() + generated_methods_;
+    auto [id, first] = specialization_ids_.try_emplace(std::pair{base, std::move(keys)}, next);
+    if (first) {
+      auto completed = Declarations::complete_direct_signature(source, arguments);
+      specializations_.emplace(next, Specialization{std::move(completed), std::move(arguments)});
+      ++generated_methods_;
+    }
+    return id->second;
+  }
+
   void require_callable_body(size_t method_id, const Location &at, bool allow_omitted_void) const {
-    const auto &method = declarations_.method(method_id);
+    const auto &method = this->method(method_id);
     const auto &source = *method.source;
     const bool borrowed_result = method.result.borrowed() && !method.result.native_borrow() &&
         !source.c_linkage && method.here.empty() && method.result.type &&
@@ -358,7 +389,7 @@ class BodyExtraction {
   }
 
   size_t demand_body(size_t method_id, const Location &at, ProductPlacements placements = {}) {
-    const auto &method = declarations_.method(method_id);
+    const auto &method = this->method(method_id);
     if (method.result.borrowed() && reference_product(*method.result.type)) {
       const auto &owners = method.input_owners();
       const auto owner = std::ranges::find(owners, method.result.owner, &OwnerParameter::name);
@@ -386,7 +417,7 @@ class BodyExtraction {
 
   void add_outline(Outline outline, std::optional<Type> result) {
     auto &body = bodies_.emplace_back();
-    body.instance.method = declarations_.declarations_.methods.size() + outlined_methods_++;
+    body.instance.method = declarations_.declarations_.methods.size() + generated_methods_++;
     body.instance.result.type = std::move(result);
     body.outline = std::move(outline);
   }
@@ -718,7 +749,7 @@ class BodyExtraction {
       const auto known = std::ranges::find(outlined.owners, original.owner);
       const auto role = static_cast<size_t>(known - outlined.owners.begin());
       if (known == outlined.owners.end()) {
-        const bool read_only = original.owner && extraction_.declarations_.method(supplier.method)
+        const bool read_only = original.owner && extraction_.method(supplier.method)
             .input_owners().at(null_target - 1 - original.owner).read_only;
         outlined.owners.push_back(original.owner);
         outlined.owner_parameters.push_back({"$scope.owner." + std::to_string(role), {}, expr.at, false, read_only});
@@ -1237,16 +1268,34 @@ class BodyExtraction {
              !selected->methods.empty() && selected->declarations.empty(),
              expr.at, "seed needs an unambiguous ordinary source call");
       std::vector<const CheckedOperation *> operands;
-      const auto method_id = selected->methods.size() == 1 ? selected->methods.front() :
+      auto method_id = selected->methods.size() == 1 ? selected->methods.front() :
           select_overload(expr, *selected, operands);
-      const auto &target = extraction_.declarations_.method(method_id);
-      expect(target.result.owns_region() == region_receiver, expr.at,
+      const auto &definition = extraction_.declarations_.method(method_id);
+      expect(definition.result.owns_region() == region_receiver, expr.at,
              "an owning region result requires a direct owning declaration");
-      if (form_.kind == Form::Kind::function && target.source->kind != Form::Kind::function)
+      if (form_.kind == Form::Kind::function && definition.source->kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
       const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
           !region_receiver && !expr.has_here_body();
+      if (!definition.type_parameters.empty()) {
+        const auto parameters = definition.input_parameters();
+        expect(definition.result.type && !definition.source->c_linkage && !expr.has_here_body() &&
+               definition.here.empty() && expr.children.size() == parameters.size() &&
+               std::ranges::none_of(parameters, [](const auto &parameter) {
+                 return parameter.variadic || parameter.automatic_conversion || parameter.selects_caller_place();
+               }), expr.at, "seed needs a fixed direct generic call with a declared result");
+        std::vector<Type> actuals;
+        actuals.reserve(parameters.size());
+        operands.reserve(parameters.size());
+        for (const auto &argument : expr.children) {
+          const auto &operand = ordinary_operand(*argument);
+          operands.push_back(&operand);
+          actuals.push_back(operand.type);
+        }
+        method_id = extraction_.specialize(method_id, actuals, expr.at);
+      }
       extraction_.require_callable_body(method_id, expr.at, allow_omitted_void);
+      const auto &target = extraction_.method(method_id);
       const auto parameters = target.input_parameters();
       expect(target.here.size() == size_t{expr.has_here_body()} &&
              parameters.size() + expr.has_here_body() == expr.children.size(),
@@ -1337,6 +1386,15 @@ class BodyExtraction {
 
     Type resolve_annotation(const Type &annotation, const Location &at) const {
       if (annotation.kind != Type::named) return annotation;
+      const auto *lexical = &body_;
+      while (lexical->outline) lexical = &extraction_.bodies_.at(lexical->outline->supplier);
+      if (const auto found = extraction_.specializations_.find(lexical->instance.method);
+          found != extraction_.specializations_.end()) {
+        const auto &concrete = found->second;
+        const auto &definition = extraction_.declarations_.method(concrete.method.definition);
+        auto type = Declarations::apply_direct_types(definition, annotation, concrete.arguments);
+        if (type.kind != Type::named) return type;
+      }
       const auto found = names().types.find(annotation.name);
       if (found == names().types.end()) fail(at, "unknown type '" + annotation.name + "'");
       return found->second;
@@ -2373,7 +2431,7 @@ class BodyExtraction {
   public:
     Frame(BodyExtraction &extraction, size_t id, bool executable)
         : extraction_(extraction), body_(extraction.bodies_[id]), id_(id), executable_(executable),
-          method_(body_.outline ? nullptr : &extraction.declarations_.method(body_.instance.method)),
+          method_(body_.outline ? nullptr : &extraction.method(body_.instance.method)),
           form_(method_ ? *method_->source : *body_.outline->source),
           module_(method_ ? method_->module : body_.outline->module) {}
 
@@ -2628,10 +2686,17 @@ class BodyExtraction {
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
              "a C entry cannot import an array allocator capability");
-    for (size_t i = 0; i < executable; ++i) if (const auto &outline = bodies_[i].outline) {
-      expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
-             "seed needs an ordinary outlined body without imported allocators");
-      seal_outline(program, i, results);
+    for (size_t i = 0; i < executable; ++i) {
+      const auto &body = bodies_[i];
+      if (const auto &outline = body.outline) {
+        expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
+               "seed needs an ordinary outlined body without imported allocators");
+        seal_outline(program, i, results);
+      } else if (const auto found = specializations_.find(body.instance.method); found != specializations_.end()) {
+        if (found->first != program.methods.size())
+          throw std::logic_error("generic method order changed before emission");
+        program.methods.push_back(std::move(found->second.method));
+      }
     }
     for (size_t i = 0; i < executable; ++i) {
       auto &body = bodies_[i];

@@ -3608,9 +3608,12 @@ public:
         const auto &owners = here_array_owners.at(method.definition);
         layout.array_owners.assign(owners.begin(), owners.end());
       }
-      const auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name +
-          (i == method.definition ? std::string{} : ".interpretation." + std::to_string(i));
-      if (!method.instance || !method.source->type_parameters.empty())
+      auto prefix = "cod.method." + std::to_string(method.definition) + "." + method.source->name;
+      if (i != method.definition) {
+        prefix += method.source->type_parameters.empty() ? ".interpretation." : ".instance.";
+        prefix += std::to_string(i);
+      }
+      if (!method.instance || !method.type_parameters.empty())
         throw std::logic_error("seed emission requires one concrete native frame per method");
       methods_[i] = declare(prefix + ".native", layout);
     }

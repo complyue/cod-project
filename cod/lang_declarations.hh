@@ -1753,11 +1753,14 @@ class ModuleBinder {
       const bool aggregate_value_result = ordinary_bits_aggregate && form->result_kind == "val" &&
           prepared.result.owner.empty();
       const bool aggregate_borrowed_result = ordinary_bits_aggregate && prepared.result.borrowed();
+      const bool generic_value_result = prepared.result.type && binder(prepared, *prepared.result.type) &&
+          prepared.result.mode == ResultMode::value && !form->c_linkage && !form->symbolic &&
+          !form->implicit_scope && operation.empty() && !here && !constructor;
       if (form->result_kind == "val" && prepared.result.type && !scalar_type(*prepared.result.type) &&
-          !aggregate_value_result)
-        implementation_gap(form->at, "explicit val results for non-scalar or generic types");
+          !aggregate_value_result && !generic_value_result)
+        implementation_gap(form->at, "explicit val result without an admitted value type");
       if (prepared.result.type && !prepared.result.borrowed() && !prepared.result.owns_region() &&
-          !prepared.result.owns_exception() && !aggregate_value_result &&
+          !prepared.result.owns_exception() && !aggregate_value_result && !generic_value_result &&
           *prepared.result.type != Type::void_type && prepared.result.type->kind != Type::procedure && !scalar_type(*prepared.result.type)) {
         if (!form->result_const) implementation_gap(form->at, "default result mode for non-scalar or generic types");
       }
@@ -2052,6 +2055,44 @@ public:
   public:
     const SourceProgram &source() const { return source_; }
     const CheckedMethod &method(size_t id) const { return declarations_.methods.at(id); }
+
+    static std::vector<Type> infer_direct_types(const CheckedMethod &method, std::span<const Type> actuals,
+                                                const Location &at) {
+      Substitutions substitutions(method.type_parameters.size());
+      for (size_t i = 0; i < actuals.size(); ++i) {
+        const auto &pattern = method.parameters.at(i);
+        if (actuals[i] != Type::null_ref && binder(method, pattern) &&
+            !bind_type(method, pattern, actuals[i], substitutions))
+          fail(at, "repeated generic type parameter '" + pattern.name + "' requires the same type");
+      }
+      std::vector<Type> types;
+      types.reserve(substitutions.size());
+      for (size_t i = 0; i < substitutions.size(); ++i) {
+        if (!substitutions[i]) fail(at, "cannot infer generic type parameter '" + method.type_parameters[i] + "'");
+        auto &type = *substitutions[i];
+        if (!scalar_type(type) && type.kind != Type::product && type.kind != Type::sum && type.kind != Type::array)
+          implementation_gap(at, "seed needs a scalar or nominal data type argument");
+        types.push_back(std::move(type));
+      }
+      return types;
+    }
+
+    static Type apply_direct_types(const CheckedMethod &method, const Type &type, std::span<const Type> arguments) {
+      if (const auto index = binder(method, type)) return arguments[*index];
+      return type;
+    }
+
+    static CheckedMethod complete_direct_signature(const CheckedMethod &method, std::span<const Type> arguments) {
+      auto completed = method;
+      for (auto &type : completed.parameters) type = apply_direct_types(method, type, arguments);
+      completed.result.type = apply_direct_types(method, *method.result.type, arguments);
+      completed.type_parameters.clear();
+      const auto &result = *completed.result.type;
+      if (!completed.result.borrowed() && inline_aggregate_type(result) && method.source->result_kind != "val")
+        fail(method.source->at, "a generic aggregate value result requires explicit 'val'");
+      check_aggregate_owner_roles(completed, completed.parameters);
+      return completed;
+    }
 
     // A module family is only a candidate for a call. Lexical shadowing,
     // receiving interpretation and operand preparation belong to extraction.
