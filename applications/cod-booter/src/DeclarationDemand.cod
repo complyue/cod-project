@@ -13,12 +13,12 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, has_imported_native_loan, source_handle_callable,
-    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate
+    prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ImportedFreshSumInvocation } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -218,7 +218,8 @@ export func discover_declaration_demand(
                     return false
                 }
             };
-            if ((prepared_product_writer(views, site) || prepared_scalar_predicate(views, site)) &&
+            if ((prepared_product_writer(views, site) || prepared_scalar_predicate(views, site) ||
+                prepared_aggregate_writer(views, site)) &&
                 !require_receipt_body(demand, site, count, receipt_count, used)) {
                 problem <- site;
                 return false
@@ -301,6 +302,7 @@ export func discover_declaration_demand(
                 LocalSumConstruction -> true;
                 IndexedAggregateDestination -> true;
                 LexicalSumReference -> true;
+                ImportedFreshSumInvocation -> true;
                 _ -> false
             });
         if (links[site].case_schema_prepared || aggregate_operation || selects_caught_field(fields, site) || checked_call ||

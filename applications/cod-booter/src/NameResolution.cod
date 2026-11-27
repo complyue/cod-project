@@ -1,3 +1,4 @@
+using "./ModuleExportStorage.cod" { checked_aggregate_storage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord }, SourceWriter { AggregateWriter } };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" { len, same_bytes };
@@ -38,7 +39,7 @@ using "./ParserStorage.cod" SignatureSyntax {
     TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
 using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
-using "./ParserStorage.cod" FormalMode { ValueFormal, PlaceFormal, InitializingPlaceFormal, HandleFormal, ReferenceSlotFormal };
+using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PlaceFormal, InitializingPlaceFormal, HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { InvalidFormal, OrdinaryFormal, HereFormalSyntax };
 using "./ParserStorage.cod" HandleBindingSyntax { OwnHandleBinding, BorrowHandleBinding };
 using "./ParserStorage.cod" HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake };
@@ -97,7 +98,7 @@ using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface, array_length_family_interface,
     FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
 };
-using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
+using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./ModuleExportStorage.cod" ReceiverImportCheck { NoReceiverCallables };
 
@@ -156,6 +157,7 @@ export data NameWorkSlot {
     slot_array_construction:bool;
     inline_sum_initializer:bool;
     selected_constructor:bool;
+    selected_aggregate_writer:UInt64;
     product_type_diagnostic:UInt8;
     product_type_site:UInt64;
     # Reaching installation at expression entry. The syntax count denotes
@@ -2204,7 +2206,9 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     reject_noncallable_shadow(nodes, bindings, work, state, callee.index);
                     if (state.diagnostic != 0u8) return;
                     resolve_list(source, nodes, bindings, work, state, arguments.index,
-                        state.source_only && bindings[callee.index].kind == callable_binding());
+                        state.source_only && (bindings[callee.index].kind == callable_binding() ||
+                            (bindings[callee.index].kind == ordinary_selection() &&
+                             work[bindings[callee.index].declaration].selected_aggregate_writer != no_node())));
                     return;
                 };
                 (EmptyCall { val callee <- callee; }) -> {
@@ -2594,6 +2598,73 @@ export func transfer_name(source:const SourceBytes in S, nodes:const ExprNodes i
     where {const owner S, const owner N} {
     val first <- syntax_first(nodes, syntax_len(nodes), name);
     return syntax_past(nodes, syntax_len(nodes), name) == first + 2u64 && source[first] == 60u8 && source[first + 1u64] == 45u8;
+}
+
+export func direct_source_using(nodes:const ExprNodes in N, selection:UInt64, used:UInt64, revision:UInt64)
+    -> bool where {const owner N} {
+    ref named = make ModuleSelectionSites {
+        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
+        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
+    };
+    if (inspect_module_selection(nodes, revision, used, selection, named) == SelectionReady)
+        return named.mode == UseResource && !named.symbolic;
+    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
+    return inspect_bulk_selection(nodes, revision, used, selection, bulk) == SelectionReady &&
+        bulk.mode == UseResource
+}
+
+func source_aggregate_formal(interfaces:const ModuleInterfaces in I, row:UInt64,
+    kind:UInt8, role:UInt64, readonly:UInt8) -> bool where {const owner I} {
+    if (interfaces[row].interface_kind != 0u8 || interfaces[row].entry_count != 0u64 ||
+        interfaces[row].value_kind != kind || interfaces[row].owner_role != role ||
+        interfaces[row].owner_readonly != readonly || interfaces[row].target_readonly != readonly ||
+        interfaces[row].native_reception != 0u8 || interfaces[row].native_passes_owner != 0u8 ||
+        interfaces[row].source_allocates) return false;
+    val mode <- interfaces[row].field_mode;
+    if (role == no_node()) {
+        return (mode == ValueFormal || mode == ExplicitValueFormal) &&
+            interfaces[row].type_module == 0u64 && interfaces[row].type_identity == 0u64
+    };
+    return mode == ReferenceFormal && interfaces[row].type_module != 0u64 &&
+        interfaces[row].type_module != no_node() && interfaces[row].type_identity != no_node()
+}
+
+# This completed declaration-relative plan permits construction binding. It
+# does not check any actual or promise its preparation will succeed.
+func source_aggregate_writer_header(nodes:const ExprNodes in N, interfaces:const ModuleInterfaces in I,
+    published:UInt64, selected:const SelectedExport in E, used:UInt64, revision:UInt64) -> UInt64
+    where {const owner N, const owner I, const owner E} {
+    val module <- selected.origin_module;
+    if (selected.kind != callable_export() || selected.shape != ordinary_callable_shape() ||
+        selected.checked != 0u8 || module == 0u64 || module != selected.dependency_module)
+        return no_node();
+    val head <- find_interface(interfaces, published, module, selected.identity);
+    if (head == no_node() || interfaces[head].source_writer != AggregateWriter) return no_node();
+    if (published - head <= 5u64 || interfaces[head].entry_count != 5u64 ||
+        interfaces[head].interface_kind != callable_binding() || interfaces[head].membership != FixedMethods ||
+        interfaces[head].callable_kind != CheckedFunction || interfaces[head].native_function != no_node() ||
+        interfaces[head].result_kind != builtin_void() || interfaces[head].owner_count != 3u64 ||
+        interfaces[head].owner_role != no_node() || interfaces[head].has_here != 0u8 ||
+        interfaces[head].failure_identity != no_node() || interfaces[head].failure_module != 0u64 ||
+        interfaces[head].failure_checked != 0u8 || interfaces[head].array_read_completion == NoArrayRead ||
+        !direct_source_using(nodes, selected.selection_site, used, revision)) return no_node();
+    val array <- head + 1u64;
+    val record <- head + 2u64;
+    val payload <- head + 5u64;
+    if (!source_aggregate_formal(interfaces, array, array_type(), 0u64, 0u8) ||
+        !source_aggregate_formal(interfaces, record, record_type(), 1u64, 0u8) ||
+        !source_aggregate_formal(interfaces, head + 3u64, builtin_u64(), no_node(), 0u8) ||
+        !source_aggregate_formal(interfaces, head + 4u64, builtin_u64(), no_node(), 0u8) ||
+        !source_aggregate_formal(interfaces, payload, sum_type(), 2u64, 1u8)) return no_node();
+    val array_header <- find_interface(interfaces, published, interfaces[array].type_module, interfaces[array].type_identity);
+    val storage <- checked_aggregate_storage(interfaces, published, interfaces[record].type_module,
+        interfaces[record].type_identity, record_type());
+    if (array_header == no_node() || interfaces[array_header].interface_kind != array_type() ||
+        interfaces[array_header].array_index_kind != builtin_u64() ||
+        interfaces[record].type_module != module || storage != CLayoutBitsRecord ||
+        checked_aggregate_storage(interfaces, published, interfaces[payload].type_module,
+            interfaces[payload].type_identity, sum_type()) != CoDBitsAggregate) return no_node();
+    return head
 }
 
 func published_family_membership(interfaces:const ModuleInterfaces in I, published:UInt64,
@@ -3606,6 +3677,13 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         symbolic <- false; mode <- UseResource;
         nature <- OrdinaryResource;
     };
+    ref candidate = make SelectedExport {
+        dependency_module <- 0u64; origin_module <- 0u64; identity <- no_node();
+        checked_resource <- no_node(); selection_site <- no_node(); selection_public_row <- no_node();
+        kind <- 0u8; checked <- 0u8; shape <- 0u8; owner_module <- 0u64; owner_identity <- no_node();
+        enum_head <- no_node(); enum_code <- 0u64; sum_head <- no_node(); next_sum_selection <- no_node();
+        constructor_selection <- no_node(); constructor_row <- no_node();
+    };
     for (at in 0u64 .. tree.used) {
         if (selected[at].kind == enum_member_export()) {
             remember(bindings, at, at, enum_value());
@@ -3621,6 +3699,20 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         work[at].local_symbol_conflict <- no_node();
         work[at].inline_sum_initializer <- false;
         work[at].selected_constructor <- selected[at].constructor_selection != no_node();
+        work[at].selected_aggregate_writer <- no_node();
+        if (declarations_only) {
+            if (selected[at].kind == callable_export()) {
+                (work[at].selected_aggregate_writer <- source_aggregate_writer_header(nodes, interfaces,
+                    published, selected[at], tree.used, tree.revision)):void
+            } else {
+                if (work[at].module_kind == callable_export() &&
+                    project_checked_resource(selections, selected_used, work[at].module_selection,
+                        tree.revision, tree.used, true, candidate)) {
+                    (work[at].selected_aggregate_writer <- source_aggregate_writer_header(nodes, interfaces,
+                        published, candidate, tree.used, tree.revision)):void
+                }
+            }
+        };
         work[at].enum_assertion <- (NoEnumAssertion:EnumAssertion);
         work[at].enum_members <- no_node();
         work[at].enum_backing <- 0u8;

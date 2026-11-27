@@ -1,3 +1,4 @@
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
     InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal }
@@ -7,11 +8,11 @@ using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
-    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall
+    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" index_out_of_bounds_identity;
-using "./NativeDeclarations.cod" { prepared_product_writer, prepared_scalar_predicate, prepared_array_length_call, checked_literal_call };
+using "./NativeDeclarations.cod" { prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_array_length_call, checked_literal_call };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u64, borrowed_ref, void_result, never_result };
 using "./ParserStorage.cod" {
@@ -24,7 +25,7 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
-    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedScalarPredicate }
+    SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter, CheckedAggregateWriter, CheckedScalarPredicate }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -311,8 +312,9 @@ data FunctionEffects { available:bool; bounds:bool; numeric:bool; }
 array FunctionEffectRows[UInt64]:FunctionEffects;
 
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:const OperandFacts in F, views:const SuppliedViews in V, at:UInt64, callee:UInt64) -> bool
-    where {const owner N, const owner B, const owner F, const owner V} {
+    facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
+    at:UInt64, callee:UInt64, aggregate_writer:bool) -> bool
+    where {const owner N, const owner B, const owner F, const owner V, const owner C} {
     return case nodes[at] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
             NameReference -> true;
@@ -329,6 +331,11 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds;
             ArrayLength -> true;
+            NamedConstruction -> aggregate_writer && at < intrinsic (len)(cases) &&
+                facts[at].allocation_owner == no_node() &&
+                (case cases[at] of { BitsConstruction -> true; _ -> false });
+            BracedInitializer -> aggregate_writer;
+            InitializerTransfer -> aggregate_writer && names[at].kind == 0u8;
             Conditional -> true;
             BlockSyntax -> true;
             BlockItem -> true;
@@ -353,10 +360,10 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
 # the preceding edge in this body. The ordering pass needs only those links.
 func collect_function_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:const SuppliedViews in V, facts:const OperandFacts in F,
-    demand:const DeclarationDemands in D, sites:const CompletionSites in X,
+    demand:const DeclarationDemands in D, sites:const CompletionSites in X, cases:const ConstructorCaseFacts in C,
     operations:ContractOperations in P, local:FunctionEffectRows in E, used:UInt64, revision:UInt64) -> void
     where {const owner N, const owner B, const owner W, const owner V, const owner F,
-        const owner D, const owner X, owner P, owner E} {
+        const owner D, const owner X, const owner C, owner P, owner E} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     val result <- 0u8;
     for (definition in 0u64 .. used) {
@@ -383,7 +390,8 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             callee <- facts[at].call_definition;
             if ((callee != no_node() && (callee != demand[at].callee ||
                  inspect_invocation(nodes, revision, used, at, call) != OrdinaryInvocation)) ||
-                !checked_function_operation(nodes, names, facts, views, at, callee)) {
+                !checked_function_operation(nodes, names, facts, views, cases, at, callee,
+                    prepared_aggregate_writer(views, definition))) {
                 (local[definition].available <- false):void
             } else {
                 event <- sites[at].event;
@@ -432,21 +440,23 @@ func apply_function_operation(operations:const ContractOperations in P, local:co
 
 func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
     for (at in 0u64 .. used) {
-        if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at)) return true
+        if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
+            prepared_aggregate_writer(views, at)) return true
     };
     return false
 }
 
 export func finish_closed_source_functions(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, views:SuppliedViews in V, facts:const OperandFacts in F,
-    demand:const DeclarationDemands in D, sites:const CompletionSites in X, used:UInt64, revision:UInt64)
-    -> void where {const owner N, const owner B, const owner W, owner V, const owner F, const owner D, const owner X} {
+    demand:const DeclarationDemands in D, sites:const CompletionSites in X, cases:const ConstructorCaseFacts in C,
+    used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner W, owner V, const owner F, const owner D, const owner X, const owner C} {
     if (used > 4611686018427387903u64 || !has_closed_function_candidate(views, used)) return;
     ref operations = make ContractOperations(used, make ContractOperation {
         kind <- (NoContractOperation:ContractOperationKind); first <- no_node(); second <- no_node()
     });
     ref local = make FunctionEffectRows(used, make FunctionEffects { available <- false; bounds <- false; numeric <- false });
-    collect_function_operations(nodes, names, work, views, facts, demand, sites, operations, local, used, revision);
+    collect_function_operations(nodes, names, work, views, facts, demand, sites, cases, operations, local, used, revision);
     ref traversal = make ContractTraversals(used, make ContractTraversal {
         visit <- (Unvisited:ContractVisit); stack_site <- no_node(); ordered_site <- no_node()
     });
@@ -458,6 +468,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
     for (at in 0u64 .. used) {
         if (prepared_product_writer(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedProductWriter {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric
+            }):void
+        };
+        if (prepared_aggregate_writer(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedAggregateWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric
             }):void

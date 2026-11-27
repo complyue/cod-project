@@ -23,7 +23,7 @@ using "./ParserStorage.cod" {
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
-    owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label
+    owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable
 };
 using "./ModuleExports.cod" { SelectedExports, array_export, record_export };
 using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, type_module, type_identity };
@@ -62,6 +62,7 @@ export data ConstructorCaseFact =
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
+    ImportedFreshSumInvocation {} |
     FreshSumArgument { invocation:UInt64; formal:UInt64; construction:UInt64; lexical_owner:UInt64; } |
     BitsConstruction {
         transfer:UInt64; value_type:DeclaredType; schema:UInt64; field_count:UInt64;
@@ -1058,6 +1059,69 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
     return true
 }
 
+func prepare_imported_record_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
+    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, call:UInt64, input:UInt64,
+    used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner G, const owner A, owner F} {
+    if (names[input].kind != formal_binding()) return;
+    val formal <- names[input].declaration;
+    ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (inspect_formal(nodes, revision, used, formal, parameter) != OrdinaryFormal ||
+        parameter.mode != ReferenceFormal ||
+        inspect_binding(nodes, revision, used, parameter.binding, binding) != TypedBinding ||
+        binding.readonly || binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return;
+    val owner_site <- names[binding.owner_name].declaration;
+    if (owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint) return;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) &&
+        type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)) {
+        remember_inline_product_formal(facts, formal, enclosing_callable(nodes, names, names[call].scope),
+            owner_site, false, type)
+    }
+}
+
+func prepare_imported_aggregate_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W,
+    interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
+    facts:ConstructorCaseFacts in F, call:UInt64, header:UInt64, first_argument:UInt64,
+    first:UInt64 in P, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A,
+        owner F, owner P, owner R} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val argument <- first_argument;
+    val input <- no_node();
+    val lexical_owner <- names[call].scope;
+    ref expected = make DeclaredType {
+        kind <- sum_type();
+        defining_module <- interfaces[header + 5u64].type_module;
+        identity <- interfaces[header + 5u64].type_identity;
+    };
+    for (position in 0u64 .. 5u64) {
+        if (argument >= call ||
+            inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
+        input <- entry.item;
+        if (position == 1u64) {
+            prepare_imported_record_formal(nodes, names, selected, interfaces, published, aggregate,
+                facts, call, input, used, revision)
+        };
+        if (work[input].inline_sum_initializer) {
+            if (position != 4u64 || input >= argument || lexical_owner >= used ||
+                names[input].scope != lexical_owner || checked_ref_argument(nodes, argument))
+                return case_problem(report, input, unsupported_bits_construction());
+            if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+                input, argument, expected, used, revision, report)) return false;
+            facts[call] <- make ImportedFreshSumInvocation {};
+            if (first == no_node()) { (first <- call):void }
+        };
+        (argument <- work[argument].next):void
+    };
+    return true
+}
+
 func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W,
     interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
@@ -1073,7 +1137,16 @@ func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const Na
     ref argument = make UInt64 { no_node() };
     ref formal = make UInt64 { no_node() };
     val definition <- no_node();
+    val imported_header <- no_node();
     for (call in 0u64 .. used) {
+        if (direct_invocation(nodes, revision, used, call, invocation) == DirectInvocationReady &&
+            invocation.arguments != no_node() && names[invocation.callee].kind == ordinary_selection()) {
+            imported_header <- work[names[invocation.callee].declaration].selected_aggregate_writer;
+            if (imported_header < published &&
+                first_sequence_entry(nodes, revision, used, invocation.arguments, ArgumentSequence, argument) &&
+                !prepare_imported_aggregate_arguments(nodes, names, selected, work, interfaces, published, aggregate,
+                    facts, call, imported_header, argument, first, used, revision, report)) return false
+        };
         if (direct_invocation(nodes, revision, used, call, invocation) == DirectInvocationReady &&
             invocation.arguments != no_node() && names[invocation.callee].kind == callable_binding()) {
             definition <- names[invocation.callee].declaration;

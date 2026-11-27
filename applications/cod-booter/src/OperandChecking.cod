@@ -1,3 +1,5 @@
+using "./NameResolution.cod" direct_source_using;
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" OwnerConstraintSyntax {
     NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint
@@ -60,13 +62,8 @@ using "./ParserStorage.cod" {
     RangeBounds, RangeSites, inspect_range_header, inspect_range_loop, classify_literal_range,
     inspect_logical, LogicalSites, boolean_literal, unequal_words,
     ungrouped, native_installation_input, IndexSites, inspect_index_selection,
-    ModuleSelectionSites, inspect_module_selection, BulkSelectionSites, inspect_bulk_selection,
     SumArmSites, inspect_sum_arm,
 };
-using "./ParserStorage.cod" ModuleSelectionMode { UseResource };
-using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
-using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
-using "./ParserStorage.cod" PublicView { DefaultPublic };
 using "./ParserStorage.cod" DeferSyntax { DeferBody };
 using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
 using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs, TakesRhs };
@@ -2369,6 +2366,23 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     return invalid_operand_tree();
 }
 
+func lend_imported_fresh_sum(names:const NameBindings in B, facts:OperandFacts in F,
+    cases:const ConstructorCaseFacts in C, invocation:UInt64, argument:UInt64, input:UInt64) -> UInt8
+    where {const owner B, owner F, const owner C} {
+    val lexical_owner <- names[invocation].scope;
+    if (lexical_owner == no_node() || names[input].scope != lexical_owner ||
+        facts[input].reception != independent_value() || input >= intrinsic (len)(cases) ||
+        !(case cases[input] of {
+            BitsConstruction { val consumer <- transfer; } -> consumer == argument;
+            _ -> false
+        })) return unproved_owner();
+    set_fact(facts, argument, source_sum_target(), borrowed_ref(), lexical_owner, facts[input].identity, 0u8);
+    facts[argument].identity_module <- facts[input].identity_module;
+    facts[argument].selection <- input;
+    facts[argument].target_readonly <- 1u8;
+    return 0u8
+}
+
 func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                          facts:OperandFacts in F, cases:const ConstructorCaseFacts in C, at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, source_only:bool) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner C} {
@@ -2413,10 +2427,16 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
         };
         expected <- links[argument].imported_kind;
         source_aggregate_loan <- links[at].imported_array_read_completion != NoArrayRead &&
-            (expected == source_array_loan() || expected == source_product_loan());
+            (expected == source_array_loan() || expected == source_product_loan() || expected == source_sum_target());
         if (expected == source_handle_loan() || source_aggregate_loan) {
-            if (checked_ref_argument(nodes, argument) ||
-                facts[value].kind != expected ||
+            if (checked_ref_argument(nodes, argument)) return wrong_operand_type();
+            if (source_aggregate_loan && expected == source_sum_target() &&
+                facts[value].kind == independent_sum_bits()) {
+                diagnostic <- lend_imported_fresh_sum(names, facts, cases, at, argument, value);
+                if (diagnostic != 0u8) return diagnostic;
+                (value <- argument):void
+            };
+            if (facts[value].kind != expected ||
                     facts[value].reception != borrowed_ref() ||
                 (source_aggregate_loan && facts[value].target_presence != present_target()) ||
                 facts[value].identity_module != links[argument].imported_type_module ||
@@ -2432,7 +2452,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
                         consumer == argument && writable == (links[argument].imported_target_readonly == 0u8);
                     _ -> false
                  }))) return unproved_owner();
-            copy_fact(facts, argument, value);
+            if (value != argument) { copy_fact(facts, argument, value) };
             if (source_aggregate_loan) {
                 (facts[argument].target_readonly <- links[argument].imported_target_readonly):void
             }
@@ -2515,6 +2535,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     val handles <- false;
     val array_loan <- false;
     val product_loan <- false;
+    val sum_loan <- false;
     val role <- no_node();
     val kind <- 0u8;
     for (index in 0u64 .. contracts[header].entry_count) {
@@ -2523,14 +2544,17 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
         handles <- source_handles && kind == c_handle_type();
         array_loan <- source_declared_signature && kind == array_type();
         product_loan <- source_declared_signature && kind == record_type();
+        sum_loan <- source_declared_signature && kind == sum_type();
         links[argument].imported_kind <- if (array_loan) { source_array_loan() } else {
             if (product_loan) { source_product_loan() } else {
-                if (source_handles || source_declared_signature) {
-                    if (handles) { source_handle_loan() } else { source_scalar_kind(kind) }
-                } else { kind }
+                if (sum_loan) { source_sum_target() } else {
+                    if (source_handles || source_declared_signature) {
+                        if (handles) { source_handle_loan() } else { source_scalar_kind(kind) }
+                    } else { kind }
+                }
             }
         };
-        links[argument].imported_reception <- if (array_loan || product_loan || handles) {
+        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles) {
             borrowed_ref()
         } else {
             if (source_handles || source_declared_signature) { local_place() } else { (contracts[row].native_reception) }
@@ -2539,7 +2563,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
         links[argument].imported_owner_readonly <- contracts[row].owner_readonly;
         links[argument].imported_passes_owner <- contracts[row].native_passes_owner;
         role <- contracts[row].owner_role;
-        if (handles || array_loan || product_loan || (!source_handles && !source_declared_signature && kind == scalar_enum())) {
+        if (handles || array_loan || product_loan || sum_loan || (!source_handles && !source_declared_signature && kind == scalar_enum())) {
             links[argument].imported_type_module <- contracts[row].type_module;
             (links[argument].imported_type_identity <- contracts[row].type_identity):void
         };
@@ -2728,7 +2752,7 @@ func checked_scalar_predicate_header(contracts:const ModuleInterfaces in I, publ
         contracts[header].has_here != 0u8 || contracts[header].failure_identity != no_node() ||
         contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8 ||
         contracts[header].array_read_completion != NoArrayRead || contracts[header].source_numeric_fault ||
-        contracts[header].source_product_writer) return false;
+        contracts[header].source_writer != NoSourceWriter) return false;
     val input <- header + 1u64;
     return source_scalar_value_row(contracts[input], builtin_u8()) &&
         !contracts[input].source_allocates && contracts[input].type_module == 0u64 &&
@@ -2738,7 +2762,7 @@ func checked_scalar_predicate_header(contracts:const ModuleInterfaces in I, publ
 func checked_product_writer_header(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> bool where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts) || published - header <= 3u64 ||
-        contracts[header].entry_count != 3u64 || !contracts[header].source_product_writer ||
+        contracts[header].entry_count != 3u64 || contracts[header].source_writer != ProductWriter ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].result_kind != builtin_void() || contracts[header].type_module != 0u64 ||
@@ -2845,19 +2869,6 @@ func checked_array_reader_header(contracts:const ModuleInterfaces in I, publishe
         if (!source_scalar_value_row(contracts[row], builtin_u64())) return false
     };
     return true
-}
-
-func direct_source_using(nodes:const ExprNodes in N, selection:UInt64, used:UInt64, revision:UInt64)
-    -> bool where {const owner N} {
-    ref named = make ModuleSelectionSites {
-        path <- no_node(); resource <- no_node(); local <- no_node(); members <- no_node();
-        symbolic <- false; mode <- UseResource; nature <- OrdinaryResource
-    };
-    if (inspect_module_selection(nodes, revision, used, selection, named) == SelectionReady)
-        return named.mode == UseResource && !named.symbolic;
-    ref bulk = make BulkSelectionSites { path <- no_node(); mode <- UseResource; view <- DefaultPublic };
-    return inspect_bulk_selection(nodes, revision, used, selection, bulk) == SelectionReady &&
-        bulk.mode == UseResource
 }
 
 export func mark_literal_source_bodies(views:const SuppliedViews in V, exports:const ModuleExports in E, export_count:UInt64,
@@ -3004,7 +3015,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         (supplied[at] <- make CheckedLiteralCall {}):void;
         return true
     };
-    if (source_only && header != no_node() && contracts[header].source_product_writer) {
+    if (source_only && header != no_node() && contracts[header].source_writer == ProductWriter) {
         if (obligation || !checked_product_writer_header(contracts, interface_count, header) ||
             selected[site].dependency_module != selected[site].origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
@@ -3020,6 +3031,24 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
         supplied[at] <- make ImportedProductWriter {};
         if (required == no_node()) { (required <- at):void };
+        return true
+    };
+    if (source_only && header != no_node() && contracts[header].source_writer == AggregateWriter) {
+        val module <- selected[site].origin_module;
+        if (links[site].selected_aggregate_writer != header ||
+            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, module, header + 5u64, interface_count))
+            return true;
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
+            return operand_problem(report, at, wrong_argument_count());
+        ref first = make UInt64 { no_node() };
+        if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
+            return operand_problem(report, at, invalid_operand_tree());
+        prepare_imported_product_loan(nodes, names, selected, contracts, interface_count,
+            aggregate, cases, links[first].next, used, revision, true);
+        remember_imported_call(links, contracts, at, header, true);
+        links[at].imported_array_read_completion <- contracts[header].array_read_completion;
+        links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
         return true
     };
     val scalar_reader <- array_read && contracts[header].result_kind == builtin_u64();

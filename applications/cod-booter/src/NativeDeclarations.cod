@@ -1,3 +1,5 @@
+using "./ModuleExportStorage.cod" SourceWriter;
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter };
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
 using "./SourceAccess.cod" same_bytes;
 using "./SourceStorage.cod" SourceBytes;
@@ -1046,7 +1048,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -1485,12 +1487,15 @@ export data SuppliedView =
     ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
     ReadonlyIndexedByteReader {} |
     PreparedProductWriter {} |
+    PreparedAggregateWriter {} |
+    CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedProductWriterHelper {} |
     CheckedProductWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedLiteralCall {} |
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
+    ImportedAggregateWriterCandidate {} |
     ImportedProductWriter {} |
     PreparedArrayReaderLeaf { declared_array:UInt64; } |
     PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
@@ -2384,6 +2389,79 @@ func prepare_product_writer(nodes:const ExprNodes in N, names:const NameBindings
     }
 }
 
+# The array and record are initialized writable loans. The third role
+# lends only a readonly finite-bits sum during the call.
+func aggregate_writer_loan(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, formal:UInt64, owner_site:UInt64, kind:UInt8, readonly:bool,
+    used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (!typed_formal(nodes, revision, used, formal, parameter, binding) ||
+        parameter.mode != ReferenceFormal || binding.readonly != readonly ||
+        binding.owner_name >= used || names[binding.owner_name].declaration != owner_site) return false;
+    if (kind == array_type()) {
+        val marker <- binding.target_type;
+        return names[marker].kind == array_type() || imported_kind(names, selected, marker) == array_export()
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) || type.kind != kind)
+        return false;
+    # The writer body already has the ordinary local scalar-product path.
+    if (kind == record_type())
+        return type.defining_module == 0u64 && type.identity < used && aggregate[type.identity] == CLayoutBitsRecord;
+    if (type.defining_module == 0u64)
+        return type.identity < used && aggregate[type.identity] == CoDBitsAggregate;
+    return checked_aggregate_storage(contracts, published, type.defining_module, type.identity, kind) == CoDBitsAggregate
+}
+
+func prepare_aggregate_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
+    at:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, const owner W, owner V} {
+    if (names[at].kind != callable_binding() || names[at].declaration != at ||
+        work[at].next_method != no_node() || work[at].active != no_node()) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form ||
+        variadic_method_formal(nodes, revision, used, at) != no_node()) return;
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val payload_owner <- callable.signature;
+    if (inspect_signature(nodes, revision, used, payload_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
+    val record_owner <- clause.previous;
+    if (inspect_signature(nodes, revision, used, record_owner, clause) != OwnerSignatureClause || clause.readonly) return;
+    val array_owner <- clause.previous;
+    if (inspect_signature(nodes, revision, used, array_owner, clause) != OwnerSignatureClause || clause.readonly ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+        clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    ref first = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
+        !aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, first, array_owner,
+            array_type(), false, used, revision)) return;
+    val second <- work[first].next;
+    if (!aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, second, record_owner,
+        record_type(), false, used, revision)) return;
+    val third <- work[second].next;
+    if (!independent_scalar_formal(nodes, names, third, used, revision, builtin_u64())) return;
+    val fourth <- work[third].next;
+    if (!independent_scalar_formal(nodes, names, fourth, used, revision, builtin_u64())) return;
+    val fifth <- work[fourth].next;
+    if (aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, fifth, payload_owner,
+        sum_type(), true, used, revision) && work[fifth].next == no_node()) {
+        (views[at] <- make PreparedAggregateWriter {}):void
+    }
+}
+
+export func prepared_aggregate_writer(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
+    return site < intrinsic (len)(views) && (case views[site] of { PreparedAggregateWriter -> true; _ -> false })
+}
+
 export func prepared_product_writer(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
     return site < intrinsic (len)(views) && (case views[site] of { PreparedProductWriter -> true; _ -> false })
 }
@@ -2401,10 +2479,11 @@ export func first_source_call_profile(views:const SuppliedViews in V, used:UInt6
     where {const owner V} {
     for (site in 0u64 .. used) {
         if (readonly_reader_needs_body(views, site) || prepared_product_writer(views, site) ||
-            prepared_scalar_predicate(views, site)) return site;
+            prepared_scalar_predicate(views, site) || prepared_aggregate_writer(views, site)) return site;
         if (case views[site] of {
             ImportedTextPredicateCandidate -> true;
             ImportedProductWriterCandidate -> true;
+            ImportedAggregateWriterCandidate -> true;
             ImportedScalarPredicateCandidate -> true;
             _ -> false
         }) return site
@@ -2477,6 +2556,7 @@ func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
         CheckedArrayReaderForward { val completion <-; } -> completion;
         CheckedReadonlyReader { val completion <-; } -> completion;
         CheckedProductWriter { val completion <-; } -> completion;
+        CheckedAggregateWriter { val completion <-; } -> completion;
         _ -> NoArrayRead
     }
 }
@@ -2714,7 +2794,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3516,7 +3596,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_product_writer <- false; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3698,6 +3778,8 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_product_writer(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
+        prepare_aggregate_writer(nodes, names, selected, contracts, interface_count,
+            aggregate, work, views, at, used, revision);
         prepare_scalar_predicate(nodes, names, work, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);
@@ -3726,8 +3808,12 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                     contracts[head].result_kind == builtin_bool()) {
                     (views[at] <- make ImportedTextPredicateCandidate {}):void
                 };
-                if (contracts[head].source_product_writer) {
+                if (contracts[head].source_writer == ProductWriter) {
                     (views[at] <- make ImportedProductWriterCandidate {}):void
+                };
+                if (contracts[head].source_writer == AggregateWriter &&
+                    work[names[call.callee].declaration].selected_aggregate_writer == head) {
+                    (views[at] <- make ImportedAggregateWriterCandidate {}):void
                 };
                 if (contracts[head].scalar_source_body && contracts[head].result_kind == builtin_bool()) {
                     (views[at] <- make ImportedScalarPredicateCandidate {}):void
@@ -4013,7 +4099,7 @@ func source_here_view(nodes:const ExprNodes in N, names:const NameBindings in B,
 func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                      selected:const SelectedExports in E, work:const NameWork in W,
                      contracts:ModuleInterfaces in C, count:UInt64, defining_module:UInt64, declaration:UInt64,
-                     form:UInt64, kind:UInt8, source_callback:UInt64, array_read_completion:ArrayReadCompletion, product_writer:bool, scalar_predicate:bool,
+                     form:UInt64, kind:UInt8, source_callback:UInt64, array_read_completion:ArrayReadCompletion, source_writer:SourceWriter, scalar_predicate:bool,
                      used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, owner C} {
     val limit <- intrinsic (len)(contracts);
@@ -4099,7 +4185,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             contracts[count].has_here <- if (callback == no_node()) { 0u8 } else { 1u8 };
             contracts[count].owner_count <- owner_count;
             contracts[count].array_read_completion <- array_read_completion;
-            contracts[count].source_product_writer <- product_writer;
+            contracts[count].source_writer <- source_writer;
             contracts[count].scalar_source_body <- scalar_predicate;
             if (source_array_reader || scalar_predicate) { (contracts[count].failure_identity <- no_node()):void };
             if (result_kind == enum_type()) {
@@ -4121,13 +4207,17 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                                 contracts[next], used, revision))
             return no_node();
         if ((source_array_reader && result_kind == builtin_bool() && next == count + 2u64) ||
-            (product_writer && next == count + 3u64)) {
+            (source_writer == ProductWriter && next == count + 3u64) ||
+            (source_writer == AggregateWriter && next == count + 2u64)) {
             (contracts[next].value_kind <- record_type()):void
+        };
+        if (source_writer == AggregateWriter && next == count + 5u64) {
+            (contracts[next].value_kind <- sum_type()):void
         };
         if (indexed_owners &&
             (contracts[next].value_kind == c_handle_type() ||
                 text_type(contracts[next].value_kind) || contracts[next].value_kind == array_type() ||
-                 contracts[next].value_kind == record_type())) {
+                 contracts[next].value_kind == record_type() || contracts[next].value_kind == sum_type())) {
             if (inspect_signature(nodes, revision, used, contracts[next].owner_role, clause) != OwnerSignatureClause) return no_node();
             ordinal <- count_owner_clauses(nodes, clause.previous, used, revision);
             if (ordinal == no_node()) return no_node();
@@ -4196,7 +4286,7 @@ func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings
     val next <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
         marker, constructor, if (constructor == no_node()) { c_handle_type() }
             else { c_constructor() },
-        no_node(), NoArrayRead, false, false, used, revision);
+        no_node(), NoArrayRead, NoSourceWriter, false, used, revision);
     if (next == no_node()) return next;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
@@ -4329,7 +4419,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
     val callback <- no_node();
     val source_handle <- false;
     val array_read_completion <- NoArrayRead;
-    val product_writer <- false;
+    val source_writer <- NoSourceWriter;
     val scalar_predicate <- false;
     for (at in 0u64 .. used) {
         kind <- names[at].kind;
@@ -4373,16 +4463,23 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             reject_declaration(report, at, invalid_native_parameter());
                             return no_node()
                         };
-                        product_writer <- case views[at] of { CheckedProductWriter -> true; _ -> false };
+                        source_writer <- case views[at] of {
+                            CheckedProductWriter -> ProductWriter;
+                            CheckedAggregateWriter -> AggregateWriter;
+                            _ -> NoSourceWriter
+                        };
                         scalar_predicate <- case views[at] of { CheckedScalarPredicate -> true; _ -> false };
                         (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                            at, at, kind, callback, array_read_completion, product_writer, scalar_predicate, used, revision)):void;
+                            at, at, kind, callback, array_read_completion, source_writer, scalar_predicate, used, revision)):void;
                         if (count != no_node()) {
                             case views[at] of {
                                 CheckedReadonlyReader { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
                                 CheckedProductWriter { val numeric_fault <-; } -> {
+                                    (contracts[first].source_numeric_fault <- numeric_fault):void
+                                };
+                                CheckedAggregateWriter { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
                                 _ -> {}

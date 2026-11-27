@@ -247,7 +247,13 @@ Object emission for the writable loan has its own admission checks.
 
 In a body already required to be checked, a direct source-preserving `using` selection can call an ordinary fixed function with one independent `UInt8` value and a `bool` result. The defining visit checks the single returned predicate and completes its exact local call dependencies before publishing the result and signature. Only a proved normal contract with no possible bounds or fatal arithmetic outcome after entry is published in this profile. The caller evaluates and checks the actual once. An indexed read can still fail before entry. Cyclic or unrepresented dependencies leave the contract unavailable.
 
-Both source commands accept the full unchanged `TokenBuffer`, including its imported `Lexer.lexical_error` call. The application frontend currently stops at the imported `make Formal` operand in `CallableSyntax.cod:147:56`.
+Both source commands accept the full unchanged `TokenBuffer`, including its imported `Lexer.lexical_error` call.
+
+### Imported syntax-row writers
+
+The source checker can use the completed `ParserInput.append_syntax_node` contract across a direct `using` selection, including a rename. The defining visit proves the ordinary function's body and publishes the five ordered formals together with possible bounds and fatal arithmetic outcomes. The caller prepares a writable array, a writable record, two independent `UInt64` values and a readonly loan of an exact finite-bits sum. The two writable formals can share an actual owner. A direct braced construction uses the selected constructor's defining schema, evaluates its initializers in order and lends the completed value under the caller's lexical owner. An abrupt operand prevents entry and preserves the effects of earlier operands.
+
+The reduced call to unchanged `append_syntax_node` passes both source commands. The full frontend reaches the `ParseResult` formal of `parse_parameters` at `CallableSyntax.cod:158:45`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 
