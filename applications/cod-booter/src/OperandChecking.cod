@@ -1,4 +1,4 @@
-using "./NameResolution.cod" source_aggregate_formal;
+using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar };
 using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector };
@@ -127,7 +127,7 @@ using "./ExceptionPayload.cod" {
 using "./NativeDeclarations.cod" {
     SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
     inspect_acquired_handle_loan,
-    prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_signature, published_record_array, published_record_array_storage,
+    prepared_here_formal, prepared_native_operation, prepared_array_signature, published_record_array, published_record_array_storage,
 };
 using "./NativeDeclarations.cod" {
     ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement, BoolArrayElement, EnumArrayElement },
@@ -139,7 +139,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, CheckedScalarFunctionCall,
-    CheckedWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
+    CheckedWriterCall, CheckedSumWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -3804,7 +3804,9 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (source_only && header != no_node() && contracts[header].source_writer == AggregateWriter) {
         val module <- selected[site].origin_module;
-        val past <- if (links[site].selected_aggregate_writer == header) { header + 6u64 } else {
+        val has_payload <- links[site].selected_aggregate_writer == header;
+        val only_array_output <- has_payload && contracts[header].owner_count == 2u64;
+        val past <- if (has_payload) { header + 1u64 + contracts[header].entry_count } else {
             checked_scalar_writer_past(contracts, interface_count, header)
         };
         if (obligation || past == no_node() || selected[site].dependency_module != module ||
@@ -3814,15 +3816,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
-        ref first = make UInt64 { no_node() };
-        if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
-            return operand_problem(report, at, invalid_operand_tree());
-        prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
-            aggregate, cases, links[first].next, used, revision, record_type(), true);
+        if (!only_array_output) {
+            ref first = make UInt64 { no_node() };
+            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
+                return operand_problem(report, at, invalid_operand_tree());
+            prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
+                aggregate, cases, links[first].next, used, revision, record_type(), true)
+        };
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        (supplied[at] <- make CheckedWriterCall {}):void;
+        if (only_array_output) {
+            supplied[at] <- make CheckedSumWriterCall {};
+            if (required == no_node()) { (required <- at):void }
+        } else {
+            (supplied[at] <- make CheckedWriterCall {}):void
+        };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ArrayInspector) {

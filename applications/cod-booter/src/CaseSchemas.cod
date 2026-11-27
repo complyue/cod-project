@@ -1393,20 +1393,23 @@ func prepare_imported_aggregate_arguments(nodes:const ExprNodes in N, names:cons
     val argument <- first_argument;
     val input <- no_node();
     val lexical_owner <- names[call].scope;
+    val count <- interfaces[header].entry_count;
+    val payload <- header + count;
+    val has_record <- interfaces[header].owner_count == 3u64;
     ref expected = make DeclaredType {
         kind <- sum_type();
-        defining_module <- interfaces[header + 5u64].type_module;
-        identity <- interfaces[header + 5u64].type_identity;
+        defining_module <- interfaces[payload].type_module;
+        identity <- interfaces[payload].type_identity;
     };
-    for (position in 0u64 .. 5u64) {
+    for (position in 0u64 .. count) {
         if (argument >= call ||
             inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
         input <- entry.item;
-        if (position == 1u64) {
+        if (has_record && position == 1u64) {
             mark_direct_writer_loan(names, facts, call, input, nodes)
         };
         if (work[input].inline_sum_initializer) {
-            if (position != 4u64 || input >= argument || lexical_owner >= used ||
+            if (position + 1u64 != count || input >= argument || lexical_owner >= used ||
                 names[input].scope != lexical_owner || checked_ref_argument(nodes, argument))
                 return case_problem(report, input, unsupported_bits_construction());
             if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,

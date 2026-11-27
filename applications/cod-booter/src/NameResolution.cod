@@ -290,6 +290,11 @@ export func native_scalar(kind:UInt8) -> bool {
     return kind == builtin_u64() || kind == builtin_bool() || (kind >= builtin_u8() && kind <= builtin_f64());
 }
 
+export func source_call_scalar(kind:UInt8) -> bool {
+    return kind == builtin_u64() || kind == builtin_u32() || kind == builtin_u8() ||
+        kind == builtin_bool()
+}
+
 export func unresolved_name() -> UInt8 { return 1u8; }
 export func expected_symbol_binding() -> UInt8 { return 2u8; }
 export func expected_type_binding() -> UInt8 { return 3u8; }
@@ -2716,30 +2721,47 @@ func source_aggregate_writer_header(nodes:const ExprNodes in N, interfaces:const
         return no_node();
     val head <- find_interface(interfaces, published, module, selected.identity);
     if (head == no_node() || interfaces[head].source_writer != AggregateWriter) return no_node();
-    if (published - head <= 5u64 || interfaces[head].entry_count != 5u64 ||
+    val count <- interfaces[head].entry_count;
+    val owners <- interfaces[head].owner_count;
+    if (count < 3u64 || count >= published - head ||
+        (owners != 2u64 && (owners != 3u64 || count != 5u64)) ||
         interfaces[head].interface_kind != callable_binding() || interfaces[head].membership != FixedMethods ||
         interfaces[head].callable_kind != CheckedFunction || interfaces[head].native_function != no_node() ||
-        interfaces[head].result_kind != builtin_void() || interfaces[head].owner_count != 3u64 ||
+        interfaces[head].result_kind != builtin_void() ||
+        interfaces[head].type_module != 0u64 || interfaces[head].type_identity != 0u64 ||
+        interfaces[head].target_readonly != 0u8 ||
         interfaces[head].owner_role != no_node() || interfaces[head].has_here != 0u8 ||
         interfaces[head].failure_identity != no_node() || interfaces[head].failure_module != 0u64 ||
         interfaces[head].failure_checked != 0u8 || interfaces[head].array_read_completion == NoArrayRead ||
         !direct_source_using(nodes, selected.selection_site, used, revision)) return no_node();
     val array <- head + 1u64;
-    val record <- head + 2u64;
-    val payload <- head + 5u64;
+    val payload <- head + count;
     if (!source_aggregate_formal(interfaces, array, array_type(), 0u64, 0u8) ||
-        !source_aggregate_formal(interfaces, record, record_type(), 1u64, 0u8) ||
-        !source_aggregate_formal(interfaces, head + 3u64, builtin_u64(), no_node(), 0u8) ||
-        !source_aggregate_formal(interfaces, head + 4u64, builtin_u64(), no_node(), 0u8) ||
-        !source_aggregate_formal(interfaces, payload, sum_type(), 2u64, 1u8)) return no_node();
-    val array_header <- find_interface(interfaces, published, interfaces[array].type_module, interfaces[array].type_identity);
-    val storage <- checked_aggregate_storage(interfaces, published, interfaces[record].type_module,
-        interfaces[record].type_identity, record_type());
-    if (array_header == no_node() || interfaces[array_header].interface_kind != array_type() ||
-        interfaces[array_header].array_index_kind != builtin_u64() ||
-        interfaces[record].type_module != module || storage != CLayoutBitsRecord ||
+        !source_aggregate_formal(interfaces, payload, sum_type(), owners - 1u64, 1u8) ||
         checked_aggregate_storage(interfaces, published, interfaces[payload].type_module,
             interfaces[payload].type_identity, sum_type()) != CoDBitsAggregate) return no_node();
+    val array_header <- find_interface(interfaces, published, interfaces[array].type_module, interfaces[array].type_identity);
+    if (array_header == no_node() || interfaces[array_header].interface_kind != array_type() ||
+        interfaces[array_header].array_index_kind != builtin_u64()) return no_node();
+    val second <- array + 1u64;
+    if (owners == 3u64) {
+        if (!source_aggregate_formal(interfaces, second, record_type(), 1u64, 0u8) ||
+            interfaces[second].type_module != module ||
+            checked_aggregate_storage(interfaces, published, module,
+                interfaces[second].type_identity, record_type()) != CLayoutBitsRecord ||
+            !source_aggregate_formal(interfaces, head + 3u64, builtin_u64(), no_node(), 0u8) ||
+            !source_aggregate_formal(interfaces, head + 4u64, builtin_u64(), no_node(), 0u8)) return no_node();
+        return head
+    };
+    if (interfaces[array_header].entry_count != 0u64 || interfaces[array_header].element_kind != record_type() ||
+        !source_aggregate_formal(interfaces, second, builtin_u64(), no_node(), 0u8)) return no_node();
+    val storage <- checked_aggregate_storage(interfaces, published, interfaces[array_header].type_module,
+        interfaces[array_header].type_identity, record_type());
+    if (storage != CoDBitsAggregate && storage != CLayoutBitsRecord) return no_node();
+    for (row in second + 1u64 .. payload) {
+        if (!source_call_scalar(interfaces[row].value_kind) ||
+            !source_aggregate_formal(interfaces, row, interfaces[row].value_kind, no_node(), 0u8)) return no_node()
+    };
     return head
 }
 
