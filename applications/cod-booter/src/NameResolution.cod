@@ -156,6 +156,7 @@ export data NameWorkSlot {
     arm_case:UInt64;
     sum_loan_formals:bool;
     array_construction:bool;
+    repeated_product_transfer:bool;
     inline_sum_initializer:bool;
     selected_constructor:bool;
     selected_aggregate_writer:UInt64;
@@ -1461,13 +1462,18 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         state.enclosing_defer <- state.delayed;
         return;
     } else {};
-    if (state.repeated) { reject_name(state, at, unsupported_repeated_construction()); return; } else {};
-    if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node();
     };
     val shape <- inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, construction);
+    if (state.repeated && (!state.source_only || state.here_group || state.local_sum_input != at ||
+        shape != BracedConstruction || construction.placement != no_node() ||
+        construction.queried_operand != no_node())) {
+        reject_name(state, at, unsupported_repeated_construction());
+        return
+    };
+    if (state.here_group) { reject_name(state, at, unsupported_here_group_storage()); return; } else {};
     if (shape != PositionalConstruction && shape != BracedConstruction && shape != StorageReservation) {
         reject_name(state, at, invalid_module_tree());
         return;
@@ -1479,12 +1485,14 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         construction.queried_operand == no_node()) {
         val found <- lookup(source, nodes, work, requested, 0u64, state.used);
         if (found != no_node() && bindings[found].kind == constructor_type()) {
+            if (state.repeated) { reject_name(state, at, unsupported_repeated_construction()); return };
             remember(bindings, requested, bindings[found].declaration, constructor_type());
             work[at].inline_sum_initializer <- inline_sum;
             resolve_record_initializer(source, nodes, bindings, work, state, construction.contents, inline_sum);
             return
         }
         if (found == no_node() && state.inline_field_input == at && work[requested].selected_constructor) {
+            if (state.repeated) { reject_name(state, at, unsupported_repeated_construction()); return };
             remember(bindings, requested, no_node(), constructor_type());
             work[at].inline_sum_initializer <- true;
             resolve_record_initializer(source, nodes, bindings, work, state, construction.contents, true);
@@ -1506,6 +1514,11 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
         record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
+        if (state.repeated) {
+            if (!record_initializer) { reject_name(state, at, unsupported_repeated_construction()); return };
+            # The indexed transfer must later prove a complete bits operand.
+            (work[at].repeated_product_transfer <- true):void
+        };
         val imported_enum <- state.source_only && shape == BracedConstruction && kind == ordinary_selection() &&
             bindings[definition].imported_kind == enum_export();
         array_initializer <- state.source_only && shape == PositionalConstruction &&
@@ -3763,6 +3776,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         bindings[at].handle_guard <- no_node();
         work[at].local_symbol_conflict <- no_node();
         work[at].inline_sum_initializer <- false;
+        work[at].repeated_product_transfer <- false;
         work[at].selected_constructor <- selected[at].constructor_selection != no_node();
         work[at].selected_aggregate_writer <- no_node();
         if (declarations_only) {

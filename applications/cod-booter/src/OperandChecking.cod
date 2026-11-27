@@ -3053,6 +3053,15 @@ func source_scalar_value_row(row:const ModuleInterfaceRow in R, kind:UInt8) -> b
         row.native_reception == 0u8 && row.native_passes_owner == 0u8
 }
 
+func checked_source_scalar_parameter(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64)
+    -> bool where {const owner I} {
+    val kind <- contracts[row].value_kind;
+    if (kind == enum_type())
+        return source_scalar_value_row(contracts[row], kind) && !contracts[row].source_allocates &&
+            published_enum_domain(contracts, published, row);
+    return source_call_scalar(kind) && source_aggregate_formal(contracts, row, kind, no_node(), 0u8)
+}
+
 func checked_array_procedure_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3218,16 +3227,8 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
     if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 1u8) ||
         !published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity))
         return no_node();
-    val kind <- 0u8;
     for (row in array + 1u64 .. output) {
-        kind <- contracts[row].value_kind;
-        if (kind == enum_type()) {
-            if (!source_scalar_value_row(contracts[row], kind) || contracts[row].source_allocates ||
-                !published_enum_domain(contracts, published, row)) return no_node()
-        } else {
-            if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
-                return no_node()
-        }
+        if (!checked_source_scalar_parameter(contracts, published, row)) return no_node()
     };
     if (contracts[output].value_kind == builtin_u64()) {
         if (contracts[output].interface_kind == 0u8 && contracts[output].entry_count == 0u64 &&
@@ -3343,7 +3344,7 @@ func checked_readonly_array_inputs(contracts:const ModuleInterfaces in I, publis
     first:UInt64, past:UInt64, owners:UInt64) -> bool where {const owner I} {
     val role <- 0u64;
     for (row in first .. past) {
-        if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) {
+        if (!checked_source_scalar_parameter(contracts, published, row)) {
             if (role >= owners || !checked_readonly_loan_row(contracts[row], array_type(), role) ||
                 (!published_sum_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
                  !published_record_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
@@ -3378,11 +3379,9 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
     };
     val array <- header + 1u64;
     val past <- array + parameters;
-    if (result != enum_type() && checked_readonly_array_inputs(contracts, published, array, past, owner_count))
+    if (checked_readonly_array_inputs(contracts, published, array, past, owner_count))
         return past;
-    val enum_query <- result == enum_type() && owner_count == 1u64 &&
-        (parameters == 3u64 || parameters == 4u64);
-    if (!(record_predicate && owner_count == 1u64) && !record_key && !enum_query) return no_node();
+    if (!(record_predicate && owner_count == 1u64) && !record_key) return no_node();
     if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 1u8)) return no_node();
     val module <- contracts[array].type_module;
     val identity <- contracts[array].type_identity;
@@ -3392,16 +3391,14 @@ func checked_readonly_array_query_past(contracts:const ModuleInterfaces in I, pu
         return array + 1u64
     };
     if (!published_sum_array(contracts, published, module, identity)) return no_node();
-    val scalar_past <- if (record_key) { past - 1u64 } else { past };
+    val scalar_past <- past - 1u64;
     for (row in array + 1u64 .. scalar_past) {
         if (!source_aggregate_formal(contracts, row, builtin_u64(), no_node(), 0u8)) return no_node()
     };
-    if (record_key) {
-        if (!checked_readonly_loan_row(contracts[scalar_past], record_type(), 1u64)) return no_node();
-        val storage <- checked_aggregate_storage(contracts, published, contracts[scalar_past].type_module,
-            contracts[scalar_past].type_identity, record_type());
-        if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return no_node()
-    };
+    if (!checked_readonly_loan_row(contracts[scalar_past], record_type(), 1u64)) return no_node();
+    val storage <- checked_aggregate_storage(contracts, published, contracts[scalar_past].type_module,
+        contracts[scalar_past].type_identity, record_type());
+    if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return no_node();
     return past
 }
 

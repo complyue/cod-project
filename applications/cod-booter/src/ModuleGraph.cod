@@ -1447,7 +1447,8 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             native_installation <- no_node();
             case_schema_prepared <- false; declaring_sum <- no_node();
             enclosing_case_arm <- no_node(); arm_case <- no_node();
-            sum_loan_formals <- false; array_construction <- false; inline_sum_initializer <- false;
+            sum_loan_formals <- false; array_construction <- false; repeated_product_transfer <- false;
+            inline_sum_initializer <- false;
             selected_constructor <- false; selected_aggregate_writer <- no_node();
             product_type_diagnostic <- 0u8; product_type_site <- no_node();
             active <- no_node(); module_selection <- no_node(); module_kind <- 0u8; module_scalar <- 0u8;

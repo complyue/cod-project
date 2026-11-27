@@ -2532,7 +2532,7 @@ export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UI
     return site < intrinsic (len)(views) && (case views[site] of { ReadonlyIndexedByteReader -> true; _ -> false })
 }
 
-# A query receives independent index words and one readonly array at
+# A query receives independent scalar values and one readonly array at
 # each owner role, in owner-clause order. Check the two lists from their tails.
 func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
@@ -2545,8 +2545,9 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
     if (!find_signature_clause(nodes, revision, used, signature, ValueResultClause, result) ||
         result == signature || inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
         clause.annotation >= used) return false;
-    val kind <- names[clause.annotation].kind;
-    if (kind != builtin_bool() && kind != builtin_u64() && kind != builtin_u8()) return false;
+    val kind <- native_value_kind(names, selected, clause.annotation);
+    if (kind != builtin_bool() && kind != builtin_u64() && kind != builtin_u8() && kind != enum_type())
+        return false;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref bytes = make ArraySlotType {
@@ -2555,10 +2556,14 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
     val formal <- clause.parameter_tail;
     val role <- signature;
     val marker <- no_node();
+    val annotation <- no_node();
+    val parameter_kind <- 0u8;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return role == result;
         if (inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
-        if (!independent_scalar_formal(nodes, names, formal, used, revision, builtin_u64())) {
+        annotation <- independent_formal_type(nodes, formal, used, revision);
+        parameter_kind <- if (annotation < used) { native_value_kind(names, selected, annotation) } else { 0u8 };
+        if (!source_call_scalar(parameter_kind) && parameter_kind != enum_type()) {
             if (role == result ||
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly)
                 return false;
@@ -2601,8 +2606,7 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     val result_site <- if (record_loan) { (clause.previous) } else { preceding };
     if (inspect_signature(nodes, revision, used, result_site, clause) != ValueResultClause || clause.annotation >= used) return;
     val result <- names[clause.annotation].kind;
-    val enum_result <- result == enum_type() || imported_kind(names, selected, clause.annotation) == enum_export();
-    if (result != builtin_bool() && !enum_result) return;
+    if (result != builtin_bool()) return;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
@@ -2612,7 +2616,7 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
     if (marker >= used) return;
     val input <- work[first].next;
     if (record_loan) {
-        if (result != builtin_bool() || variadic_method_formal(nodes, revision, used, at) != no_node() ||
+        if (variadic_method_formal(nodes, revision, used, at) != no_node() ||
             !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
         for (position in 0u64 .. 2u64) {
             if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
@@ -2633,25 +2637,12 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
         };
         return
     };
-    if (input == no_node() && result == builtin_bool()) {
+    if (input == no_node()) {
         val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
             aggregate, marker, used, revision);
         if (storage == CoDBitsAggregate || storage == CLayoutBitsRecord) {
             (views[at] <- make PreparedReadonlyQuery {}):void
         };
-        return
-    };
-    if (!enum_result ||
-        !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
-    for (position in 0u64 .. 3u64) {
-        if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
-        input <- work[input].next;
-        if (input == no_node()) {
-            if (position != 0u64) {
-                (views[at] <- make PreparedReadonlyQuery {}):void
-            };
-            return
-        }
     }
 }
 
