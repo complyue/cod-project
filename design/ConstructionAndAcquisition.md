@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 75 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 76 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r76 the [construction terminology decision](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) names the two ordinary ADT construction forms [make by ctor and make by init](#make-by-ctor-and-make-by-init). D-22-RESERVATION and P-502 continue the r75 selection, placement, failure and readiness rules.
 
 At r75 the [fieldless alternative decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) narrows [D-22-RESERVATION](#typed-reservation-and-completed-construction), P-500–P-502. An empty payload and an empty initializer family suffice for successful bare allocation to deliver the completed alternative. H-562's identity, owner, failure and staged initialization rules continue wherever fields or constructor obligations remain.
 
@@ -756,15 +758,24 @@ The free block must finish normally with a ready region before make produces its
 
 **Acceptance / proof scope:** cover independent root expressions, declared/written-order differences, mixed direct/ref/ptr roots, contextual make/null and explicit owner mismatch, a root called capacity, missing/unknown roots, repeated valid writes, unreadable slots/targets, initialization failure at every prefix and exact owning-result cleanup. Prior permitted external effects remain observable; stale/escaping construction borrows reject. The optional binder and free-block/init-helper source direction are selected; anonymous schema spelling and complete native/initialization proofs are not qualified by these examples. No regional callable/owned-user-field, implicit graph transfer, allocation rollback or D-16 validity change follows.
 
+## Make by ctor and make by init
+
+| Ordinary ADT construction | Source form | Who initializes the destination |
+| --- | --- | --- |
+| **make by ctor** | `make T(args) in r` | Call the selected constructor method with the written arguments. Empty parentheses request a zero-argument ctor. |
+| **make by init** | `make T in r { ... }` | The written initializer establishes the fields directly. For a sum, the selected alternative determines whether its payload is positional or labeled. |
+
+Here `T` names a product or a selected sum alternative. The optional placement `in r` supplies the destination owner in either form. The [booter’s deque](../applications/cod-booter/src/Deque.cod) illustrates both forms. Callers use make by ctor for the deque. Its push methods use make by init for private links. Use the two terms for the construction expression. `init a(args)` calls a ctor on an existing reserved target.
+
 ## Typed reservation and completed construction
 
 H-562 fixes the distinction through the existing initializer-block syntax. In this table T names an eligible construction operand. A product name identifies its sole constructor. For a nominal sum the [D-07 sum construction rule](DomainLanguageDesign.md#sum-object-construction-and-reference-storage) requires an alternative such as Link. Its parent sum type still annotates ref/ptr bindings and fields.
 
 | Form | Completion contract |
 | --- | --- |
-| Bare `make DCtor [in o]` for a fieldless sum alternative with zero initializer overloads | Complete the selected alternative exactly as with empty braces. Allocation still requires its ordinary owner capability and may fail. |
+| Bare `make DCtor [in o]` for a fieldless sum alternative with zero initializer overloads | Shorthand for make by init with empty braces. Complete the selected alternative. Allocation still requires its ordinary owner capability and may fail. |
 | Other bare ordinary `make T [in o]` | Reserve suitably typed storage with a selected owner and a non-null target identity on successful allocation. Required field initialization and constructor obligations must be satisfied before readable publication. |
-| `make T [in o] { ... }` | Reserve and initialize storage, then provide a completed result. An empty block still requests completion and must satisfy the type's initialization requirements. |
+| Make by init, `make T [in o] { ... }` | Reserve and initialize storage, then provide a completed result. An empty block still requests completion and must satisfy the type's initialization requirements. |
 
 Test the [selected alternative and its visible initializer family](DomainLanguageDesign.md#positional-and-labeled-sum-payloads). An inapplicable overload still prevents the fieldless shorthand. A constructor on a sibling alternative has no effect on the shorthand. This distinction concerns the bare ordinary allocation form. Existing constructor-argument calls and intrinsic resource/exception construction retain their own completion contracts; absence of a trailing block does not reinterpret `make region` or an exception constructor as incomplete raw storage. Type layout and owner allocation capability must be established before reservation. Physical zero-filled bytes are not evidence of initialized fields or valid typed values.
 

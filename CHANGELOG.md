@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Distinguish make by ctor from make by init
+
+<a id="h-make-by-ctor-and-init-20261127"></a>
+**H-MAKE-BY-CTOR-AND-INIT-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user named `make deque[UInt64]()` “make by ctor” and the braced form “make by init”. [D-22 r75→76](design/ConstructionAndAcquisition.md#make-by-ctor-and-make-by-init) defines the terms for ordinary ADT construction. D-07 r234→235, D-30 r22→23 and the idiomatic guide r20→21 apply them to sum alternatives and the deque. The [prior behavior](https://github.com/complyue/cod-project/blob/d22d127aa3bbfd30ee8fdd3310a7c04dbaf6039f/design/ConstructionAndAcquisition.md#typed-reservation-and-completed-construction) is continued, including bare reservation, the fieldless shorthand and public deque construction through its ctor. P-502/P-590/P-601/P-602/P-694/P-695, registry r1376→1377.
+
 ## 2026-11-27 — Construct an empty deque through its initializer and distinguish sum payload forms
 
 <a id="h-deque-ctor-sum-braces-20261127"></a>

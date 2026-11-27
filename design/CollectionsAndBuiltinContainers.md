@@ -1,8 +1,10 @@
 # Collections and builtin containers
 
-Design revision 22 · 2026-11-27 · Source design draft
+Design revision 23 · 2026-11-27 · Source design draft
 
 ## Design authority
+
+At r23 the [construction terminology](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) applies to the r22 public deque contract under D-30/P-590. The constructor, item storage and pointer results are continued.
 
 At r22 the [deque construction decision](../CHANGELOG.md#h-deque-ctor-sum-braces-20261127) specifies the public empty constructor for the [bootstrap deque](#bootstrap-linked-deque) under D-30 and D-20-BOOTSTRAP. Its callers receive a ready container. The same decision places the item of `Maybe[T]` under the r21 value-only rule. P-589/P-590 continue the r21 item and pointer-result guarantees.
 
@@ -51,13 +53,13 @@ At r7 [D-30-ARRAY-POLICY](DesignAuthorityRegistry.md#d-30-array-policy) assigns 
 
 The first public generic linked collection for the booter is a deque parameterized by its element type, implemented in CoD with private nodes. Insertion and removal at either end serve FIFO queues and LIFO stacks. The bootstrap plan omits a separate public list. A second interface would need a caller with a distinct operation, such as splicing at a known interior position. The [booter roadmap](../applications/cod-booter/README.md#booter-source-ergonomics) sets seed acceptance and the order of the regional storage manager and growable vector.
 
-A caller constructs a ready empty deque using the library's zero-argument initializer. For example:
+The public deque uses [make by ctor](ConstructionAndAcquisition.md#make-by-ctor-and-make-by-init) with zero arguments. It delivers a ready empty deque.
 
 ```cod
 ref queue = make deque[UInt64]() in r
 ```
 
-Omitting `in r` selects the ordinary lexical destination. The initializer establishes the empty endpoints and bookkeeping in the supplied destination. Caller-written field initialization is outside the deque interface. The library can declare its initializer as `func deque() -> ref deque[T] in R where {T, owner R}`. The construction head determines `T` even with zero explicit arguments. The result annotation identifies the supplied destination. Popping the newly constructed deque yields null.
+Omitting `in r` selects the ordinary lexical destination. The ctor establishes the empty endpoints and bookkeeping in the supplied destination. A caller-written `make deque[UInt64] { ... }` requests make by init and is rejected by the public deque contract. The library can declare its ctor as `func deque() -> ref deque[T] in R where {T, owner R}`. The construction head determines `T` even with zero explicit arguments. The result annotation identifies the supplied destination. Popping the newly constructed deque yields null.
 
 ### Container pointer results
 
