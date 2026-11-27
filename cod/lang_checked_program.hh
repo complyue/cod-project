@@ -125,6 +125,7 @@ struct CheckedOperation {
   std::optional<size_t> callee;
   std::optional<size_t> place;
   std::optional<size_t> product_field;
+  bool initialize_nested_product = false;
   std::optional<size_t> exception_owner;
   bool owns_exception_result = false;
   std::optional<size_t> region_holder;
@@ -167,13 +168,15 @@ struct CheckedOperation {
     auto operator<=>(const LexicalAllocation &) const = default;
   };
   std::optional<LexicalAllocation> lexical_allocation;
-  struct ArrayAllocator {
+  struct OwnerAllocator {
     enum Kind { lexical, region, input } kind;
     size_t place = 0;
-    auto operator<=>(const ArrayAllocator &) const = default;
+    auto operator<=>(const OwnerAllocator &) const = default;
   };
-  std::optional<ArrayAllocator> array_allocator;
-  std::shared_ptr<const std::map<size_t, ArrayAllocator>> array_allocator_arguments;
+  std::optional<OwnerAllocator> array_allocator;
+  // An aggregate made in an incoming lexical owner uses that owner's extent list.
+  std::optional<size_t> lexical_row_role;
+  std::shared_ptr<const std::map<size_t, OwnerAllocator>> allocator_arguments;
   std::optional<SumConstructor> sum_constructor;
   bool invokes_regional_initializer = false;
   std::vector<size_t> sum_initializers;
@@ -341,7 +344,7 @@ struct CheckedInstance {
   CheckedFrame frame;
   // Completed capability arguments for this executable frame. An empty
   // layout is valid. A missing layout cannot supply the LLVM call ABI.
-  std::optional<std::set<size_t>> array_allocator_roles = {};
+  std::optional<std::set<size_t>> allocator_roles = {};
   // The completed snapshot suffix for a publishing scoped handler frame.
   std::set<size_t> scoped_replay_bindings = {};
 };

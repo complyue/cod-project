@@ -79,7 +79,7 @@ struct BodyDependencies {
 };
 
 class BodyExtraction {
-  using Allocator = CheckedOperation::ArrayAllocator;
+  using Allocator = CheckedOperation::OwnerAllocator;
   using Declarations = ModuleBinder::ModuleDeclarations;
   using SymbolBindings = BodyDependencies::Bindings;
 
@@ -568,11 +568,6 @@ class BodyExtraction {
       return !const_input_owner(owner);
     }
 
-    void require_regional_allocation(size_t owner, const Location &at) const {
-      expect(product_placement(owner) == ProductPlacement::region && product_allocation_permitted(owner),
-             at, "seed needs a writable regional owner for placed construction");
-    }
-
     std::optional<Allocator> allocator_for(size_t owner) const {
       if (!owner) return Allocator{Allocator::lexical};
       if (const auto place = region_controller(owner)) {
@@ -648,16 +643,16 @@ class BodyExtraction {
       return call.kind == Kind::call && body_.instance.operations.at(&call).callee.has_value();
     }
 
-    void takes_return_value(const Expression &expr, const CheckedOperation &value, const Type &to) const {
+    void takes_complete_value(const Expression &expr, const CheckedOperation &value, const Type &to) const {
       if (!inline_aggregate_type(to)) return takes_value(value, to, expr.at);
       bits_payload_type(declarations(), value.type, to, expr.at);
-      expect(value.view || direct_value_call(expr), expr.at, "seed needs a complete aggregate return value");
+      expect(value.view || direct_value_call(expr), expr.at, "seed needs a complete aggregate value");
     }
 
     void prepare_return(const Expression &expr, const CheckedOperation &value, CheckedOperation &exit) const {
       const auto &contract = body_.instance.result;
       exit.operand_type = *contract.type;
-      if (!contract.borrowed()) return takes_return_value(expr, value, *contract.type);
+      if (!contract.borrowed()) return takes_complete_value(expr, value, *contract.type);
       exit.borrowed_result = true;
       if (value.type == Type::never) return;
       const auto owner = input_owner(owner_role(contract.owner, expr.at));
@@ -1645,7 +1640,7 @@ class BodyExtraction {
                "seed needs a fresh owning C handle initializer");
         op.native_acquisition = native_acquisition(initializer, marker);
         // The low owner keys name local storage in this activation's frame.
-        // They carry no array allocation capability.
+        // They carry no allocation capability.
         const auto owner = body_.instance.bindings.size() + 1;
         op.place = declare(expr.at, expr.text, native_handle_type(marker, true), true, false, true, owner).place;
       } else {
@@ -1658,51 +1653,67 @@ class BodyExtraction {
       return op;
     }
 
+    CheckedOperation aggregate_construction(const Type &type, size_t owner, bool local_storage, const Location &at) {
+      CheckedOperation op;
+      op.type = op.operand_type = type;
+      op.view = true;
+      op.owners.insert(owner);
+      if (!owner) {
+        if (local_storage) op.place = storage(type.kind == Type::sum ? "$sum" : "$product", type, 0, false, false);
+        return op;
+      }
+
+      const auto placement = product_placement(owner);
+      expect(local_storage && placement && product_allocation_permitted(owner),
+             at, "seed needs a known writable owner for placed construction");
+      if (*placement == ProductPlacement::region) op.regional_storage = true;
+      else {
+        const auto role = null_target - 1 - owner;
+        op.lexical_row_role = role;
+        body_.allocations.insert(role);
+      }
+      return op;
+    }
+
     CheckedOperation make_product(const Expression &expr, const Type &type, bool local_storage) {
       expect(expr.kind == Kind::make_object && expr.annotation &&
              !expr.construction_type_query && !expr.constructor_arguments &&
              expr.initializer_block && resolve_annotation(*expr.annotation, expr.at) == type,
              expr.at, "seed needs a complete braced product initializer");
       const auto owner = named_owner(expr.owner_name, expr.at);
-      if (owner) {
-        expect(local_storage, expr.at, "seed needs an inline initializer for a nested product");
-        require_regional_allocation(owner, expr.at);
-      } else {
+      if (!owner)
         expect(declarations().bits_payload(type) ||
                (local_storage && !in_iteration_ && extraction_.reference_product(type)),
                expr.at, "seed needs a complete braced product with an admitted allocation owner");
-      }
+      auto op = aggregate_construction(type, owner, local_storage, expr.at);
       const auto &schema = declarations().schemas.at(type.identity);
       const auto order = product_initializers(schema, expr);
       expect(std::set(order.begin(), order.end()).size() == schema.fields.size(), expr.at,
              "seed needs an initializer for each product field");
-      CheckedOperation op;
-      op.type = op.operand_type = type;
-      op.regional_storage = owner != 0;
-      if (!owner && local_storage) op.place = storage("$product", type, 0, false, false);
-      op.view = true;
-      op.owners.insert(owner);
       for (size_t i = 0; i < order.size(); ++i) {
         const auto &item = *expr.initializer_items()[i];
         const auto &field = schema.fields[order[i]];
         const auto &input = *item.children.back();
+        CheckedOperation write;
+        write.type = write.operand_type = field.type;
+        write.product_field = order[i];
         if (field.storage != PlaceKind::value) {
           expect(!op.regional_storage || field.type.kind != Type::array, item.at,
                  "seed needs lexical storage for an array reference field");
           expect(admits_reference(extract(input), field.type, owner, field.storage == PlaceKind::pointer,
                                   field.readonly_target(), input.at),
                  input.at, "reference field initializer must preserve type, owner and target access");
-        } else if (field.type.kind == Type::product) {
-          // The backend initializes this nested product in its destination.
-          remember(input, make_product(input, field.type, false));
         } else {
           expect(declarations().bits_payload(field.type), item.at,
                  "seed needs an inline bits field in a braced product initializer");
-          takes_payload(extract(input), field.type, input.at);
+          if (field.type.kind == Type::product && input.kind == Kind::make_object &&
+              input.owner_name.empty() && input.initializer_block) {
+            remember(input, make_product(input, field.type, false));
+            write.initialize_nested_product = true;
+          } else if (inline_aggregate_type(field.type)) {
+            takes_complete_value(input, extract(input), field.type);
+          } else takes_value(extract(input), field.type, input.at);
         }
-        CheckedOperation write;
-        write.type = write.operand_type = field.type;
-        write.product_field = order[i];
         remember(item, std::move(write));
       }
       return op;
@@ -1760,10 +1771,7 @@ class BodyExtraction {
         expect(expr.initializer_block && !sum.regional_only && arm.initializers.empty() && !family(spelling),
                expr.at, "seed needs a complete braced bits sum initializer");
         const auto owner = named_owner(expr.owner_name, expr.at);
-        if (owner) require_regional_allocation(owner, expr.at);
-        op.type = Type{Type::sum, sum.source->name, selected.sum};
-        op.regional_storage = owner != 0;
-        if (!owner) op.place = storage("$sum", op.type, 0, false, false);
+        op = aggregate_construction(Type{Type::sum, sum.source->name, selected.sum}, owner, true, expr.at);
         op.sum_constructor = selected;
         std::set<size_t> supplied;
         for (const auto &item : expr.initializer_items()) {
@@ -1780,8 +1788,6 @@ class BodyExtraction {
           op.sum_initializers.push_back(ordinal);
         }
         expect(supplied.size() == arm.fields.size(), expr.at, "sum construction has a field without an initializer");
-        op.view = true;
-        op.owners.insert(owner);
         return op;
       }
       const auto type = resolve_annotation(*expr.annotation, expr.at);
@@ -2685,7 +2691,7 @@ class BodyExtraction {
       if (method < program.methods.size()) program.methods[method].result = result;
     for (const auto &entry : program.native_entries)
       expect(completed[selected_.at(entry.method)].allocations.empty(), program.methods[entry.method].source->at,
-             "a C entry cannot import an array allocator capability");
+             "a C entry cannot import an allocator capability");
     for (size_t i = 0; i < executable; ++i) {
       const auto &body = bodies_[i];
       if (const auto &outline = body.outline) {
@@ -2741,9 +2747,9 @@ class BodyExtraction {
           expect(actual.has_value(), call.site->at, "required allocation has no prepared owner capability");
           arguments->emplace(role, *actual);
         }
-        operation.array_allocator_arguments = std::move(arguments);
+        operation.allocator_arguments = std::move(arguments);
       }
-      body.instance.array_allocator_roles = completed[i].allocations;
+      body.instance.allocator_roles = completed[i].allocations;
       body.instance.complete = true;
       program.methods[body.instance.method].instance = i;
       program.instances.push_back(std::move(body.instance));
