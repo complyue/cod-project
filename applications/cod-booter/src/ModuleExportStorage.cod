@@ -39,7 +39,7 @@ export func constructor_type() -> UInt8 { return 40u8; }
 
 export enum AggregateStorage:UInt8 { UnprovedAggregate; CoDBitsAggregate; CLayoutBitsRecord; NonBitsAggregate; }
 export enum InterfaceCallableKind:UInt8 { NoCallableKind; CheckedFunction; CheckedProcedure; }
-export enum ByteFunctionCompletion:UInt8 { NoByteFunction; CheckedByteFunction; ByteFunctionMayFailBounds; }
+export enum ArrayReadCompletion:UInt8 { NoArrayRead; CheckedArrayRead; ArrayReadMayFailBounds; }
 
 export data ByteArrayFailures {
     bounds:bool;
@@ -153,7 +153,7 @@ export data ModuleInterfaceRow {
     field_mode:FormalMode;
     scalar_object_body:bool;
     literal_source_body:bool;
-    byte_completion:ByteFunctionCompletion;
+    array_read_completion:ArrayReadCompletion;
     object_view:CallableObjectView;
     array_slot_checked:bool;
     array_slot_failures:ByteArrayFailures;
@@ -195,7 +195,7 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     row.field_mode <- ValueFormal;
     row.scalar_object_body <- false;
     row.literal_source_body <- false;
-    row.byte_completion <- (NoByteFunction:ByteFunctionCompletion);
+    row.array_read_completion <- (NoArrayRead:ArrayReadCompletion);
     row.array_slot_checked <- false;
     row.array_slot_failures.bounds <- false;
     row.array_slot_failures.out_of_memory <- false;
@@ -221,7 +221,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:U
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion); object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -243,7 +243,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:UInt64, publi
         sum_payload <- make NoSumInterface {};
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; byte_completion <- (NoByteFunction:ByteFunctionCompletion);
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion);
         object_view <- view;
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {

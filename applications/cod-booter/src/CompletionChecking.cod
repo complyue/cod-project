@@ -4,6 +4,12 @@ using "./ParserStorage.cod" ExprPayload {
     DiscardedExpression, CheckedTypeAssertion, PredicateAssertion, RaisePending, RaiseValue, NamedThrow,
         CaseFallthrough, CaseFailure
 };
+using "./ParserStorage.cod" ExprPayload {
+    ArrayLength, IndexSelection, NameReference, IntegerLiteral, BooleanLiteral, ComparisonExpression,
+    ReturningCondition, Conditional, Disjunction, Conjunction, Parenthesized, FieldSelection, EmptyCall,
+    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, BlockSyntax, BlockItem, ReturnValue,
+};
+using "./NameResolution.cod" builtin_u64;
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary };
 using "./ParserStorage.cod" ArithmeticOperation { Addition };
 using "./ParserStorage.cod" ComparisonRelation { Equal };
@@ -14,7 +20,7 @@ using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
 using "./ExceptionTypes.cod" ExceptionType;
-using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure };
+using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, is_array_reader_leaf };
 using "./ParserStorage.cod" {
     HandleConstructionSites, inspect_handle_construction,
     HandleConstructionSyntax { OwnHandleMake, BorrowHandleMake },
@@ -59,7 +65,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, has_value_tail, has_slot_array,
+    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, has_value_tail, has_slot_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
@@ -69,8 +75,8 @@ using "./ModuleExports.cod" {
 };
 using "./ExceptionTypes.cod" exception_type_covers;
 using "./ModuleExportStorage.cod" ByteArrayFailures;
-using "./ModuleExportStorage.cod" ByteFunctionCompletion {
-    NoByteFunction, CheckedByteFunction, ByteFunctionMayFailBounds
+using "./ModuleExportStorage.cod" ArrayReadCompletion {
+    NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds
 };
 using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
 
@@ -83,7 +89,7 @@ export data CompletionSite {
     forwarded_operand:UInt8;
     in_delayed_body:UInt8;
     in_supplied_body:bool;
-    byte_completion:ByteFunctionCompletion;
+    array_read_completion:ArrayReadCompletion;
     slot_summary:bool;
     array_failures:ByteArrayFailures;
     case_break:UInt8;
@@ -138,7 +144,7 @@ func initialize_site(sites:CompletionSites in X, at:UInt64) -> void where {owner
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
     sites[at].in_supplied_body <- false;
-    sites[at].byte_completion <- NoByteFunction;
+    sites[at].array_read_completion <- NoArrayRead;
     sites[at].slot_summary <- false;
     sites[at].array_failures.bounds <- false;
     sites[at].array_failures.out_of_memory <- false;
@@ -846,7 +852,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
-            if (links[at].imported_byte_completion == ByteFunctionMayFailBounds)
+            if (links[at].imported_array_read_completion == ArrayReadMayFailBounds)
                 return route_failure(nodes, names, links, facts, sites, at, used, revision,
                     index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8;
@@ -865,10 +871,10 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             (prepared_byte_function(views, enclosing_callable(nodes, names, names[at].scope), false) ||
              prepared_byte_function(views, definition, true))) {
             if (definition >= at || declaration != no_node() ||
-                sites[definition].byte_completion == NoByteFunction) return unproved_byte_completion();
+                sites[definition].array_read_completion == NoArrayRead) return unproved_byte_completion();
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
                 return unproved_deferred_error();
-            if (sites[definition].byte_completion == ByteFunctionMayFailBounds)
+            if (sites[definition].array_read_completion == ArrayReadMayFailBounds)
                 return route_failure(nodes, names, links, facts, sites, at, used, revision,
                     index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8
@@ -933,14 +939,14 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     return 0u8;
 }
 
-func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
+func record_array_read_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
     sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, const owner V, owner X} {
     if (prepared_byte_function(views, at, false)) {
         if (can_miss_return(nodes, facts, sites, at, revision, used)) return unproved_byte_completion();
-        if (sites[at].byte_completion == NoByteFunction) {
-            (sites[at].byte_completion <- CheckedByteFunction):void
+        if (sites[at].array_read_completion == NoArrayRead) {
+            (sites[at].array_read_completion <- CheckedArrayRead):void
         };
         return 0u8
     };
@@ -957,16 +963,71 @@ func record_byte_completion(nodes:const ExprNodes in N, names:const NameBindings
     val unproved_index <- !facts[at].checks_array_bounds &&
         inspect_index_selection(nodes, revision, used, at, index);
     if (unproved_index) return unproved_byte_completion();
-    if (invokes && links[at].imported_byte_completion == NoByteFunction &&
+    if (invokes && links[at].imported_array_read_completion == NoArrayRead &&
         !prepared_byte_function(views, facts[at].call_definition, false))
         return unproved_byte_completion();
     if (failed && sites[at].replacing_try != no_node()) return unproved_byte_completion();
     if (failed && sites[at].destination == definition) {
         if (sites[at].category_module != 0u64 || sites[at].category != index_out_of_bounds_identity())
             return unproved_byte_completion();
-        (sites[definition].byte_completion <- ByteFunctionMayFailBounds):void
+        (sites[definition].array_read_completion <- ArrayReadMayFailBounds):void
     };
     return 0u8
+}
+
+# The leaf collector reads only checked operations. The returned UInt64
+# may be a sentinel value. Bounds are the sole admitted abrupt completion.
+func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    views:const SuppliedViews in H, at:UInt64) -> bool
+    where {const owner N, const owner F, const owner H} {
+    val target <- facts[at].call_definition;
+    if (target != no_node() && source_literal_kind(views, target) != builtin_u64()) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            NameReference -> true;
+            IntegerLiteral -> true;
+            BooleanLiteral -> true;
+            ComparisonExpression -> true;
+            ReturningCondition -> true;
+            Conditional -> true;
+            Disjunction -> true;
+            Conjunction -> true;
+            Parenthesized -> true;
+            FieldSelection -> true;
+            ArrayLength -> true;
+            IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
+            EmptyCall -> target != no_node();
+            CaseExpression -> true;
+            CaseArm -> true;
+            ConstructorCasePattern -> true;
+            CaseValueReceiver -> true;
+            BlockSyntax -> true;
+            BlockItem -> true;
+            ReturnValue -> true;
+            _ -> false
+        };
+        Vacant -> false
+    }
+}
+
+func record_array_reader_completion(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    views:const SuppliedViews in H, sites:CompletionSites in X, definition:UInt64, at:UInt64)
+    -> void where {const owner N, const owner F, const owner H, owner X} {
+    if (sites[definition].array_read_completion == NoArrayRead || sites[at].event == skipped_operand())
+        return;
+    if (!array_reader_operation(nodes, facts, views, at)) {
+        sites[definition].array_read_completion <- NoArrayRead;
+        return
+    };
+    if (sites[at].event == possible_failure() || sites[at].event == definite_failure()) {
+        if (sites[at].category_module == 0u64 && sites[at].category == index_out_of_bounds_identity() &&
+            sites[at].destination == definition && sites[at].replacing_try == no_node()) {
+            (sites[definition].array_read_completion <- ArrayReadMayFailBounds):void
+        } else {
+            (sites[definition].array_read_completion <- NoArrayRead):void
+        }
+    };
+    return
 }
 
 # Every normal fallthrough crosses the direct items of the procedure body.
@@ -1129,7 +1190,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
             } else {};
             imported <- links[at].imported_interface != no_node() &&
                 (if (array_summary) {
-                    links[at].imported_byte_completion == NoByteFunction &&
+                    links[at].imported_array_read_completion == NoArrayRead &&
                         invocation_reached(nodes, sites, at, used, revision)
                 } else { can_continue(sites, at) });
             allocation <- array_summary && category != index_out_of_bounds_identity() &&
@@ -1280,6 +1341,9 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     val form <- InvalidCallable;
     for (at in 0u64 .. tree.used) {
         initialize_site(sites, at);
+        if (needs_body_check(demand, at) && is_array_reader_leaf(views, at)) {
+            (sites[at].array_read_completion <- CheckedArrayRead):void
+        };
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
         if (form == ModuleCallable || form == LexicalCallable) {
             if (!find_signature_clause(nodes, tree.revision, tree.used, callable.signature, ThrowsSignatureClause, failure)) {
@@ -1297,16 +1361,27 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         prepare_context(nodes, facts, sites, site, tree.used, tree.revision);
     };
     val slot_bodies <- false;
+    val definition <- no_node();
     for (at in 0u64 .. tree.used) {
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
             report.diagnostic <- check_event(
                 nodes, names, links, facts, views, sites, at, tree.used, tree.revision);
             if (report.diagnostic == 0u8) {
-                report.diagnostic <- record_byte_completion(nodes, names, links, facts, views,
+                report.diagnostic <- record_array_read_completion(nodes, names, links, facts, views,
                     sites, at, tree.used, tree.revision)
             };
-            if (report.diagnostic != 0u8) { report.node <- at; return false; }
+            if (report.diagnostic != 0u8) { report.node <- at; return false; };
+            definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
+            if (definition < tree.used && definition != at &&
+                sites[definition].array_read_completion != NoArrayRead && is_array_reader_leaf(views, definition)) {
+                record_array_reader_completion(nodes, facts, views, sites, definition, at)
+            };
+            if (is_array_reader_leaf(views, at) &&
+                (can_miss_return(nodes, facts, sites, at, tree.revision, tree.used) ||
+                facts[at].kind != scalar_u64())) {
+                (sites[at].array_read_completion <- NoArrayRead):void
+            }
         }
     };
     return check_escaping_failure_paths(nodes, names, links, facts, sites, demand, report,

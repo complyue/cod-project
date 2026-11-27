@@ -16,8 +16,8 @@ using "./NativeDeclarations.cod" {
     prepared_byte_function, prepared_array_construction, prepared_array_slot_signature
 };
 using "./ModuleExports.cod" SelectedExports;
-using "./ModuleExportStorage.cod" sum_type;
-using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
+using "./ModuleExportStorage.cod" { sum_type, enum_type };
+using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, LocalSumConstruction, IndexedAggregateDestination, IndexedProductRead, LexicalSumReference, FreshSumInvocation } };
 
 export data DeclarationDemand {
@@ -242,7 +242,7 @@ export func discover_declaration_demand(
         demand[site].scope <- scope;
         checked_call <- links[site].imported_interface != no_node() &&
             (links[site].imported_failure_checked != 0u8 ||
-             links[site].imported_byte_completion != NoByteFunction);
+             (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()));
         shape <- direct_invocation(nodes, revision, used, site, invocation);
         if (shape == InvalidInvocation) {
             problem <- site;

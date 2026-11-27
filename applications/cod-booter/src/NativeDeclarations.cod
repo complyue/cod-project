@@ -1,6 +1,7 @@
-using "./ModuleExportStorage.cod" { ByteArrayFailures, ByteFunctionCompletion { NoByteFunction } };
+using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
 using "./SourceAccess.cod" same_bytes;
 using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" { boolean_literal, BooleanSyntax { OtherBooleanSyntax } };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" { SourceSpan, BulkSelectionSites, inspect_bulk_selection,
     PublicView { DefaultPublic } };
@@ -49,7 +50,7 @@ using "./ParserStorage.cod" SignatureSyntax {
 using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
-    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength
+    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength, NameReference
 };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
@@ -1043,7 +1044,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -1473,7 +1474,11 @@ export data SuppliedView =
     PreparedArrayConstruction { requested:UInt64; placement:UInt64; length:UInt64; fill:UInt64;
         owner_site:UInt64; type_module:UInt64; type_identity:UInt64; element:ArraySlotElement; element_sum:UInt64; } |
     EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
-    PreparedByteFunction { enum_result:bool; completion:ByteFunctionCompletion; } |
+    PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
+    PreparedScalarLiteral { kind:UInt8; } |
+    PreparedArrayReaderLeaf { declared_array:UInt64; } |
+    PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
+    CheckedArrayReaderForward { completion:ArrayReadCompletion; } |
     PreparedArrayLengthMethod { type_module:UInt64; type_identity:UInt64; } |
     ImportedArrayLengthCall { first:UInt64; past:UInt64; argument:UInt64; input:UInt64; } |
     PreparedAcquisitionFailure { nominal:ExceptionType; };
@@ -1823,29 +1828,76 @@ func prepare_source_byte_read(nodes:const ExprNodes in N, names:const NameBindin
     };
 }
 
-func independent_u64_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
-    formal:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner B} {
+func independent_scalar_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+    formal:UInt64, used:UInt64, revision:UInt64, kind:UInt8) -> bool where {const owner N, const owner B} {
     ref shape = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
         owner_name <- no_node(); readonly <- false
     };
-    return typed_formal(nodes, revision, used, formal, shape, binding) &&
+    return formal_variadic_at(nodes, revision, used, formal) == no_node() &&
+        typed_formal(nodes, revision, used, formal, shape, binding) &&
         (shape.mode == ValueFormal || shape.mode == ExplicitValueFormal) &&
-        binding.owner_name == no_node() && names[binding.target_type].kind == builtin_u64()
+        binding.owner_name == no_node() && names[binding.target_type].kind == kind
 }
 
-func returns_formal_length(nodes:const ExprNodes in N, names:const NameBindings in B,
-    body:UInt64, formal:UInt64, used:UInt64, revision:UInt64) -> bool
-    where {const owner N, const owner B} {
+func single_return_value(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N} {
     val tail <- no_node();
     ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val value <- no_node();
     if (!block_tail(nodes, revision, used, body, tail) ||
         inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
         item.previous != no_node() || completion_syntax(nodes, item.item) != ReturnCompletion ||
-        !completion_operand(nodes, revision, used, item.item, value) || value >= used)
-        return false;
+        !completion_operand(nodes, revision, used, item.item, value))
+        return no_node();
+    return value
+}
+
+func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, definition:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, const owner B, const owner L} {
+    if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
+        links[definition].next_method != no_node() || links[definition].active != no_node()) return 0u8;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        !callable.function_form || is_scope_block(nodes, callable.body)) return 0u8;
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause) return 0u8;
+    val kind <- names[signature.annotation].kind;
+    if (kind != builtin_u8() && kind != builtin_u64()) return 0u8;
+    val head <- signature.previous;
+    if (inspect_signature(nodes, revision, used, head, signature) != SignatureHead ||
+        signature.parameter_tail != no_node()) return 0u8;
+    val operand <- single_return_value(nodes, callable.body, used, revision);
+    if (operand >= used) return 0u8;
+    return case nodes[operand] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            IntegerLiteral { val width <- width; val value <- magnitude; } ->
+                if ((kind == builtin_u8() && width == 8u64 && value <= 255u64) ||
+                    (kind == builtin_u64() && width == 64u64)) { kind } else { 0u8 };
+            _ -> 0u8
+        };
+        _ -> 0u8
+    }
+}
+
+export func source_literal_kind(views:const SuppliedViews in V, definition:UInt64) -> UInt8
+    where {const owner V} {
+    if (definition >= intrinsic (len)(views)) return 0u8;
+    return case views[definition] of {
+        PreparedScalarLiteral { val kind <-; } -> (kind);
+        _ -> 0u8
+    }
+}
+
+func returns_formal_length(nodes:const ExprNodes in N, names:const NameBindings in B,
+    body:UInt64, formal:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B} {
+    val value <- single_return_value(nodes, body, used, revision);
+    if (value >= used) return false;
     return case nodes[value] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
             ArrayLength { val target <-; } -> published_syntax_id(nodes, revision, value, target) &&
@@ -1856,35 +1908,50 @@ func returns_formal_length(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-func prepare_array_length_method(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, views:SuppliedViews in V, at:UInt64, used:UInt64, revision:UInt64)
-    -> void where {const owner N, const owner B, const owner E, owner V} {
-    if (names[at].kind != callable_binding()) return;
-    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
-    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form)
-        return;
+# The complete supported signature has one readonly owner and an independent
+# UInt64 result. Check the owner separately at the array formal.
+func readonly_array_parameters(nodes:const ExprNodes in N, names:const NameBindings in B,
+    signature:UInt64, used:UInt64, revision:UInt64) -> UInt64 where {const owner N, const owner B} {
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
-    val owner_site <- callable.signature;
-    if (inspect_signature(nodes, revision, used, owner_site, clause) != OwnerSignatureClause ||
-        !clause.readonly) return;
+    if (inspect_signature(nodes, revision, used, signature, clause) != OwnerSignatureClause ||
+        !clause.readonly) return no_node();
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
-        names[clause.annotation].kind != builtin_u64()) return;
-    if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
-    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
-    val parameter <- clause.parameter_tail;
-    if (inspect_sequence_entry(nodes, revision, used, parameter, entry) != FormalSequence ||
-        entry.previous != no_node() || formal_variadic_at(nodes, revision, used, parameter) != no_node()) return;
+        names[clause.annotation].kind != builtin_u64()) return no_node();
+    if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return no_node();
+    val first <- no_node();
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first))
+        return no_node();
+    return first
+}
+
+func readonly_array_marker(nodes:const ExprNodes in N, names:const NameBindings in B,
+    parameter:UInt64, owner_site:UInt64, used:UInt64, revision:UInt64) -> UInt64
+    where {const owner N, const owner B} {
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     ref binding = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
     };
-    if (!typed_formal(nodes, revision, used, parameter, formal, binding) ||
+    if (formal_variadic_at(nodes, revision, used, parameter) != no_node() ||
+        !typed_formal(nodes, revision, used, parameter, formal, binding) ||
         formal.mode != ReferenceFormal || !binding.readonly || binding.owner_name >= used ||
         names[binding.owner_name].kind != owner_binding() ||
-        names[binding.owner_name].declaration != owner_site) return;
-    val marker <- binding.target_type;
+        names[binding.owner_name].declaration != owner_site) return no_node();
+    return binding.target_type
+}
+
+func prepare_array_length_method(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V, at:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner E, const owner W, owner V} {
+    if (names[at].kind != callable_binding()) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form)
+        return;
+    val parameter <- readonly_array_parameters(nodes, names, callable.signature, used, revision);
+    if (parameter >= used) return;
+    if (work[parameter].next != no_node()) return;
+    val marker <- readonly_array_marker(nodes, names, parameter, callable.signature, used, revision);
     if (marker >= used || (names[marker].kind != array_type() &&
         imported_kind(names, selected, marker) != array_export())) return;
     if (!returns_formal_length(nodes, names, callable.body, parameter, used, revision)) return;
@@ -1901,6 +1968,106 @@ export func prepared_array_length_call(views:const SuppliedViews in V, at:UInt64
         ImportedArrayLengthCall -> true;
         _ -> false
     })
+}
+
+# The forwarding body contributes no operation except ordinary preparation
+# of these exact formals and a Boolean literal, then return of the result.
+func forwarded_array_read(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, body:UInt64, first:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N, const owner B, const owner W} {
+    val value <- single_return_value(nodes, body, used, revision);
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, value, call) != DirectInvocationReady ||
+        names[call.callee].kind != callable_binding()) return no_node();
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val argument <- no_node();
+    if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, argument))
+        return no_node();
+    val formal <- first;
+    for (position in 0u64 .. 4u64) {
+        if (argument >= value || checked_ref_argument(nodes, argument) ||
+            inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
+            return no_node();
+        if (position < 3u64) {
+            if (names[entry.item].kind != formal_binding() || names[entry.item].declaration != formal ||
+                !(case nodes[entry.item] of {
+                    Occupied { val syntax <- node; } -> case syntax.payload of {
+                        NameReference -> true; _ -> false
+                    };
+                    Vacant -> false
+                })) return no_node();
+            (formal <- work[formal].next):void
+        } else {
+            if (boolean_literal(nodes, used, entry.item) == OtherBooleanSyntax) return no_node()
+        };
+        argument <- work[argument].next
+    };
+    if (argument != no_node()) return no_node();
+    return names[call.callee].declaration
+}
+
+func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
+    at:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner E, const owner W, owner V} {
+    if (names[at].kind != callable_binding() || names[at].declaration != at ||
+        work[at].next_method != no_node() || work[at].active != no_node()) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form)
+        return;
+    val first <- readonly_array_parameters(nodes, names, callable.signature, used, revision);
+    if (first >= used || work[first].next >= used) return;
+    val marker <- readonly_array_marker(nodes, names, first, callable.signature, used, revision);
+    if (marker >= used || names[marker].kind != array_type()) return;
+    val declared_array <- names[marker].declaration;
+    ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_local_u64_array_element(nodes, names, selected, declared_array, used, revision, element) ||
+        element.kind != sum_type()) return;
+    val second <- work[first].next;
+    val third <- work[second].next;
+    if (!independent_scalar_formal(nodes, names, second, used, revision, builtin_u64()) ||
+        !independent_scalar_formal(nodes, names, third, used, revision, builtin_u64()))
+        return;
+    val fourth <- work[third].next;
+    if (fourth == no_node()) {
+        val callee <- forwarded_array_read(nodes, names, work, callable.body, first, used, revision);
+        if (callee < used) {
+            (views[at] <- make PreparedArrayReaderForward { declared_array <- declared_array; callee <- callee }):void
+        };
+        return
+    };
+    if (independent_scalar_formal(nodes, names, fourth, used, revision, builtin_bool()) &&
+        work[fourth].next == no_node()) {
+        (views[at] <- make PreparedArrayReaderLeaf { declared_array <- declared_array }):void
+    };
+    return
+}
+
+export func is_array_reader_leaf(views:const SuppliedViews in V, definition:UInt64) -> bool where {const owner V} {
+    return definition < intrinsic (len)(views) && (case views[definition] of {
+        PreparedArrayReaderLeaf -> true;
+        _ -> false
+    })
+}
+
+export func forwarded_array_reader(views:const SuppliedViews in V, definition:UInt64) -> UInt64 where {const owner V} {
+    return case views[definition] of {
+        PreparedArrayReaderForward { val declared_array <-; val callee <-; } -> {
+            if (callee >= intrinsic (len)(views)) return no_node();
+            return case views[callee] of {
+                PreparedArrayReaderLeaf { val target <- declared_array; } ->
+                    if (target == declared_array) { callee } else { no_node() };
+                _ -> no_node()
+            }
+        };
+        _ -> no_node()
+    }
+}
+
+export func finish_array_reader_forward(views:SuppliedViews in V, definition:UInt64, completion:ArrayReadCompletion)
+    -> void where {owner V} {
+    views[definition] <- make CheckedArrayReaderForward { completion <- completion };
+    return
 }
 
 func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -1927,11 +2094,11 @@ func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings 
         !describe_byte_array_formal(nodes, names, selected, contracts, published, first, used, revision, proof))
         return;
     val second <- work[first].next;
-    if (!independent_u64_formal(nodes, names, second, used, revision)) return;
+    if (!independent_scalar_formal(nodes, names, second, used, revision, builtin_u64())) return;
     val third <- work[second].next;
-    if (!independent_u64_formal(nodes, names, third, used, revision) || work[third].next != no_node())
+    if (!independent_scalar_formal(nodes, names, third, used, revision, builtin_u64()) || work[third].next != no_node())
         return;
-    views[at] <- make PreparedByteFunction { enum_result <- kind == enum_type(); completion <- NoByteFunction };
+    views[at] <- make PreparedByteFunction { enum_result <- kind == enum_type(); completion <- NoArrayRead };
     return
 }
 
@@ -1952,7 +2119,7 @@ export func first_byte_function(views:const SuppliedViews in V, used:UInt64)
     return no_node()
 }
 
-export func finish_byte_function(views:SuppliedViews in V, at:UInt64, completion:ByteFunctionCompletion)
+export func finish_byte_function(views:SuppliedViews in V, at:UInt64, completion:ArrayReadCompletion)
     -> void where {owner V} {
     if (prepared_byte_function(views, at, true)) {
         views[at] <- make PreparedByteFunction { enum_result <- true; completion <- completion };
@@ -1960,12 +2127,13 @@ export func finish_byte_function(views:SuppliedViews in V, at:UInt64, completion
     }
 }
 
-func byte_function_completion(views:const SuppliedViews in V, at:UInt64)
-    -> ByteFunctionCompletion where {const owner V} {
-    if (at >= intrinsic (len)(views)) return NoByteFunction;
+func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
+    -> ArrayReadCompletion where {const owner V} {
+    if (at >= intrinsic (len)(views)) return NoArrayRead;
     return case views[at] of {
         PreparedByteFunction { val completion <-; } -> completion;
-        _ -> NoByteFunction
+        CheckedArrayReaderForward { val completion <-; } -> completion;
+        _ -> NoArrayRead
     }
 }
 
@@ -2202,7 +2370,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3004,7 +3172,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             membership <- UnprovedMembership;
             sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-            scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+            scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; source_allocates <- false;
             array_slot_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
@@ -3149,7 +3317,12 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         initializer <- no_node(); contents <- no_node()
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
+    val literal_kind <- 0u8;
     for (at in 0u64 .. used) {
+        literal_kind <- literal_source_result(nodes, names, work, at, used, revision);
+        if (literal_kind != 0u8) {
+            (views[at] <- make PreparedScalarLiteral { kind <- literal_kind }):void
+        };
         if (work[at].slot_array_construction) {
             if (inspect_construction(nodes, revision, used, at, construction) != PositionalConstruction) {
                 reject_declaration(report, at, unsupported_ordinary_construction());
@@ -3175,7 +3348,8 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                 remember_indexed_array_source(views, assignment.input, at, indexed)
             }
         };
-        prepare_array_length_method(nodes, names, selected, views, at, used, revision);
+        prepare_array_length_method(nodes, names, selected, work, views, at, used, revision);
+        prepare_array_reader(nodes, names, selected, work, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
@@ -3479,7 +3653,7 @@ func source_here_view(nodes:const ExprNodes in N, names:const NameBindings in B,
 func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                      selected:const SelectedExports in E, work:const NameWork in W,
                      contracts:ModuleInterfaces in C, count:UInt64, defining_module:UInt64, declaration:UInt64,
-                     form:UInt64, kind:UInt8, source_callback:UInt64, byte_completion:ByteFunctionCompletion,
+                     form:UInt64, kind:UInt8, source_callback:UInt64, array_read_completion:ArrayReadCompletion,
                      used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, owner C} {
     val limit <- intrinsic (len)(contracts);
@@ -3500,7 +3674,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     val source_here <- source_callback != no_node();
     val source_handle <- kind == callable_binding() && !source_here &&
         source_handle_callable(nodes, names, selected, work, form, used, revision);
-    val source_byte <- byte_completion != NoByteFunction;
+    val source_array_reader <- array_read_completion != NoArrayRead;
     val role <- no_node();
     if (form != no_node()) {
         shape <- inspect_callable(nodes, revision, used, form, callable);
@@ -3516,13 +3690,13 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == c_operation()) {
         (callback <- native_here_parameter(nodes, form, used, revision)):void
     };
-    val indexed_owners <- kind == c_entry() || source_handle || source_byte ||
+    val indexed_owners <- kind == c_entry() || source_handle || source_array_reader ||
         (kind == c_operation() && callback == no_node());
     if (indexed_owners) {
         owner_count <- count_owner_clauses(nodes, callable.signature, used, revision);
         if (owner_count == no_node()) return no_node();
     } else {};
-    if (kind == c_constructor() || kind == c_entry() || source_handle || source_byte ||
+    if (kind == c_constructor() || kind == c_entry() || source_handle || source_array_reader ||
         (kind == c_operation() && callback == no_node())) {
         if (!signature_formals(nodes, revision, used, callable.signature, head, parameter)) return no_node();
     } else {};
@@ -3564,8 +3738,8 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             };
             contracts[count].has_here <- if (callback == no_node()) { 0u8 } else { 1u8 };
             contracts[count].owner_count <- owner_count;
-            contracts[count].byte_completion <- byte_completion;
-            if (source_byte) { (contracts[count].failure_identity <- no_node()):void };
+            contracts[count].array_read_completion <- array_read_completion;
+            if (source_array_reader) { (contracts[count].failure_identity <- no_node()):void };
             if (result_kind == enum_type()) {
                 contracts[count].type_module <- type_module(names, selected, result_marker, defining_module);
                 (contracts[count].type_identity <- type_identity(names, selected, result_marker)):void;
@@ -3655,7 +3829,7 @@ func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings
     val next <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
         marker, constructor, if (constructor == no_node()) { c_handle_type() }
             else { c_constructor() },
-        no_node(), NoByteFunction, used, revision);
+        no_node(), NoArrayRead, used, revision);
     if (next == no_node()) return next;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
@@ -3787,7 +3961,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
     val ordinary <- false;
     val callback <- no_node();
     val source_handle <- false;
-    val byte_completion <- NoByteFunction;
+    val array_read_completion <- NoArrayRead;
     for (at in 0u64 .. used) {
         kind <- names[at].kind;
         shape <- inspect_declaration(nodes, revision, used, at, declaration);
@@ -3825,13 +3999,13 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     };
                     if (count == no_node()) return no_node();
                     if (count == first) {
-                        byte_completion <- byte_function_completion(views, at);
-                        if (prepared_byte_function(views, at, true) && byte_completion == NoByteFunction) {
+                        array_read_completion <- published_array_read_completion(views, at);
+                        if (prepared_byte_function(views, at, true) && array_read_completion == NoArrayRead) {
                             reject_declaration(report, at, invalid_native_parameter());
                             return no_node()
                         };
                         (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                                                   at, at, kind, callback, byte_completion, used, revision)):void;
+                                                   at, at, kind, callback, array_read_completion, used, revision)):void;
                         if (callback != no_node() && (count == no_node() ||
                             !stage_checked_here_contract(nodes, names, selected, views,
                                 contracts[first],

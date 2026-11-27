@@ -189,7 +189,7 @@ An ordinary scalar reference local can rebind to an existing initialized target 
 
 The declaration and C provider commands also check fixed locals initialized from a named byte-array loan with a `UInt64` index. The loan can be an ordinary reference formal or a previously checked local. The checker requires the exact nominal array and owner. A writable target supports indexed byte stores and ordinary mutable loans. Rebinding an ordinary slot under that owner leaves earlier selections intact. Byte-array object emission, grouped fixed references and bare fixed declarations retain their profile limits. [Binding and target qualifiers](../../design/RegionalOwnership.md#independent-binding-and-target-qualifiers)
 
-Both source commands also check lexical references initialized by an unplaced braced constructor of a selected imported finite-bits sum. A mutable slot can select a fresh target of that nominal sum under the same lexical owner, including a slot declared with readonly target access. A failed constructor leaves the previous target selected. At a conditional continuation, the checker retains the common type, owner, access and readiness. Copying the selected bits into an inline field works in the `append_block_item` and `append_block` reduction with an intrinsic length query. A fixed slot cannot rebind.
+Both source commands also check lexical references initialized by an unplaced braced constructor of a selected imported finite-bits sum. A mutable slot can select a fresh target of that nominal sum under the same lexical owner, including a slot declared with readonly target access. A failed constructor leaves the previous target selected. At a conditional continuation, the checker retains the common type, owner, access and readiness. Copying the selected bits into an inline field is checked in the original `append_block_item` and `append_block` bodies. A fixed slot cannot rebind.
 
 ### Array growth and reference-slot calls
 
@@ -213,11 +213,13 @@ The indexed element loan is scoped to the field use or immediate call. The sourc
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
 
-Both commands check the `OwnerQualifiedType` argument to `ParserInput.append_syntax_node` in a reduction that supplies the offsets directly. The unchanged `ParserInput.cod` and application entry now reach the unsupported `syntax_first` call in `append_qualified_type` at `ParserInput.cod:91:39`.
+Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls. The unchanged `ParserInput.cod` and application entry reach the unsupported `not_word` call in `parse_identifier` at `ParserInput.cod:155:58`.
 
 ### Imported array length families
 
 In demanded source bodies, a direct `using` selection can call a fixed ordinary family whose methods each return the builtin length of their sole readonly array formal as an independent `UInt64`. The defining module publishes all methods with their exact nominal array types and completed body evidence together. A rename preserves that selection. The caller prepares the live array and its actual owner once, then selects the unique method for that array. A writable actual can supply the readonly formal. Argument failure precedes entry. Extended views, deferred calls and object emission remain outside this profile.
+
+The offset helpers have a separate source-call contract. The defining visit checks the indexed case and nested field projections in the shared readonly helper. Only a direct return that forwards the same array and the two independent `UInt64` arguments in order, with one Boolean literal, can use that completed evidence. The published signature retains nominal array identity and the readonly owner role. After successful preparation, the call supplies an independent `UInt64` on normal return and carries any established unchecked bounds outcome. The maximum `UInt64` sentinel is a normal result.
 
 ### Package probe and literal call contracts
 

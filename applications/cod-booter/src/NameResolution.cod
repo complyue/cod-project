@@ -98,7 +98,7 @@ using "./ModuleExportStorage.cod" {
     FamilyMembership { UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod },
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
-using "./ModuleExportStorage.cod" ByteFunctionCompletion { NoByteFunction };
+using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./ModuleExportStorage.cod" ReceiverImportCheck { NoReceiverCallables };
 
 export enum ModuleNameUse:UInt8 {
@@ -172,7 +172,7 @@ export data NameWorkSlot {
     imported_failure_module:UInt64;
     imported_kind:UInt8;
     imported_callable_kind:InterfaceCallableKind;
-    imported_byte_completion:ByteFunctionCompletion;
+    imported_array_read_completion:ArrayReadCompletion;
     imported_reception:UInt8;
     imported_target_readonly:UInt8;
     imported_owner_readonly:UInt8;
@@ -3623,7 +3623,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
         work[at].enum_assertion <- (NoEnumAssertion:EnumAssertion);
         work[at].enum_members <- no_node();
         work[at].enum_backing <- 0u8;
-        work[at].imported_byte_completion <- NoByteFunction;
+        work[at].imported_array_read_completion <- NoArrayRead;
     };
     if (!link_entries(nodes, work, tree.revision, tree.used)) return false;
     ref state = make NameState {

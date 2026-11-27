@@ -5,7 +5,7 @@ using "./ModuleExportStorage.cod" {
     ModuleInterfaces, ModuleInterfaceRow, ByteArrayFailures,
     FamilyMembership { UnprovedMembership }, InterfaceCallableKind { NoCallableKind },
     AggregateStorage { UnprovedAggregate }, ExceptionSchema { OrdinarySchema },
-    ByteFunctionCompletion { NoByteFunction }, SumInterfacePayload { NoSumInterface },
+    ArrayReadCompletion { NoArrayRead }, SumInterfacePayload { NoSumInterface },
     CallableObjectView { NoCallableObjectView },
 };
 using "./ParserStorage.cod" FormalMode { ValueFormal };
@@ -43,7 +43,7 @@ export func compile_module_commands(source:const SourceBytes in S, tokens:Tokens
         membership <- UnprovedMembership;
         native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; literal_source_body <- false; byte_completion <- NoByteFunction; object_view <- make NoCallableObjectView {};
+        scalar_object_body <- false; literal_source_body <- false; array_read_completion <- NoArrayRead; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; source_allocates <- false;
         array_slot_failures <- make ByteArrayFailures {
             bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
