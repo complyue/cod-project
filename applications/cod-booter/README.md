@@ -108,7 +108,7 @@ Build the initial booter with statically linked C providers generated from resol
 
 **Reuse typed blocks in the graph region.** The [key and spelling tables](src/ModuleIndex.cod) share a CoD-written `SourceBytePool` allocated in the graph region. The pool can reuse a surrendered `SourceBytes` backing of the exact requested length. Growth copies the prefix and initializes the tail before publishing the replacement. The previous backing enters the pool after the rebind. The initial manager keeps one spare and uses the existing zero-length backing when there is nothing to reuse. The visit table uses its own growth path. Whole-region acquisition, relocation and release retain their existing contracts. The generic growable vector follows this work. [Intra-region library policy](../../design/RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
 
-The seed translates the pool on the normal booter build. Both booter source commands accept the unchanged `ModuleIndex.cod` and a direct renamed import of `reserve_keys`. The completed source contract covers the pool loan, its same-owner byte-array field and the separate caller array slot. Both source commands read the fixed reference fields of `ModuleBindingWorkspace`. The first current `ModuleGraph.cod` self-check error is the indexed `EnumSelection` transfer in its `ModuleExports.cod` dependency.
+The seed translates the pool on the normal booter build. Both booter source commands accept the unchanged `ModuleIndex.cod` and a direct renamed import of `reserve_keys`. The completed source contract covers the pool loan, its same-owner byte-array field and the separate caller array slot. Both source commands read the fixed reference fields of `ModuleBindingWorkspace`. Both source commands accept the unchanged `ModuleExports.cod`. Self-checking `ModuleGraph.cod` now reaches the `named_operator_at` call in `NameResolution.cod`.
 
 **Group related operands that share an owner.** [`bind_graph_module`](src/ModuleGraph.cod) receives its syntax, name, publication and checking tables through one `ModuleBindingWorkspace` under `W`. Its fixed reference fields select the existing tables. The nodes and object prefixes retain readonly target access. The synchronous source loan captures one fixed workspace reference, while its source views, diagnostic destination, catalog and graph storage keep their own owner contracts. [Reference binding and bits transfer](../../design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer)
 
@@ -321,7 +321,9 @@ In a body that needs operand checking, both source commands check an unplaced br
 
 ### Local indexed product outputs
 
-Both source commands check an exact local array element lent to a same-revision function’s writable finite-bits product formal. For the selection projection in `ModuleExports.cod`, the bound indexed argument makes the receiving body a dependency. Its independent result and the actual record owner follow the ordinary call contract. The index must succeed before entry. The profile rejects readonly and different nominal destinations. The same production source now reaches the indexed `EnumSelection` transfer.
+Both source commands check an exact local array element lent to a same-revision function’s writable finite-bits product formal. For the selection projection in `ModuleExports.cod`, the bound indexed argument makes the receiving body a dependency. Its independent result and the actual record owner follow the ordinary call contract. The index must succeed before entry. The profile rejects readonly and different nominal destinations.
+
+At the indexed `EnumSelection` transfer, both source commands accept copying an already initialized local finite-bits product into the matching local array element. The binding keeps the exact nominal types and the selected builtin operation. The destination must be writable and its index must succeed before transfer. The source can be readonly, and the destination keeps its copied payload after a later source write. This profile covers a discarded transfer result.
 
 ### Imported AST inspection
 
@@ -439,7 +441,7 @@ The offset helpers have a separate source-call contract. The defining visit chec
 
 The declaration and C provider commands check the imported native package probe with two readonly byte-array loans and four independent 64-bit unsigned bounds. Each loan preserves the array's nominal identity and actual owner. The probe returns the full-width value, including the maximum code for an absent module. The unchanged resolver reaches its first indexed product field after the probe signature is checked. [Native package probe](docs/ModuleGraph.md#checking-the-native-package-probe)
 
-Demanded source bodies can call a directly selected ordinary function proved to return one scalar literal. The defining module publishes this proof only for a complete empty signature and the exact checked body. Source selection through a rename preserves that contract. [Imported literal calls](docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal)
+Demanded source bodies can call a directly selected ordinary function proved to return one scalar literal. The defining module publishes this proof for a complete empty signature and an exact literal body, or for a single direct return of an already established local literal helper with the same result type. The wrapper proof uses the bound call and completed leaf regardless of declaration order. Source selection through a rename preserves that contract. [Imported literal calls](docs/ModuleGraph.md#checking-an-imported-function-that-returns-a-scalar-literal)
 
 ### Fixed scalar value bindings
 

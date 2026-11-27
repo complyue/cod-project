@@ -1775,11 +1775,54 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
         return case_problem(report, assignment.destination, wrong_construction_type());
     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
         assignment.input, transfer, type, used, revision, report)) return false;
-    facts[assignment.destination] <- make IndexedAggregateDestination {
+    remember_indexed_aggregate_destination(nodes, facts, assignment.destination, transfer, loan, type);
+    return true
+}
+
+func remember_indexed_aggregate_destination(nodes:const ExprNodes in N, facts:ConstructorCaseFacts in F,
+    destination:UInt64, transfer:UInt64, loan:const IndexedCaseLoan in L, type:const DeclaredType in T)
+    -> void where {const owner N, owner F, const owner L, const owner T} {
+    facts[destination] <- make IndexedAggregateDestination {
         transfer <- transfer; array <- loan.array; index <- loan.index; owner_site <- loan.owner_site;
         array_module <- loan.array_module; array_type <- loan.array_type; element <- type;
-        index_binds_storage <- binds_local_storage(nodes, loan.index);
+        index_binds_storage <- binds_local_storage(nodes, loan.index)
     };
+    return
+}
+
+func prepare_indexed_local_product_copy(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
+    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    transfer:UInt64, assignment:const AssignmentSites in S, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner G, const owner A, owner F, const owner S} {
+    val source <- assignment.input;
+    val destination <- assignment.destination;
+    if (names[transfer].kind != 0u8 || names[destination].kind != 0u8 ||
+        names[source].kind != local_binding()) return false;
+    val declaration <- names[source].declaration;
+    if (declaration >= source) return false;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node()
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_indexed_case_loan(nodes, names, selected, interfaces, published, destination,
+        used, revision, record_type(), loan, type) || loan.array_module != 0u64 ||
+        type.defining_module != 0u64 || type.identity >= used || aggregate[type.identity] != CLayoutBitsRecord)
+        return false;
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false
+    };
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    if (!inspect_local_binding(nodes, revision, used, declaration, local) || local.mode != ReferenceLocal ||
+        inspect_construction(nodes, revision, used, local.initializer, construction) != BracedConstruction ||
+        construction.placement != no_node() || construction.queried_operand != no_node() ||
+        names[construction.requested].kind != record_type() ||
+        names[construction.requested].declaration != type.identity) return false;
+    remember_indexed_aggregate_destination(nodes, facts, destination, transfer, loan, type);
     return true
 }
 
@@ -2048,6 +2091,11 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         if (transfer == PlaceTransfer && names[at].kind == 0u8 &&
             indexed_field_destination(nodes, at, revision, assignment.destination, field, indexed)) {
             facts[assignment.destination] <- make IndexedFieldDestination {};
+            if (first == no_node()) { (first <- at):void }
+        };
+        if (transfer == PlaceTransfer &&
+            prepare_indexed_local_product_copy(nodes, names, selected, interfaces, published, aggregate,
+                facts, at, assignment, used, revision)) {
             if (first == no_node()) { (first <- at):void }
         };
         if (transfer == PlaceTransfer && indexed_braced_transfer(nodes, at, revision, assignment, construction)) {

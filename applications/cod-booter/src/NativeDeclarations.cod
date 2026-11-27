@@ -1501,6 +1501,7 @@ export data SuppliedView =
     EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
     PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
     PreparedScalarLiteral { kind:UInt8; } |
+    BoundNiladicScalarReturn { kind:UInt8; callee:UInt64; } |
     PreparedScalarPredicate {} |
     CheckedScalarPredicate {} |
     ImportedScalarPredicateCandidate {} |
@@ -2079,34 +2080,45 @@ func single_return_value(nodes:const ExprNodes in N, body:UInt64, used:UInt64, r
     return single_completion_value(nodes, body, ReturnCompletion, used, revision)
 }
 
-func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in L, definition:UInt64, used:UInt64, revision:UInt64)
-    -> UInt8 where {const owner N, const owner B, const owner L} {
+func prepare_niladic_scalar_source(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, views:SuppliedViews in V, definition:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner L, owner V} {
     if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
-        links[definition].next_method != no_node() || links[definition].active != no_node()) return 0u8;
+        links[definition].next_method != no_node() || links[definition].active != no_node()) return;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
-        !callable.function_form || is_scope_block(nodes, callable.body)) return 0u8;
+        !callable.function_form || is_scope_block(nodes, callable.body)) return;
     ref signature = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
-    if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause) return 0u8;
+    if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause) return;
     val kind <- names[signature.annotation].kind;
-    if (kind != builtin_u8() && kind != builtin_u64()) return 0u8;
+    if (kind != builtin_u8() && kind != builtin_u64()) return;
     val head <- signature.previous;
     if (inspect_signature(nodes, revision, used, head, signature) != SignatureHead ||
-        signature.parameter_tail != no_node()) return 0u8;
+        signature.parameter_tail != no_node()) return;
     val operand <- single_return_value(nodes, callable.body, used, revision);
-    if (operand >= used) return 0u8;
-    return case nodes[operand] of {
+    if (operand >= used) return;
+    val literal <- case nodes[operand] of {
         Occupied { val syntax <- node; } -> case syntax.payload of {
             IntegerLiteral { val width <- width; val value <- magnitude; } ->
-                if ((kind == builtin_u8() && width == 8u64 && value <= 255u64) ||
-                    (kind == builtin_u64() && width == 64u64)) { kind } else { 0u8 };
-            _ -> 0u8
+                (kind == builtin_u8() && width == 8u64 && value <= 255u64) ||
+                (kind == builtin_u64() && width == 64u64);
+            _ -> false
         };
-        _ -> 0u8
-    }
+        _ -> false
+    };
+    if (literal) {
+        views[definition] <- make PreparedScalarLiteral { kind <- kind };
+        return
+    };
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, operand, call) != DirectInvocationReady ||
+        call.arguments != no_node() || names[call.callee].kind != callable_binding()) return;
+    val callee <- names[call.callee].declaration;
+    if (callee >= used) return;
+    views[definition] <- make BoundNiladicScalarReturn { kind <- kind; callee <- callee };
+    return
 }
 
 func prepare_scalar_predicate(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2153,6 +2165,19 @@ export func source_literal_kind(views:const SuppliedViews in V, definition:UInt6
     if (definition >= intrinsic (len)(views)) return 0u8;
     return case views[definition] of {
         PreparedScalarLiteral { val kind <-; } -> (kind);
+        _ -> 0u8
+    }
+}
+
+# Publication reads the completed leaf table. A wrapper cannot act as
+# a leaf receipt for another wrapper in this profile.
+export func completed_niladic_source_kind(views:const SuppliedViews in V, definition:UInt64) -> UInt8
+    where {const owner V} {
+    if (definition >= intrinsic (len)(views)) return 0u8;
+    return case views[definition] of {
+        PreparedScalarLiteral { val kind <-; } -> { kind };
+        BoundNiladicScalarReturn { val kind <-; val callee <-; } ->
+            if (source_literal_kind(views, callee) == kind) { kind } else { 0u8 };
         _ -> 0u8
     }
 }
@@ -4410,13 +4435,9 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         initializer <- no_node(); contents <- no_node()
     };
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
-    val literal_kind <- 0u8;
     val profile <- (NoSourceHandle:SourceHandleProfile);
     for (at in 0u64 .. used) {
-        literal_kind <- literal_source_result(nodes, names, work, at, used, revision);
-        if (literal_kind != 0u8) {
-            (views[at] <- make PreparedScalarLiteral { kind <- literal_kind }):void
-        };
+        prepare_niladic_scalar_source(nodes, names, work, views, at, used, revision);
         if (work[at].array_construction) {
             if (inspect_construction(nodes, revision, used, at, construction) != PositionalConstruction) {
                 reject_declaration(report, at, unsupported_ordinary_construction());

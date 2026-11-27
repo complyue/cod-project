@@ -130,7 +130,7 @@ using "./NativeDeclarations.cod" {
     prepared_here_formal, prepared_native_operation, source_call_scalar, prepared_array_slot_signature, published_record_array, published_record_array_storage,
 };
 using "./NativeDeclarations.cod" { ArraySlotElement, ArraySlotElement { ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement, BoolArrayElement } };
-using "./NativeDeclarations.cod" { source_literal_kind, has_prepared_native_loans };
+using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
@@ -3453,7 +3453,7 @@ export func mark_literal_source_bodies(views:const SuppliedViews in V, exports:c
             exports[row].checked == 0u8) {
             definition <- exports[row].identity;
             if (definition >= used) return false;
-            kind <- source_literal_kind(views, definition);
+            kind <- completed_niladic_source_kind(views, definition);
             if (kind != 0u8) {
                 header <- find_interface(contracts, count, module, definition);
                 if (header >= count || contracts[header].interface_kind != callable_binding() ||
@@ -5934,9 +5934,9 @@ func check_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
     return invalid_operand_tree()
 }
 
-func check_indexed_bits_transfer(facts:OperandFacts in F, cases:const ConstructorCaseFacts in C,
-    at:UInt64, destination:UInt64, input:UInt64, type:const DeclaredType in T)
-    -> UInt8 where {owner F, const owner C, const owner T} {
+func check_indexed_bits_transfer(names:const NameBindings in B, facts:OperandFacts in F,
+    cases:const ConstructorCaseFacts in C, at:UInt64, destination:UInt64, input:UInt64, type:const DeclaredType in T)
+    -> UInt8 where {const owner B, owner F, const owner C, const owner T} {
     if (facts[at].discarded_result == 0u8) return unsupported_transfer_signature();
     if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
         set_result(facts, at, never_result());
@@ -5947,9 +5947,15 @@ func check_indexed_bits_transfer(facts:OperandFacts in F, cases:const Constructo
     if (facts[destination].kind != target_kind || facts[destination].selection != destination ||
         facts[destination].target_readonly != 0u8 || facts[destination].identity_module != type.defining_module ||
         facts[destination].identity != type.identity || !facts[destination].checks_array_bounds ||
-        facts[input].kind != value_kind || facts[input].identity_module != type.defining_module ||
-        facts[input].identity != type.identity || facts[input].reception != independent_value() ||
-        (case cases[input] of { BitsConstruction { val transfer <-; } -> transfer != at; _ -> true }))
+        facts[input].identity_module != type.defining_module || facts[input].identity != type.identity)
+        return wrong_operand_type();
+    val declaration <- names[input].declaration;
+    val copied_product <- type.kind == record_type() && type.defining_module == 0u64 &&
+        names[input].kind == local_binding() && declaration < input &&
+        facts[input].kind == product_kind() && facts[input].target_presence == present_target() &&
+        completed_lexical_bits_target(facts, input, names[declaration].scope);
+    if (!copied_product && (facts[input].kind != value_kind || facts[input].reception != independent_value() ||
+        (case cases[input] of { BitsConstruction { val transfer <-; } -> transfer != at; _ -> true })))
         return wrong_operand_type();
     only_void(facts, at);
     return 0u8
@@ -6315,7 +6321,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             case cases[destination] of {
                 IndexedAggregateDestination { val transfer <-; val element <-; } -> {
                     if (transfer != at) return invalid_operand_tree();
-                    return check_indexed_bits_transfer(facts, cases, at, destination, input, element)
+                    return check_indexed_bits_transfer(names, facts, cases, at, destination, input, element)
                 };
                 _ -> {}
             }
@@ -6514,7 +6520,14 @@ func discard_aggregate_statement(nodes:const ExprNodes in N, cases:const Constru
     val at <- ungrouped(nodes, revision, used, written);
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
     if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer ||
-        assignment.input >= intrinsic (len)(cases)) return;
+        assignment.input >= intrinsic (len)(cases) || assignment.destination >= intrinsic (len)(cases)) return;
+    if (case cases[assignment.destination] of {
+        IndexedAggregateDestination { val transfer <-; } -> transfer == at;
+        _ -> false
+    }) {
+        discard_result(facts, at, explicit_discard());
+        return
+    };
     case cases[assignment.input] of {
         LocalSumConstruction { val transfer <-; } -> {
             if (transfer == at) { discard_result(facts, at, explicit_discard()) }
