@@ -88,7 +88,7 @@ using "./NativeDeclarations.cod" { forwarded_array_reader, finish_array_reader_f
 using "./NativeDeclarations.cod" {
     ModulePublication, NativeDeclarationResult, prepare_module_calls, check_module_interfaces,
     publish_interfaces, first_source_handle_callable, first_byte_function, finish_byte_function, first_array_slot_work,
-    finish_array_slot_body,
+    finish_array_slot_body, first_readonly_text_predicate,
     publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView },
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
@@ -558,7 +558,7 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
                       checked_selections:const CheckedSelections in C, checked_used:UInt64,
                       interfaces:const ModuleInterfaces in G, interface_count:UInt64, selected:SelectedExports in W,
                       names:NameBindings in W, work:NameWork in W, facts:AggregateFacts in F,
-                      views:SuppliedViews in H, cases:ConstructorCaseFacts in R, first_case:UInt64 in R,
+                      views:SuppliedViews in H,
                       result:ModuleBindingResult in R, native:bool, allow_structural:bool, recovery:ProductTypeRecovery in P) -> bool
     where {const owner S, owner W, const owner G, const owner C, owner F, owner H, owner R, owner P} {
     ref members = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
@@ -594,6 +594,17 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
         binding_diagnostic(nodes, result, module_binding_failed(), checked.diagnostic, checked.node);
         return false;
     } else {};
+    return true
+}
+
+func prepare_graph_source_operands(source:const SourceBytes in S, nodes:const ExprNodes in W,
+    names:NameBindings in W, selected:const SelectedExports in W, work:NameWork in W,
+    spellings:const SourceBytes in G, spelling_size:UInt64, interfaces:const ModuleInterfaces in G,
+    interface_count:UInt64, facts:const AggregateFacts in F, cases:ConstructorCaseFacts in C,
+    first_case:UInt64 in R, result:ModuleBindingResult in R) -> bool
+    where {const owner S, owner W, const owner G, const owner F, owner C, owner R} {
+    val used <- result.frontend.tree.used;
+    ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_constructor_cases(source, nodes, names, selected, work, spellings, spelling_size,
         interfaces, interface_count, facts, cases, used, result.frontend.tree.revision,
         first_case, expressions)) {
@@ -934,11 +945,6 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     ref aggregate_facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
     ref views = make SuppliedViews(result.frontend.tree.used, make NoSuppliedView {});
-    val case_capacity <- if (!native && needs_constructor_case_plan(nodes, used, result.frontend.tree.revision)) {
-        used
-    } else { 0u64 };
-    ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
-    ref first_case = make UInt64 { no_node() };
     val maximum <- if (run[0u64].limit == 0u64) { no_node() } else {
         run[0u64].limit - run[0u64].retained
     };
@@ -947,7 +953,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (!bind_graph_names(source, nodes, spellings, spelling_size, checked_selections, checked_used,
                           published_interfaces, interface_count, selected, names, work,
-                          aggregate_facts, views, cases, first_case, result, native, structural, recovery)) {
+                          aggregate_facts, views, result, native, structural, recovery)) {
         if (recovery.count != 0u64) {
             val reported <- report_product_type_failures(source, lines, diagnostic, nodes, work,
                 recovery, used, keys, key_first, key_past, run);
@@ -971,6 +977,19 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected;
     } else {};
+    val readonly_predicate <- if (native) { no_node() } else { first_readonly_text_predicate(views, used) };
+    val case_capacity <- if (!native && (readonly_predicate != no_node() ||
+        needs_constructor_case_plan(nodes, used, revision))) { used } else { 0u64 };
+    ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
+    ref first_case = make UInt64 { readonly_predicate };
+    if (!native && !prepare_graph_source_operands(source, nodes, names, selected, work,
+        spellings, spelling_size, published_interfaces, interface_count, aggregate_facts, cases, first_case, result)) {
+        delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
+            result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first,
+            keys, key_first, key_past, run);
+        if (delivered != Complete) return delivered;
+        return Rejected
+    };
     if (formal != no_node()) {
         locate_variadic_profile(source, lines, progress[0u64].variadic_stop, syntax_past(nodes,
             used, formal))

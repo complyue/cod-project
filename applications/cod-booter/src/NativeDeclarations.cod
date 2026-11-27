@@ -55,7 +55,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady, InvalidSelection, OtherSelectionSyntax };
-using "./ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral, InteriorNulLiteral };
+using "./ParserStorage.cod" TextLiteralSyntax { NotTextLiteral, NulFreeLiteral, InteriorNulLiteral };
 using "./ParserStorage.cod" text_literal_syntax;
 using "./ParserStorage.cod" BindingSyntax { BareBinding };
 using "./ParserStorage.cod" HandleBindingSyntax {
@@ -1476,6 +1476,8 @@ export data SuppliedView =
     EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
     PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
     PreparedScalarLiteral { kind:UInt8; } |
+    ReadonlyTextPredicate {} |
+    ReadonlyTextPredicateForward { callee:UInt64; } |
     PreparedArrayReaderLeaf { declared_array:UInt64; } |
     PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
     CheckedArrayReaderForward { completion:ArrayReadCompletion; } |
@@ -1926,7 +1928,7 @@ func readonly_array_parameters(nodes:const ExprNodes in N, names:const NameBindi
     return first
 }
 
-func readonly_array_marker(nodes:const ExprNodes in N, names:const NameBindings in B,
+func readonly_formal_marker(nodes:const ExprNodes in N, names:const NameBindings in B,
     parameter:UInt64, owner_site:UInt64, used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner B} {
     ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
@@ -1951,7 +1953,7 @@ func prepare_array_length_method(nodes:const ExprNodes in N, names:const NameBin
     val parameter <- readonly_array_parameters(nodes, names, callable.signature, used, revision);
     if (parameter >= used) return;
     if (work[parameter].next != no_node()) return;
-    val marker <- readonly_array_marker(nodes, names, parameter, callable.signature, used, revision);
+    val marker <- readonly_formal_marker(nodes, names, parameter, callable.signature, used, revision);
     if (marker >= used || (names[marker].kind != array_type() &&
         imported_kind(names, selected, marker) != array_export())) return;
     if (!returns_formal_length(nodes, names, callable.body, parameter, used, revision)) return;
@@ -1971,9 +1973,9 @@ export func prepared_array_length_call(views:const SuppliedViews in V, at:UInt64
 }
 
 # The forwarding body contributes no operation except ordinary preparation
-# of these exact formals and a Boolean literal, then return of the result.
-func forwarded_array_read(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, body:UInt64, first:UInt64, used:UInt64, revision:UInt64)
+# of its exact formals and one literal, then return of the result.
+func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, body:UInt64, first:UInt64, text:bool, used:UInt64, revision:UInt64)
     -> UInt64 where {const owner N, const owner B, const owner W} {
     val value <- single_return_value(nodes, body, used, revision);
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
@@ -1984,11 +1986,12 @@ func forwarded_array_read(nodes:const ExprNodes in N, names:const NameBindings i
     if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, argument))
         return no_node();
     val formal <- first;
-    for (position in 0u64 .. 4u64) {
+    val forwarded <- if (text) { 2u64 } else { 3u64 };
+    for (position in 0u64 .. forwarded + 1u64) {
         if (argument >= value || checked_ref_argument(nodes, argument) ||
             inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
             return no_node();
-        if (position < 3u64) {
+        if (position < forwarded) {
             if (names[entry.item].kind != formal_binding() || names[entry.item].declaration != formal ||
                 !(case nodes[entry.item] of {
                     Occupied { val syntax <- node; } -> case syntax.payload of {
@@ -1998,7 +2001,11 @@ func forwarded_array_read(nodes:const ExprNodes in N, names:const NameBindings i
                 })) return no_node();
             (formal <- work[formal].next):void
         } else {
-            if (boolean_literal(nodes, used, entry.item) == OtherBooleanSyntax) return no_node()
+            if (text) {
+                if (text_literal_syntax(nodes, used, entry.item) == NotTextLiteral) return no_node()
+            } else {
+                if (boolean_literal(nodes, used, entry.item) == OtherBooleanSyntax) return no_node()
+            }
         };
         argument <- work[argument].next
     };
@@ -2017,7 +2024,7 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
         return;
     val first <- readonly_array_parameters(nodes, names, callable.signature, used, revision);
     if (first >= used || work[first].next >= used) return;
-    val marker <- readonly_array_marker(nodes, names, first, callable.signature, used, revision);
+    val marker <- readonly_formal_marker(nodes, names, first, callable.signature, used, revision);
     if (marker >= used || names[marker].kind != array_type()) return;
     val declared_array <- names[marker].declaration;
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
@@ -2030,7 +2037,7 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
         return;
     val fourth <- work[third].next;
     if (fourth == no_node()) {
-        val callee <- forwarded_array_read(nodes, names, work, callable.body, first, used, revision);
+        val callee <- forwarded_read(nodes, names, work, callable.body, first, false, used, revision);
         if (callee < used) {
             (views[at] <- make PreparedArrayReaderForward { declared_array <- declared_array; callee <- callee }):void
         };
@@ -2068,6 +2075,94 @@ export func finish_array_reader_forward(views:SuppliedViews in V, definition:UIn
     -> void where {owner V} {
     views[definition] <- make CheckedArrayReaderForward { completion <- completion };
     return
+}
+
+# This source profile covers an immediate byte-array and bits-product
+# predicate with one immutable String loan. It supplies body demand only.
+func prepare_readonly_text_predicate(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
+    at:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner C, const owner A, const owner W, owner V} {
+    if (names[at].kind != callable_binding() || names[at].declaration != at ||
+        work[at].next_method != no_node() || work[at].active != no_node()) return;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form) return;
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val last_owner <- callable.signature;
+    if (inspect_signature(nodes, revision, used, last_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
+    val previous_owner <- clause.previous;
+    if (inspect_signature(nodes, revision, used, previous_owner, clause) != OwnerSignatureClause || !clause.readonly) return;
+    val first_owner <- clause.previous;
+    val third_owner <- inspect_signature(nodes, revision, used, first_owner, clause) == OwnerSignatureClause;
+    if (third_owner && !clause.readonly) return;
+    val result <- if (third_owner) { (clause.previous) } else { first_owner };
+    if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
+        names[clause.annotation].kind != builtin_bool()) return;
+    if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    val first <- no_node();
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
+        return;
+    val second <- work[first].next;
+    if (second >= used) return;
+    val third <- work[second].next;
+    if (third_owner) {
+        if (third >= used || work[third].next != no_node()) return;
+        val text <- readonly_formal_marker(nodes, names, third, last_owner, used, revision);
+        if (text >= used || names[text].kind != builtin_string()) return
+    } else {
+        if (third != no_node()) return
+    };
+    val record_owner <- if (third_owner) { previous_owner } else { last_owner };
+    val array_owner <- if (third_owner) { first_owner } else { previous_owner };
+    val record <- readonly_formal_marker(nodes, names, second, record_owner, used, revision);
+    if (record >= used) return;
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (!describe_type(nodes, names, selected, record, 0u64, revision, used, type) || type.kind != record_type())
+        return;
+    val bits <- if (type.defining_module == 0u64) {
+        type.identity < used && aggregate[type.identity] == CoDBitsAggregate
+    } else {
+        val header <- find_interface(contracts, published, type.defining_module, type.identity);
+        header < published && contracts[header].interface_kind == record_type() &&
+            contracts[header].aggregate_storage == CoDBitsAggregate
+    };
+    if (!bits) return;
+    val marker <- readonly_formal_marker(nodes, names, first, array_owner, used, revision);
+    ref bytes = make ArraySlotType { owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_sum <- no_node() };
+    if (!describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, bytes)) return;
+    if (third_owner) {
+        (views[at] <- make ReadonlyTextPredicate {}):void
+    } else {
+        val callee <- forwarded_read(nodes, names, work, callable.body, first, true, used, revision);
+        if (callee < used) {
+            (views[at] <- make ReadonlyTextPredicateForward { callee <- callee }):void
+        }
+    };
+    return
+}
+
+export func readonly_text_predicate(views:const SuppliedViews in V, site:UInt64) -> bool
+    where {const owner V} {
+    if (site >= intrinsic (len)(views)) return false;
+    return case views[site] of {
+        ReadonlyTextPredicate -> true;
+        ReadonlyTextPredicateForward { val callee <-; } -> {
+            if (callee >= intrinsic (len)(views)) return false;
+            return case views[callee] of { ReadonlyTextPredicate -> true; _ -> false }
+        };
+        _ -> false
+    }
+}
+
+export func first_readonly_text_predicate(views:const SuppliedViews in V, used:UInt64) -> UInt64
+    where {const owner V} {
+    for (site in 0u64 .. used) {
+        if (readonly_text_predicate(views, site)) return site
+    };
+    return no_node()
 }
 
 func prepare_byte_function(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -3350,6 +3445,8 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         };
         prepare_array_length_method(nodes, names, selected, work, views, at, used, revision);
         prepare_array_reader(nodes, names, selected, work, views, at, used, revision);
+        prepare_readonly_text_predicate(nodes, names, selected, contracts, interface_count,
+            aggregate, work, views, at, used, revision);
         prepare_byte_function(nodes, names, selected, work, contracts, interface_count,
             views, at, used, revision);
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {

@@ -213,7 +213,7 @@ The indexed element loan is scoped to the field use or immediate call. The sourc
 
 The declaration and C provider commands check a selected, unplaced braced sum constructor supplied directly to an ordinary same-revision function with an independent scalar or void result. The immediate formal must be a readonly reference under a readonly owner role. The construction uses the caller's lexical owner. Each actual has its own target, so two constructions in that scope can share one formal owner role. A failed later operand prevents entry. Deferred use and borrowed results are outside this profile.
 
-Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls. The unchanged `ParserInput.cod` and application entry reach the unsupported `not_word` call in `parse_identifier` at `ParserInput.cod:155:58`.
+Both commands check the original `OwnerQualifiedType` argument in `ParserInput.append_qualified_type`, including the two offset calls. The two source commands check the defining `Lexer.word_is` body and its direct wrappers, including the readonly byte-array and token loans, the literal passed as an immutable `String`, and the Boolean result. The unchanged `ParserInput.cod` and application entry still reach the unsupported imported `not_word` call in `parse_identifier` at `ParserInput.cod:155:58`. That boundary needs completed source-call evidence for the catchable bounds outcome and the separate fatal numeric outcome.
 
 ### Imported array length families
 

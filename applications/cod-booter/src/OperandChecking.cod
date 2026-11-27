@@ -1662,7 +1662,8 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
             if (scalar_kind(kind) || kind == source_u32()) {
                 if (reception != local_place() && reception != borrowed_ref()) return false
             } else {
-                if ((kind != source_array_loan() && kind != source_sum_target() && kind != source_product_loan()) ||
+                if ((kind != source_array_loan() && kind != source_sum_target() &&
+                     kind != source_product_loan() && kind != string_kind()) ||
                     reception != borrowed_ref() || facts[parameter].target_readonly == 0u8 ||
                     owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
                     return false
