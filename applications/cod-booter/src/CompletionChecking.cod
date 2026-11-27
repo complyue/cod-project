@@ -876,7 +876,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             if (diagnostic != 0u8) return diagnostic;
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
-            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8) return unproved_deferred_error();
+            if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 ||
+                (facts[at].loans_scoped_aggregate && sites[at].in_supplied_body)) return unproved_deferred_error();
             if (links[at].imported_numeric_fault && !supports_immediate_numeric_exit(nodes, names, sites, at, used))
                 return unproved_numeric_fault_route();
             if (links[at].imported_array_read_completion == ArrayReadMayFailBounds)

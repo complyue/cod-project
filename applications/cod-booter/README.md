@@ -341,7 +341,13 @@ For a builtin bits transfer to an indexed record field, the selected array must 
 
 In a demanded body, both source commands check synchronous calls to a same-revision procedure with readonly finite-bits product loans and an independent result or no result. The actual can be an initialized product formal or a checked lexical product reference. The checker prepares each operand in written order and checks its nominal type, access and actual owner. The procedure can also take checked handle loans, readonly arrays and by-value scalars in this profile. A failed operand prevents entry. Both source commands check the original `write_single_report` and its caller in the stored-rejection reduction.
 
-Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`. The unchanged `ModuleIndex` and full CLI first stop at the checked export for `lookup_path` in `ModuleIndex.cod:121:8`. Its mixed borrowed signature has a separate interface limit.
+Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`.
+
+### Imported module-index path loans
+
+Both source commands accept the unchanged `ModuleIndex` and direct imported calls to `lookup_path` and `fill_path`, including renamed selections. The checked interface preserves the ordered handle, nominal array and record loans, by-value scalars, declared `PathNotReadyException`, and the independent void or nominal enum result. This profile covers immediate calls in an ordinary activation. Object emission and allocator transport have separate admission checks.
+
+Each borrower retains its actual owner and target access. The two readonly lookup arrays must share the actual owner for their common role. The result record and path handle have their own roles. A failed argument prevents entry. The linked seed witness distinguishes a normal fill, its `ScratchFailed` feedback, an unready path, and a failure during argument preparation. The unchanged full CLI reaches `PackageDiagnostics.cod:58:35`, where the source checker cannot yet represent the selected `with_source` handoff.
 
 ### Imported array length families
 
