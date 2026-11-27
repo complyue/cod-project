@@ -347,7 +347,13 @@ Both source commands accept the unchanged `NativeDiagnostics`, including the pos
 
 Both source commands accept the unchanged `ModuleIndex` and direct imported calls to `lookup_path` and `fill_path`, including renamed selections. The checked interface preserves the ordered handle, nominal array and record loans, by-value scalars, declared `PathNotReadyException`, and the independent void or nominal enum result. This profile covers immediate calls in an ordinary activation. Object emission and allocator transport have separate admission checks.
 
-Each borrower retains its actual owner and target access. The two readonly lookup arrays must share the actual owner for their common role. The result record and path handle have their own roles. A failed argument prevents entry. The linked seed witness distinguishes a normal fill, its `ScratchFailed` feedback, an unready path, and a failure during argument preparation. The unchanged full CLI reaches `PackageDiagnostics.cod:58:35`, where the source checker cannot yet represent the selected `with_source` handoff.
+Each borrower retains its actual owner and target access. The two readonly lookup arrays must share the actual owner for their common role. The result record and path handle have their own roles. A failed argument prevents entry. The linked seed witness distinguishes a normal fill, its `ScratchFailed` feedback, an unready path, and a failure during argument preparation.
+
+### Synchronous source-revision loans
+
+Both source commands check the defining body of `NativeSourceUse.with_source` and publish its ordinary callback signature. The relay forwards readonly source bytes and line rows in their declared positions under the same actual revision owner. A renamed direct import binds the same two offers. The caller checks the supplied body and its nominal `CompilerStatus` feedback. The linked seed witness verifies the extents, distinct contents, ordinary feedback and an abrupt callback with its original payload.
+
+The unchanged full CLI now checks through the `with_source` handoff and stops at the borrowed `importer` operand of `append_package_diagnostic` in `PackageDiagnostics.cod:33:49`.
 
 ### Imported array length families
 

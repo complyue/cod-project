@@ -14,6 +14,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedProductWriter }, read_acquisition_failure, native_loan_requires_body, source_handle_callable,
+    prepared_source_here_relay,
     prepared_byte_function, prepared_array_construction, prepared_array_slot_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_record_inspector
 };
 using "./ModuleExports.cod" SelectedExports;
@@ -233,7 +234,8 @@ export func discover_declaration_demand(
                 problem <- site;
                 return false
             };
-            if ((clause != no_node() || links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
+            if ((clause != no_node() || prepared_source_here_relay(views, site) != no_node() ||
+                 links[site].sum_loan_formals || prepared_byte_function(views, site, true) ||
                  readonly_reader_needs_body(views, site) ||
                  source_handle_callable(nodes, names, selected, links, site, used, revision)) &&
                 !require_body(demand, site, count, used, true)) {
@@ -266,7 +268,7 @@ export func discover_declaration_demand(
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
         checked_call <- links[site].imported_interface != no_node() &&
-            (links[site].imported_failure_checked != 0u8 ||
+            (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
              (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
              (site < intrinsic (len)(views) && (case views[site] of { ImportedProductWriter -> true; _ -> false })));
         shape <- direct_invocation(nodes, revision, used, site, invocation);

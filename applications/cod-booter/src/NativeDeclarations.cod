@@ -22,8 +22,8 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
 using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, HereReceiverSequence };
-using "./ParserStorage.cod" CompletionSyntax {
-    ReturnCompletion, ContinueCompletion, BreakCompletion
+using "./ParserStorage.cod" {
+    CompletionSyntax, CompletionSyntax { ReturnCompletion, ContinueCompletion, BreakCompletion }
 };
 using "./ParserStorage.cod" {
     DeclarationSites, inspect_declaration, name_syntax, BoundHandleSites, inspect_handle_binding,
@@ -1461,6 +1461,7 @@ export data SuppliedView =
     HereFormalContract { first_parameter:UInt64; result_kind:UInt8; result_module:UInt64;
         result_identity:UInt64; } |
     PreparedHereInvocation { formal:UInt64; } |
+    PreparedSourceHereRelay { formal:UInt64; } |
     PreparedHandleFormal { marker:UInt64; owner_site:UInt64; readonly:bool; } |
     PreparedNativeOperation { definition:UInt64; actual_owner:UInt64; } |
     PreparedNativeLoanCall { module:UInt64; definition:UInt64; revision:UInt64;
@@ -1972,17 +1973,22 @@ func independent_scalar_formal(nodes:const ExprNodes in N, names:const NameBindi
     return independent_formal_kind(nodes, names, formal, used, revision) == kind
 }
 
-func single_return_value(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
+func single_completion_value(nodes:const ExprNodes in N, body:UInt64, kind:CompletionSyntax, used:UInt64, revision:UInt64)
     -> UInt64 where {const owner N} {
     val tail <- no_node();
     ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val value <- no_node();
     if (!block_tail(nodes, revision, used, body, tail) ||
         inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
-        item.previous != no_node() || completion_syntax(nodes, item.item) != ReturnCompletion ||
+        item.previous != no_node() || completion_syntax(nodes, item.item) != kind ||
         !completion_operand(nodes, revision, used, item.item, value))
         return no_node();
     return value
+}
+
+func single_return_value(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N} {
+    return single_completion_value(nodes, body, ReturnCompletion, used, revision)
 }
 
 func literal_source_result(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -3514,9 +3520,53 @@ func here_completion_destination(nodes:const ExprNodes in N, names:const NameBin
     return no_node();
 }
 
+export func prepared_source_here_relay(views:const SuppliedViews in V, at:UInt64) -> UInt64
+    where {const owner V} {
+    if (at >= intrinsic (len)(views)) return no_node();
+    return case views[at] of {
+        PreparedSourceHereRelay { val formal <-; } -> formal;
+        _ -> no_node()
+    }
+}
+
+# A direct synchronous native relay may publish its ordinary here signature
+# after the defining body has been checked. The forwarded call already proved
+# the receiver's exact, ordered offers and their common owner.
+func prepare_source_here_relay(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, target:UInt64, forwarded:UInt64,
+    used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner W, owner V} {
+    val formal <- prepared_here_formal(views, forwarded);
+    if (formal == no_node()) return;
+    val definition <- enclosing_callable(nodes, names, names[target].scope);
+    ref wrapper = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    if (definition >= used || names[definition].declaration != definition ||
+        work[definition].next_method != no_node() || work[definition].active != no_node() ||
+        inspect_callable(nodes, revision, used, definition, wrapper) != ModuleCallable || wrapper.function_form ||
+        single_return_value(nodes, wrapper.body, used, revision) != target ||
+        source_here_parameter(nodes, wrapper.signature, used, revision) != formal) return;
+    ref supplied = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
+    };
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    ref provider = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
+    ref operand = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    if (inspect_here_invocation(nodes, revision, used, target, supplied) != HereReady ||
+        single_completion_value(nodes, supplied.body, ContinueCompletion, used, revision) != forwarded ||
+        direct_invocation(nodes, revision, used, supplied.call, call) != DirectInvocationReady ||
+        names[call.callee].kind != c_operation() ||
+        inspect_callable(nodes, revision, used, names[call.callee].declaration, provider) != CProvider ||
+        !provider.function_form ||
+        inspect_sequence_entry(nodes, revision, used, call.arguments, operand) != ArgumentSequence ||
+        operand.previous != no_node() ||
+        names[operand.item].kind != formal_binding() || names[operand.item].declaration != work[formal].next) return;
+    views[definition] <- make PreparedSourceHereRelay { formal <- formal };
+    return;
+}
+
 func prepare_forwarded_feedback(nodes:const ExprNodes in N, names:const NameBindings in B,
                                 selected:const SelectedExports in E, work:NameWork in W,
-                                views:SuppliedViews in V, used:UInt64, revision:UInt64,
+                                views:SuppliedViews in V, used:UInt64, revision:UInt64, source_only:bool,
                                     report:NativeDeclarationResult in R) -> bool
     where {const owner N, const owner B, const owner E, owner W, owner V, owner R} {
     ref operand = make UInt64 { no_node() };
@@ -3528,9 +3578,11 @@ func prepare_forwarded_feedback(nodes:const ExprNodes in N, names:const NameBind
         if (target != no_node() && work[target].value_kind != 0u8 &&
             completion_operand(nodes, revision, used, at, operand) && operand != no_node()) {
             value <- ungrouped(nodes, revision, used, operand);
-            if (direct_invocation(nodes, revision, used, value, call) == DirectInvocationReady &&
-                !check_forwarded_here_call(nodes, names, selected, work, views, value, call, used,
+            if (direct_invocation(nodes, revision, used, value, call) == DirectInvocationReady) {
+                if (!check_forwarded_here_call(nodes, names, selected, work, views, value, call, used,
                     revision, report)) return false;
+                if (source_only) { prepare_source_here_relay(nodes, names, work, views, target, value, used, revision) }
+            };
         };
     };
     return true;
@@ -4303,7 +4355,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             } else {};
         };
     };
-    return prepare_forwarded_feedback(nodes, names, selected, work, views, used, revision, report);
+    return prepare_forwarded_feedback(nodes, names, selected, work, views, used, revision, true, report);
 }
 
 export func check_module_interfaces(
@@ -4327,6 +4379,9 @@ export func check_module_interfaces(
     val constructor <- no_node();
     val valid <- false;
     for (at in 0u64 .. used) {
+        if (first_required == no_node() && prepared_source_here_relay(views, at) != no_node()) {
+            (first_required <- at):void
+        };
         mode <- inspect_handle_construction(nodes, revision, used, at, acquired);
         if (mode == OwnHandleMake || mode == BorrowHandleMake) {
             marker <- acquired.marker;
@@ -4436,7 +4491,7 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         prepare_local_calls(nodes, names, selected, work, views, used, revision, emit_object,
             report) &&
         (!emit_object ||
-         (prepare_forwarded_feedback(nodes, names, selected, work, views, used, revision, report) &&
+         (prepare_forwarded_feedback(nodes, names, selected, work, views, used, revision, false, report) &&
           check_here_completions(nodes, names, work, used, revision, report)));
 }
 
@@ -4919,7 +4974,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     source_handle_callable(nodes, names, selected, work, at, used, revision);
                 callback <- if (ordinary && failure != no_node()) {
                     source_here_parameter(nodes, callable.signature, used, revision)
-                } else { no_node() };
+                } else { prepared_source_here_relay(views, at) };
                 if (!has_array_slot_body(views, at) && (form == CProvider || form == CEntry ||
                     (ordinary && failure == no_node()) || callback != no_node() || source_handle ||
                     (form == ModuleCallablePromise && names[at].declaration == at))) {
