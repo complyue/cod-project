@@ -2434,7 +2434,7 @@ export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UI
     return site < intrinsic (len)(views) && (case views[site] of { ReadonlyIndexedByteReader -> true; _ -> false })
 }
 
-# A readonly query receives an exact array and independent index words.
+# A readonly query receives an exact array, with index words where needed.
 # Its definition still needs a completed body and dependency proof.
 func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
@@ -2462,11 +2462,19 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
         first >= used) return;
     val marker <- readonly_formal_marker(nodes, names, first, owner_site, used, revision);
     if (marker >= used) return;
+    val input <- work[first].next;
+    if (input == no_node() && result == builtin_bool()) {
+        val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
+            aggregate, marker, used, revision);
+        if (storage == CoDBitsAggregate || storage == CLayoutBitsRecord) {
+            (views[at] <- make PreparedReadonlyQuery {}):void
+        };
+        return
+    };
     val valid_array <- checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
         marker, used, revision) || (result == builtin_u64() &&
         readonly_record_array(nodes, names, selected, contracts, published, aggregate, marker, used, revision));
     if (!valid_array) return;
-    val input <- work[first].next;
     for (position in 0u64 .. 3u64) {
         if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
         input <- work[input].next;

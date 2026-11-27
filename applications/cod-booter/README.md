@@ -357,7 +357,11 @@ Both source commands check the defining body of `NativeSourceUse.with_source` an
 
 Both source commands check immediate calls to the imported C function `append_package_diagnostic`, including renamed selections. The ordered native argument checker consumes the published signature. It checks the writable diagnostic handle, exact diagnostic enum, independent scalar values, and four readonly array loans under their actual owners. A repeated role must use the same actual owner. The checker rejects deferred use of this loan profile. On successful preparation and native completion the call returns an independent `UInt8`. [Native operand preparation](docs/ModuleGraph.md#checking-handles-and-readonly-array-loans-in-one-native-call)
 
-The unchanged `PackageDiagnostics`, `ModuleGraph` and CLI source checks get past native argument binding for this call. Their first remaining stop is the ordinary imported `diagnostic_budget_full` at `PackageDiagnostics.cod:24:9`, which needs completed evidence for its indexed reads.
+### Readonly record-array predicates
+
+Both source commands check an immediate ordinary Boolean query over one readonly nominal array of finite-bits records. The defining visit checks the body and publishes its ordered signature with completed bounds and arithmetic evidence. A direct import, including a rename, keeps the same array identity and actual owner. The caller prepares the loan before invoking the query and routes any recorded bounds failure through its own completion context.
+
+This covers the unchanged `diagnostic_budget_full` call in `PackageDiagnostics`. Both source commands on that module, `ModuleGraph` and the CLI now stop at the subsequent ordinary `report_rejection` call in `PackageDiagnostics.cod:37:13`. Object emission requires its own admission.
 
 ### Imported array length families
 
