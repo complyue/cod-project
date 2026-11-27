@@ -108,7 +108,7 @@ Build the initial booter with statically linked C providers generated from resol
 
 **Reuse typed blocks in the graph region.** The [key and spelling tables](src/ModuleIndex.cod) share a CoD-written `SourceBytePool` allocated in the graph region. The pool can reuse a surrendered `SourceBytes` backing of the exact requested length. Growth copies the prefix and initializes the tail before publishing the replacement. The previous backing enters the pool after the rebind. The initial manager keeps one spare and uses the existing zero-length backing when there is nothing to reuse. The visit table uses its own growth path. Whole-region acquisition, relocation and release retain their existing contracts. The generic growable vector follows this work. [Intra-region library policy](../../design/RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
 
-The seed translates the pool on the normal booter build. Both booter source commands accept the unchanged `ModuleIndex.cod` and a direct renamed import of `reserve_keys`. The completed source contract covers the pool loan, its same-owner byte-array field and the separate caller array slot. Both source commands read the fixed reference fields of `ModuleBindingWorkspace`. The first current `ModuleGraph.cod` self-check error is an operand check in its `ModuleExports.cod` dependency.
+The seed translates the pool on the normal booter build. Both booter source commands accept the unchanged `ModuleIndex.cod` and a direct renamed import of `reserve_keys`. The completed source contract covers the pool loan, its same-owner byte-array field and the separate caller array slot. Both source commands read the fixed reference fields of `ModuleBindingWorkspace`. The first current `ModuleGraph.cod` self-check error is the imported member-selector inspector call in its `ModuleExports.cod` dependency.
 
 **Group related operands that share an owner.** [`bind_graph_module`](src/ModuleGraph.cod) receives its syntax, name, publication and checking tables through one `ModuleBindingWorkspace` under `W`. Its fixed reference fields select the existing tables. The nodes and object prefixes retain readonly target access. The synchronous source loan captures one fixed workspace reference, while its source views, diagnostic destination, catalog and graph storage keep their own owner contracts. [Reference binding and bits transfer](../../design/CallableViewsAndCaptures.md#copying-moving-and-graph-transfer)
 
@@ -318,6 +318,10 @@ A direct source-preserving selection prepares the two readonly array loans, the 
 ### Imported lexical record construction
 
 In a body that needs operand checking, both source commands check an unplaced braced construction of an imported record with a completed finite-bits C layout. The selected type supplies the initializer fields, including through a rename. The checker verifies each field in written order. A writable field can receive another initializer. A readonly field is initialized exactly once. The local reference selects the completed target under the lexical owner and can restrict its access. A scalar member read or write uses the field of that exact target.
+
+### Local indexed product outputs
+
+Both source commands check an exact local array element lent to a same-revision function’s writable finite-bits product formal. For the selection projection in `ModuleExports.cod`, the bound indexed argument makes the receiving body a dependency. Its independent result and the actual record owner follow the ordinary call contract. The index must succeed before entry. The profile rejects readonly and different nominal destinations. The same production source now reaches the independent imported member-selector inspector call.
 
 ### Imported binding inspection
 

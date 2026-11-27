@@ -58,6 +58,7 @@ export data ConstructorCaseFact =
         receiver:UInt64; record:DeclaredType; array_module:UInt64; array_identity:UInt64;
         fixed:bool; target_readonly:bool;
     } |
+    IndexedOutputFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
     IndexedFieldDestination {} |
     InlineProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; readonly:bool; } |
     CaseConstructor { case_site:UInt64; defining_module:UInt64; declaration:UInt64; ordinal:UInt64; representative:UInt64; } |
@@ -372,6 +373,11 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
                             if (storage == CoDBitsAggregate || type.defining_module != 0u64) {
                                 remember_inline_product_formal(facts, formal, definition, owner_site, false, false, type);
                                 if (storage == CLayoutBitsRecord && first == no_node()) { (first <- formal):void }
+                            } else {
+                                # Keep a local record signature available for a reached indexed destination.
+                                facts[formal] <- make IndexedOutputFormal {
+                                    definition <- definition; owner_site <- owner_site; value_type <- type
+                                }
                             }
                         }
                     }
@@ -1279,6 +1285,17 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
             };
         } else {
             case facts[formal] of {
+                IndexedOutputFormal { val bound <- definition; val owner_site <-; val expected <- value_type; } -> {
+                    if (bound == definition &&
+                        describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used,
+                            revision, record_type(), loan, record) && loan.array_module == 0u64 &&
+                        record.identity == expected.identity && record.defining_module == expected.defining_module &&
+                        case_bits_type(record, aggregate, interfaces, published)) {
+                        remember_inline_product_formal(facts, formal, definition, owner_site, false, false, expected);
+                        remember_indexed_product_loan(nodes, facts, argument, loan, record, true);
+                        if (first == no_node()) { (first <- call):void }
+                    }
+                };
                 InlineProductFormal { val readonly <-; } -> {
                     # Imported arrays provide a completed nominal element schema.
                     # The argument checker still validates the actual loan.
