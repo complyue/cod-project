@@ -581,7 +581,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; slot_body <- false; signature <- false; body <- false;
+        receipt_body <- false; forwarded_product <- false; slot_body <- false; signature <- false; body <- false;
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, interfaces, interface_count, owners,
@@ -611,7 +611,7 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; slot_body <- false; signature <- false; body <- false;
+        receipt_body <- false; forwarded_product <- false; slot_body <- false; signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     return analyze_bound_declaration_completion(

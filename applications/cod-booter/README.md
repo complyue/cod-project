@@ -253,7 +253,9 @@ Both source commands accept the full unchanged `TokenBuffer`, including its impo
 
 The source checker can use the completed `ParserInput.append_syntax_node` contract across a direct `using` selection, including a rename. The defining visit proves the ordinary function's body and publishes the five ordered formals together with possible bounds and fatal arithmetic outcomes. The caller prepares a writable array, a writable record, two independent `UInt64` values and a readonly loan of an exact finite-bits sum. The two writable formals can share an actual owner. A direct braced construction uses the selected constructor's defining schema, evaluates its initializers in order and lends the completed value under the caller's lexical owner. An abrupt operand prevents entry and preserves the effects of earlier operands.
 
-The reduced call to unchanged `append_syntax_node` passes both source commands. The full frontend reaches the `ParseResult` formal of `parse_parameters` at `CallableSyntax.cod:158:45`. Executable object checking has a separate admission path.
+Both source commands accept the reduced call to unchanged `append_syntax_node`. They also bind an imported finite scalar-layout record to its writable ordinary reference formal before reading any operands. In an already demanded caller, a direct same-module function can receive that initialized record alongside ordinary array loans. The source checker follows the recorded call edge to check the receiving body and preserves the caller's actual target and owner. A readonly reference cannot supply the writable formal, and separate declared owner roles do not imply separate actual owners.
+
+The full frontend now checks the `ParseResult` formal of `parse_parameters` and reaches the call to `exception_binder_width` at `CallableSyntax.cod:62:18`. Executable object checking has a separate admission path.
 
 ### Imported array length families
 

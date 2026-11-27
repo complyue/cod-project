@@ -117,7 +117,7 @@ using "./CaseSchemas.cod" {
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, InlineProductField, LocalSumConstruction,
         IndexedProductLoan, IndexedAggregateDestination, LexicalSumReference, LexicalSumRebind,
-        FreshSumInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
+        FreshSumInvocation, ForwardedProductInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -1636,7 +1636,8 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
 }
 
 func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in L,
-    facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64) -> bool
+    facts:const OperandFacts in F, definition:UInt64, first:UInt64, used:UInt64, revision:UInt64,
+    allow_writable_array:bool) -> bool
     where {const owner N, const owner L, const owner F} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
@@ -1648,6 +1649,7 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
     val kind <- 0u8;
     val reception <- 0u8;
     val product <- no_node();
+    ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     for (unused in 0u64 .. used) {
         if (parameter == no_node()) return true;
         if (parameter >= used) return false;
@@ -1664,7 +1666,11 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
                 if ((kind != source_array_loan() && kind != source_sum_target() &&
                      kind != source_product_loan() && kind != string_kind()) || reception != borrowed_ref())
                     return false;
-                if (kind == source_product_loan() && facts[parameter].target_readonly == 0u8) {
+                if (facts[parameter].target_readonly == 0u8) {
+                    if (kind != source_product_loan() &&
+                        (!allow_writable_array || kind != source_array_loan() ||
+                         inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
+                         syntax.mode != ReferenceFormal)) return false;
                     if (owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
                         return false
                 } else {
@@ -1725,7 +1731,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L,
     facts:OperandFacts in F, owners:CallOwners in O, cases:const ConstructorCaseFacts in C, argument:UInt64, formal:UInt64,
     invocation:UInt64, used:UInt64, revision:UInt64, allow_owned_loan:bool,
-    definition:UInt64, first:UInt64, source_only:bool) -> UInt8
+    definition:UInt64, first:UInt64, source_only:bool, scoped_product_call:bool) -> UInt8
     where {const owner N, const owner B, const owner E, const owner L, owner F, owner O, const owner C} {
     if (facts[formal].writable_text_place != 0u8) return unsupported_text_operation();
     val kind <- facts[formal].kind;
@@ -1746,13 +1752,15 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (operand < used &&
         (facts[operand].kind == received_sum() || facts[operand].kind == received_product())) {
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, false))
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
     };
     if (operand < used && facts[operand].kind == source_product_loan()) {
+        val forwarded <- scoped_product_call &&
+            names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
         if (!source_only || checked_ref_argument(nodes, argument) ||
-            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision))
+            !receipt_loan_signature(nodes, links, facts, definition, first, used, revision, forwarded))
             return unproved_owner();
         if ((kind != source_product_loan() && kind != product_kind()) ||
             facts[formal].reception != borrowed_ref() ||
@@ -2327,8 +2335,12 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         (checks_slot_call <- prepared_array_slot_signature(nodes, links, views,
             callable.signature, used, revision)):void
     };
-    val checks_fresh_call <- source_only && at < intrinsic (len)(cases) &&
-        (case cases[at] of { FreshSumInvocation { val selected <- definition; } -> selected == definition; _ -> false });
+    val checks_scoped_call <- source_only && at < intrinsic (len)(cases) &&
+        (case cases[at] of {
+            FreshSumInvocation { val target <- definition; } -> target == definition;
+            ForwardedProductInvocation { val target <- definition; } -> target == definition;
+            _ -> false
+        });
     val can_enter <- true;
     val diagnostic <- 0u8;
     val input <- no_node();
@@ -2347,14 +2359,14 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
             facts[at].loans_array_slot <- loans_array_slot;
             return 0u8;
         } else {};
-        if (checks_slot_call || checks_fresh_call) {
+        if (checks_slot_call || checks_scoped_call) {
             input <- ordinary_argument_value(nodes, used, revision, argument);
             if (input >= argument || argument >= at || formal >= used) return invalid_operand_tree();
             (can_enter <- can_enter && facts[input].kind != never_result()):void
         };
         if (can_enter) {
             diagnostic <- check_argument(nodes, names, selected, links, facts, owners, cases, argument,
-                formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only);
+                formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only, checks_scoped_call);
             if (diagnostic != 0u8) return diagnostic;
             loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
             loans_scoped_aggregate <- loans_scoped_aggregate || facts[argument].loans_scoped_aggregate;

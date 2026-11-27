@@ -18,7 +18,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ImportedFreshSumInvocation } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, InlineProductFormal, LocalSumConstruction, IndexedAggregateDestination, IndexedProductLoan, LexicalSumReference, FreshSumInvocation, ForwardedProductInvocation, ImportedFreshSumInvocation } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -29,6 +29,7 @@ export data DeclarationDemand {
     receipt_pending:UInt64;
     declared_failure:UInt64;
     receipt_body:bool;
+    forwarded_product:bool;
     slot_body:bool;
     signature:bool;
     body:bool;
@@ -119,7 +120,10 @@ func passes_scoped_aggregate_loan(nodes:const ExprNodes in N, names:const NameBi
         if (names[entry.item].kind == formal_binding()) {
             receipt <- names[entry.item].declaration;
             if (receipt < intrinsic (len)(cases) &&
-                (case cases[receipt] of { InlineProductFormal { val readonly <-; } -> !readonly; _ -> false }))
+                (case cases[receipt] of {
+                    InlineProductFormal { val readonly <-; val demand_on_use <-; } -> !readonly && demand_on_use;
+                    _ -> false
+                }))
                 return true
         };
         if (names[entry.item].kind == local_binding()) {
@@ -174,7 +178,7 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if ((form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
+            if ((demand[call].forwarded_product || form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
                 !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void
@@ -273,7 +277,13 @@ export func discover_declaration_demand(
                 problem <- site;
                 return false
             };
-            (demand[site].callee <- definition):void;
+            demand[site].callee <- definition;
+            if (site < intrinsic (len)(cases)) {
+                (demand[site].forwarded_product <- case cases[site] of {
+                    ForwardedProductInvocation { val target <- definition; } -> target == definition;
+                    _ -> false
+                }):void
+            };
             if (scope < used) {
                 demand[site].next_call <- demand[scope].first_call;
                 (demand[scope].first_call <- site):void

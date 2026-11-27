@@ -734,7 +734,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
     ref demand = make DeclarationDemands(demands, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; slot_body <- false; signature <- false; body <- false;
+        receipt_body <- false; forwarded_product <- false; slot_body <- false; signature <- false; body <- false;
     });
     val field_capacity <- if (caught_field == no_node()) { 0u64 } else { used };
     ref fields = make CaughtFieldUses(field_capacity, make NoCaughtField {});
@@ -991,7 +991,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     } else {};
     val source_call_profile <- if (native) { no_node() } else { first_source_call_profile(views, used) };
     val case_capacity <- if (!native && (source_call_profile != no_node() ||
-        needs_constructor_case_plan(nodes, used, revision))) { used } else { 0u64 };
+        needs_constructor_case_plan(nodes, names, selected, used, revision))) { used } else { 0u64 };
     ref cases = make ConstructorCaseFacts(case_capacity, make NoConstructorCase {});
     ref first_case = make UInt64 { source_call_profile };
     if (!native && !prepare_graph_source_operands(source, nodes, names, selected, work,

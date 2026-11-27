@@ -43,7 +43,7 @@ export data ConstructorCaseFact =
     FieldLoanCaseSubject { expression:UInt64; receiver:UInt64; count:UInt64; } |
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
-    InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; } |
+    InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; demand_on_use:bool; } |
     InlineProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; readonly:bool; } |
     CaseConstructor { case_site:UInt64; defining_module:UInt64; declaration:UInt64; ordinal:UInt64; representative:UInt64; } |
     CaseFieldReceipt { case_site:UInt64; arm:UInt64; pattern:UInt64; field:UInt64; value_type:DeclaredType; } |
@@ -62,6 +62,7 @@ export data ConstructorCaseFact =
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalSumRebind { destination:UInt64; construction:UInt64; owner_site:UInt64; } |
     FreshSumInvocation { definition:UInt64; } |
+    ForwardedProductInvocation { definition:UInt64; } |
     ImportedFreshSumInvocation {} |
     FreshSumArgument { invocation:UInt64; formal:UInt64; construction:UInt64; lexical_owner:UInt64; } |
     BitsConstruction {
@@ -222,10 +223,11 @@ func remember_sum_formal(facts:ConstructorCaseFacts in F, formal:UInt64, definit
 }
 
 func remember_inline_product_formal(facts:ConstructorCaseFacts in F, formal:UInt64,
-    definition:UInt64, owner_site:UInt64, readonly:bool, type:const DeclaredType in T) -> void
+    definition:UInt64, owner_site:UInt64, readonly:bool, demand_on_use:bool, type:const DeclaredType in T) -> void
     where {owner F, const owner T} {
     facts[formal] <- make InlineProductFormal {
-        definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly
+        definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly;
+        demand_on_use <- demand_on_use
     };
     return
 }
@@ -233,8 +235,9 @@ func remember_inline_product_formal(facts:ConstructorCaseFacts in F, formal:UInt
 func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
     aggregate:const AggregateFacts in A, work:NameWork in W, facts:ConstructorCaseFacts in F,
-    writable_product:bool, definition:UInt64, signature:UInt64, used:UInt64, revision:UInt64) -> void
-    where {const owner N, const owner B, const owner E, const owner G, const owner A, owner W, owner F} {
+    writable_product:bool, definition:UInt64, signature:UInt64, used:UInt64, revision:UInt64,
+    first:UInt64 in P) -> void
+    where {const owner N, const owner B, const owner E, const owner G, const owner A, owner W, owner F, owner P} {
     ref head = make UInt64 { no_node() };
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node();
@@ -262,7 +265,6 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
             names[binding.name].kind == formal_binding() &&
             names[binding.name].declaration == formal && names[binding.owner_name].kind == owner_binding() &&
             describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) &&
-            (type.kind == sum_type() || (type.kind == record_type() && (binding.readonly || writable_product))) &&
             case_bits_type(type, aggregate, interfaces, published)) {
             owner_site <- names[binding.owner_name].declaration;
             if (owner_site < used) {
@@ -271,8 +273,18 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
                     (work[definition].sum_loan_formals <- true):void
                 } else {
                     required <- if (binding.readonly) { ReadonlyOwnerConstraint } else { WritableOwnerConstraint };
-                    if (owner_constraint_syntax(nodes, owner_site) == required) {
-                        remember_inline_product_formal(facts, formal, definition, owner_site, binding.readonly, type)
+                    if (type.kind == record_type() && owner_constraint_syntax(nodes, owner_site) == required) {
+                        if (binding.readonly || writable_product) {
+                            remember_inline_product_formal(facts, formal, definition, owner_site, binding.readonly,
+                                writable_product, type)
+                        } else {
+                            if (type.defining_module != 0u64 &&
+                                checked_aggregate_storage(interfaces, published, type.defining_module,
+                                    type.identity, record_type()) == CLayoutBitsRecord) {
+                                remember_inline_product_formal(facts, formal, definition, owner_site, false, false, type);
+                                if (first == no_node()) { (first <- formal):void }
+                            }
+                        }
                     }
                 }
             }
@@ -1034,6 +1046,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val argument <- first_argument;
     val formal <- first_formal;
+    val actual <- no_node();
     for (unused in 0u64 .. used) {
         if (argument >= used || formal >= used) return true;
         if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
@@ -1047,6 +1060,18 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
             remember_indexed_product_loan(nodes, facts, argument, loan, record, false);
             if (first == no_node()) { (first <- call):void }
         };
+        if (names[entry.item].kind == formal_binding()) {
+            actual <- names[entry.item].declaration;
+            if (actual < entry.item &&
+                (case facts[actual] of {
+                    InlineProductFormal { val type <- value_type; } -> type.defining_module != 0u64;
+                    _ -> false
+                }) &&
+                (case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
+                (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
+                (facts[call] <- make ForwardedProductInvocation { definition <- definition }):void
+            }
+        };
         if (work[entry.item].inline_sum_initializer) {
             if (!prepare_fresh_sum_argument(nodes, names, selected, work, interfaces, published, facts, call,
                 argument, formal, entry.item, used, revision, report)) return false;
@@ -1059,37 +1084,32 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
     return true
 }
 
-func prepare_imported_record_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in G, published:UInt64,
-    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, call:UInt64, input:UInt64,
-    used:UInt64, revision:UInt64) -> void
-    where {const owner N, const owner B, const owner E, const owner G, const owner A, owner F} {
+# Preserve the established direct writer's demand when its writable
+# actual is subsequently forwarded to a same-revision callable.
+func mark_direct_writer_loan(names:const NameBindings in B, facts:ConstructorCaseFacts in F,
+    call:UInt64, input:UInt64, nodes:const ExprNodes in N) -> void
+    where {const owner B, owner F, const owner N} {
     if (names[input].kind != formal_binding()) return;
     val formal <- names[input].declaration;
-    ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
-    ref binding = make BindingSites {
-        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    if (formal >= input) return;
+    case facts[formal] of {
+        InlineProductFormal {
+            val owner_site <-; val type <- value_type; val definition <-; val readonly <-;
+        } -> {
+            if (!readonly && definition == enclosing_callable(nodes, names, names[call].scope)) {
+                remember_inline_product_formal(facts, formal, definition, owner_site, false, true, type)
+            }
+        };
+        _ -> {}
     };
-    if (inspect_formal(nodes, revision, used, formal, parameter) != OrdinaryFormal ||
-        parameter.mode != ReferenceFormal ||
-        inspect_binding(nodes, revision, used, parameter.binding, binding) != TypedBinding ||
-        binding.readonly || binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return;
-    val owner_site <- names[binding.owner_name].declaration;
-    if (owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint) return;
-    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    if (describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) &&
-        type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)) {
-        remember_inline_product_formal(facts, formal, enclosing_callable(nodes, names, names[call].scope),
-            owner_site, false, type)
-    }
 }
 
 func prepare_imported_aggregate_arguments(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W,
-    interfaces:const ModuleInterfaces in G, published:UInt64, aggregate:const AggregateFacts in A,
+    interfaces:const ModuleInterfaces in G, published:UInt64,
     facts:ConstructorCaseFacts in F, call:UInt64, header:UInt64, first_argument:UInt64,
     first:UInt64 in P, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
-    where {const owner N, const owner B, const owner E, const owner W, const owner G, const owner A,
+    where {const owner N, const owner B, const owner E, const owner W, const owner G,
         owner F, owner P, owner R} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     val argument <- first_argument;
@@ -1105,8 +1125,7 @@ func prepare_imported_aggregate_arguments(nodes:const ExprNodes in N, names:cons
             inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return true;
         input <- entry.item;
         if (position == 1u64) {
-            prepare_imported_record_formal(nodes, names, selected, interfaces, published, aggregate,
-                facts, call, input, used, revision)
+            mark_direct_writer_loan(names, facts, call, input, nodes)
         };
         if (work[input].inline_sum_initializer) {
             if (position != 4u64 || input >= argument || lexical_owner >= used ||
@@ -1144,7 +1163,7 @@ func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const Na
             imported_header <- work[names[invocation.callee].declaration].selected_aggregate_writer;
             if (imported_header < published &&
                 first_sequence_entry(nodes, revision, used, invocation.arguments, ArgumentSequence, argument) &&
-                !prepare_imported_aggregate_arguments(nodes, names, selected, work, interfaces, published, aggregate,
+                !prepare_imported_aggregate_arguments(nodes, names, selected, work, interfaces, published,
                     facts, call, imported_header, argument, first, used, revision, report)) return false
         };
         if (direct_invocation(nodes, revision, used, call, invocation) == DirectInvocationReady &&
@@ -1541,8 +1560,13 @@ func prepare_bits_initializers(source:const SourceBytes in S, nodes:const ExprNo
     return case_problem(report, at, unsupported_bits_construction())
 }
 
-export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64, revision:UInt64)
-    -> bool where {const owner N} {
+export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E} {
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
     ref local = make LocalBindingSites {
         binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
     };
@@ -1556,6 +1580,11 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, used:UInt64,
         initializer <- no_node(); contents <- no_node()
     };
     for (at in 0u64 .. used) {
+        if (inspect_formal(nodes, revision, used, at, formal) == OrdinaryFormal && formal.mode == ReferenceFormal &&
+            inspect_binding(nodes, revision, used, formal.binding, binding) == TypedBinding &&
+            !binding.readonly && binding.owner_name < used && binding.target_type < used &&
+            names[binding.target_type].kind == ordinary_selection() &&
+            selected[names[binding.target_type].declaration].kind == record_export()) return true;
         if (inspect_local_binding(nodes, revision, used, at, local) && local.mode == ReferenceLocal &&
             inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
             construction.placement == no_node() && construction.queried_operand == no_node()) return true;
@@ -1588,7 +1617,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         mode <- inspect_callable(nodes, revision, used, at, callable);
         if (mode == ModuleCallable || mode == LexicalCallable) {
             prepare_case_loan_formals(nodes, names, selected, interfaces, published, aggregate, work,
-                facts, prepared_writable_product_formal(views, at), at, callable.signature, used, revision);
+                facts, prepared_writable_product_formal(views, at),
+                at, callable.signature, used, revision, first);
             if (work[at].sum_loan_formals && first == no_node()) { (first <- at):void }
         }
     };
