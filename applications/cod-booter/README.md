@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 54 · Recorded: 2026-11-27 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 55 · Recorded: 2026-11-28 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r55 the [static mixin scope decision](../../CHANGELOG.md#h-static-mixin-bootstrap-scope-20261128) locates type-level programming in the production design. D-20-BOOTSTRAP/P-642 continues r54 support for ordinary type families used by the booter.
 
 At r54 the [booter source ergonomics decision](../../CHANGELOG.md#h-booter-source-ergonomics-20261127) applies [D-20-BOOTSTRAP](../../design/DesignAuthorityRegistry.md#d-20-bootstrap), P-642/P-643, to the [next seed and library work](#booter-source-ergonomics). The trusted seed translates these author-facing forms for the booter. The r53 compiler roles and native interfaces continue.
 
@@ -131,6 +133,8 @@ The three [compiler commands](src/ObjectCompiler.cod) lend one `GraphProgress` p
 The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)
 
 ### Trusted source and the seed
+
+Booter source uses ordinary `using`, `import`, and concrete applications of type families such as `deque[UInt64]`. It uses neither `mixin` nor type-level programs. Seed support for mixin instantiation, quoted type-level source, or its evaluation is outside the bootstrap requirements. [Production design for static mixin parameters](../../design/ModuleWorlds.md#static-module-parameters-for-mixin)
 
 Run `cod-seed --parse FILE` for syntax feedback across the selected entry and its reachable source modules. The command stops after source discovery and parsing. Use `cod-seed --check-declarations FILE` to also resolve module selections, nominal layouts and callable signatures. Declarations inside bodies and type checking of executable expressions belong to later work. Both commands report diagnostics without emitting artifacts. The standalone booter build uses `--translate`. Run `cod-seed --translate FILE` with the requested LLVM IR, bitcode or C provider outputs for a trusted entry with a C entry point. Link those products with the matching native providers and runtime.
 
