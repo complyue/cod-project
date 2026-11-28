@@ -110,8 +110,7 @@ using "./DeclarationTypes.cod" {
     prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult,
         check_declared_expressions, prepare_enum_assertions
 };
-using "./Compiler.cod" ExpressionScratchPlan;
-using "./ModuleWorkspace.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
+using "./ModuleWorkspace.cod" { plan_module_source, plan_module_workspace, ExpressionScratchPlan, ModuleWorkspacePlan };
 using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult,
         prepare_imported_calls, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,

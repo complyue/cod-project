@@ -1,11 +1,49 @@
-using "./SourceStorage.cod" SourceBytes;
+using "./SourceStorage.cod" { SourceBytes, Token };
+using "./SourceStorage.cod" DelimiterLink { OrdinaryToken };
+using "./SourceAccess.cod" len;
+using "./Lexer.cod" { scan_token, end_of_source };
 using "./ParserStorage.cod" no_node;
-using "./Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
 using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
+
+export data ExpressionScratchPlan {
+    token_count:UInt64,
+    node_capacity:UInt64,
+    syntax_capacity:UInt64,
+}
 
 export data ModuleWorkspacePlan {
     source:ExpressionScratchPlan,
     commands:UInt64,
+}
+
+func count_tokens(source:const SourceBytes in S, token:Token in T) -> UInt64
+    where {const owner S, owner T} {
+    val next <- 0u64;
+    val bytes <- len(source);
+    # Each non-EOF token advances by at least one byte.
+    for (index in 0u64 .. bytes) {
+        scan_token(source, next, token);
+        if (token.kind == end_of_source()) return index;
+        next <- token.past;
+    };
+    return bytes;
+}
+
+# Plan buffers before acquiring scratch storage. Each node is introduced by
+# one distinct non-EOF token. List entries use delimiter tokens, leaving the
+# expression and control keywords available for their own nodes.
+export func plan_expression_scratch(source:const SourceBytes in S, scratch:ExpressionScratchPlan in R) -> bool
+    where {const owner S, owner R} {
+    scratch.token_count <- 0u64;
+    scratch.node_capacity <- 0u64;
+    scratch.syntax_capacity <- 0u64;
+    ref token = make Token { kind <- end_of_source(); first <- 0u64; past <- 0u64; delimiter <- make OrdinaryToken {}; };
+    val count <- count_tokens(source, token);
+    if (count > (no_node() - 1u64) / 3u64) return false;
+    scratch.token_count <- count + 1u64;
+    scratch.node_capacity <- count;
+    scratch.syntax_capacity <- 3u64 * count;
+    return true;
 }
 
 # A normalized grouped selection may need one extra node per item. Each
