@@ -1,6 +1,6 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 237
+Discussion revision: 238
 
 Recorded: 2026-11-27
 
@@ -8,7 +8,7 @@ Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
 
-At r237 the [terminology revision](../CHANGELOG.md#h-type-family-term-reservation-20261127) reserves *type family* for possible type-indexed definitions. The r236 [member type identity](#generic-adts-and-member-types), bracket applications, transparent synonyms and construction terms continue under D-07/D-15, P-18/P-208/P-229. Type families remain an open language design option.
+At r238 the [type family decision](../CHANGELOG.md#h-type-families-and-static-mixin-params-20261127) names the identity introduced by a generic ADT declaration. The r237 member identity, canonical argument order, module selection and construction rules continue under D-07/D-15, P-18/P-208/P-229. [Static module parameters for mixin](ModuleWorlds.md#static-module-parameters-for-mixin) are the preferred future direction for type-level programming.
 
 At r235 the [construction terminology](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) applies to sum payloads under D-07-SUM-CONSTRUCTORS/P-601/P-602. Constructor-family selection and the r234 positional, labeled and fieldless forms are continued.
 
@@ -376,12 +376,15 @@ For a leaf whose `code`, `detail` and `attempt` fields hold 10, 3 and 1 respecti
 A super-call requires the implicit receiver of an OO member method, field accessor or functor call-operator body. An ordinary helper taking the same reference cannot perform that call. Neither an unrelated type nor a `<:` conformance supplies the required storage ancestry. The named form rejects the declaring type itself, a sibling or a descendant. There is no first-class `super` reference to store or pass. Check receiver access and ownership, other arguments in written order, checked failures, and normal cleanup just as for the selected ordinary signature. A readonly `self` cannot invoke a writable-only ancestor method. The restriction on receiver selection ends with the call.
 
 <a id="nominal-type-families-and-member-types"></a>
+<a id="generic-adts-and-member-types"></a>
 
-#### Generic ADTs and member types
+#### Type families and member types
 
-The declaration `export data deque[T] { ... }` introduces a **generic ADT** called `deque`. In type formation, `deque` is a **nominal type constructor**. Applying it to `UInt64` gives `deque[UInt64]`, a **member type** of `deque`. At the value level, `make deque[UInt64]()` invokes a ctor to create an **instance** of that member type.
+The generic ADT declaration `data deque[T] { … }` introduces the **type family** `deque`. Like a method family, a type family has its own nominal identity and can be selected under a new name. Its individual members retain their own identities. A type application selects a **member type** by its ordered type arguments. With `UInt64` supplied, `deque[UInt64]` is a **concrete member type**. An object made by `make deque[UInt64]()` is an **instance** of that type.
 
-**Identity rule.** Two applications denote the same member type exactly when they select the same defining generic ADT and their corresponding type arguments have the same canonical identities. Transparent type synonyms therefore select the same member. `deque[UInt64]` and `deque[Int64]` select different members. Argument order matters for a generic ADT with several parameters. Storage owner, field layout and whether a compiler shares machine code do not enter the identity.
+In a discussion of kinds, `deque` is a *unary type constructor* of kind `Type → Type`. In a signature, `deque[T]` applies that constructor to an in-scope parameter. In the declaration head, `T` introduces the parameter. Method overload selection applies when an operation is called. Forming `deque[UInt64]` needs only the family and the type argument.
+
+**Identity rule.** Two applications denote the same member type exactly when their type family identities and corresponding canonical type arguments agree. A transparent synonym for `UInt64` selects the same member. `deque[Int64]` selects a different member. Argument order matters for families with several parameters. Storage owner, field layout and code sharing do not enter this identity.
 
 Suppose `first.cod` and `second.cod` each declare and export their own `deque[T]`, with identical definitions. A consumer can select each under its own name.
 
@@ -390,13 +393,9 @@ using "./first.cod" deque as WorkQueue
 using "./second.cod" deque as OtherQueue
 ```
 
-`WorkQueue[UInt64]` names the original member from `first.cod` under a new spelling. `OtherQueue[UInt64]` belongs to an independently declared generic ADT, so a parameter requiring `WorkQueue[UInt64]` cannot accept it on layout alone. If `second.cod` instead re-exports `deque` from `first.cod`, both applications have the same identity. The same rule applies recursively when an argument is itself an applied type. [Module-world identity and aliases](ModuleWorlds.md#identity-records-aliases-and-publication) · [Transparent type synonyms](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
+`WorkQueue[UInt64]` names the original member from `first.cod` under a new spelling. `OtherQueue[UInt64]` belongs to an independently declared type family, so a parameter requiring `WorkQueue[UInt64]` cannot accept it on layout alone. If `second.cod` instead re-exports `deque` from `first.cod`, both applications have the same identity. The same rule applies recursively when an argument is itself an applied type. [Module-world identity and aliases](ModuleWorlds.md#identity-records-aliases-and-publication) · [Transparent type synonyms](JuliaPackagePortability.md#scalar-names-and-transparent-type-synonyms)
 
-Use **type application** for syntax such as `deque[T]` in a method signature. When the caller supplies `T = UInt64`, the signature names the member `deque[UInt64]`. The `T` in the declaration head `data deque[T]` introduces a parameter. Membership describes type formation. Abstract conformance and method-family dispatch follow their own declarations and rules. For a sum, `Maybe[UInt64]` is a member type of `Maybe`. `Just` and `Nothing` are sum alternatives.
-
-Reserve **type family** for a possible future language feature. Haskell uses *type constructor* for an ordinary declaration such as `Maybe`. GHC additionally supports type families defined by equations and data families whose representation can vary by type index. [Haskell 2010 data declarations](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html#x10-690004.2.1) · [GHC type families](https://ghc.gitlab.haskell.org/ghc/doc/users_guide/exts/type_families.html)
-
-For example, a future closed set of equations could map both `Element[deque[T]]` and `Element[vector[T]]` to `T`. With `T = UInt64`, both results would be the existing `UInt64` type. This is illustrative notation. A design for open equations would also have to explain what happens when independently compiled modules supply conflicting equations for the same input, and how an exported signature retains its meaning on import. The present decision reserves terminology only. [Charter §5](RegionalSemanticPlatformCharter.md#5-kindtypevalue-regions-与阶段化计算)
+For a sum, `Maybe[UInt64]` is a member type of `Maybe`. `Just` and `Nothing` are alternatives of that sum. Use *type-level function* for a computation on types. The proposal for such computations builds on [static module parameters for mixin](ModuleWorlds.md#static-module-parameters-for-mixin).
 
 #### Brackets in generic type heads
 

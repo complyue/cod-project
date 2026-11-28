@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Name the type family identity and locate future type-level programming in mixin
+
+<a id="h-type-families-and-static-mixin-params-20261127"></a>
+**H-TYPE-FAMILIES-AND-STATIC-MIXIN-PARAMS-20261127.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) chose *type family* for the identity introduced by `data deque[T]`, following the method-family analogy, and expressed a preference for type- and kind-level static module parameters supplied at the mixin site. [D-07 r237→238](design/DomainLanguageDesign.md#type-families-and-member-types) supersedes the [earlier reservation of the term](https://github.com/complyue/cod-project/blob/43665dd1a125ac4e6ffba155f79ccebed9b0b484/design/DomainLanguageDesign.md#generic-adts-and-member-types). Member identities, canonical argument order and re-exports continue. [D-15 r90→91](design/ModuleWorlds.md#static-module-parameters-for-mixin) records the future direction under the [existing template contract](#h-mixin-template-deferral-20261124). Syntax, full evaluation semantics and identity of fresh template declarations remain open. P-18/P-102/P-208/P-229, registry r1379→1380.
+
 ## 2026-11-27 — Reserve the term type family for type-indexed definitions
 
 <a id="h-type-family-term-reservation-20261127"></a>
