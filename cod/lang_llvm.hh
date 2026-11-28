@@ -1052,12 +1052,12 @@ class LLVMEmission {
       result->addIncoming(ordinary_result, success);
       llvm::Value *completed = result;
       if (here_entries_.at(body.instance).group)
-        completed = consume_here_transfer(result, b_.CreateExtractValue(callback, 1));
+        completed = consume_here_transfer(result, std::array{b_.CreateExtractValue(callback, 1)});
       return propagate(completed);
     }
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           llvm::AllocaInst *here_site = nullptr,
+                           std::vector<llvm::Value *> *here_sites = nullptr,
                            std::span<llvm::Value *const> current_owners = {}) {
     const auto &layout = call_layouts_.at(method);
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
@@ -1104,7 +1104,8 @@ class LLVMEmission {
     for (const auto &input : invocation.here_arguments) {
       if (const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&input)) {
         auto *argument = prepare_here(*literal, expr.at);
-        if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
+        if (here_sites && here_entries_.at(literal->instance).group)
+          here_sites->push_back(b_.CreateExtractValue(argument, 1));
         prepared.push_back(argument);
       } else {
         prepared.push_back(here_arguments_.at(std::get<CheckedOperation::ForwardedHere>(input).input));
@@ -1139,8 +1140,8 @@ class LLVMEmission {
     b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
-  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments, llvm::AllocaInst *here_site = nullptr,
-                      std::span<llvm::Value *const> current_owners = {}) {
+  llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments,
+                      std::vector<llvm::Value *> *here_sites = nullptr, std::span<llvm::Value *const> current_owners = {}) {
     const auto &fact = checked_.at(&expr);
     if (fact.invokes_here) {
       auto *argument = here_arguments_.at(*fact.invokes_here);
@@ -1172,7 +1173,7 @@ class LLVMEmission {
     }
     if (fact.callee) {
       const auto method = program_->instances[*fact.callee].method;
-      return native_call(expr, methods_[method], method, arguments, here_site, current_owners);
+      return native_call(expr, methods_[method], method, arguments, here_sites, current_owners);
     }
     if (fact.builtin == BuiltinOperation::unary || fact.builtin == BuiltinOperation::binary) {
       EagerOperation operation{{}, &fact};
@@ -1193,10 +1194,13 @@ class LLVMEmission {
     b_.CreateCall(runtime("cod_lang_print_" + suffix, b_.getVoidTy(), {argument->getType()}), {argument});
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
-  llvm::Value *consume_here_transfer(llvm::Value *result, llvm::Value *here_site) {
+  llvm::Value *consume_here_transfer(llvm::Value *result, std::span<llvm::Value *const> here_sites) {
     auto *target = b_.CreateExtractValue(result, 7);
+    llvm::Value *matches = b_.getFalse();
+    for (auto *here_site : here_sites)
+      matches = b_.CreateOr(matches, b_.CreateICmpEQ(target, here_site));
     auto *matched = block("here.leaves"), *ordinary = block("here.call.outcome"), *join = block("here.outcome");
-    b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(target), b_.CreateICmpEQ(target, here_site)), matched, ordinary);
+    b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(target), matches), matched, ordinary);
     b_.SetInsertPoint(ordinary);
     b_.CreateBr(join);
     b_.SetInsertPoint(matched);
@@ -2717,16 +2721,9 @@ class LLVMEmission {
       std::vector<llvm::Value *> current_owners;
       const auto arguments = prepare_arguments(expr, nullptr, &current_owners);
       if (!reachable()) return nullptr;
-      llvm::AllocaInst *here_site = nullptr;
-      if (!fact.here_arguments.empty()) {
-        const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&fact.here_arguments.front());
-        if (literal && program_->methods[program_->instances[literal->instance].method].here_group) {
-          here_site = slot(b_.getPtrTy(), "here.call.destination");
-          b_.CreateStore(null_pointer(), here_site);
-        }
-      }
-      auto *result = invoke(expr, arguments, here_site, current_owners);
-      if (here_site) result = consume_here_transfer(result, load(here_site));
+      std::vector<llvm::Value *> here_sites;
+      auto *result = invoke(expr, arguments, &here_sites, current_owners);
+      if (!here_sites.empty()) result = consume_here_transfer(result, here_sites);
       auto *value = propagate(result);
       if (!fact.view && inline_aggregate_type(fact.type)) return view_address(value);
       if (!fact.borrowed_result) return value;

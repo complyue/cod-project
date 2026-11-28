@@ -117,6 +117,8 @@ class BodyExtraction {
   };
   struct HereSupply {
     const Expression *call;
+    size_t slot;
+    std::optional<Type> break_result;
     std::optional<size_t> owner;
     std::vector<CheckedLexicalHere> lexical_here;
     std::vector<size_t> here_sources;
@@ -464,10 +466,9 @@ class BodyExtraction {
 
   void add_literal(Outline outline, const Expression &site, const CheckedHereContract &contract) {
     const auto &offers = contract.inputs;
-    expect(outline.source->supplied_group && !site.scoped && site.receiving &&
-           site.receiving->shape == ReceivingHeader::Shape::ordered && !site.receiving->from_for &&
-           site.definition->parameters.size() == offers.size(),
-           site.at, "seed needs a single-brace here body receiving every offer in order");
+    expect(site.receiving && site.receiving->shape == ReceivingHeader::Shape::ordered &&
+           !site.receiving->from_for && site.definition->parameters.size() == offers.size(),
+           site.at, "seed needs a here body receiving every offer in order");
     outline.parameters = site.definition->parameters;
     const std::string handed_owner = "$here.owner.0";
     if (outline.here->owner) {
@@ -935,13 +936,13 @@ class BodyExtraction {
       return operation;
     }
 
-    CheckedOperation::SuppliedHere supply_here(const Expression &call, const CheckedHereContract &contract,
-                                               std::optional<size_t> owner) {
-      expect(!body_.outline, call.at, "seed does not supply a here body from an outlined body");
-      const auto &site = *call.children.back();
+    CheckedOperation::SuppliedHere supply_here(const Expression &call, const Expression &site, size_t slot,
+                                               const CheckedHereContract &contract, std::optional<size_t> owner,
+                                               std::optional<Type> break_result) {
+      expect(!body_.outline, site.at, "seed does not supply a here body from an outlined body");
       expect(bool(site.definition), site.at, "seed needs a supplied here definition");
       auto outlined = outline(*site.definition);
-      outlined.here = HereSupply{&call, owner, {}, {}};
+      outlined.here = HereSupply{&call, slot, std::move(break_result), owner, {}, {}};
       const auto target = extraction_.bodies_.size();
       extraction_.add_literal(std::move(outlined), site, contract);
       body_.replay_calls.push_back({target, supplied_});
@@ -1107,7 +1108,9 @@ class BodyExtraction {
         expect(role.has_value(), expr.at, "native here loan needs a declared input owner");
         const auto owner = owners.find(*role - 1);
         expect(owner != owners.end(), expr.at, "native here loan needs the prepared actual owner");
-        op.here_arguments.emplace_back(supply_here(expr, contract, owner->second));
+        const auto &site = *expr.children.back();
+        expect(!site.scoped, site.at, "seed needs a single-brace here body for the C provider");
+        op.here_arguments.emplace_back(supply_here(expr, site, 0, contract, owner->second, {}));
         auto &sources = op.argument_sources.emplace();
         for (const auto &operand : std::span(expr.children).first(native.inputs.size()))
           sources.push_back(operand.get());
@@ -1253,8 +1256,19 @@ class BodyExtraction {
       return true;
     }
 
+    static const Expression &written_argument(const Expression &argument) {
+      if (argument.kind == Kind::named_argument && argument.children.size() == 1)
+        return *argument.children.front();
+      return argument;
+    }
+
     size_t select_overload(const Expression &expr, const CheckedFamily &family,
                            std::vector<const CheckedOperation *> &operands) {
+      for (const auto &operand : expr.children) {
+        const auto &actual = written_argument(*operand);
+        if (actual.kind == Kind::here_body)
+          fail(actual.at, "seed needs a single selected declaration for this here literal");
+      }
       expect(!expr.has_here_body() && std::ranges::none_of(expr.children, [](const auto &operand) {
         return operand->spread || operand->checked_ref_argument || operand->kind == Kind::named_argument;
       }), expr.at, "seed needs positional operands for an ordinary overload");
@@ -1334,20 +1348,25 @@ class BodyExtraction {
       const auto here_count = method.here.size();
       std::vector<const Expression *> actuals(formals.size());
       size_t next = 0;
+      bool named_suffix = false;
       if (call.has_here_body()) actuals[next++] = call.children.back().get();
       for (const auto &argument : written) {
-        require_executable_expression(*argument);
-        const Expression *actual = argument.get();
+        const Expression *actual = &written_argument(*argument);
         size_t slot = next;
         if (argument->kind == Kind::named_argument) {
           const auto formal = std::ranges::find(formals, argument->text, &Parameter::name);
           if (formal == formals.end()) fail(argument->at, "unknown argument label '" + argument->text + "'");
           expect(argument->children.size() == 1, argument->at, "seed needs an explicit operand for this call");
           slot = static_cast<size_t>(formal - formals.begin());
-          actual = argument->children.front().get();
+          named_suffix |= slot != next;
+        } else if (named_suffix) {
+          fail(argument->at, "an argument after a reordered label must name its parameter");
         }
         expect(slot < actuals.size(), argument->at, "too many ordinary call arguments");
         if (actuals[slot]) fail(argument->at, "duplicate argument for '" + formals[slot].name + "'");
+        if (actual->kind == Kind::here_body) {
+          expect(slot < here_count, actual->at, "a here literal requires a here parameter");
+        } else require_executable_expression(*argument);
         actuals[slot] = actual;
         if (slot == next) ++next;
         if (slot >= here_count) operation.argument_order.push_back(slot - here_count);
@@ -1372,8 +1391,9 @@ class BodyExtraction {
           expect(prepared != ordinary_owners.end(), actual.at, "here loan needs a prepared actual owner");
           owner = prepared->second;
         }
-        if (slot == 0 && call.has_here_body()) {
-          operation.here_arguments.emplace_back(supply_here(call, contract, owner));
+        if (actual.kind == Kind::here_body) {
+          const auto break_result = method.result.mode == ResultMode::value ? method.result.type : std::nullopt;
+          operation.here_arguments.emplace_back(supply_here(call, actual, slot, contract, owner, break_result));
           continue;
         }
         require_executable_expression(actual);
@@ -1459,6 +1479,10 @@ class BodyExtraction {
       const auto parameters = target.input_parameters();
       std::vector<const Expression *> here_actuals;
       if (target.here.empty()) {
+        for (const auto &argument : expr.children) {
+          const auto &actual = written_argument(*argument);
+          if (actual.kind == Kind::here_body) fail(actual.at, "a here literal requires a here parameter");
+        }
         expect(!expr.has_here_body() && parameters.size() == expr.children.size(),
                expr.at, "ordinary call arguments do not match the selected declaration");
       } else {
@@ -2598,8 +2622,8 @@ class BodyExtraction {
         return op;
       }
       case Kind::return_tail: {
-        expect(!supplied_body() && !body_.instance.result.owns_region(), expr.at,
-               "seed needs an ordinary callable result at the tail");
+        expect(!form_.supplied_group && !body_.instance.result.owns_region(), expr.at,
+               "seed needs a local callable result at the tail");
         if (!body_.outline && body_.instance.result.type && !body_.instance.result.borrowed() &&
             implicit_scope_call(*expr.children.front())) {
           prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
@@ -2615,9 +2639,23 @@ class BodyExtraction {
         }
         return op;
       }
-      case Kind::return_value: case Kind::continue_value:
-        expect(supplied_body() == (expr.kind == Kind::continue_value), expr.at,
-               "seed needs an ordinary return or a local here continue");
+      case Kind::break_value: case Kind::return_value: case Kind::continue_value:
+        if (form_.supplied_group && expr.kind != Kind::continue_value) {
+          const auto &outline = *body_.outline;
+          const auto &supplier_result = extraction_.bodies_.at(outline.supplier).instance.result;
+          const bool returns = expr.kind == Kind::return_value;
+          const auto result = returns && supplier_result.mode == ResultMode::value
+              ? supplier_result.type : returns ? std::nullopt : outline.here->break_result;
+          expect(result && (*result == Type::void_type || scalar_type(*result)), expr.at,
+                 "seed needs a declared scalar or void destination for this here transfer");
+          if (expr.children.empty()) expect(*result == Type::void_type, expr.at, "here transfer needs a value");
+          else takes_value(operand(expr, 0), *result, expr.children.front()->at);
+          op = value_return(*result);
+          op.here_exit = returns ? HereExit::return_supplier : HereExit::break_call;
+          return op;
+        }
+        expect(form_.supplied_group ? expr.kind == Kind::continue_value : expr.kind == Kind::return_value,
+               expr.at, "this control transfer requires a single-brace here group");
         if (!body_.instance.result.type) {
           expect(expr.children.empty(), expr.at, "seed needs a declared result for a value return");
           body_.void_exit = &expr;
@@ -2734,8 +2772,11 @@ class BodyExtraction {
       expect(body_.instance.frame.owners.size() == owners().size(), form_.at,
              "seed needs an input for every formal owner");
       if (body_.instance.result.type) {
-        expect(end.type == Type::never || body_.instance.result.type == Type::void_type,
-               form_.at, "seed needs a reachable return for this result");
+        const auto &result = *body_.instance.result.type;
+        if (end.type != Type::never && result != Type::void_type) {
+          expect(form_.supplied_group, form_.at, "seed needs a reachable return for this result");
+          takes_value(end, result, form_.body->at);
+        }
       } else {
         expect(end.type == Type::void_type || end.type == Type::never,
                form_.at, "seed needs a declared result for a value tail");
@@ -2881,7 +2922,7 @@ class BodyExtraction {
     scope.owners = std::move(outline.owner_parameters);
     CheckedOperation::SuppliedHere *supplied = nullptr;
     if (auto &here = outline.here) {
-      auto &handoff = supplier.instance.operations.at(here->call).here_arguments.front();
+      auto &handoff = supplier.instance.operations.at(here->call).here_arguments.at(here->slot);
       supplied = &std::get<CheckedOperation::SuppliedHere>(handoff);
       supplied->lexical_here = std::move(here->here_sources);
       scope.here_input_owners = here->owner ? 1 : 0;
@@ -2891,7 +2932,7 @@ class BodyExtraction {
       std::iota(positions.begin(), positions.end(), size_t{0});
       scope.here_reception = CheckedMethod::ScopeInputs::HereReception{offered, std::move(positions)};
       scope.lexical_here = std::move(here->lexical_here);
-      method.here_group = true;
+      method.here_group = outline.source->supplied_group;
     } else {
       scope.named = CheckedMethod::ScopeInputs::NamedEntry{scope.parameters.size()};
     }

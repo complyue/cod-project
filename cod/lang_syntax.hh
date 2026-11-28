@@ -392,6 +392,7 @@ struct Expression {
   bool fixed_binding = false;
   bool read_only = false;
   bool scoped = false;
+  bool trailing_here_body = false;
   bool case_resumes = false;
   bool case_breaks = false;
   bool grouped_deferred_call = false;
@@ -425,8 +426,8 @@ struct Expression {
     while (label->kind == Kind::grouped) label = label->children.front().get();
     return label->construction_label ? label : nullptr;
   }
-  // A supplied body is stored after the written operands. It binds slot one.
-  bool has_here_body() const { return !children.empty() && children.back()->kind == Kind::here_body; }
+  // Only a trailing supplied body sits outside the written argument list.
+  bool has_here_body() const { return !children.empty() && children.back()->trailing_here_body; }
   bool ordinary_braced_if() const {
     return kind == Kind::conditional && children.front()->kind != Kind::return_test && children[1]->kind == Kind::block;
   }
@@ -1226,7 +1227,7 @@ class Parser {
     return kind == TokenKind::identifier || kind == TokenKind::integer || kind == TokenKind::real ||
            kind == TokenKind::symbol || is("(", 2) || is("{", 2) || is("!", 2);
   }
-  Expr argument_operand(bool accepts_ref, bool named) {
+  Expr argument_operand(bool accepts_ref, bool named, bool inline_here) {
     const auto first = cursor_;
     const auto saved = controls_;
     try {
@@ -1236,7 +1237,14 @@ class Parser {
         checked_ref = expect("not").at;
         expect("null");
       }
-      auto operand = expression(0, HereAttachment::immediate, !named);
+      Expr operand;
+      if (inline_here && here_header()) {
+        const auto start = peek();
+        auto header = read_here_header();
+        operand = read_here_body(std::move(header), start);
+        if (checked_ref || is("..."))
+          fail(start.at, "a here literal supplies one here parameter");
+      } else operand = expression(0, HereAttachment::immediate, !named);
       operand->checked_ref_argument = std::move(checked_ref);
       operand->spread = take("...");
       if (operand->checked_ref_argument && operand->spread)
@@ -1252,7 +1260,9 @@ class Parser {
     const bool follows_call = allow_supplied_body && close < tokens_.size() &&
         (is("{", close + 1 - cursor_) || here_header(close + 1 - cursor_));
     const bool labelled_yield = controls_.labelled_yield && expr.kind == Expression::Kind::call && expr.text == "yield";
-    const bool named = (expr.kind == Expression::Kind::call && !expr.intrinsic) ||
+    const bool inline_here = !expr.intrinsic &&
+        (expr.kind == Expression::Kind::call || expr.kind == Expression::Kind::value_call);
+    const bool named = inline_here ||
         expr.kind == Expression::Kind::make_exception || expr.kind == Expression::Kind::make_object ||
         (accepts_supplied_body(expr) && follows_call) || labelled_yield;
     const bool accepts_ref_argument = expr.kind == Expression::Kind::call || expr.kind == Expression::Kind::value_call ||
@@ -1267,7 +1277,7 @@ class Parser {
           argument->span.past = expect("...").at.span.past;
           argument->spread = true;
         } else if (!named || !is("->")) {
-          argument = argument_operand(accepts_ref_argument, named);
+          argument = argument_operand(accepts_ref_argument, named, inline_here);
         }
         if (named && take("->")) {
           const bool construction = expr.kind == Expression::Kind::make_object || expr.kind == Expression::Kind::make_exception;
@@ -1644,13 +1654,9 @@ class Parser {
         fail(item.at, "conflicting receiving destination '" + item.name + "'");
     }
   }
-  void attach_body(Expression &call, ReceivingHeader header) {
-    if (call.endpoints && call.endpoints->consumer)
-      fail(peek().at, "a pipeline can have only one consumer");
-    using K = Expression::Kind;
-    if (call.has_here_body()) fail(peek().at, "a call can supply only one trailing here body");
+  Expr read_here_body(ReceivingHeader header, const Token &start) {
     validate_receivers(header);
-    auto supplied = make(K::here_body, peek());
+    auto supplied = make(Expression::Kind::here_body, start);
     supplied->receiving = std::make_shared<ReceivingHeader>(std::move(header));
     if (is("=>", 1) || (is("{", 1) && is("=>", 2)))
       fail(peek().at, "write the receiving header as '(...) => ' before the here body");
@@ -1659,11 +1665,19 @@ class Parser {
     controls_.parsing_handoff = previous;
     if (!supplied->receiving->from_for) supplied->scoped = std::exchange(body->scoped, false);
     supplied->children.push_back(std::move(body));
-    call.children.push_back(finish(std::move(supplied)));
+    return finish(std::move(supplied));
+  }
+  void attach_body(Expression &call, ReceivingHeader header) {
+    if (call.endpoints && call.endpoints->consumer)
+      fail(peek().at, "a pipeline can have only one consumer");
+    if (call.has_here_body()) fail(peek().at, "a call can supply only one trailing here body");
+    auto supplied = read_here_body(std::move(header), peek());
+    supplied->trailing_here_body = true;
+    call.children.push_back(std::move(supplied));
     // The call was complete before its trailing operand was added.
     depths_.erase(&call);
   }
-  void trailing_body(Expression &call) {
+  ReceivingHeader read_here_header() {
     ReceivingHeader header{ReceivingHeader::Shape::ordered, {}};
     if (take("(")) {
       if (is("{")) labelled_receiving(header);
@@ -1683,7 +1697,10 @@ class Parser {
       expect(")");
       expect("=>");
     }
-    attach_body(call, std::move(header));
+    return header;
+  }
+  void trailing_body(Expression &call) {
+    attach_body(call, read_here_header());
   }
   Expr generator_for(const Location &at) {
     ReceivingHeader header{ReceivingHeader::Shape::single, {}, true};

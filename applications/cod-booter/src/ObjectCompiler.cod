@@ -109,7 +109,9 @@ proc finish_provider_pair(here publish() -> UInt64, here report(code:UInt32) -> 
 proc publish_rendered_providers(here report(code:UInt32) -> void, handle directory:Path in P,
                                  header:const String in H, stubs:const String in S) -> CompilerStatus
     where {const owner P, const owner H, const owner S} {
-    return finish_provider_pair(report) { continue publish_provider_pair(directory, header, stubs); };
+    return finish_provider_pair(
+        () => {{ return publish_provider_pair(directory, header, stubs); }},
+        report);
 }
 
 proc render_providers(here report(code:UInt32) -> void,
