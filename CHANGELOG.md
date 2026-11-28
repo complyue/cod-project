@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Trace ordinary argument preparation across a go process launch
+
+<a id="k-swarm-launch-preparation-20261128"></a>
+**K-SWARM-LAUNCH-PREPARATION-20261128.** [D-32 r9→10](design/ActorChannels.md#acceptance-scenarios) derives two examples from the [existing launch and ownership boundary](https://github.com/complyue/cod-project/blob/ae8511b47f713b93256621847b4e8d161d4199ab/design/SymbolicDynamicScope.md#go-process-launch) and [ordinary default initialization](https://github.com/complyue/cod-project/blob/ae8511b47f713b93256621847b4e8d161d4199ab/design/SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding). An owner-free nested launch still names its swarm. For a named entry, caller-default failure precedes ownership transfer and callee-default failure after entry triggers child cleanup. P-788/P-789 continue. Provider admission failure stays open. Registry r1392→1393.
+
 ## 2026-11-28 — Keep physical worker identity private to the swarm provider
 
 <a id="h-provider-private-workers-20261128"></a>

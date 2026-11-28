@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 9 · 2026-11-28
+Design and research revision: 10 · 2026-11-28
 
 ## Design authority
+
+At r10 two [launch examples](#acceptance-scenarios) apply the existing rules for consuming calls, parameter defaults and fresh TLS to the r9 named entry. P-788/P-789 continue. [Scope and continuity](../CHANGELOG.md#k-swarm-launch-preparation-20261128)
 
 At r9 the [worker identity decision](../CHANGELOG.md#h-provider-private-workers-20261128) keeps physical workers private to the swarm provider. D-32-RESOURCE-POOLS/P-789 continues the declared handoff requirements for a complete launch. The source-level example and the cluster workload below use a swarm, entry arguments and application message endpoints.
 
@@ -535,6 +537,8 @@ These are design acceptance workloads, not a test suite or a claim of implemente
 | Scenario | Observation required before the associated scope can be accepted |
 | --- | --- |
 | Both launch forms in one OS process | For each form, observe a dedicated child OS thread, fresh initial TLS and independent installations of the same symbol. The named entry procedure and the owner-list body can each use their transferred region and handle after the launcher leaves its scope. Check a mixed scalar argument, reject reuse of a consumed owner, and observe one release per resource still owned on normal or exceptional child exit. |
+| Nested launch with only an independent scalar argument | The nested launch still requires an explicit target swarm. There is no resource handoff for the provider to perform for that argument. Ordinary launch admission still applies. |
+| Named entry with a swarm region and an omitted scalar default | Run the caller-context default in the launcher. If it reads a valid local installation of `@amount` holding 7, the child receives the scalar 7 and starts with fresh initial TLS. If that default raises before entry, the launch has not consumed the prepared region. In the definition-context variant, the default runs in the child’s parameter preamble. If it raises after entry, child cleanup releases the transferred region even though the entry body never starts. [Parameter initialization order](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) · [Consuming calls](ExceptionControl.md#e4--consuming-calls-and-results) |
 | Static payload mismatch | An incompatible message is rejected by the source type contract; an invalid external representation never becomes an admitted typed value. |
 | A deliberately lost message | Ordinary send remains fire-and-forget; all retained payload storage is accounted for, without a synthesized receipt or sender-view revival. |
 | A continuing communication fault | The selected fault policy reports the system condition to the sender; the ownership outcome is derivable and a later recovery has defined behavior. |
