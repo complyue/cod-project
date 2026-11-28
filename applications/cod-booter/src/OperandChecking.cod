@@ -1,7 +1,7 @@
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
 using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array };
 using "./NameResolution.cod" direct_source_using;
-using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector };
+using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" OwnerConstraintSyntax {
     NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint
@@ -134,13 +134,14 @@ using "./NativeDeclarations.cod" {
     published_enum_array_header, SourceArrayFormals { ArrayReferenceSlotFormal }
 };
 using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
+using "./NativeDeclarations.cod" prepared_workspace_loans;
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
     CheckedScalarFunctionCall, CheckedScalarPredicateCall,
-    CheckedWriterCall, CheckedParserWriterCall, CheckedSumWriterCall, CheckedArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
+    CheckedWriterCall, CheckedParserWriterCall, CheckedWorkspaceWriterCall, CheckedSumWriterCall, CheckedArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -1945,7 +1946,8 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         facts[argument].target_readonly <- facts[formal].target_readonly;
         return record_owner_argument(nodes, facts, owners, formal, facts[operand].owner, argument, invocation)
     };
-    if (operand < used && facts[operand].kind == source_product_loan()) {
+    if (operand < used && (facts[operand].kind == source_product_loan() ||
+        (mixed_aggregate_loan && kind == source_product_loan() && facts[operand].kind == product_kind()))) {
         val forwarded <- names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
         val indexed <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
             (case cases[operand] of {
@@ -1968,12 +1970,12 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (facts[formal].target_readonly == 0u8) {
             val local <- names[operand].declaration;
             val lexical <- names[operand].kind == local_binding() && local < operand &&
-                local < intrinsic (len)(cases) &&
-                (case cases[local] of {
+                ((mixed_aggregate_loan && completed_lexical_bits_target(facts, operand, names[invocation].scope)) ||
+                 (local < intrinsic (len)(cases) && (case cases[local] of {
                     LexicalProductReference { val owner_site <-; val readonly <-; } ->
                         !readonly && owner_site == facts[operand].owner;
                     _ -> false
-                });
+                 })));
             val projected_output <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
                 (case cases[operand] of {
                     IndexedAggregateLoan { val consumer <-; val writable <-; } ->
@@ -1981,7 +1983,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
                     InlineProductField { val writable <-; } -> writable && mixed_aggregate_loan;
                     _ -> false
                 });
-            if (kind != source_product_loan() || facts[operand].target_readonly != 0u8 ||
+            if ((kind != source_product_loan() && !mixed_aggregate_loan) || facts[operand].target_readonly != 0u8 ||
                 (names[operand].kind != formal_binding() && !lexical && !projected_output) ||
                 owner_constraint_syntax(nodes, facts[formal].owner) != WritableOwnerConstraint)
                 return expected_writable_place()
@@ -2569,7 +2571,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         (checks_slot_call <- prepared_array_signature(nodes, links, views,
             callable.signature, used, revision) == (ArrayReferenceSlotFormal:SourceArrayFormals)):void
     };
-    val checks_scoped_call <- mixed_aggregate_loan || (source_only && at < intrinsic (len)(cases) &&
+    val checked_mixed_loan <- mixed_aggregate_loan || (source_only && prepared_workspace_loans(views, definition));
+    val checks_scoped_call <- checked_mixed_loan || (source_only && at < intrinsic (len)(cases) &&
         (case cases[at] of {
             FreshSumInvocation { val target <- definition; } -> target == definition;
             ProductLoanInvocation { val target <- definition; } -> target == definition;
@@ -2601,7 +2604,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (can_enter) {
             diagnostic <- check_argument(nodes, names, selected, links, facts, owners, cases, argument,
                 formal, at, used, revision, allow_owned_loan, definition, first_formal, source_only,
-                checks_scoped_call, checks_slot_call, mixed_aggregate_loan);
+                checks_scoped_call, checks_slot_call, checked_mixed_loan);
             if (diagnostic != 0u8) return diagnostic;
             loans_owning_handle <- loans_owning_handle || facts[argument].loans_owning_handle;
             loans_scoped_aggregate <- loans_scoped_aggregate || facts[argument].loans_scoped_aggregate;
@@ -2686,7 +2689,8 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     val returned_kind <- links[at].imported_kind;
     val readonly_call <- source_only && (case views[at] of { CheckedReadonlyCall -> true; _ -> false });
     val inline_product_loan <- source_only && (case views[at] of {
-        CheckedParserWriterCall { val aggregate_loan <-; } -> aggregate_loan;
+        CheckedParserWriterCall { val inline_input <-; } -> inline_input;
+        CheckedWorkspaceWriterCall -> true;
         _ -> false
     });
     val widens_index_operand <- source_only && (returned_kind == scalar_u8() || returned_kind == void_result() ||
@@ -3416,6 +3420,70 @@ func preceding_source_loan_row(contracts:const ModuleInterfaces in I, published:
     return no_node()
 }
 
+func published_workspace_array(contracts:const ModuleInterfaces in I, published:UInt64,
+    row:UInt64) -> bool where {const owner I} {
+    val module <- contracts[row].type_module;
+    val identity <- contracts[row].type_identity;
+    val head <- find_interface(contracts, published, module, identity);
+    if (head >= published || contracts[head].interface_kind != array_type() ||
+        contracts[head].entry_count != 0u64 || contracts[head].array_index_kind != builtin_u64()) return false;
+    val element <- contracts[head].element_kind;
+    if (element == builtin_u8() || element == builtin_u64() || element == builtin_bool()) return true;
+    val storage <- published_record_array_storage(contracts, published, module, identity);
+    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate ||
+        published_sum_array(contracts, published, module, identity) ||
+        published_enum_array_header(contracts, published, module, identity) == head
+}
+
+func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, published:UInt64,
+    header:UInt64) -> UInt64 where {const owner I} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val count <- contracts[header].entry_count;
+    val owners <- contracts[header].owner_count;
+    if (count < 3u64 || count >= published - header || owners == 0u64 ||
+        contracts[header].source_writer != WorkspaceWriter ||
+        (contracts[header].result_kind != builtin_bool() && contracts[header].result_kind != builtin_void()) ||
+        contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
+        contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
+        contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
+        contracts[header].target_readonly != 0u8 ||
+        contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
+        contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
+        contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead)
+        return no_node();
+    val past <- header + 1u64 + count;
+    val role <- no_node();
+    val kind <- 0u8;
+    val access <- 0u8;
+    val writes <- 0u64;
+    val writable_arrays <- 0u64;
+    val reads_record <- false;
+    val previous_writable <- no_node();
+    val adjacent_arrays <- false;
+    for (row in header + 1u64 .. past) {
+        if (!checked_source_scalar_parameter(contracts, published, row)) {
+            role <- contracts[row].owner_role;
+            kind <- contracts[row].value_kind;
+            access <- contracts[row].target_readonly;
+            if (role >= owners || access > 1u8 || !source_aggregate_formal(contracts, row, kind, role, access))
+                return no_node();
+            if (kind == array_type()) {
+                if (!published_workspace_array(contracts, published, row)) return no_node();
+                if (access == 0u8) {
+                    adjacent_arrays <- previous_writable == row - 1u64;
+                    previous_writable <- row;
+                    (writable_arrays <- writable_arrays + 1u64):void
+                }
+            } else {
+                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
+                (reads_record <- reads_record || access != 0u8):void
+            };
+            if (access == 0u8) { (writes <- writes + 1u64):void }
+        }
+    };
+    return if (writes >= 3u64 && writable_arrays == 2u64 && adjacent_arrays && reads_record) { past } else { no_node() }
+}
+
 func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published:UInt64,
     header:UInt64, aggregate_loan:bool in S) -> UInt64 where {const owner I, owner S} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -4010,6 +4078,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         if ((allocates || sum_output || indexed_output) && required == no_node()) { (required <- at):void };
         return true
     };
+    if (source_only && header != no_node() && contracts[header].source_writer == WorkspaceWriter) {
+        val workspace_past <- checked_workspace_writer_past(contracts, interface_count, header);
+        if (obligation || workspace_past == no_node() || selected[site].dependency_module != origin_module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, workspace_past - 1u64, interface_count)) return true;
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
+            return operand_problem(report, at, wrong_argument_count());
+        remember_imported_call(links, contracts, at, header, true);
+        links[at].imported_array_read_completion <- contracts[header].array_read_completion;
+        links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
+        val workspace_allocates <- contracts[header].array_slot_failures.out_of_memory;
+        (supplied[at] <- make CheckedWorkspaceWriterCall { allocates <- workspace_allocates }):void;
+        if (required == no_node()) { (required <- at):void };
+        return true
+    };
     if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {
         ref parser_aggregate_loan = make bool { false };
         val parser_past <- checked_parser_writer_past(contracts, interface_count, header, parser_aggregate_loan);
@@ -4022,7 +4106,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        (supplied[at] <- make CheckedParserWriterCall { aggregate_loan <- parser_aggregate_loan }):void;
+        (supplied[at] <- make CheckedParserWriterCall { inline_input <- parser_aggregate_loan }):void;
         return true
     };
     if (array_read && contracts[header].callable_kind == CheckedProcedure) {
@@ -5049,13 +5133,16 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
 func case_member_excluded(facts:const OperandFacts in F, coverage:const CaseCoverage in V,
     member:UInt64) -> bool where {const owner F, const owner V} {
     if (!coverage.imported_enum) return facts[member].case_excluded_at == coverage.generation;
-    # Independent enum subjects cannot change during scanning. Spellings
-    # bound in this domain denote the same value exactly when their codes agree.
+    # Spellings in this domain exclude the same value when their codes agree.
+    # A possible write invalidates exclusions from earlier scan generations.
     val code <- facts[member].discriminator_code;
     val prior <- coverage.exclusions;
+    val excluded <- no_node();
     for (unused in 0u64 .. intrinsic (len)(facts)) {
         if (prior == no_node()) return false;
-        if (facts[facts[prior].case_exclusion_member].discriminator_code == code) return true;
+        excluded <- facts[prior].case_exclusion_member;
+        if (facts[excluded].case_excluded_at == coverage.generation &&
+            facts[excluded].discriminator_code == code) return true;
         prior <- facts[prior].case_exclusion_next;
     };
     return false
@@ -5185,7 +5272,10 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         return operand_problem(report, at, unsupported_case_subject());
     val borrowed <- facts[subject].reception != independent_value();
     val imported_enum <- kind == scalar_enum() && facts[subject].identity_module != 0u64;
-    if (imported_enum && (borrowed || intrinsic (len)(demand) == 0u64))
+    if (imported_enum &&
+        ((borrowed && (facts[subject].reception != local_place() ||
+                      facts[subject].target_presence != present_target())) ||
+         intrinsic (len)(demand) == 0u64))
         return operand_problem(report, at, unsupported_case_subject());
     ref coverage = make CaseCoverage {
         total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at; exclusions <- no_node();

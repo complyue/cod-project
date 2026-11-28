@@ -81,7 +81,7 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion {
     NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds
 };
 using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
-using "./NativeDeclarations.cod" SuppliedView { CheckedImportedArraySlotCall, CheckedArrayCall };
+using "./NativeDeclarations.cod" { source_call_allocates, SuppliedView { CheckedImportedArraySlotCall } };
 
 export data CompletionSite {
     event:UInt8;
@@ -1215,10 +1215,9 @@ func imported_array_escapes(views:const SuppliedViews in H, at:UInt64, category:
             (category == out_of_memory_identity() && failures.out_of_memory) ||
             (category == region_capacity_identity() && failures.region_capacity) ||
             (category == invalid_capacity_identity() && failures.invalid_capacity);
-        CheckedArrayCall { val allocates <-; } ->
-            allocates && (category == out_of_memory_identity() || category == region_capacity_identity() ||
-                category == invalid_capacity_identity());
-        _ -> false
+        _ -> source_call_allocates(views, at) &&
+            (category == out_of_memory_identity() || category == region_capacity_identity() ||
+                category == invalid_capacity_identity())
     }
 }
 

@@ -18,7 +18,7 @@ using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identi
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_readonly_query,
     prepared_array_procedure, prepared_native_function,
-    prepared_parser_writer, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, checked_scalar_call, readonly_indexed_byte_reader
+    prepared_parser_writer, prepared_workspace_writer, source_call_allocates, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, checked_scalar_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
 using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits };
@@ -33,7 +33,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayCall, PreparedArrayConstruction, EmptySumArrayFill, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedWorkspaceWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, PreparedArrayConstruction, EmptySumArrayFill, PreparedSynchronousHere }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -484,8 +484,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                         } else { (local[definition].available <- false):void }
                     }
                 };
-                if (checked_call && !stops_before_entry &&
-                    (case views[at] of { CheckedArrayCall { val allocates <-; } -> allocates; _ -> false })) {
+                if (checked_call && !stops_before_entry && source_call_allocates(views, at)) {
                     (local[definition].allocates <- true):void
                 };
                 if (can_continue(sites, at)) {
@@ -571,7 +570,7 @@ func has_closed_function_candidate(views:const SuppliedViews in V, used:UInt64) 
         if (prepared_product_writer(views, at) || prepared_scalar_predicate(views, at) ||
             prepared_scalar_function(views, at) || prepared_aggregate_writer(views, at) || prepared_readonly_query(views, at) ||
             prepared_array_procedure(views, at) ||
-            prepared_parser_writer(views, at) || prepared_array_inspector(views, at)) return true
+            prepared_parser_writer(views, at) || prepared_workspace_writer(views, at) || prepared_array_inspector(views, at)) return true
     };
     return false
 }
@@ -609,6 +608,12 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         };
         if (prepared_array_inspector(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedArrayInspector {
+                completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
+                numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
+            }):void
+        };
+        if (prepared_workspace_writer(views, at) && outcomes[at].available) {
+            (views[at] <- make CheckedWorkspaceWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
             }):void
