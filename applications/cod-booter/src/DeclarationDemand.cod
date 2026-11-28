@@ -28,19 +28,19 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, ArrayFieldRecordFormal, InlineProductField, BitsConstruction, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
-    scope:UInt64;
-    first_call:UInt64;
-    next_call:UInt64;
-    callee:UInt64;
-    pending:UInt64;
-    receipt_pending:UInt64;
-    declared_failure:UInt64;
-    receipt_body:bool;
-    product_body_dependency:bool;
-    mixed_aggregate_loan:bool;
-    slot_body:bool;
-    signature:bool;
-    body:bool;
+    scope:UInt64,
+    first_call:UInt64,
+    next_call:UInt64,
+    callee:UInt64,
+    pending:UInt64,
+    receipt_pending:UInt64,
+    declared_failure:UInt64,
+    receipt_body:bool,
+    product_body_dependency:bool,
+    mixed_aggregate_loan:bool,
+    slot_body:bool,
+    signature:bool,
+    body:bool,
 }
 export array DeclarationDemands[UInt64]:DeclarationDemand;
 
@@ -128,13 +128,13 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
             case cases[entry.item] of {
                 # Check the body for writable indexed loans, including when
                 # the array schema came from a published dependency.
-                IndexedAggregateLoan { val consumer <-; val array_module <-; val writable <-; } -> {
+                IndexedAggregateLoan { val consumer <-, val array_module <-, val writable <-, } -> {
                     if (consumer == argument && (array_module == 0u64 || writable)) { (needs_receipt <- true):void }
                 };
-                InlineProductField { val type <- value_type; } -> {
+                InlineProductField { val type <- value_type, } -> {
                     if (type.kind == record_type()) { (mixed_aggregate <- true):void }
                 };
-                CaseProductField { val type <- value_type; } -> {
+                CaseProductField { val type <- value_type, } -> {
                     if (type.kind == record_type()) { (mixed_aggregate <- true):void }
                 };
                 _ -> {}
@@ -144,7 +144,7 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
             receipt <- names[entry.item].declaration;
             if (receipt < intrinsic (len)(cases)) {
                 case cases[receipt] of {
-                    InlineProductFormal { val readonly <-; val demand_on_use <-; } -> {
+                    InlineProductFormal { val readonly <-, val demand_on_use <-, } -> {
                         if (!readonly && demand_on_use) { (needs_receipt <- true):void }
                     };
                     ArrayFieldRecordFormal -> {
@@ -160,7 +160,7 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
             if (receipt < entry.item && receipt < intrinsic (len)(cases)) {
                 case cases[receipt] of {
                     LexicalProductReference -> { (mixed_aggregate <- true):void };
-                    CaseFieldReceipt { val type <- value_type; } -> {
+                    CaseFieldReceipt { val type <- value_type, } -> {
                         if (type.kind == record_type() || type.kind == sum_type()) {
                             mixed_aggregate <- true;
                             (needs_receipt <- true):void
@@ -322,7 +322,7 @@ export func discover_declaration_demand(
                      ImportedProductWriter -> true; CheckedArrayCall -> true; CheckedImportedArraySlotCall -> true;
                      CheckedSumWriterCall -> true;
                      CheckedWorkspaceWriterCall -> true;
-                     CheckedReadonlyCall { val aggregate_loan <-; } -> aggregate_loan;
+                     CheckedReadonlyCall { val aggregate_loan <-, } -> aggregate_loan;
                      _ -> false
                  })));
             shape <- direct_invocation(nodes, revision, used, site, invocation);
@@ -344,7 +344,7 @@ export func discover_declaration_demand(
                 demand[site].callee <- definition;
                 if (site < intrinsic (len)(cases)) {
                     (demand[site].product_body_dependency <- case cases[site] of {
-                        ProductLoanInvocation { val target <- definition; } -> target == definition;
+                        ProductLoanInvocation { val target <- definition, } -> target == definition;
                         _ -> false
                     }):void
                 };
@@ -365,7 +365,7 @@ export func discover_declaration_demand(
                     };
                     if (needs_receipt ||
                         (site < intrinsic (len)(cases) && (case cases[site] of {
-                            FreshSumInvocation { val selected <- definition; } -> selected == definition;
+                            FreshSumInvocation { val selected <- definition, } -> selected == definition;
                             _ -> false
                         }))) {
                         if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
@@ -391,12 +391,12 @@ export func discover_declaration_demand(
             };
             aggregate_operation <- site < intrinsic (len)(cases) &&
                 (case cases[site] of {
-                    BitsConstruction { val consumer <- transfer; val type <- value_type; } ->
+                    BitsConstruction { val consumer <- transfer, val type <- value_type, } ->
                         type.defining_module == 0u64 && type.kind == sum_type() && consumer > site &&
                         consumer < used && inspect_assignment(nodes, revision, used, consumer, assignment) == PlaceTransfer &&
                         assignment.input == site;
                     IndexedAggregateDestination -> true;
-                    InlineProductField { val receiver <-; val writable <-; val demand_on_use <-; } ->
+                    InlineProductField { val receiver <-, val writable <-, val demand_on_use <-, } ->
                         writable && demand_on_use && receiver < site &&
                         (case cases[receiver] of { InlineProductField -> true; _ -> false });
                     LexicalSumReference -> true;

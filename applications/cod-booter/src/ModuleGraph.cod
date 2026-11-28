@@ -147,18 +147,18 @@ using "./CompilerStatus.cod" CompilerStatus {
     Complete, Rejected, FormUnsupported, LoweringFailed, ScratchFailed, SourceOpenFailed, DiagnosticsIncomplete
 };
 
-export enum GraphPurpose:UInt8 { Declarations; NativeObject; }
+export enum GraphPurpose:UInt8 { Declarations, NativeObject, }
 
 export data DependencyEdge {
-    finding:UInt64;
-    owns_finding:bool;
-    site:UInt64;
-    path:UInt64;
-    mode:ModuleSelectionMode;
-    first:UInt64;
-    past:UInt64;
-    decoded_first:UInt64;
-    decoded_past:UInt64;
+    finding:UInt64,
+    owns_finding:bool,
+    site:UInt64,
+    path:UInt64,
+    mode:ModuleSelectionMode,
+    first:UInt64,
+    past:UInt64,
+    decoded_first:UInt64,
+    decoded_past:UInt64,
 }
 export array DependencyEdges [UInt64]:DependencyEdge;
 
@@ -258,10 +258,10 @@ export func decode_dependency_path(source:const SourceBytes in S, first:UInt64, 
 }
 
 data PublicationSize {
-    source_bytes:UInt64;
-    spelling_bytes:UInt64;
-    literal_bytes:UInt64;
-    literals:UInt64;
+    source_bytes:UInt64,
+    spelling_bytes:UInt64,
+    literal_bytes:UInt64,
+    literals:UInt64,
 }
 array PublicationSizes[UInt64]:PublicationSize;
 
@@ -388,13 +388,13 @@ func measure_publication(source:const SourceBytes in S, exports:const ModuleExpo
     for (i in 0u64 .. export_count) {
         if (exports[i].publishing_module != module) return false;
         case names[i] of {
-            SourceSpelling { val range <- span; } -> {
+            SourceSpelling { val range <- span, } -> {
                 if (range.first != exports[i].name_first || range.past != exports[i].name_past ||
                     range.first >= range.past) return false;
                 spelling_bytes <- add_span(spelling_bytes, range.first, range.past, limit);
                 if (spelling_bytes == no_node()) return false
             };
-            GraphSpelling { val range <- span; } -> {
+            GraphSpelling { val range <- span, } -> {
                 if (range.first != exports[i].name_first || range.past != exports[i].name_past ||
                     range.first >= range.past || range.past > graph_used) return false
             };
@@ -442,7 +442,7 @@ func copy_publication(source:const SourceBytes in S, exports:const ModuleExports
     for (i in 0u64 .. export_count) {
         published[export_first + i] <- exports[i];
         case names[i] of {
-            SourceSpelling { val range <- span; } -> {
+            SourceSpelling { val range <- span, } -> {
                 past <- copy_span(source, range.first, range.past, spellings, start);
                 published[export_first + i].name_first <- start;
                 published[export_first + i].name_past <- past;
@@ -481,25 +481,25 @@ func copy_unit_material(source:const SourceBytes in S, staged:const NativeComman
 }
 
 data ModuleProgress {
-    identity:UInt64;
-    used:UInt64;
-    root:UInt64;
-    revision:UInt64;
-    dependencies:UInt64;
-    read_rejected:bool;
-    count:UInt64;
-    default_count:UInt64;
-    interface_count:UInt64;
-    purpose:GraphPurpose;
-    entry:UInt8;
-    function_base:UInt64;
-    functions:UInt64;
-    command_count:UInt64;
-    primitive_namespace:bool;
-    labels:UInt64;
-    slots:UInt64;
-    variadic_stop:VariadicProfileStop;
-    structural_dependency:bool;
+    identity:UInt64,
+    used:UInt64,
+    root:UInt64,
+    revision:UInt64,
+    dependencies:UInt64,
+    read_rejected:bool,
+    count:UInt64,
+    default_count:UInt64,
+    interface_count:UInt64,
+    purpose:GraphPurpose,
+    entry:UInt8,
+    function_base:UInt64,
+    functions:UInt64,
+    command_count:UInt64,
+    primitive_namespace:bool,
+    labels:UInt64,
+    slots:UInt64,
+    variadic_stop:VariadicProfileStop,
+    structural_dependency:bool,
 }
 array ModuleProgressRows[UInt64]:ModuleProgress;
 
@@ -879,7 +879,7 @@ proc report_symbol_binder(source:const SourceBytes in S, lines:const SourceLines
         checked_lexical_selection_kind(selections, selected_used, selection_row, revision, used) != symbol_export())
         return ScratchFailed;
     return case selections[selection_row] of {
-        SelectedResource { val origin <- defining_module; val identity <-; } -> {{
+        SelectedResource { val origin <- defining_module, val identity <-, } -> {{
             if (origin == 0u64) {
                 val builtin_row <- defining_symbol_row(builtins, 0u64, intrinsic (len)(builtins), origin,
                     identity, intrinsic (len)(catalog));
@@ -906,23 +906,23 @@ proc report_symbol_binder(source:const SourceBytes in S, lines:const SourceLines
 }
 
 data ModuleBindingWorkspace {
-    const ref nodes:const ExprNodes;
-    const ref selected:SelectedExports;
-    const ref names:NameBindings;
-    const ref work:NameWork;
-    const ref staged:ModuleExports;
-    const ref export_names:StagedExportNames;
-    const ref export_uses:StagedExportUses;
-    const ref defaults:StagedDefaultExports;
-    const ref checked_selections:CheckedSelections;
-    const ref callable_uses:CallableUseProofs;
-    const ref object_prefixes:const ObjectPrefixes;
-    const ref progress:ModuleProgressRows;
-    const ref staged_interfaces:ModuleInterfaces;
-    const ref facts:OperandFacts;
-    const ref owners:CallOwners;
-    const ref sites:CompletionSites;
-    const ref commands:NativeCommands;
+    const ref nodes:const ExprNodes,
+    const ref selected:SelectedExports,
+    const ref names:NameBindings,
+    const ref work:NameWork,
+    const ref staged:ModuleExports,
+    const ref export_names:StagedExportNames,
+    const ref export_uses:StagedExportUses,
+    const ref defaults:StagedDefaultExports,
+    const ref checked_selections:CheckedSelections,
+    const ref callable_uses:CallableUseProofs,
+    const ref object_prefixes:const ObjectPrefixes,
+    const ref progress:ModuleProgressRows,
+    const ref staged_interfaces:ModuleInterfaces,
+    const ref facts:OperandFacts,
+    const ref owners:CallOwners,
+    const ref sites:CompletionSites,
+    const ref commands:NativeCommands,
 }
 
 # Collect the actual construction sites and their already bound lexical
@@ -1434,8 +1434,8 @@ proc publish_visit(handle opened:SourceRevision in S, progress:const ModuleProgr
 }
 
 data VisitWorkspacePlan {
-    plan:ModuleWorkspacePlan;
-    source_size:UInt64;
+    plan:ModuleWorkspacePlan,
+    source_size:UInt64,
 }
 array VisitWorkspacePlans[UInt64]:VisitWorkspacePlan;
 
@@ -1812,7 +1812,7 @@ export proc complete_graph_profile(handle diagnostic:DiagnosticDestination in D,
     if (stopped == no_node()) return Complete;
     ref unrelated = make SourcePosition { line <- 0u64; column <- 0u64 };
     return case visits[stopped] of {
-        (StructuralOnly { val first <- key_first; val past <- key_past; val pending <- stop; }) -> {
+        (StructuralOnly { val first <- key_first, val past <- key_past, val pending <- stop, }) -> {
             rejected_after(report_stored_rejection(diagnostic, module_binding_failed(), 130u8, pending.first,
                 pending.past, unrelated, keys, first, past, run))
         };

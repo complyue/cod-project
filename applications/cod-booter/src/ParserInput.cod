@@ -22,16 +22,16 @@ using "./ParserStorage.cod" {
 using "./SourceStorage.cod" { SourceBytes, DelimiterLink { MatchedDelimiter } };
 
 export data ParseResult {
-    revision:UInt64;
-    next:UInt64;
-    used:UInt64;
-    root:UInt64;
-    diagnostic:UInt8;
-    supplied_here:bool;
-    case_control:bool;
-    reports:UInt64;
-    lexical_reports:UInt64;
-    exhausted:bool;
+    revision:UInt64,
+    next:UInt64,
+    used:UInt64,
+    root:UInt64,
+    diagnostic:UInt8,
+    supplied_here:bool,
+    case_control:bool,
+    reports:UInt64,
+    lexical_reports:UInt64,
+    exhausted:bool,
 }
 
 export func node_storage_exhausted() -> UInt8 { return 5u8; }
@@ -61,7 +61,7 @@ export func punct_pair_at(source:const SourceBytes in S, tokens:const Tokens in 
 export func closing_token(tokens:const Tokens in T, opening:UInt64, past:UInt64) -> UInt64 where {const owner T} {
     if (opening >= past || past >= len(tokens)) return no_node();
     return case tokens[opening].delimiter of {
-        MatchedDelimiter { val close <- closing; } | close > opening && close < past -> (close);
+        MatchedDelimiter { val close <- closing, } | close > opening && close < past -> (close);
         _ -> no_node()
     }
 }

@@ -1,6 +1,6 @@
 using "./SourceStorage.cod" SourceBytes;
 
-export enum ModulePathKind:UInt8 { InvalidPath; SourceRelative; PackagePath; }
+export enum ModulePathKind:UInt8 { InvalidPath, SourceRelative, PackagePath, }
 
 func invalid_segment(path:const SourceBytes in P, first:UInt64, past:UInt64) -> bool
     where {const owner P} {

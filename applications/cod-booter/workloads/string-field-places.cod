@@ -2,7 +2,7 @@ using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 using "std:text-storage" { utf8_size, utf8_byte };
 
-data Entry { name:String; }
+data Entry { name:String, }
 
 proc reject() -> void throws NullPointerException {
     ptr missing:UInt64 = null in here;

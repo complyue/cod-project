@@ -76,14 +76,14 @@ export func type_identity(names:const NameBindings in B, selected:const Selected
 }
 
 export data DeclaredType {
-    kind:UInt8;
-    defining_module:UInt64;
-    identity:UInt64;
+    kind:UInt8,
+    defining_module:UInt64,
+    identity:UInt64,
 }
 
 export data DeclaredExpressionResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 export func unproved_type_assertion() -> UInt8 { return 84u8; }
@@ -196,7 +196,7 @@ export func describe_record_field(source:const SourceBytes in S, nodes:const Exp
         interface_count, name, used, revision, false, result, ordinal, readonly)
 }
 
-export data SumConstructorPosition { count:UInt64; ordinal:UInt64; }
+export data SumConstructorPosition { count:UInt64, ordinal:UInt64, }
 
 export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, sum:UInt64, spelling:UInt64, used:UInt64, revision:UInt64,
@@ -257,7 +257,7 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
         return trace_type(source, nodes, names, selected, work, spellings, interfaces, interface_count, inside, used, revision, result);
     case nodes[at] of {
         (Vacant) -> { return false; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (TextLiteral) -> {
                     result.kind <- builtin_string();
@@ -271,7 +271,7 @@ func trace_type(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                     result.identity <- 0u64;
                     return true;
                 };
-                (IntegerLiteral { val width <- width; }) -> {
+                (IntegerLiteral { val width <- width, }) -> {
                     result.kind <- if (width == 8u64) { builtin_u8() } else {
                         if (width == 32u64) { builtin_u32() } else {
                             if (width == 0u64) { builtin_i64() } else { builtin_u64() }
@@ -426,9 +426,9 @@ func read_enum_operand(nodes:const ExprNodes in N, used:UInt64, revision:UInt64,
     if (atom >= used || atom >= intrinsic (len)(nodes)) return false;
     if (inspect_enum_integer(nodes, used, atom, literal)) return true;
     return case nodes[atom] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (IntegerLiteral { val magnitude <-; val width <-; }) -> {
+                (IntegerLiteral { val magnitude <-, val width <-, }) -> {
                     literal.magnitude <- magnitude;
                     literal.negative <- false;
                     literal.width <- width;

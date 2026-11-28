@@ -980,7 +980,7 @@ class Parser {
       fields.back().declaration_kind = mode;
       fields.back().fixed_binding = fixed_binding;
       fields.back().read_only = read_only;
-      if (!is("}")) expect(";");
+      if (!is("}")) expect(",");
     }
     return fields;
   }
@@ -1376,8 +1376,7 @@ class Parser {
       if (field.variadic) fail(field.at, "a protocol field cannot be variadic");
       if (!labels.insert(field.name).second) fail(field.at, "duplicate protocol label '" + field.name + "'");
       fields.push_back(std::move(field));
-      if (!is("}")) expect(";");
-      else take(";");
+      if (!is("}")) expect(",");
     }
     return fields;
   }
@@ -1626,7 +1625,7 @@ class Parser {
       if (item.declaration_kind.empty() && (item.fixed_binding || item.annotation || item.read_only || !item.owner.empty()))
         fail(item.at, "an existing receiving destination cannot have a declaration annotation");
     }
-    if (labelled) item.selector = is(";") || is("}") ? item.name : ordinary_name().text;
+    if (labelled) item.selector = is(",") || is("}") ? item.name : ordinary_name().text;
     return item;
   }
   void labelled_receiving(ReceivingHeader &header) {
@@ -1634,7 +1633,7 @@ class Parser {
     expect("{");
     while (!take("}")) {
       header.items.push_back(receiving_item(true, true));
-      expect(";");
+      if (!is("}")) expect(",");
     }
   }
   static void validate_receivers(const ReceivingHeader &header) {
@@ -1670,11 +1669,15 @@ class Parser {
       if (is("{")) labelled_receiving(header);
       else if (!is(")")) {
         header.items.push_back(receiving_item(false, false));
-        if (!header.items.front().operation.empty()) header.shape = ReceivingHeader::Shape::single;
-        else while (take(",")) {
-          auto item = receiving_item(false, false);
-          if (!item.operation.empty()) fail(item.at, "an explicit receiving operation requires a single destination or a labelled spec");
-          header.items.push_back(std::move(item));
+        if (!header.items.front().operation.empty()) {
+          header.shape = ReceivingHeader::Shape::single;
+          take(",");
+        } else {
+          while (take(",") && !is(")")) {
+            auto item = receiving_item(false, false);
+            if (!item.operation.empty()) fail(item.at, "an explicit receiving operation requires a single destination or a labelled spec");
+            header.items.push_back(std::move(item));
+          }
         }
       }
       expect(")");
@@ -3049,7 +3052,7 @@ public:
             member.initializer = peek().kind == TokenKind::identifier && !member.negative
                 ? ordinary_name() : name(TokenKind::integer);
           }
-          expect(";");
+          if (!is("}")) expect(",");
           form->enum_members.push_back(std::move(member));
         }
         if (form->enum_members.empty()) fail(start.at, "an enum requires at least one member");

@@ -48,24 +48,24 @@ using "./ModuleExportStorage.cod" { DefaultExportRef, DefaultExportRefs, Default
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 
 data GraphProgress {
-    used:UInt64;
-    key_used:UInt64;
-    next_revision:UInt64;
-    export_used:UInt64;
-    default_used:UInt64;
-    interface_used:UInt64;
-    spelling_used:UInt64;
-    command_used:UInt64;
-    unit_used:UInt64;
-    literal_used:UInt64;
-    function_used:UInt64;
-    package_ready:bool;
-    package_rows:UInt64;
-    package_bytes:UInt64;
+    used:UInt64,
+    key_used:UInt64,
+    next_revision:UInt64,
+    export_used:UInt64,
+    default_used:UInt64,
+    interface_used:UInt64,
+    spelling_used:UInt64,
+    command_used:UInt64,
+    unit_used:UInt64,
+    literal_used:UInt64,
+    function_used:UInt64,
+    package_ready:bool,
+    package_rows:UInt64,
+    package_bytes:UInt64,
 }
 
 region GraphRoot {
-    progress:GraphProgress;
+    progress:GraphProgress,
 }
 
 proc write_object(commands:const NativeCommands in G, units:const NativeUnitRows in G,

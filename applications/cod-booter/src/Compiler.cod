@@ -12,16 +12,16 @@ using "./CompilerStatus.cod" CompilerStatus {
 export from "./CompilerStatus.cod" CompilerStatus;
 
 export data ExpressionScratchPlan {
-    token_count:UInt64;
-    node_capacity:UInt64;
-    syntax_capacity:UInt64;
+    token_count:UInt64,
+    node_capacity:UInt64,
+    syntax_capacity:UInt64,
 }
 
 export data NativeExpressionResult {
-    frontend:FrontendResult;
-    rejected_node:UInt64;
-    rejected_at:UInt64;
-    backend_status:UInt8;
+    frontend:FrontendResult,
+    rejected_node:UInt64,
+    rejected_at:UInt64,
+    backend_status:UInt8,
 }
 
 func count_tokens(source:const SourceBytes in S, token:Token in T) -> UInt64

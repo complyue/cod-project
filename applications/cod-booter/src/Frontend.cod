@@ -9,10 +9,10 @@ using "./ExpressionParser.cod" { parse_expression, unexpected_token };
 using "./ModuleParser.cod" parse_module;
 
 export data FrontendResult {
-    scan:ScanResult;
-    tree:ParseResult;
-    diagnostic_first:UInt64;
-    diagnostic_past:UInt64;
+    scan:ScanResult,
+    tree:ParseResult,
+    diagnostic_first:UInt64,
+    diagnostic_past:UInt64,
 }
 
 func scan_source(source:const SourceBytes in S, tokens:Tokens in T,

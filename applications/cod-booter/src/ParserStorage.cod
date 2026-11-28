@@ -2,193 +2,193 @@ using "./SourceStorage.cod" Token;
 
 export array Tokens[UInt64]:Token;
 
-export data SourceSpan { first:UInt64; past:UInt64; }
-export data NodeId { revision:UInt64; index:UInt64; }
-export data SyntaxRevisions { last:UInt64; }
-export data NodeLink = NoLink {} | LinkTo { node:NodeId; };
-export data AssignmentOperands { destination:NodeId; input:NodeId; operator_at:UInt64; }
-export enum ModuleSelectionMode:UInt8 { UseResource; ImportResource; ReexportResource; MixinResource;
-    IdentityResource; }
-export enum ResourceNature:UInt8 { OrdinaryResource; VariableResource; ProcedureResource; }
-export enum PublicView:UInt8 { DefaultPublic; CompletePublic; }
+export data SourceSpan { first:UInt64, past:UInt64, }
+export data NodeId { revision:UInt64, index:UInt64, }
+export data SyntaxRevisions { last:UInt64, }
+export data NodeLink = NoLink {} | LinkTo { node:NodeId, };
+export data AssignmentOperands { destination:NodeId, input:NodeId, operator_at:UInt64, }
+export enum ModuleSelectionMode:UInt8 { UseResource, ImportResource, ReexportResource, MixinResource,
+    IdentityResource, }
+export enum ResourceNature:UInt8 { OrdinaryResource, VariableResource, ProcedureResource, }
+export enum PublicView:UInt8 { DefaultPublic, CompletePublic, }
 
 export enum FormalMode:UInt8 {
-    ValueFormal;
-    ExplicitValueFormal;
-    ReferenceFormal;
-    PointerFormal;
-    PlaceFormal;
-    InitializingPlaceFormal;
-    HandleFormal;
-    RetainedHandleFormal;
-    ExceptionFormal;
-    ReferenceSlotFormal;
-    IdentityOnlyRefFormal;
+    ValueFormal,
+    ExplicitValueFormal,
+    ReferenceFormal,
+    PointerFormal,
+    PlaceFormal,
+    InitializingPlaceFormal,
+    HandleFormal,
+    RetainedHandleFormal,
+    ExceptionFormal,
+    ReferenceSlotFormal,
+    IdentityOnlyRefFormal,
 }
 
 export enum SyntaxRole:UInt8 {
-    ModuleItemRole; BlockItemRole; InitializerRole; ExpressionRole; BindingNameRole; TypeAnnotationRole;
-    ReferenceGroupEntryRole; ArgumentOperandRole; ModuleSelectionItemRole; ConditionRole; CaseGuardRole;
+    ModuleItemRole, BlockItemRole, InitializerRole, ExpressionRole, BindingNameRole, TypeAnnotationRole,
+    ReferenceGroupEntryRole, ArgumentOperandRole, ModuleSelectionItemRole, ConditionRole, CaseGuardRole,
 }
 
-export enum LocalMode:UInt8 { ValueLocal; ReferenceLocal; PointerLocal; ExceptionLocal; }
-export enum ArithmeticOperation:UInt8 { Addition; Subtraction; Multiplication; Division; Remainder; }
-export enum ComparisonRelation:UInt8 { Equal; Unequal; Less; AtMost; Greater; AtLeast; }
-export data BinaryOperands { left_operand:NodeId; right_operand:NodeId; operator_at:UInt64; }
+export enum LocalMode:UInt8 { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal, }
+export enum ArithmeticOperation:UInt8 { Addition, Subtraction, Multiplication, Division, Remainder, }
+export enum ComparisonRelation:UInt8 { Equal, Unequal, Less, AtMost, Greater, AtLeast, }
+export data BinaryOperands { left_operand:NodeId, right_operand:NodeId, operator_at:UInt64, }
 
 export data ExprPayload =
-      IntegerLiteral { magnitude:UInt64; width:UInt64; }
+      IntegerLiteral { magnitude:UInt64, width:UInt64, }
     | NameReference {}
-    | AppliedType { name:NodeId; arguments:NodeId; }
-    | TypeListItem { previous:NodeLink; item:NodeId; count:UInt64; }
-    | ParseReport { diagnostic:UInt8; }
-    | ErrorReport { role:SyntaxRole; report:NodeId; }
-    | BooleanLiteral { truth:bool; }
-    | Negation { operand:NodeId; }
-    | Conjunction { left_operand:NodeId; right_operand:NodeId; }
-    | Disjunction { left_operand:NodeId; right_operand:NodeId; }
-    | Parenthesized { expression:NodeId; }
-    | NamedConstruction { requested:NodeId; initializer:NodeId; }
-    | ExceptionConstruction { requested:NodeId; initializer:NodeId; }
-    | ReserveStorage { placement:NodeLink; }
-    | PositionalInitializer { placement:NodeLink; arguments:NodeLink; }
-    | BracedInitializer { placement:NodeLink; body:NodeId; }
-    | ExceptionFields { placement:NodeLink; fields:NodeLink; }
-    | CapacityPlacement { capacity:NodeId; }
-    | CausePlacement { cause:NodeId; }
-    | ConstructionTypeQuery { operand:NodeId; }
-    | NamedThrow { requested:NodeId; fields:NodeLink; cause:NodeLink; }
-    | HandleType { name:NodeId; parent_type:NodeLink; parent_at:UInt64; }
-    | NominalParent { name:NodeId; parent_type:NodeId; anchor:UInt64; }
-    | RecordDefinition { heading:NodeId; fields:NodeLink; native:bool; }
-    | GenericRecordDefinition { name:NodeId; parameters:NodeId; fields:NodeLink; }
-    | SumDefinition { heading:NodeId; last_arm:NodeId; }
-    | SumArm { name:NodeId; previous:NodeLink; fields:NodeLink; }
-    | RegionDefinition { name:NodeId; fields:NodeLink; }
-    | OwningRegionBinding { name:NodeId; schema:NodeId; input:NodeId; readonly:bool; transfer_at:UInt64; }
-    | RegionConstruction { schema:NodeId; capacity:NodeId; initializers:NodeId; capacity_at:UInt64; }
-    | AbstractType { heading:NodeId; }
-    | TypeSynonym { name:NodeId; target:NodeId; }
-    | HandleSymbol { name:NodeId; marker:NodeId; }
-    | ValueSymbol { name:NodeId; annotation:NodeId; explicit_value:bool; }
-    | ReferenceSymbol { name:NodeId; target:NodeId; owner_name:NodeId; readonly:bool; nullable:bool; }
-    | Publication { name:NodeId; nature:ResourceNature; }
-    | ArrayDefinition { name:NodeId; index_type:NodeId; element_type:NodeId; dimension_at:UInt64; }
-    | EnumInteger { magnitude:UInt64; negative:bool; width:UInt64; }
-    | EnumMember { previous:NodeLink; name:NodeId; initializer:NodeLink; }
-    | EnumDefinition { name:NodeId; backing:NodeId; member_tail:NodeId; }
-    | Transfer { operands:AssignmentOperands; }
-    | AugmentedTransfer { operands:AssignmentOperands; operation:ArithmeticOperation; }
-    | Rebind { operands:AssignmentOperands; }
-    | InitializerTransfer { operands:AssignmentOperands; }
-    | InitializerRebind { operands:AssignmentOperands; }
-    | Call { callee:NodeId; argument_tail:NodeId; opening:UInt64; }
-    | EmptyCall { callee:NodeId; opening:UInt64; }
-    | ReturnValue { value:NodeId; }
+    | AppliedType { name:NodeId, arguments:NodeId, }
+    | TypeListItem { previous:NodeLink, item:NodeId, count:UInt64, }
+    | ParseReport { diagnostic:UInt8, }
+    | ErrorReport { role:SyntaxRole, report:NodeId, }
+    | BooleanLiteral { truth:bool, }
+    | Negation { operand:NodeId, }
+    | Conjunction { left_operand:NodeId, right_operand:NodeId, }
+    | Disjunction { left_operand:NodeId, right_operand:NodeId, }
+    | Parenthesized { expression:NodeId, }
+    | NamedConstruction { requested:NodeId, initializer:NodeId, }
+    | ExceptionConstruction { requested:NodeId, initializer:NodeId, }
+    | ReserveStorage { placement:NodeLink, }
+    | PositionalInitializer { placement:NodeLink, arguments:NodeLink, }
+    | BracedInitializer { placement:NodeLink, body:NodeId, }
+    | ExceptionFields { placement:NodeLink, fields:NodeLink, }
+    | CapacityPlacement { capacity:NodeId, }
+    | CausePlacement { cause:NodeId, }
+    | ConstructionTypeQuery { operand:NodeId, }
+    | NamedThrow { requested:NodeId, fields:NodeLink, cause:NodeLink, }
+    | HandleType { name:NodeId, parent_type:NodeLink, parent_at:UInt64, }
+    | NominalParent { name:NodeId, parent_type:NodeId, anchor:UInt64, }
+    | RecordDefinition { heading:NodeId, fields:NodeLink, native:bool, }
+    | GenericRecordDefinition { name:NodeId, parameters:NodeId, fields:NodeLink, }
+    | SumDefinition { heading:NodeId, last_arm:NodeId, }
+    | SumArm { name:NodeId, previous:NodeLink, fields:NodeLink, }
+    | RegionDefinition { name:NodeId, fields:NodeLink, }
+    | OwningRegionBinding { name:NodeId, schema:NodeId, input:NodeId, readonly:bool, transfer_at:UInt64, }
+    | RegionConstruction { schema:NodeId, capacity:NodeId, initializers:NodeId, capacity_at:UInt64, }
+    | AbstractType { heading:NodeId, }
+    | TypeSynonym { name:NodeId, target:NodeId, }
+    | HandleSymbol { name:NodeId, marker:NodeId, }
+    | ValueSymbol { name:NodeId, annotation:NodeId, explicit_value:bool, }
+    | ReferenceSymbol { name:NodeId, target:NodeId, owner_name:NodeId, readonly:bool, nullable:bool, }
+    | Publication { name:NodeId, nature:ResourceNature, }
+    | ArrayDefinition { name:NodeId, index_type:NodeId, element_type:NodeId, dimension_at:UInt64, }
+    | EnumInteger { magnitude:UInt64, negative:bool, width:UInt64, }
+    | EnumMember { previous:NodeLink, name:NodeId, initializer:NodeLink, }
+    | EnumDefinition { name:NodeId, backing:NodeId, member_tail:NodeId, }
+    | Transfer { operands:AssignmentOperands, }
+    | AugmentedTransfer { operands:AssignmentOperands, operation:ArithmeticOperation, }
+    | Rebind { operands:AssignmentOperands, }
+    | InitializerTransfer { operands:AssignmentOperands, }
+    | InitializerRebind { operands:AssignmentOperands, }
+    | Call { callee:NodeId, argument_tail:NodeId, opening:UInt64, }
+    | EmptyCall { callee:NodeId, opening:UInt64, }
+    | ReturnValue { value:NodeId, }
     | ReturnVoid {}
-    | ContinueValue { value:NodeId; }
+    | ContinueValue { value:NodeId, }
     | ContinueVoid {}
-    | BreakValue { value:NodeId; }
+    | BreakValue { value:NodeId, }
     | BreakVoid {}
     | RaisePending {}
-    | RaiseValue { exception_value:NodeId; }
-    | RaiseWithCause { exception_value:NodeId; explicit_cause:NodeId; }
-    | RethrowWithCause { explicit_cause:NodeId; }
-    | CatchBinding { name:NodeId; caught_type:NodeLink; readonly:bool; }
-    | CatchHandler { binding:NodeId; body:NodeId; }
-    | CatchClause { previous:NodeLink; handler:NodeId; }
-    | FinallyClause { previous:NodeLink; body:NodeId; }
-    | ProtectedBlock { body:NodeId; clause_tail:NodeId; discarded:bool; }
-    | DeferredBlock { body:NodeId; }
-    | DeferredInvocation { operand:NodeId; invocation:NodeId; }
-    | DeferredClauses { clause_tail:NodeId; }
-    | LocalBinding { binding:NodeId; initializer:NodeId; mode:LocalMode; operator_at:UInt64; declaration_const:bool; }
-    | BareReferenceBinding { binding:NodeId; }
-    | ReferenceGroupItem { previous:NodeLink; binding_item:NodeId; }
-    | ReferenceBindingGroup { last_binding:NodeId; body:NodeLink; }
-    | InitializeReservation { destination:NodeId; arguments:NodeLink; opening:UInt64; }
-    | PredicateAssertion { predicate:NodeId; message:NodeLink; }
-    | LocalCallableSlot { binding:NodeId; initializer:NodeId; function_form:bool; fixed:bool; operator_at:UInt64; }
-    | OwningHandleBinding { binding:NodeId; initializer:NodeId; readonly:bool; operator_at:UInt64; }
-    | BorrowedHandleBinding { binding:NodeId; initializer:NodeId; operator_at:UInt64; }
-    | OwnHandleConstruction { marker:NodeId; arguments:NodeLink; }
-    | BorrowHandleConstruction { marker:NodeId; arguments:NodeLink; actual_owner:NodeId; }
-    | NullLiteral { owner_name:NodeLink; }
-    | Conditional { condition:NodeId; consequent:NodeId; alternative:NodeId; }
-    | ReturningCondition { pattern:SourceSpan; }
-    | ArrayLength { target:NodeId; intrinsic_at:UInt64; }
-    | FieldSelection { target:NodeId; field:NodeId; dot_at:UInt64; }
-    | IndexSelection { target:NodeId; index:NodeId; opening:UInt64; }
-    | CheckedTypeAssertion { operand:NodeId; annotation:NodeId; colon:UInt64; }
-    | DiscardedExpression { operand:NodeId; colon:UInt64; }
-    | TextLiteral { interior_zero:bool; }
-    | ArithmeticExpression { operands:BinaryOperands; operation:ArithmeticOperation; }
-    | ComparisonExpression { operands:BinaryOperands; relation:ComparisonRelation; }
-    | ReferenceIdentity { operands:BinaryOperands; operator_past:UInt64; negated:bool; }
-    | Concatenation { operands:BinaryOperands; }
-    | BindSymbolEffect { name:NodeId; input:NodeId; operator_at:UInt64; }
-    | InstallSymbolEffect { name:NodeId; acquisition:NodeId; operator_at:UInt64; }
-    | ProcedureSymbol { name:NodeId; input_types:NodeLink; result_type:NodeId; arrow:UInt64; }
-    | ProcedureTypeInput { previous:NodeLink; annotation:NodeId; }
-    | ProcedureTypeAnnotation { type_name:NodeId; mode:FormalMode; readonly:bool; }
-    | ScopedProcedureDefinition { header:NodeId; body:NodeId; }
-    | ProcedureActivation { name:NodeId; }
-    | BooleanCasePattern { truth:bool; }
+    | RaiseValue { exception_value:NodeId, }
+    | RaiseWithCause { exception_value:NodeId, explicit_cause:NodeId, }
+    | RethrowWithCause { explicit_cause:NodeId, }
+    | CatchBinding { name:NodeId, caught_type:NodeLink, readonly:bool, }
+    | CatchHandler { binding:NodeId, body:NodeId, }
+    | CatchClause { previous:NodeLink, handler:NodeId, }
+    | FinallyClause { previous:NodeLink, body:NodeId, }
+    | ProtectedBlock { body:NodeId, clause_tail:NodeId, discarded:bool, }
+    | DeferredBlock { body:NodeId, }
+    | DeferredInvocation { operand:NodeId, invocation:NodeId, }
+    | DeferredClauses { clause_tail:NodeId, }
+    | LocalBinding { binding:NodeId, initializer:NodeId, mode:LocalMode, operator_at:UInt64, declaration_const:bool, }
+    | BareReferenceBinding { binding:NodeId, }
+    | ReferenceGroupItem { previous:NodeLink, binding_item:NodeId, }
+    | ReferenceBindingGroup { last_binding:NodeId, body:NodeLink, }
+    | InitializeReservation { destination:NodeId, arguments:NodeLink, opening:UInt64, }
+    | PredicateAssertion { predicate:NodeId, message:NodeLink, }
+    | LocalCallableSlot { binding:NodeId, initializer:NodeId, function_form:bool, fixed:bool, operator_at:UInt64, }
+    | OwningHandleBinding { binding:NodeId, initializer:NodeId, readonly:bool, operator_at:UInt64, }
+    | BorrowedHandleBinding { binding:NodeId, initializer:NodeId, operator_at:UInt64, }
+    | OwnHandleConstruction { marker:NodeId, arguments:NodeLink, }
+    | BorrowHandleConstruction { marker:NodeId, arguments:NodeLink, actual_owner:NodeId, }
+    | NullLiteral { owner_name:NodeLink, }
+    | Conditional { condition:NodeId, consequent:NodeId, alternative:NodeId, }
+    | ReturningCondition { pattern:SourceSpan, }
+    | ArrayLength { target:NodeId, intrinsic_at:UInt64, }
+    | FieldSelection { target:NodeId, field:NodeId, dot_at:UInt64, }
+    | IndexSelection { target:NodeId, index:NodeId, opening:UInt64, }
+    | CheckedTypeAssertion { operand:NodeId, annotation:NodeId, colon:UInt64, }
+    | DiscardedExpression { operand:NodeId, colon:UInt64, }
+    | TextLiteral { interior_zero:bool, }
+    | ArithmeticExpression { operands:BinaryOperands, operation:ArithmeticOperation, }
+    | ComparisonExpression { operands:BinaryOperands, relation:ComparisonRelation, }
+    | ReferenceIdentity { operands:BinaryOperands, operator_past:UInt64, negated:bool, }
+    | Concatenation { operands:BinaryOperands, }
+    | BindSymbolEffect { name:NodeId, input:NodeId, operator_at:UInt64, }
+    | InstallSymbolEffect { name:NodeId, acquisition:NodeId, operator_at:UInt64, }
+    | ProcedureSymbol { name:NodeId, input_types:NodeLink, result_type:NodeId, arrow:UInt64, }
+    | ProcedureTypeInput { previous:NodeLink, annotation:NodeId, }
+    | ProcedureTypeAnnotation { type_name:NodeId, mode:FormalMode, readonly:bool, }
+    | ScopedProcedureDefinition { header:NodeId, body:NodeId, }
+    | ProcedureActivation { name:NodeId, }
+    | BooleanCasePattern { truth:bool, }
     | NullCasePattern {}
     | MemberCasePattern {}
-    | ReferenceCasePattern { binding:NodeId; }
-    | ConstructorCasePattern { constructor:NodeId; receivers:NodeLink; }
-    | CaseValueReceiver { previous:NodeLink; destination:NodeId; selected_field:NodeLink; transfer_at:UInt64; }
-    | CaseArm { pattern:NodeLink; guard:NodeLink; body:NodeId; arrow:UInt64; }
-    | CaseExpression { subject:NodeId; items:NodeLink; }
+    | ReferenceCasePattern { binding:NodeId, }
+    | ConstructorCasePattern { constructor:NodeId, receivers:NodeLink, }
+    | CaseValueReceiver { previous:NodeLink, destination:NodeId, selected_field:NodeLink, transfer_at:UInt64, }
+    | CaseArm { pattern:NodeLink, guard:NodeLink, body:NodeId, arrow:UInt64, }
+    | CaseExpression { subject:NodeId, items:NodeLink, }
     | CaseFailure {}
     | CaseFallthrough {}
-    | ModuleSyntax { items:NodeLink; }
-    | ModuleItem { previous:NodeLink; form:NodeId; published:bool; defaulted:bool; }
-    | BlockSyntax { items:NodeLink; }
-    | ScopeSyntax { items:NodeLink; }
-    | BlockItem { previous:NodeLink; expression:NodeId; }
-    | CallableHeader { name:NodeId; parameters:NodeLink; opening:UInt64; }
-    | ScopedProcedureHeader { name:NodeId; parameters:NodeLink; opening:UInt64; }
-    | AnnotatedBinding { name:NodeId; annotation:NodeId; readonly:bool; colon:UInt64; }
-    | OwnerQualifiedType { target:NodeId; declared_owner:NodeId; anchor:UInt64; }
+    | ModuleSyntax { items:NodeLink, }
+    | ModuleItem { previous:NodeLink, form:NodeId, published:bool, defaulted:bool, }
+    | BlockSyntax { items:NodeLink, }
+    | ScopeSyntax { items:NodeLink, }
+    | BlockItem { previous:NodeLink, expression:NodeId, }
+    | CallableHeader { name:NodeId, parameters:NodeLink, opening:UInt64, }
+    | ScopedProcedureHeader { name:NodeId, parameters:NodeLink, opening:UInt64, }
+    | AnnotatedBinding { name:NodeId, annotation:NodeId, readonly:bool, colon:UInt64, }
+    | OwnerQualifiedType { target:NodeId, declared_owner:NodeId, anchor:UInt64, }
     | Formal {
-        previous:NodeLink; binding:NodeId; mode:FormalMode; binding_const:bool; variadic_at:UInt64;
+        previous:NodeLink, binding:NodeId, mode:FormalMode, binding_const:bool, variadic_at:UInt64,
       }
-    | HereFormal { previous:NodeLink; signature:NodeId; }
-    | OwnerConstraint { previous:NodeLink; declared_owner:NodeId; readonly:bool; }
-    | TypeConstraint { previous:NodeId; type_name:NodeId; }
-    | ValueResult { previous:NodeId; type_name:NodeId; readonly:bool; explicit_value:bool; }
-    | BorrowedResult { previous:NodeId; owner_qualified_type:NodeId; readonly:bool; }
-    | PointerResult { previous:NodeId; owner_qualified_type:NodeId; readonly:bool; }
-    | ExceptionResult { previous:NodeId; type_name:NodeId; readonly:bool; }
-    | OwningRegionResult { previous:NodeId; schema:NodeLink; readonly:bool; }
-    | ThrowsClause { previous:NodeId; exception_type:NodeId; }
-    | CallableDefinition { header:NodeId; body:NodeId; function_form:bool; lexical:bool; }
-    | CallablePromise { header:NodeId; function_form:bool; }
-    | CProviderDeclaration { header:NodeId; function_form:bool; }
-    | CEntryDefinition { header:NodeId; body:NodeId; function_form:bool; }
-    | ArgumentItem { previous:NodeLink; operand:NodeId; checked_ref:bool; selection_at:UInt64; }
-    | NamedArgument { operand:NodeLink; label:NodeId; arrow:UInt64; }
+    | HereFormal { previous:NodeLink, signature:NodeId, }
+    | OwnerConstraint { previous:NodeLink, declared_owner:NodeId, readonly:bool, }
+    | TypeConstraint { previous:NodeId, type_name:NodeId, }
+    | ValueResult { previous:NodeId, type_name:NodeId, readonly:bool, explicit_value:bool, }
+    | BorrowedResult { previous:NodeId, owner_qualified_type:NodeId, readonly:bool, }
+    | PointerResult { previous:NodeId, owner_qualified_type:NodeId, readonly:bool, }
+    | ExceptionResult { previous:NodeId, type_name:NodeId, readonly:bool, }
+    | OwningRegionResult { previous:NodeId, schema:NodeLink, readonly:bool, }
+    | ThrowsClause { previous:NodeId, exception_type:NodeId, }
+    | CallableDefinition { header:NodeId, body:NodeId, function_form:bool, lexical:bool, }
+    | CallablePromise { header:NodeId, function_form:bool, }
+    | CProviderDeclaration { header:NodeId, function_form:bool, }
+    | CEntryDefinition { header:NodeId, body:NodeId, function_form:bool, }
+    | ArgumentItem { previous:NodeLink, operand:NodeId, checked_ref:bool, selection_at:UInt64, }
+    | NamedArgument { operand:NodeLink, label:NodeId, arrow:UInt64, }
     | SymbolReference {}
-    | SymbolicInvocation { callee:NodeId; arguments:NodeLink; }
-    | HereInvocation { call:NodeId; supplied:NodeId; }
-    | HereSupply { receivers:NodeLink; body:NodeId; }
-    | HereReceiver { previous:NodeLink; binding:NodeId; explicit_ref:bool; }
+    | SymbolicInvocation { callee:NodeId, arguments:NodeLink, }
+    | HereInvocation { call:NodeId, supplied:NodeId, }
+    | HereSupply { receivers:NodeLink, body:NodeId, }
+    | HereReceiver { previous:NodeLink, binding:NodeId, explicit_ref:bool, }
     | ModulePathSyntax {}
-    | ModuleSelection { path:NodeId; resource:NodeId; renamed:NodeLink; members:NodeLink;
-        mode:ModuleSelectionMode; nature:ResourceNature; }
-    | BulkModuleSelection { path:NodeId; mode:ModuleSelectionMode; view:PublicView; }
-    | DefaultPublicSet { marks:NodeLink; }
-    | DefaultMark { previous:NodeLink; name:NodeId; nature:ResourceNature; members:NodeLink; }
-    | AllMembers { opening:UInt64; }
-    | ChosenMembers { items:NodeId; opening:UInt64; }
-    | ChosenMember { previous:NodeLink; member:NodeId; }
-    | RangeHeader { index_binding:NodeId; lower:NodeId; upper:NodeId; separator:UInt64; }
-    | RangeLoop { header:NodeId; body:NodeId; empty:NodeLink; };
+    | ModuleSelection { path:NodeId, resource:NodeId, renamed:NodeLink, members:NodeLink,
+        mode:ModuleSelectionMode, nature:ResourceNature, }
+    | BulkModuleSelection { path:NodeId, mode:ModuleSelectionMode, view:PublicView, }
+    | DefaultPublicSet { marks:NodeLink, }
+    | DefaultMark { previous:NodeLink, name:NodeId, nature:ResourceNature, members:NodeLink, }
+    | AllMembers { opening:UInt64, }
+    | ChosenMembers { items:NodeId, opening:UInt64, }
+    | ChosenMember { previous:NodeLink, member:NodeId, }
+    | RangeHeader { index_binding:NodeId, lower:NodeId, upper:NodeId, separator:UInt64, }
+    | RangeLoop { header:NodeId, body:NodeId, empty:NodeLink, };
 
-export data ExprNode { span:SourceSpan; payload:ExprPayload; }
-export data AstSlot = Vacant {} | Occupied { node:ExprNode; };
+export data ExprNode { span:SourceSpan, payload:ExprPayload, }
+export data AstSlot = Vacant {} | Occupied { node:ExprNode, };
 export array ExprNodes[UInt64]:AstSlot;
 
 export func issue_syntax_revision(sequence:SyntaxRevisions in G, revision:UInt64 in F) -> bool
@@ -214,7 +214,7 @@ func syntax_boundary(nodes:const ExprNodes in N, used:UInt64, at:UInt64, begin:b
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
         (Vacant) -> { no_node() };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             if (begin) { (syntax.span.first) } else { (syntax.span.past) }
         };
     };
@@ -228,25 +228,25 @@ export func syntax_past(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> U
     return syntax_boundary(nodes, used, at, false);
 }
 
-export enum HereSyntax:UInt8 { OtherSyntax; InvalidHere; HereReady; }
+export enum HereSyntax:UInt8 { OtherSyntax, InvalidHere, HereReady, }
 
 export data HereSites {
-    call:UInt64;
-    supplied:UInt64;
-    receivers:UInt64;
-    body:UInt64;
-    full_scope:bool;
+    call:UInt64,
+    supplied:UInt64,
+    receivers:UInt64,
+    body:UInt64,
+    full_scope:bool,
 }
 
 func inspect_here_receivers(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, receivers:const NodeLink in L,
                             sites:HereSites in R) -> bool where {const owner N, const owner L, owner R} {
     return case receivers of {
         (NoLink) -> { sites.receivers <- no_node(); true };
-        (LinkTo { val tail <- node; }) -> {
+        (LinkTo { val tail <- node, }) -> {
             if (!published_syntax_id(nodes, revision, used, tail)) return false;
             case nodes[tail.index] of {
                 (Vacant) -> { false };
-                (Occupied { val syntax <- node; }) -> {
+                (Occupied { val syntax <- node, }) -> {
                     case syntax.payload of {
                         (HereReceiver) -> { sites.receivers <- tail.index; true };
                         (_) -> { false };
@@ -262,7 +262,7 @@ func inspect_here_block(nodes:const ExprNodes in N, revision:UInt64, used:UInt64
     if (!published_syntax_id(nodes, revision, used, body)) return false;
     return case nodes[body.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ScopeSyntax) -> { sites.full_scope <- true; true };
                 (BlockSyntax) -> { sites.full_scope <- false; true };
@@ -277,9 +277,9 @@ func inspect_here_supply(nodes:const ExprNodes in N, revision:UInt64, used:UInt6
     if (!published_syntax_id(nodes, revision, used, supplied)) return false;
     return case nodes[supplied.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (HereSupply { val receivers <- receivers; val body <- body; }) -> {
+                (HereSupply { val receivers <- receivers, val body <- body, }) -> {
                     if (!inspect_here_receivers(nodes, revision, supplied.index, receivers, sites) ||
                         !inspect_here_block(nodes, revision, supplied.index, body, sites)) return false;
                     sites.body <- body.index;
@@ -296,7 +296,7 @@ func accepts_here_body(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     if (!published_syntax_id(nodes, revision, used, call)) return false;
     return case nodes[call.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (Call) -> { true };
                 (EmptyCall) -> { true };
@@ -312,9 +312,9 @@ export func inspect_here_invocation(nodes:const ExprNodes in N, revision:UInt64,
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidHere:HereSyntax);
     return case nodes[at] of {
         (Vacant) -> { (InvalidHere:HereSyntax) };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (HereInvocation { val call <- call; val supplied <- supplied; }) -> {
+                (HereInvocation { val call <- call, val supplied <- supplied, }) -> {
                     if (!accepts_here_body(nodes, revision, at, call) ||
                         !inspect_here_supply(nodes, revision, at, supplied, sites)) return (InvalidHere:HereSyntax);
                     sites.call <- call.index;
@@ -328,24 +328,24 @@ export func inspect_here_invocation(nodes:const ExprNodes in N, revision:UInt64,
 }
 
 export enum SequenceSyntax:UInt8 {
-    OtherSequenceSyntax;
-    InvalidSequence;
-    ModuleSequence;
-    BlockSequence;
-    ArgumentSequence;
-    HereReceiverSequence;
-    FormalSequence;
-    EnumSequence;
-    ClauseSequence;
-    MemberSequence;
-    SumSequence;
-    ProcedureTypeSequence;
-    ReferenceGroupSequence;
-    CaseReceiverSequence;
-    TypeSequence;
+    OtherSequenceSyntax,
+    InvalidSequence,
+    ModuleSequence,
+    BlockSequence,
+    ArgumentSequence,
+    HereReceiverSequence,
+    FormalSequence,
+    EnumSequence,
+    ClauseSequence,
+    MemberSequence,
+    SumSequence,
+    ProcedureTypeSequence,
+    ReferenceGroupSequence,
+    CaseReceiverSequence,
+    TypeSequence,
 }
 
-export data SequenceEntry { previous:UInt64; item:UInt64; }
+export data SequenceEntry { previous:UInt64, item:UInt64, }
 
 func read_sequence_links(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                          previous:const NodeLink in L, item:const NodeId in I,
@@ -355,7 +355,7 @@ func read_sequence_links(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
     entry.item <- item.index;
     return case previous of {
         (NoLink) -> { entry.previous <- no_node(); true };
-        (LinkTo { val prior <- node; }) -> {
+        (LinkTo { val prior <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, prior)) return false;
             entry.previous <- prior.index;
             return true;
@@ -368,40 +368,40 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, 
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidSequence:SequenceSyntax);
     return case nodes[at] of {
         (Vacant) -> { (InvalidSequence:SequenceSyntax) };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (TypeListItem { val previous <- previous; val item <- item; }) -> {
+                (TypeListItem { val previous <- previous, val item <- item, }) -> {
                     if (read_sequence_links(nodes, revision, at, previous, item, entry)) {
                         TypeSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax }
                 };
-                (CaseValueReceiver { val previous <- previous; val destination <- destination; }) -> {
+                (CaseValueReceiver { val previous <- previous, val destination <- destination, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, destination, entry)) {
                         CaseReceiverSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax }
                 };
-                (ModuleItem { val previous <- previous; val form <- form; }) -> {
+                (ModuleItem { val previous <- previous, val form <- form, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, form, entry)) {
                         (ModuleSequence:SequenceSyntax)
                     } else { (InvalidSequence:SequenceSyntax) };
                 };
-                (BlockItem { val previous <- previous; val expression <- expression; }) -> {
+                (BlockItem { val previous <- previous, val expression <- expression, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, expression, entry)) {
                         (BlockSequence:SequenceSyntax)
                     } else { (InvalidSequence:SequenceSyntax) };
                 };
-                (ReferenceGroupItem { val previous <- previous; val binding <- binding_item; }) -> {
+                (ReferenceGroupItem { val previous <- previous, val binding <- binding_item, }) -> {
                     if (!read_sequence_links(nodes, revision, at, previous, binding, entry))
                         return InvalidSequence:SequenceSyntax;
                     case nodes[entry.item] of {
-                        (Occupied { val child <- node; }) -> {
+                        (Occupied { val child <- node, }) -> {
                             case child.payload of {
                                 BareReferenceBinding -> ReferenceGroupSequence:SequenceSyntax;
-                                (LocalBinding { val mode <- mode; }) -> {
+                                (LocalBinding { val mode <- mode, }) -> {
                                     if (mode == (ReferenceLocal:LocalMode)) { ReferenceGroupSequence:SequenceSyntax }
                                     else { InvalidSequence:SequenceSyntax }
                                 };
-                                (ErrorReport { val role <- role; val report <- report; }) -> {
+                                (ErrorReport { val role <- role, val report <- report, }) -> {
                                     if (role == (ReferenceGroupEntryRole:SyntaxRole) &&
                                         published_syntax_id(nodes, revision, entry.item, report)) {
                                         ReferenceGroupSequence:SequenceSyntax
@@ -413,11 +413,11 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, 
                         _ -> InvalidSequence:SequenceSyntax;
                     }
                 };
-                (ArgumentItem { val previous <- previous; val operand <- operand; }) -> {
+                (ArgumentItem { val previous <- previous, val operand <- operand, }) -> {
                     if (!read_sequence_links(nodes, revision, at, previous, operand, entry))
                         return InvalidSequence:SequenceSyntax;
                     return case nodes[entry.item] of {
-                        Occupied { val child <- node; } -> {
+                        Occupied { val child <- node, } -> {
                             case child.payload of {
                                 ErrorReport -> {
                                     if (has_error_role(nodes, revision, at, entry.item, ArgumentOperandRole:SyntaxRole))
@@ -430,45 +430,45 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, 
                         _ -> InvalidSequence:SequenceSyntax
                     }
                 };
-                (HereReceiver { val previous <- previous; val binding <- binding; }) -> {
+                (HereReceiver { val previous <- previous, val binding <- binding, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, binding, entry)) {
                         (HereReceiverSequence:SequenceSyntax)
                     } else { (InvalidSequence:SequenceSyntax) };
                 };
-                (Formal { val previous <- previous; val binding <- binding; }) -> {
+                (Formal { val previous <- previous, val binding <- binding, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, binding, entry)) {
                         FormalSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (HereFormal { val previous <- previous; val signature <- signature; }) -> {
+                (HereFormal { val previous <- previous, val signature <- signature, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, signature, entry)) {
                         FormalSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (ProcedureTypeInput { val previous <- previous; val annotation <- annotation; }) -> {
+                (ProcedureTypeInput { val previous <- previous, val annotation <- annotation, }) -> {
                     read_procedure_input(nodes, revision, at, previous, annotation, entry)
                 };
-                (EnumMember { val previous <- previous; val name <- name; }) -> {
+                (EnumMember { val previous <- previous, val name <- name, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, name, entry)) {
                         EnumSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (SumArm { val previous <- previous; val name <- name; }) -> {
+                (SumArm { val previous <- previous, val name <- name, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, name, entry)) {
                         SumSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (CatchClause { val previous <- previous; val handler <- handler; }) -> {
+                (CatchClause { val previous <- previous, val handler <- handler, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, handler, entry)) {
                         ClauseSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (FinallyClause { val previous <- previous; val body <- body; }) -> {
+                (FinallyClause { val previous <- previous, val body <- body, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, body, entry)) {
                         ClauseSequence:SequenceSyntax
                     } else { InvalidSequence:SequenceSyntax };
                 };
-                (ChosenMember { val previous <- previous; val member <- member; }) -> {
+                (ChosenMember { val previous <- previous, val member <- member, }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, member, entry)) {
                         (MemberSequence:SequenceSyntax)
                     } else { (InvalidSequence:SequenceSyntax) };
@@ -496,22 +496,22 @@ export func first_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, us
 
 func is_procedure_type_input(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of { (ProcedureTypeInput) -> { true }; (_) -> { false }; }
         };
         (Vacant) -> { false };
     };
 }
 
-export data ProcedureTypeSites { name:UInt64; mode:FormalMode; readonly:bool; }
+export data ProcedureTypeSites { name:UInt64, mode:FormalMode, readonly:bool, }
 
 export func inspect_procedure_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:ProcedureTypeSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ProcedureTypeAnnotation { val name <- type_name; val mode <- mode; val readonly <- readonly; }) -> {
+                (ProcedureTypeAnnotation { val name <- type_name, val mode <- mode, val readonly <- readonly, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
                         (mode != (ValueFormal:FormalMode) && mode != (ExplicitValueFormal:FormalMode) &&
@@ -539,7 +539,7 @@ func read_procedure_input(nodes:const ExprNodes in N, revision:UInt64, at:UInt64
     } else { InvalidSequence:SequenceSyntax };
 }
 
-export data ProcedureSymbolSites { symbol:UInt64; input_tail:UInt64; result_type:UInt64; arrow:UInt64; }
+export data ProcedureSymbolSites { symbol:UInt64, input_tail:UInt64, result_type:UInt64, arrow:UInt64, }
 
 func read_procedure_symbol(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, name:const NodeId in I,
                            inputs:const NodeLink in L, output:const NodeId in O, arrow:UInt64, sites:ProcedureSymbolSites in R)
@@ -565,9 +565,9 @@ export func inspect_procedure_symbol(nodes:const ExprNodes in N, revision:UInt64
                                      sites:ProcedureSymbolSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ProcedureSymbol { val name <- name; val inputs <- input_types; val output <- result_type; val arrow <- arrow; }) -> {
+                (ProcedureSymbol { val name <- name, val inputs <- input_types, val output <- result_type, val arrow <- arrow, }) -> {
                     read_procedure_symbol(nodes, revision, at, name, inputs, output, arrow, sites)
                 };
                 (_) -> { false };
@@ -589,9 +589,9 @@ export func module_tail(nodes:const ExprNodes in N, revision:UInt64, used:UInt64
     if (root >= used || root >= intrinsic (len)(nodes)) return false;
     return case nodes[root] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ModuleSyntax { val items <- items; }) -> { optional_syntax_link(nodes, revision, root, items, tail) };
+                (ModuleSyntax { val items <- items, }) -> { optional_syntax_link(nodes, revision, root, items, tail) };
                 (_) -> { false };
             }
         };
@@ -603,12 +603,12 @@ export func block_tail(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (BlockSyntax { val items <- items; }) -> {
+                (BlockSyntax { val items <- items, }) -> {
                     return block_item_tail(nodes, revision, at, items, tail);
                 };
-                (ScopeSyntax { val items <- items; }) -> {
+                (ScopeSyntax { val items <- items, }) -> {
                     return block_item_tail(nodes, revision, at, items, tail);
                 };
                 (_) -> { false };
@@ -623,14 +623,14 @@ export func braced_reference_group(nodes:const ExprNodes in N, revision:UInt64, 
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     val tail <- no_node();
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ReferenceBindingGroup { val last <- last_binding; val body <- body; }) -> {
+                (ReferenceBindingGroup { val last <- last_binding, val body <- body, }) -> {
                     if (!published_syntax_id(nodes, revision, at, last) ||
                         inspect_sequence_entry(nodes, revision, at, last.index, entry) !=
                             (ReferenceGroupSequence:SequenceSyntax)) return false;
                     case body of {
-                        (LinkTo { val child <- node; }) -> {
+                        (LinkTo { val child <- node, }) -> {
                             published_syntax_id(nodes, revision, at, child) &&
                                 block_tail(nodes, revision, at, child.index, tail)
                         };
@@ -649,7 +649,7 @@ func block_item_tail(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return case items of {
         (NoLink) -> { tail <- no_node(); true };
-        (LinkTo { val final_item <- node; }) -> {
+        (LinkTo { val final_item <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, final_item) ||
                 inspect_sequence_entry(nodes, revision, at, final_item.index, entry) != (BlockSequence:SequenceSyntax)) return false;
             tail <- final_item.index;
@@ -662,17 +662,17 @@ export func module_item_publication(nodes:const ExprNodes in N, used:UInt64, at:
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ModuleItem { val published <- published; }) -> { published };
+                (ModuleItem { val published <- published, }) -> { published };
                 (_) -> { false };
             }
         };
     };
 }
 
-export enum DirectInvocationSyntax:UInt8 { OtherInvocation; InvalidInvocation; DirectInvocationReady; }
-export data DirectCallSites { callee:UInt64; arguments:UInt64; }
+export enum DirectInvocationSyntax:UInt8 { OtherInvocation, InvalidInvocation, DirectInvocationReady, }
+export data DirectCallSites { callee:UInt64, arguments:UInt64, }
 
 export func direct_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:DirectCallSites in C) -> DirectInvocationSyntax
@@ -681,9 +681,9 @@ export func direct_invocation(nodes:const ExprNodes in N, revision:UInt64, used:
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return case nodes[at] of {
         (Vacant) -> { (InvalidInvocation:DirectInvocationSyntax) };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Call { val callee <- callee; val arguments <- argument_tail; }) -> {
+                (Call { val callee <- callee, val arguments <- argument_tail, }) -> {
                     if (!published_syntax_id(nodes, revision, at, callee) ||
                         !published_syntax_id(nodes, revision, at, arguments) ||
                         inspect_sequence_entry(nodes, revision, at, arguments.index, entry) != (ArgumentSequence:SequenceSyntax))
@@ -692,7 +692,7 @@ export func direct_invocation(nodes:const ExprNodes in N, revision:UInt64, used:
                     sites.arguments <- arguments.index;
                     return (DirectInvocationReady:DirectInvocationSyntax);
                 };
-                (EmptyCall { val callee <- callee; }) -> {
+                (EmptyCall { val callee <- callee, }) -> {
                     if (!published_syntax_id(nodes, revision, at, callee)) return (InvalidInvocation:DirectInvocationSyntax);
                     sites.callee <- callee.index;
                     sites.arguments <- no_node();
@@ -712,9 +712,9 @@ export func checked_ref_argument(nodes:const ExprNodes in N, argument:UInt64) ->
     if (argument >= intrinsic (len)(nodes)) return false;
     return case nodes[argument] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ArgumentItem { val checked <- checked_ref; }) -> { checked };
+                (ArgumentItem { val checked <- checked_ref, }) -> { checked };
                 (_) -> { false };
             }
         };
@@ -740,37 +740,37 @@ export func break_node() -> UInt8 { return 92u8; }
 
 export func concat_node() -> UInt8 { return 114u8; }
 
-export enum SelectionSyntax:UInt8 { OtherSelectionSyntax; InvalidSelection; SelectionReady; }
-export enum NameSyntax:UInt8 { NotAName; OrdinaryName; SymbolicName; }
+export enum SelectionSyntax:UInt8 { OtherSelectionSyntax, InvalidSelection, SelectionReady, }
+export enum NameSyntax:UInt8 { NotAName, OrdinaryName, SymbolicName, }
 
 export data ModuleSelectionSites {
-    path:UInt64;
-    resource:UInt64;
-    local:UInt64;
-    members:UInt64;
-    symbolic:bool;
-    mode:ModuleSelectionMode;
-    nature:ResourceNature;
+    path:UInt64,
+    resource:UInt64,
+    local:UInt64,
+    members:UInt64,
+    symbolic:bool,
+    mode:ModuleSelectionMode,
+    nature:ResourceNature,
 }
 
 export data BulkSelectionSites {
-    path:UInt64;
-    mode:ModuleSelectionMode;
-    view:PublicView;
+    path:UInt64,
+    mode:ModuleSelectionMode,
+    view:PublicView,
 }
 
 export data DefaultMarkSites {
-    previous:UInt64;
-    name:UInt64;
-    nature:ResourceNature;
-    members:UInt64;
+    previous:UInt64,
+    name:UInt64,
+    nature:ResourceNature,
+    members:UInt64,
 }
 
 export func name_syntax(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> NameSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return NotAName:NameSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotAName:NameSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> { OrdinaryName:NameSyntax };
                 (SymbolReference) -> { SymbolicName:NameSyntax };
@@ -785,7 +785,7 @@ func module_path_syntax(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, 
     if (!published_syntax_id(nodes, revision, at, path)) return false;
     return case nodes[path.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ModulePathSyntax) -> { true };
                 (_) -> { false };
@@ -799,7 +799,7 @@ func selection_local_name(nodes:const ExprNodes in N, revision:UInt64, at:UInt64
     where {const owner N, const owner L, owner R} {
     return case rename of {
         (NoLink) -> { sites.local <- sites.resource; true };
-        (LinkTo { val local_name <- node; }) -> {
+        (LinkTo { val local_name <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, local_name) ||
                 name_syntax(nodes, at, local_name.index) != name) return false;
             sites.local <- local_name.index;
@@ -813,11 +813,11 @@ func selection_member_clause(nodes:const ExprNodes in N, revision:UInt64, at:UIn
     where {const owner N, const owner L, owner R} {
     return case members of {
         (NoLink) -> { selected <- no_node(); true };
-        (LinkTo { val selection <- node; }) -> {
+        (LinkTo { val selection <- node, }) -> {
             if (symbolic || !published_syntax_id(nodes, revision, at, selection)) return false;
             case nodes[selection.index] of {
                 (Vacant) -> { false };
-                (Occupied { val syntax <- node; }) -> {
+                (Occupied { val syntax <- node, }) -> {
                     case syntax.payload of {
                         (AllMembers) -> { selected <- selection.index; true };
                         (ChosenMembers) -> { selected <- selection.index; true };
@@ -829,7 +829,7 @@ func selection_member_clause(nodes:const ExprNodes in N, revision:UInt64, at:UIn
     };
 }
 
-export enum MemberSelectionSyntax:UInt8 { InvalidMemberSelector; AllSelectedMembers; NamedSelectedMembers; }
+export enum MemberSelectionSyntax:UInt8 { InvalidMemberSelector, AllSelectedMembers, NamedSelectedMembers, }
 
 export func inspect_member_selector(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     tail:UInt64 in R) -> MemberSelectionSyntax where {const owner N, owner R} {
@@ -837,10 +837,10 @@ export func inspect_member_selector(nodes:const ExprNodes in N, revision:UInt64,
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     return case nodes[at] of {
         (Vacant) -> { InvalidMemberSelector:MemberSelectionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (AllMembers) -> { tail <- no_node(); AllSelectedMembers:MemberSelectionSyntax };
-                (ChosenMembers { val items <- items; }) -> {
+                (ChosenMembers { val items <- items, }) -> {
                     if (!published_syntax_id(nodes, revision, at, items) ||
                         inspect_sequence_entry(nodes, revision, at, items.index, entry) != (MemberSequence:SequenceSyntax))
                         return InvalidMemberSelector:MemberSelectionSyntax;
@@ -874,11 +874,11 @@ export func inspect_module_selection(nodes:const ExprNodes in N, revision:UInt64
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidSelection:SelectionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ModuleSelection {
-                    val path <-; val resource <-; val renamed <-; val members <-;
-                    val mode <-; val nature <-;
+                    val path <-, val resource <-, val renamed <-, val members <-,
+                    val mode <-, val nature <-,
                 }) -> {
                     if (!prepare_selection_sites(
                         nodes, revision, at, path, resource, renamed, members, mode, sites))
@@ -899,9 +899,9 @@ export func inspect_bulk_selection(
     -> SelectionSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (BulkModuleSelection { val path <-; val mode <-; val view <-; }) -> {
+                (BulkModuleSelection { val path <-, val mode <-, val view <-, }) -> {
                     if (!module_path_syntax(nodes, revision, at, path) ||
                         mode == (IdentityResource:ModuleSelectionMode))
                         return InvalidSelection:SelectionSyntax;
@@ -922,10 +922,10 @@ func default_mark_link(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, l
     where {const owner N, const owner L, owner S} {
     return case link of {
         NoLink -> { selected <- no_node(); true };
-        (LinkTo { val target <- node; }) -> {
+        (LinkTo { val target <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, target)) return false;
             case nodes[target.index] of {
-                (Occupied { val syntax <- node; }) -> {
+                (Occupied { val syntax <- node, }) -> {
                     case syntax.payload of {
                         DefaultMark -> { selected <- target.index; true };
                         _ -> false
@@ -942,9 +942,9 @@ export func inspect_default_set(
     where {const owner N, owner T} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSelection:SelectionSyntax;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (DefaultPublicSet { val marks <-; }) -> {
+                (DefaultPublicSet { val marks <-, }) -> {
                     if (!default_mark_link(nodes, revision, at, marks, tail))
                         return InvalidSelection:SelectionSyntax;
                     SelectionReady:SelectionSyntax
@@ -961,9 +961,9 @@ export func inspect_default_mark(
     -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (DefaultMark { val previous <-; val name <-; val nature <-; val members <-; }) -> {
+                (DefaultMark { val previous <-, val name <-, val nature <-, val members <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         !default_mark_link(nodes, revision, at, previous, sites.previous))
                         return false;
@@ -989,9 +989,9 @@ export func module_item_defaulted(nodes:const ExprNodes in N, used:UInt64, at:UI
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ModuleItem { val published <-; val defaulted <-; }) -> { published && defaulted };
+                (ModuleItem { val published <-, val defaulted <-, }) -> { published && defaulted };
                 _ -> false
             }
         };
@@ -1023,19 +1023,19 @@ export func local_resource_name(nodes:const ExprNodes in N, revision:UInt64, use
     return selection.local;
 }
 
-export data RangeBounds { index_binding:UInt64; lower:UInt64; upper:UInt64; separator:UInt64; }
-export data RangeSites { header:UInt64; body:UInt64; empty:UInt64; }
-export enum LiteralRange:UInt8 { InvalidRange; DynamicRange; EmptyLiteralRange; NonemptyLiteralRange; }
+export data RangeBounds { index_binding:UInt64, lower:UInt64, upper:UInt64, separator:UInt64, }
+export data RangeSites { header:UInt64, body:UInt64, empty:UInt64, }
+export enum LiteralRange:UInt8 { InvalidRange, DynamicRange, EmptyLiteralRange, NonemptyLiteralRange, }
 
 export func inspect_range_header(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  bounds:RangeBounds in B) -> bool where {const owner N, owner B} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (RangeHeader { val binding <- index_binding; val lower <- lower; val upper <- upper;
-                               val separator <- separator; }) -> {
+                (RangeHeader { val binding <- index_binding, val lower <- lower, val upper <- upper,
+                               val separator <- separator, }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding) ||
                         !published_syntax_id(nodes, revision, at, lower) ||
                         !published_syntax_id(nodes, revision, at, upper)) return false;
@@ -1055,7 +1055,7 @@ func read_empty_range(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, em
                       range:RangeSites in R) -> bool where {const owner N, const owner L, owner R} {
     return case empty of {
         (NoLink) -> { range.empty <- no_node(); true };
-        (LinkTo { val body <- node; }) -> {
+        (LinkTo { val body <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, body)) return false;
             range.empty <- body.index;
             return true;
@@ -1068,9 +1068,9 @@ export func inspect_range_loop(nodes:const ExprNodes in N, revision:UInt64, used
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (RangeLoop { val header <- header; val body <- body; val empty <- empty; }) -> {
+                (RangeLoop { val header <- header, val body <- body, val empty <- empty, }) -> {
                     if (!published_syntax_id(nodes, revision, at, header) ||
                         !published_syntax_id(nodes, revision, at, body) ||
                         !read_empty_range(nodes, revision, at, empty, range)) return false;
@@ -1088,9 +1088,9 @@ func range_integer_literal(nodes:const ExprNodes in N, at:UInt64, value:UInt64 i
     where {const owner N, owner V} {
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (IntegerLiteral { val magnitude <- magnitude; }) -> { value <- magnitude; true };
+                (IntegerLiteral { val magnitude <- magnitude, }) -> { value <- magnitude; true };
                 (_) -> { false };
             }
         };
@@ -1109,21 +1109,21 @@ export func classify_literal_range(nodes:const ExprNodes in N, revision:UInt64, 
 }
 
 export enum AssignmentSyntax:UInt8 {
-    OtherAssignmentSyntax;
-    InvalidAssignment;
-    PlaceTransfer;
-    PlaceRebind;
-    FieldTransfer;
-    FieldRebind;
-    AugmentedPlaceTransfer;
+    OtherAssignmentSyntax,
+    InvalidAssignment,
+    PlaceTransfer,
+    PlaceRebind,
+    FieldTransfer,
+    FieldRebind,
+    AugmentedPlaceTransfer,
 }
-export data AssignmentSites { destination:UInt64; input:UInt64; operator_at:UInt64; }
+export data AssignmentSites { destination:UInt64, input:UInt64, operator_at:UInt64, }
 
 export data AugmentedTransferSites {
-    destination:UInt64;
-    input:UInt64;
-    operator_at:UInt64;
-    operation:ArithmeticOperation;
+    destination:UInt64,
+    input:UInt64,
+    operator_at:UInt64,
+    operation:ArithmeticOperation,
 }
 
 export func inspect_augmented_transfer(
@@ -1131,9 +1131,9 @@ export func inspect_augmented_transfer(
     -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val expression <- node; }) -> {
+        (Occupied { val expression <- node, }) -> {
             case expression.payload of {
-                (AugmentedTransfer { val operands <-; val arithmetic <- operation; }) -> {
+                (AugmentedTransfer { val operands <-, val arithmetic <- operation, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operands.destination) ||
                         !published_syntax_id(nodes, revision, at, operands.input)) return false;
                     sites.destination <- operands.destination.index;
@@ -1165,22 +1165,22 @@ export func inspect_assignment(nodes:const ExprNodes in N, revision:UInt64, used
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidAssignment:AssignmentSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidAssignment:AssignmentSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Transfer { val operands <- operands; }) -> {
+                (Transfer { val operands <- operands, }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, PlaceTransfer:AssignmentSyntax)
                 };
-                (AugmentedTransfer { val operands <-; }) -> {
+                (AugmentedTransfer { val operands <-, }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites,
                                              AugmentedPlaceTransfer:AssignmentSyntax)
                 };
-                (Rebind { val operands <- operands; }) -> {
+                (Rebind { val operands <- operands, }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, PlaceRebind:AssignmentSyntax)
                 };
-                (InitializerTransfer { val operands <- operands; }) -> {
+                (InitializerTransfer { val operands <- operands, }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, FieldTransfer:AssignmentSyntax)
                 };
-                (InitializerRebind { val operands <- operands; }) -> {
+                (InitializerRebind { val operands <- operands, }) -> {
                     checked_assignment_sites(nodes, revision, at, operands, sites, FieldRebind:AssignmentSyntax)
                 };
                 (_) -> { OtherAssignmentSyntax:AssignmentSyntax };
@@ -1194,19 +1194,19 @@ export func named_operator_at(nodes:const ExprNodes in N, at:UInt64) -> UInt64 w
     if (at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
         (Vacant) -> { no_node() };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Concatenation { val operands <- operands; }) -> { (operands.operator_at) };
-                (Transfer { val operands <- operands; }) -> { (operands.operator_at) };
-                (InitializerTransfer { val operands <- operands; }) -> { (operands.operator_at) };
+                (Concatenation { val operands <- operands, }) -> { (operands.operator_at) };
+                (Transfer { val operands <- operands, }) -> { (operands.operator_at) };
+                (InitializerTransfer { val operands <- operands, }) -> { (operands.operator_at) };
                 (_) -> { no_node() };
             }
         };
     };
 }
 
-export data BindingSites { name:UInt64; annotation:UInt64; target_type:UInt64; owner_name:UInt64; readonly:bool; }
-export enum BindingSyntax:UInt8 { InvalidBindingSyntax; BareBinding; TypedBinding; RecoveredBinding; }
+export data BindingSites { name:UInt64, annotation:UInt64, target_type:UInt64, owner_name:UInt64, readonly:bool, }
+export enum BindingSyntax:UInt8 { InvalidBindingSyntax, BareBinding, TypedBinding, RecoveredBinding, }
 
 func has_error_role(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
     expected:SyntaxRole) -> bool
@@ -1226,9 +1226,9 @@ func recovered_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at
         return true
     };
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; })
+                (OwnerQualifiedType { val target <- target, val owner_name <- declared_owner, })
                     -> {
                     if (!published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, owner_name) ||
@@ -1249,7 +1249,7 @@ func recovered_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at
 
 func is_named_type(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 NameReference -> true;
                 AppliedType -> true;
@@ -1267,11 +1267,11 @@ export func inspect_type_annotation(nodes:const ExprNodes in N, revision:UInt64,
     sites.owner_name <- no_node();
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> { sites.target_type <- at; true };
                 (AppliedType) -> { sites.target_type <- at; true };
-                (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; }) -> {
+                (OwnerQualifiedType { val target <- target, val owner_name <- declared_owner, }) -> {
                     if (!published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, owner_name)) return false;
                     if (!is_named_type(nodes, target.index) ||
@@ -1293,7 +1293,7 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:UInt64, used:UI
     val typed <- false;
     return case nodes[at] of {
         (Vacant) -> { InvalidBindingSyntax:BindingSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> {
                     sites.name <- at;
@@ -1313,7 +1313,7 @@ export func inspect_binding(nodes:const ExprNodes in N, revision:UInt64, used:UI
                     sites.readonly <- false;
                     RecoveredBinding:BindingSyntax
                 };
-                (AnnotatedBinding { val name <- name; val annotation <- annotation; val readonly <- readonly; }) -> {
+                (AnnotatedBinding { val name <- name, val annotation <- annotation, val readonly <- readonly, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         !published_syntax_id(nodes, revision, at,
                             annotation)) return InvalidBindingSyntax:BindingSyntax;
@@ -1339,7 +1339,7 @@ export func is_here_formal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (HereFormal) -> { true };
                 (_) -> { false };
@@ -1348,12 +1348,12 @@ export func is_here_formal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -
     };
 }
 
-export enum FormalSyntax:UInt8 { InvalidFormal; OrdinaryFormal; HereFormalSyntax; }
-export data FormalSites { binding:UInt64; signature:UInt64; mode:FormalMode; }
+export enum FormalSyntax:UInt8 { InvalidFormal, OrdinaryFormal, HereFormalSyntax, }
+export data FormalSites { binding:UInt64, signature:UInt64, mode:FormalMode, }
 
 func is_formal_node(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of { (Formal) -> { true }; (HereFormal) -> { true }; (_) -> { false }; }
         };
         (Vacant) -> { false };
@@ -1383,11 +1383,11 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:UInt64, used:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidFormal:FormalSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidFormal:FormalSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (Formal {
-                    val binding <- binding; val mode <- mode; val previous <- previous;
-                    val fixed <- binding_const; val suffix <- variadic_at;
+                    val binding <- binding, val mode <- mode, val previous <- previous,
+                    val fixed <- binding_const, val suffix <- variadic_at,
                 }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding)) return InvalidFormal:FormalSyntax;
                     if (suffix != no_node() &&
@@ -1402,7 +1402,7 @@ export func inspect_formal(nodes:const ExprNodes in N, revision:UInt64, used:UIn
                     sites.signature <- no_node();
                     OrdinaryFormal:FormalSyntax
                 };
-                (HereFormal { val signature <- signature; }) -> {
+                (HereFormal { val signature <- signature, }) -> {
                     if (!published_syntax_id(nodes, revision, at, signature)) return InvalidFormal:FormalSyntax;
                     sites.binding <- no_node();
                     sites.signature <- signature.index;
@@ -1422,9 +1422,9 @@ export func formal_variadic_at(nodes:const ExprNodes in N, revision:UInt64, used
     if (inspect_formal(nodes, revision, used, at, sites) != (OrdinaryFormal:FormalSyntax))
         return no_node();
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Formal { val suffix <- variadic_at; }) -> { suffix };
+                (Formal { val suffix <- variadic_at, }) -> { suffix };
                 _ -> no_node()
             }
         };
@@ -1437,9 +1437,9 @@ export func formal_binding_is_fixed(nodes:const ExprNodes in N, revision:UInt64,
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Formal { val binding <- binding; val mode <- mode; val previous <- previous; val fixed <- binding_const; }) -> {
+                (Formal { val binding <- binding, val mode <- mode, val previous <- previous, val fixed <- binding_const, }) -> {
                     fixed && published_syntax_id(nodes, revision, at, binding) &&
                         valid_prefixed_formal(nodes, revision, at, binding.index, previous, mode, fixed)
                 };
@@ -1453,8 +1453,8 @@ export func explicit_value_result_type(nodes:const ExprNodes in N, revision:UInt
     -> UInt64 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            ValueResult { val previous <-; val type_name <-; val explicit_value <-; } -> {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            ValueResult { val previous <-, val type_name <-, val explicit_value <-, } -> {
                 if (!explicit_value || !published_syntax_id(nodes, revision, at, previous) ||
                     !published_syntax_id(nodes, revision, at, type_name)) return no_node();
                 type_name.index
@@ -1466,26 +1466,26 @@ export func explicit_value_result_type(nodes:const ExprNodes in N, revision:UInt
 }
 
 export enum SignatureSyntax:UInt8 {
-    OtherSignatureSyntax;
-    InvalidSignature;
-    SignatureHead;
-    ValueResultClause;
-    BorrowedResultClause;
-    ExceptionResultClause;
-    ThrowsSignatureClause;
-    OwnerSignatureClause;
-    TypeSignatureClause;
-    OwningRegionResultClause;
-    ScopedProcedureHead;
-    PointerResultClause;
+    OtherSignatureSyntax,
+    InvalidSignature,
+    SignatureHead,
+    ValueResultClause,
+    BorrowedResultClause,
+    ExceptionResultClause,
+    ThrowsSignatureClause,
+    OwnerSignatureClause,
+    TypeSignatureClause,
+    OwningRegionResultClause,
+    ScopedProcedureHead,
+    PointerResultClause,
 }
 
 export data SignatureSites {
-    previous:UInt64;
-    name:UInt64;
-    annotation:UInt64;
-    parameter_tail:UInt64;
-    readonly:bool;
+    previous:UInt64,
+    name:UInt64,
+    annotation:UInt64,
+    parameter_tail:UInt64,
+    readonly:bool,
 }
 
 func signature_step(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
@@ -1522,29 +1522,29 @@ export func inspect_signature(nodes:const ExprNodes in N, revision:UInt64, used:
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidSignature:SignatureSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidSignature:SignatureSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CallableHeader { val name <- name; val formals <- parameters; }) -> {
+                (CallableHeader { val name <- name, val formals <- parameters, }) -> {
                     read_signature_header(nodes, revision, at, name, formals, OrdinaryName:NameSyntax,
                                           sites, SignatureHead:SignatureSyntax)
                 };
-                (ScopedProcedureHeader { val name <- name; val formals <- parameters; }) -> {
+                (ScopedProcedureHeader { val name <- name, val formals <- parameters, }) -> {
                     read_signature_header(nodes, revision, at, name, formals, SymbolicName:NameSyntax,
                                           sites, ScopedProcedureHead:SignatureSyntax)
                 };
-                (ValueResult { val previous <- previous; val target <- type_name; val readonly <- readonly; }) -> {
+                (ValueResult { val previous <- previous, val target <- type_name, val readonly <- readonly, }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, ValueResultClause:SignatureSyntax)
                 };
-                (BorrowedResult { val previous <- previous; val target <- owner_qualified_type; val readonly <- readonly; }) -> {
+                (BorrowedResult { val previous <- previous, val target <- owner_qualified_type, val readonly <- readonly, }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, BorrowedResultClause:SignatureSyntax)
                 };
-                (PointerResult { val previous <- previous; val target <- owner_qualified_type; val readonly <- readonly; }) -> {
+                (PointerResult { val previous <- previous, val target <- owner_qualified_type, val readonly <- readonly, }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, PointerResultClause:SignatureSyntax)
                 };
-                (ExceptionResult { val previous <- previous; val target <- type_name; val readonly <- readonly; }) -> {
+                (ExceptionResult { val previous <- previous, val target <- type_name, val readonly <- readonly, }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, ExceptionResultClause:SignatureSyntax)
                 };
-                (OwningRegionResult { val previous <- previous; val schema <- schema; val readonly <- readonly; }) -> {
+                (OwningRegionResult { val previous <- previous, val schema <- schema, val readonly <- readonly, }) -> {
                     if (!published_syntax_id(nodes, revision, at, previous) ||
                         !optional_syntax_link(nodes, revision, at, schema, sites.annotation) ||
                         (sites.annotation != no_node() &&
@@ -1554,17 +1554,17 @@ export func inspect_signature(nodes:const ExprNodes in N, revision:UInt64, used:
                     sites.readonly <- readonly;
                     OwningRegionResultClause:SignatureSyntax
                 };
-                (ThrowsClause { val previous <- previous; val target <- exception_type; }) -> {
+                (ThrowsClause { val previous <- previous, val target <- exception_type, }) -> {
                     signature_step(nodes, revision, at, previous, target, false, sites, ThrowsSignatureClause:SignatureSyntax)
                 };
-                (OwnerConstraint { val previous <- previous; val name <- declared_owner; val readonly <- readonly; }) -> {
+                (OwnerConstraint { val previous <- previous, val name <- declared_owner, val readonly <- readonly, }) -> {
                     if (!optional_syntax_link(nodes, revision, at, previous, sites.previous) ||
                         !published_syntax_id(nodes, revision, at, name)) return InvalidSignature:SignatureSyntax;
                     sites.annotation <- name.index;
                     sites.readonly <- readonly;
                     OwnerSignatureClause:SignatureSyntax
                 };
-                (TypeConstraint { val previous <- previous; val name <- type_name; }) -> {
+                (TypeConstraint { val previous <- previous, val name <- type_name, }) -> {
                     signature_step(nodes, revision, at, previous, name, false, sites, TypeSignatureClause:SignatureSyntax)
                 };
                 (_) -> { OtherSignatureSyntax:SignatureSyntax };
@@ -1608,7 +1608,7 @@ export func omits_callable_result(nodes:const ExprNodes in N, revision:UInt64, u
         clause == no_node()
 }
 
-export data ScopedProcedureSites { head:UInt64; signature:UInt64; body:UInt64; }
+export data ScopedProcedureSites { head:UInt64, signature:UInt64, body:UInt64, }
 
 func read_scoped_procedure(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, header:const NodeId in H,
                             body:const NodeId in B, sites:ScopedProcedureSites in R)
@@ -1638,9 +1638,9 @@ export func inspect_scoped_procedure(nodes:const ExprNodes in N, revision:UInt64
                                      sites:ScopedProcedureSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ScopedProcedureDefinition { val header <- header; val body <- body; }) -> {
+                (ScopedProcedureDefinition { val header <- header, val body <- body, }) -> {
                     read_scoped_procedure(nodes, revision, at, header, body, sites)
                 };
                 (_) -> { false };
@@ -1654,9 +1654,9 @@ export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:UI
                                          selected:UInt64 in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
-                ProcedureActivation { val name <- name; } -> {
+                ProcedureActivation { val name <- name, } -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         name_syntax(nodes, at, name.index) != (SymbolicName:NameSyntax)) return false;
                     selected <- name.index;
@@ -1670,10 +1670,10 @@ export func inspect_procedure_activation(nodes:const ExprNodes in N, revision:UI
 }
 
 export enum CallableSyntax:UInt8 {
-    OtherCallableSyntax; InvalidCallable; ModuleCallable; LexicalCallable; CProvider; CEntry;
-        ModuleCallablePromise;
+    OtherCallableSyntax, InvalidCallable, ModuleCallable, LexicalCallable, CProvider, CEntry,
+        ModuleCallablePromise,
 }
-export data CallableSites { signature:UInt64; body:UInt64; function_form:bool; }
+export data CallableSites { signature:UInt64, body:UInt64, function_form:bool, }
 
 func read_callable_definition(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                               signature:const NodeId in I, body:const NodeId in B, function_form:bool,
@@ -1692,21 +1692,21 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:UInt64, used:U
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidCallable:CallableSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidCallable:CallableSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (CallableDefinition {
-                    val head <- header;
-                    val body <-;
-                    val lexical <-;
-                    val function_form <-;
+                    val head <- header,
+                    val body <-,
+                    val lexical <-,
+                    val function_form <-,
                 }) -> {
                     read_callable_definition(nodes, revision, at, head, body, function_form, sites,
                         if (lexical) { LexicalCallable:CallableSyntax } else { ModuleCallable:CallableSyntax })
                 };
-                (CEntryDefinition { val head <- header; val body <-; val function_form <-; }) -> {
+                (CEntryDefinition { val head <- header, val body <-, val function_form <-, }) -> {
                     read_callable_definition(nodes, revision, at, head, body, function_form, sites, CEntry:CallableSyntax)
                 };
-                (CallablePromise { val head <- header; val function_form <-; }) -> {
+                (CallablePromise { val head <- header, val function_form <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at,
                         head)) return InvalidCallable:CallableSyntax;
                     sites.signature <- head.index;
@@ -1714,7 +1714,7 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:UInt64, used:U
                     sites.function_form <- function_form;
                     ModuleCallablePromise:CallableSyntax
                 };
-                (CProviderDeclaration { val head <- header; val function_form <-; }) -> {
+                (CProviderDeclaration { val head <- header, val function_form <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, head)) return InvalidCallable:CallableSyntax;
                     sites.signature <- head.index;
                     sites.body <- no_node();
@@ -1728,43 +1728,43 @@ export func inspect_callable(nodes:const ExprNodes in N, revision:UInt64, used:U
 }
 
 export enum DeclarationSyntax:UInt8 {
-    OtherDeclaration;
-    InvalidDeclaration;
-    NominalRecord;
-    NativeRecord;
-    HandleTypeDeclaration;
-    ArrayTypeDeclaration;
-    EnumTypeDeclaration;
-    AbstractTypeDeclaration;
-    TypeSynonymDeclaration;
-    NativeSymbolDeclaration;
-    ReferenceSymbolDeclaration;
-    LocalPublication;
-    NominalSum;
-    NamedRegion;
-    ValueSymbolDeclaration;
-    GenericProductDeclaration;
+    OtherDeclaration,
+    InvalidDeclaration,
+    NominalRecord,
+    NativeRecord,
+    HandleTypeDeclaration,
+    ArrayTypeDeclaration,
+    EnumTypeDeclaration,
+    AbstractTypeDeclaration,
+    TypeSynonymDeclaration,
+    NativeSymbolDeclaration,
+    ReferenceSymbolDeclaration,
+    LocalPublication,
+    NominalSum,
+    NamedRegion,
+    ValueSymbolDeclaration,
+    GenericProductDeclaration,
 }
 
 export data DeclarationSites {
-    name:UInt64;
-    parent_type:UInt64;
-    entries:UInt64;
-    value_type:UInt64;
-    index_type:UInt64;
-    owner_name:UInt64;
-    readonly:bool;
-    nullable:bool;
+    name:UInt64,
+    parent_type:UInt64,
+    entries:UInt64,
+    value_type:UInt64,
+    index_type:UInt64,
+    owner_name:UInt64,
+    readonly:bool,
+    nullable:bool,
 }
 
-export data TypeApplicationSites { name:UInt64; arguments:UInt64; }
-export data GenericProductSites { name:UInt64; parameters:UInt64; fields:UInt64; }
+export data TypeApplicationSites { name:UInt64, arguments:UInt64, }
+export data GenericProductSites { name:UInt64, parameters:UInt64, fields:UInt64, }
 
 export func type_list_count(nodes:const ExprNodes in N, at:UInt64) -> UInt64 where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return 0u64;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            TypeListItem { val count <-; } -> count;
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            TypeListItem { val count <-, } -> count;
             _ -> 0u64
         };
         Vacant -> 0u64
@@ -1775,8 +1775,8 @@ export func inspect_type_application(nodes:const ExprNodes in N, revision:UInt64
     sites:TypeApplicationSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            AppliedType { val name <-; val arguments <-; } -> {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            AppliedType { val name <-, val arguments <-, } -> {
                 if (!published_syntax_id(nodes, revision, at, name) ||
                     name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
                     !published_syntax_id(nodes, revision, at, arguments) ||
@@ -1809,8 +1809,8 @@ export func inspect_generic_product(nodes:const ExprNodes in N, revision:UInt64,
     sites:GenericProductSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            GenericRecordDefinition { val name <-; val parameters <-; val fields <-; } ->
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            GenericRecordDefinition { val name <-, val parameters <-, val fields <-, } ->
                 read_generic_product(nodes, revision, at, name, parameters, fields, sites);
             _ -> false
         };
@@ -1819,15 +1819,15 @@ export func inspect_generic_product(nodes:const ExprNodes in N, revision:UInt64,
 }
 
 export data SumArmSites {
-    name:UInt64;
-    previous:UInt64;
-    fields:UInt64;
+    name:UInt64,
+    previous:UInt64,
+    fields:UInt64,
 }
 
 func is_sum_arm(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (SumArm) -> { true };
                 (_) -> { false };
@@ -1841,9 +1841,9 @@ export func inspect_sum_arm(nodes:const ExprNodes in N, revision:UInt64, used:UI
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (SumArm { val name <- name; val previous <- previous; val fields <- fields; }) -> {
+                (SumArm { val name <- name, val previous <- previous, val fields <- fields, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
                         !optional_syntax_link(nodes, revision, at, previous, sites.previous) ||
@@ -1874,10 +1874,10 @@ func nominal_heading(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, hea
     sites.parent_type <- no_node();
     return case nodes[heading.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> { sites.name <- heading.index; true };
-                (NominalParent { val name <- name; val parent <- parent_type; }) -> {
+                (NominalParent { val name <- name, val parent <- parent_type, }) -> {
                     if (!declaration_name(nodes, revision, heading.index, name, false, sites) ||
                         !published_syntax_id(nodes, revision, heading.index, parent) ||
                         name_syntax(nodes, heading.index, parent.index) != (OrdinaryName:NameSyntax)) return false;
@@ -1890,7 +1890,7 @@ func nominal_heading(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, hea
     };
 }
 
-export data ValueSymbolSites { name:UInt64; annotation:UInt64; explicit_value:bool; }
+export data ValueSymbolSites { name:UInt64, annotation:UInt64, explicit_value:bool, }
 
 func valid_value_symbol(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
     name:const NodeId in I, annotation:const NodeId in A) -> bool
@@ -1905,9 +1905,9 @@ export func inspect_value_symbol(nodes:const ExprNodes in N, revision:UInt64, us
     sites:ValueSymbolSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val expression <- node; } -> {
+        Occupied { val expression <- node, } -> {
             case expression.payload of {
-                ValueSymbol { val name <-; val annotation <-; val explicit_value <-; } -> {
+                ValueSymbol { val name <-, val annotation <-, val explicit_value <-, } -> {
                     if (!valid_value_symbol(nodes, revision, at, name, annotation)) return false;
                     sites.name <- name.index;
                     sites.annotation <- annotation.index;
@@ -1926,49 +1926,49 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidDeclaration:DeclarationSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidDeclaration:DeclarationSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (RecordDefinition { val heading <- heading; val fields <- fields; val native <- native; }) -> {
+                (RecordDefinition { val heading <- heading, val fields <- fields, val native <- native, }) -> {
                     if (!nominal_heading(nodes, revision, at, heading, sites) ||
                         !optional_syntax_link(nodes, revision, at, fields, sites.entries)) return InvalidDeclaration:DeclarationSyntax;
                     return if (native) { NativeRecord:DeclarationSyntax } else { NominalRecord:DeclarationSyntax };
                 };
-                (GenericRecordDefinition { val name <-; val fields <-; }) -> {
+                (GenericRecordDefinition { val name <-, val fields <-, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !optional_syntax_link(nodes, revision, at, fields, sites.entries))
                         return InvalidDeclaration:DeclarationSyntax;
                     GenericProductDeclaration:DeclarationSyntax
                 };
-                (SumDefinition { val heading <- heading; val tail <- last_arm; }) -> {
+                (SumDefinition { val heading <- heading, val tail <- last_arm, }) -> {
                     if (!nominal_heading(nodes, revision, at, heading, sites) ||
                         !published_syntax_id(nodes, revision, at, tail) || !is_sum_arm(nodes, tail.index))
                         return InvalidDeclaration:DeclarationSyntax;
                     sites.entries <- tail.index;
                     NominalSum:DeclarationSyntax
                 };
-                (RegionDefinition { val name <- name; val fields <- fields; }) -> {
+                (RegionDefinition { val name <- name, val fields <- fields, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !optional_syntax_link(nodes, revision, at, fields, sites.entries))
                         return InvalidDeclaration:DeclarationSyntax;
                     NamedRegion:DeclarationSyntax
                 };
-                (TypeSynonym { val name <- name; val target <- target; }) -> {
+                (TypeSynonym { val name <- name, val target <- target, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !published_syntax_id(nodes, revision, at, target))
                         return InvalidDeclaration:DeclarationSyntax;
                     sites.value_type <- target.index;
                     TypeSynonymDeclaration:DeclarationSyntax
                 };
-                (AbstractType { val heading <- heading; }) -> {
+                (AbstractType { val heading <- heading, }) -> {
                     if (!nominal_heading(nodes, revision, at, heading, sites)) return InvalidDeclaration:DeclarationSyntax;
                     AbstractTypeDeclaration:DeclarationSyntax
                 };
-                (HandleType { val name <- name; val parent <- parent_type; }) -> {
+                (HandleType { val name <- name, val parent <- parent_type, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !optional_syntax_link(nodes, revision, at, parent, sites.parent_type)) return InvalidDeclaration:DeclarationSyntax;
                     HandleTypeDeclaration:DeclarationSyntax
                 };
-                (ArrayDefinition { val name <- name; val index <- index_type; val element <- element_type; }) -> {
+                (ArrayDefinition { val name <- name, val index <- index_type, val element <- element_type, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !published_syntax_id(nodes, revision, at, index) || !published_syntax_id(nodes, revision, at, element))
                         return InvalidDeclaration:DeclarationSyntax;
@@ -1976,7 +1976,7 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
                     sites.value_type <- element.index;
                     ArrayTypeDeclaration:DeclarationSyntax
                 };
-                (EnumDefinition { val name <- name; val backing <- backing; val members <- member_tail; }) -> {
+                (EnumDefinition { val name <- name, val backing <- backing, val members <- member_tail, }) -> {
                     if (!declaration_name(nodes, revision, at, name, false, sites) ||
                         !published_syntax_id(nodes, revision, at, backing) || !published_syntax_id(nodes, revision, at, members))
                         return InvalidDeclaration:DeclarationSyntax;
@@ -1984,21 +1984,21 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
                     sites.entries <- members.index;
                     EnumTypeDeclaration:DeclarationSyntax
                 };
-                (HandleSymbol { val name <- name; val marker <- marker; }) -> {
+                (HandleSymbol { val name <- name, val marker <- marker, }) -> {
                     if (!declaration_name(nodes, revision, at, name, true, sites) ||
                         !published_syntax_id(nodes, revision, at, marker)) return InvalidDeclaration:DeclarationSyntax;
                     sites.value_type <- marker.index;
                     NativeSymbolDeclaration:DeclarationSyntax
                 };
-                (ValueSymbol { val name <-; val annotation <-; }) -> {
+                (ValueSymbol { val name <-, val annotation <-, }) -> {
                     if (!valid_value_symbol(nodes, revision, at, name, annotation))
                         return InvalidDeclaration:DeclarationSyntax;
                     sites.name <- name.index;
                     sites.value_type <- annotation.index;
                     ValueSymbolDeclaration:DeclarationSyntax
                 };
-                (ReferenceSymbol { val name <- name; val target <- target; val owner_name <- owner_name;
-                                   val readonly <- readonly; val nullable <- nullable; }) -> {
+                (ReferenceSymbol { val name <- name, val target <- target, val owner_name <- owner_name,
+                                   val readonly <- readonly, val nullable <- nullable, }) -> {
                     if (!declaration_name(nodes, revision, at, name, true, sites) ||
                         !published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, owner_name)) return InvalidDeclaration:DeclarationSyntax;
@@ -2008,7 +2008,7 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
                     sites.nullable <- nullable;
                     ReferenceSymbolDeclaration:DeclarationSyntax
                 };
-                (Publication { val name <- name; }) -> {
+                (Publication { val name <- name, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         name_syntax(nodes, at, name.index) == (NotAName:NameSyntax)) return InvalidDeclaration:DeclarationSyntax;
                     sites.name <- name.index;
@@ -2020,14 +2020,14 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
     };
 }
 
-export enum HandleBindingSyntax:UInt8 { OtherHandleBinding; InvalidHandleBinding; OwnHandleBinding; BorrowHandleBinding; }
+export enum HandleBindingSyntax:UInt8 { OtherHandleBinding, InvalidHandleBinding, OwnHandleBinding, BorrowHandleBinding, }
 
 export data RegionBindingSites {
-    name:UInt64;
-    schema:UInt64;
-    input:UInt64;
-    readonly:bool;
-    transfer_at:UInt64;
+    name:UInt64,
+    schema:UInt64,
+    input:UInt64,
+    readonly:bool,
+    transfer_at:UInt64,
 }
 
 export func inspect_region_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
@@ -2035,10 +2035,10 @@ export func inspect_region_binding(nodes:const ExprNodes in N, revision:UInt64, 
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (OwningRegionBinding { val name <- name; val schema <- schema; val input <- input;
-                                       val readonly <- readonly; val transfer_at <- transfer_at; }) -> {
+                (OwningRegionBinding { val name <- name, val schema <- schema, val input <- input,
+                                       val readonly <- readonly, val transfer_at <- transfer_at, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) || !published_syntax_id(nodes, revision, at, schema) ||
                         !published_syntax_id(nodes, revision, at, input)) return false;
                     sites.name <- name.index;
@@ -2055,10 +2055,10 @@ export func inspect_region_binding(nodes:const ExprNodes in N, revision:UInt64, 
 }
 
 export data RegionConstructionSites {
-    schema:UInt64;
-    capacity:UInt64;
-    initializers:UInt64;
-    capacity_at:UInt64;
+    schema:UInt64,
+    capacity:UInt64,
+    initializers:UInt64,
+    capacity_at:UInt64,
 }
 
 export func inspect_region_construction(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
@@ -2066,10 +2066,10 @@ export func inspect_region_construction(nodes:const ExprNodes in N, revision:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (RegionConstruction { val schema <- schema; val capacity <- capacity;
-                                        val initializers <- initializers; val capacity_at <- capacity_at; }) -> {
+                (RegionConstruction { val schema <- schema, val capacity <- capacity,
+                                        val initializers <- initializers, val capacity_at <- capacity_at, }) -> {
                     if (!published_syntax_id(nodes, revision, at, schema) || !published_syntax_id(nodes, revision, at, capacity) ||
                         !published_syntax_id(nodes, revision, at, initializers)) return false;
                     sites.schema <- schema.index;
@@ -2083,9 +2083,9 @@ export func inspect_region_construction(nodes:const ExprNodes in N, revision:UIn
         };
     };
 }
-export data BoundHandleSites { binding:UInt64; initializer:UInt64; readonly:bool; }
-export enum HandleConstructionSyntax:UInt8 { OtherHandleConstruction; InvalidHandleConstruction; OwnHandleMake; BorrowHandleMake; }
-export data HandleConstructionSites { marker:UInt64; arguments:UInt64; actual_owner:UInt64; }
+export data BoundHandleSites { binding:UInt64, initializer:UInt64, readonly:bool, }
+export enum HandleConstructionSyntax:UInt8 { OtherHandleConstruction, InvalidHandleConstruction, OwnHandleMake, BorrowHandleMake, }
+export data HandleConstructionSites { marker:UInt64, arguments:UInt64, actual_owner:UInt64, }
 
 func read_handle_binding(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                          binding:const NodeId in B, initializer:const NodeId in I,
@@ -2104,12 +2104,12 @@ export func inspect_handle_binding(nodes:const ExprNodes in N, revision:UInt64, 
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidHandleBinding:HandleBindingSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidHandleBinding:HandleBindingSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (OwningHandleBinding { val binding <- binding; val initializer <- initializer; val readonly <- readonly; }) -> {
+                (OwningHandleBinding { val binding <- binding, val initializer <- initializer, val readonly <- readonly, }) -> {
                     read_handle_binding(nodes, revision, at, binding, initializer, readonly, sites, OwnHandleBinding:HandleBindingSyntax)
                 };
-                (BorrowedHandleBinding { val binding <- binding; val initializer <- initializer; }) -> {
+                (BorrowedHandleBinding { val binding <- binding, val initializer <- initializer, }) -> {
                     read_handle_binding(nodes, revision, at, binding, initializer, false, sites, BorrowHandleBinding:HandleBindingSyntax)
                 };
                 (_) -> { OtherHandleBinding:HandleBindingSyntax };
@@ -2123,9 +2123,9 @@ export func native_installation_input(nodes:const ExprNodes in N, revision:UInt6
     where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
-                InstallSymbolEffect { val name <- name; val acquisition <- acquisition; } -> {
+                InstallSymbolEffect { val name <- name, val acquisition <- acquisition, } -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         !published_syntax_id(nodes, revision, at, acquisition) ||
                         name_syntax(nodes, at, name.index) != (SymbolicName:NameSyntax)) return false;
@@ -2154,15 +2154,15 @@ export func inspect_handle_construction(nodes:const ExprNodes in N, revision:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidHandleConstruction:HandleConstructionSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidHandleConstruction:HandleConstructionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (OwnHandleConstruction { val marker <- marker; val arguments <- arguments; }) -> {
+                (OwnHandleConstruction { val marker <- marker, val arguments <- arguments, }) -> {
                     if (!read_handle_constructor(nodes, revision, at, marker, arguments, sites))
                         return InvalidHandleConstruction:HandleConstructionSyntax;
                     sites.actual_owner <- no_node();
                     OwnHandleMake:HandleConstructionSyntax
                 };
-                (BorrowHandleConstruction { val marker <- marker; val arguments <- arguments; val actual <- actual_owner; }) -> {
+                (BorrowHandleConstruction { val marker <- marker, val arguments <- arguments, val actual <- actual_owner, }) -> {
                     if (!read_handle_constructor(nodes, revision, at, marker, arguments, sites) ||
                         !published_syntax_id(nodes, revision, at, actual) ||
                         name_syntax(nodes, at, actual.index) != (OrdinaryName:NameSyntax))
@@ -2176,17 +2176,17 @@ export func inspect_handle_construction(nodes:const ExprNodes in N, revision:UIn
     };
 }
 
-export data CaseSites { subject:UInt64; items:UInt64; }
-export data CaseArmSites { pattern:UInt64; guard:UInt64; body:UInt64; arrow:UInt64; }
+export data CaseSites { subject:UInt64, items:UInt64, }
+export data CaseArmSites { pattern:UInt64, guard:UInt64, body:UInt64, arrow:UInt64, }
 
 export func inspect_case(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                          sites:CaseSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CaseExpression { val subject <- subject; val items <- items; }) -> {
+                (CaseExpression { val subject <- subject, val items <- items, }) -> {
                     if (!published_syntax_id(nodes, revision, at, subject) ||
                         !optional_syntax_link(nodes, revision, at, items, sites.items)) return false;
                     sites.subject <- subject.index;
@@ -2203,9 +2203,9 @@ export func inspect_case_arm(nodes:const ExprNodes in N, revision:UInt64, used:U
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CaseArm { val pattern <- pattern; val guard <- guard; val body <- body; val arrow <- arrow; }) -> {
+                (CaseArm { val pattern <- pattern, val guard <- guard, val body <- body, val arrow <- arrow, }) -> {
                     if (!published_syntax_id(nodes, revision, at, body) ||
                         !optional_syntax_link(nodes, revision, at, pattern, sites.pattern) ||
                         !optional_syntax_link(nodes, revision, at, guard, sites.guard)) return false;
@@ -2219,11 +2219,11 @@ export func inspect_case_arm(nodes:const ExprNodes in N, revision:UInt64, used:U
     };
 }
 
-export data CaseReceiverSites { previous:UInt64; destination:UInt64; selected_field:UInt64; transfer_at:UInt64; }
+export data CaseReceiverSites { previous:UInt64, destination:UInt64, selected_field:UInt64, transfer_at:UInt64, }
 
 func is_case_value_receiver(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (CaseValueReceiver) -> { true };
                 (_) -> { false };
@@ -2238,10 +2238,10 @@ export func inspect_case_value_receiver(nodes:const ExprNodes in N, revision:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CaseValueReceiver { val previous <- previous; val destination <- destination;
-                                     val selected <- selected_field; val transfer_at <- transfer_at; }) -> {
+                (CaseValueReceiver { val previous <- previous, val destination <- destination,
+                                     val selected <- selected_field, val transfer_at <- transfer_at, }) -> {
                     if (!published_syntax_id(nodes, revision, at, destination) ||
                         name_syntax(nodes, at, destination.index) != (OrdinaryName:NameSyntax) ||
                         !optional_syntax_link(nodes, revision, at, previous, sites.previous) ||
@@ -2266,7 +2266,7 @@ export func inspect_case_value_receiver(nodes:const ExprNodes in N, revision:UIn
     };
 }
 
-export data ConstructorCaseSites { constructor:UInt64; receiver_tail:UInt64; }
+export data ConstructorCaseSites { constructor:UInt64, receiver_tail:UInt64, }
 
 func valid_case_receiver_sequence(nodes:const ExprNodes in N, revision:UInt64, pattern:UInt64, tail:UInt64, first:UInt64, end:UInt64)
     -> bool where {const owner N} {
@@ -2291,9 +2291,9 @@ export func inspect_constructor_case(nodes:const ExprNodes in N, revision:UInt64
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ConstructorCasePattern { val head <- constructor; val receivers <- receivers; }) -> {
+                (ConstructorCasePattern { val head <- constructor, val receivers <- receivers, }) -> {
                     if (!published_syntax_id(nodes, revision, at, head) ||
                         name_syntax(nodes, at, head.index) != (OrdinaryName:NameSyntax) ||
                         !optional_syntax_link(nodes, revision, at, receivers, sites.receiver_tail)) return false;
@@ -2310,16 +2310,16 @@ export func inspect_constructor_case(nodes:const ExprNodes in N, revision:UInt64
     };
 }
 
-export data ProtectedSites { body:UInt64; clauses:UInt64; discarded:bool; }
+export data ProtectedSites { body:UInt64, clauses:UInt64, discarded:bool, }
 
 export func inspect_protected(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                               sites:ProtectedSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ProtectedBlock { val body <- body; val clauses <- clause_tail; val discarded <- discarded; }) -> {
+                (ProtectedBlock { val body <- body, val clauses <- clause_tail, val discarded <- discarded, }) -> {
                     if (!published_syntax_id(nodes, revision, at, body) ||
                         !published_syntax_id(nodes, revision, at, clauses)) return false;
                     sites.body <- body.index;
@@ -2333,23 +2333,23 @@ export func inspect_protected(nodes:const ExprNodes in N, revision:UInt64, used:
     };
 }
 
-export enum GuardClauseSyntax:UInt8 { InvalidGuardClause; HandlerClause; CleanupClause; }
-export data GuardClauseSites { target:UInt64; previous:UInt64; }
+export enum GuardClauseSyntax:UInt8 { InvalidGuardClause, HandlerClause, CleanupClause, }
+export data GuardClauseSites { target:UInt64, previous:UInt64, }
 
 export func inspect_guard_clause(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                  sites:GuardClauseSites in R) -> GuardClauseSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidGuardClause:GuardClauseSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidGuardClause:GuardClauseSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CatchClause { val previous <- previous; val handler <- handler; }) -> {
+                (CatchClause { val previous <- previous, val handler <- handler, }) -> {
                     if (!published_syntax_id(nodes, revision, at, handler) ||
                         !optional_syntax_link(nodes, revision, at, previous, sites.previous)) return InvalidGuardClause:GuardClauseSyntax;
                     sites.target <- handler.index;
                     HandlerClause:GuardClauseSyntax
                 };
-                (FinallyClause { val previous <- previous; val body <- body; }) -> {
+                (FinallyClause { val previous <- previous, val body <- body, }) -> {
                     if (!published_syntax_id(nodes, revision, at, body) ||
                         !optional_syntax_link(nodes, revision, at, previous, sites.previous)) return InvalidGuardClause:GuardClauseSyntax;
                     sites.target <- body.index;
@@ -2361,16 +2361,16 @@ export func inspect_guard_clause(nodes:const ExprNodes in N, revision:UInt64, us
     };
 }
 
-export data CatchSites { name:UInt64; annotation:UInt64; readonly:bool; }
+export data CatchSites { name:UInt64, annotation:UInt64, readonly:bool, }
 
 export func inspect_catch_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:CatchSites in C) -> bool where {const owner N, owner C} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CatchBinding { val name <- name; val annotation <- caught_type; val readonly <- readonly; }) -> {
+                (CatchBinding { val name <- name, val annotation <- caught_type, val readonly <- readonly, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
                         !optional_syntax_link(nodes, revision, at, annotation, sites.annotation)) return false;
@@ -2384,16 +2384,16 @@ export func inspect_catch_binding(nodes:const ExprNodes in N, revision:UInt64, u
     };
 }
 
-export data HandlerSites { binding:UInt64; body:UInt64; }
+export data HandlerSites { binding:UInt64, body:UInt64, }
 
 export func inspect_handler(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                              sites:HandlerSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CatchHandler { val binding <- binding; val body <- body; }) -> {
+                (CatchHandler { val binding <- binding, val body <- body, }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding) ||
                         !published_syntax_id(nodes, revision, at, body)) return false;
                     sites.binding <- binding.index;
@@ -2406,17 +2406,17 @@ export func inspect_handler(nodes:const ExprNodes in N, revision:UInt64, used:UI
     };
 }
 
-export data EnumMemberSites { name:UInt64; previous:UInt64; initializer:UInt64; }
-export data EnumIntegerSyntax { magnitude:UInt64; negative:bool; width:UInt64; }
+export data EnumMemberSites { name:UInt64, previous:UInt64, initializer:UInt64, }
+export data EnumIntegerSyntax { magnitude:UInt64, negative:bool, width:UInt64, }
 
 export func inspect_enum_member(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:EnumMemberSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (EnumMember { val name <- name; val previous <- previous; val initializer <- initializer; }) -> {
+                (EnumMember { val name <- name, val previous <- previous, val initializer <- initializer, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) ||
                         !optional_syntax_link(nodes, revision, at, previous, sites.previous) ||
                         !optional_syntax_link(nodes, revision, at, initializer, sites.initializer)) return false;
@@ -2434,9 +2434,9 @@ export func inspect_enum_integer(nodes:const ExprNodes in N, used:UInt64, at:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (EnumInteger { val magnitude <- magnitude; val negative <- negative; val width <- width; }) -> {
+                (EnumInteger { val magnitude <- magnitude, val negative <- negative, val width <- width, }) -> {
                     literal.magnitude <- magnitude;
                     literal.negative <- negative;
                     literal.width <- width;
@@ -2448,13 +2448,13 @@ export func inspect_enum_integer(nodes:const ExprNodes in N, used:UInt64, at:UIn
     };
 }
 
-export enum BinarySyntax:UInt8 { OtherBinary; InvalidBinary; ArithmeticBinary; ComparisonBinary; ConcatBinary; }
+export enum BinarySyntax:UInt8 { OtherBinary, InvalidBinary, ArithmeticBinary, ComparisonBinary, ConcatBinary, }
 export data BinarySites {
-    left_operand:UInt64;
-    right_operand:UInt64;
-    operator_at:UInt64;
-    arithmetic:ArithmeticOperation;
-    relation:ComparisonRelation;
+    left_operand:UInt64,
+    right_operand:UInt64,
+    operator_at:UInt64,
+    arithmetic:ArithmeticOperation,
+    relation:ComparisonRelation,
 }
 
 func binary_children(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
@@ -2473,19 +2473,19 @@ export func inspect_binary(nodes:const ExprNodes in N, revision:UInt64, used:UIn
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidBinary:BinarySyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidBinary:BinarySyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ArithmeticExpression { val operands <- operands; val operation <- operation; }) -> {
+                (ArithmeticExpression { val operands <- operands, val operation <- operation, }) -> {
                     if (!binary_children(nodes, revision, at, operands, sites)) return InvalidBinary:BinarySyntax;
                     sites.arithmetic <- operation;
                     ArithmeticBinary:BinarySyntax
                 };
-                (ComparisonExpression { val operands <- operands; val relation <- relation; }) -> {
+                (ComparisonExpression { val operands <- operands, val relation <- relation, }) -> {
                     if (!binary_children(nodes, revision, at, operands, sites)) return InvalidBinary:BinarySyntax;
                     sites.relation <- relation;
                     ComparisonBinary:BinarySyntax
                 };
-                (Concatenation { val operands <- operands; }) -> {
+                (Concatenation { val operands <- operands, }) -> {
                     if (!binary_children(nodes, revision, at, operands, sites)) return InvalidBinary:BinarySyntax;
                     ConcatBinary:BinarySyntax
                 };
@@ -2495,16 +2495,16 @@ export func inspect_binary(nodes:const ExprNodes in N, revision:UInt64, used:UIn
     };
 }
 
-export data ConditionalSites { test:UInt64; consequent:UInt64; alternative:UInt64; }
+export data ConditionalSites { test:UInt64, consequent:UInt64, alternative:UInt64, }
 
 export func inspect_conditional(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:ConditionalSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Conditional { val test <- condition; val yes <- consequent; val no <- alternative; }) -> {
+                (Conditional { val test <- condition, val yes <- consequent, val no <- alternative, }) -> {
                     if (!published_syntax_id(nodes, revision, at, test) ||
                         !published_syntax_id(nodes, revision, at, yes) ||
                         !published_syntax_id(nodes, revision, at, no)) return false;
@@ -2519,17 +2519,17 @@ export func inspect_conditional(nodes:const ExprNodes in N, revision:UInt64, use
     };
 }
 
-export data LocalBindingSites { binding:UInt64; initializer:UInt64; mode:LocalMode; declaration_const:bool; }
+export data LocalBindingSites { binding:UInt64, initializer:UInt64, mode:LocalMode, declaration_const:bool, }
 
 export func inspect_local_binding(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                   sites:LocalBindingSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (LocalBinding { val binding <- binding; val initializer <- initializer; val mode <- mode;
-                                val declaration_const <- declaration_const; }) -> {
+                (LocalBinding { val binding <- binding, val initializer <- initializer, val mode <- mode,
+                                val declaration_const <- declaration_const, }) -> {
                     if (!published_syntax_id(nodes, revision, at, binding) ||
                         !published_syntax_id(nodes, revision, at, initializer)) return false;
                     sites.binding <- binding.index;
@@ -2553,16 +2553,16 @@ export func fixed_reference_local(nodes:const ExprNodes in N, revision:UInt64, u
         local.mode == (ReferenceLocal:LocalMode) && local.declaration_const
 }
 
-export data FieldSelectionSites { receiver:UInt64; field:UInt64; }
+export data FieldSelectionSites { receiver:UInt64, field:UInt64, }
 
 export func inspect_field_selection(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:FieldSelectionSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (FieldSelection { val receiver <- target; val field <- field; }) -> {
+                (FieldSelection { val receiver <- target, val field <- field, }) -> {
                     if (!published_syntax_id(nodes, revision, at, receiver) ||
                         !published_syntax_id(nodes, revision, at, field) ||
                         name_syntax(nodes, at, field.index) != (OrdinaryName:NameSyntax)) return false;
@@ -2576,7 +2576,7 @@ export func inspect_field_selection(nodes:const ExprNodes in N, revision:UInt64,
     };
 }
 
-export enum InvocationSyntax:UInt8 { NotAnInvocation; InvalidCallSyntax; OrdinaryInvocation; EffectfulInvocation; }
+export enum InvocationSyntax:UInt8 { NotAnInvocation, InvalidCallSyntax, OrdinaryInvocation, EffectfulInvocation, }
 
 export func inspect_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:DirectCallSites in R) -> InvocationSyntax where {const owner N, owner R} {
@@ -2585,9 +2585,9 @@ export func inspect_invocation(nodes:const ExprNodes in N, revision:UInt64, used
     if (ordinary == (DirectInvocationReady:DirectInvocationSyntax)) return OrdinaryInvocation:InvocationSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidCallSyntax:InvocationSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (SymbolicInvocation { val callee <- callee; val arguments <- arguments; }) -> {
+                (SymbolicInvocation { val callee <- callee, val arguments <- arguments, }) -> {
                     if (!published_syntax_id(nodes, revision, at, callee) ||
                         !optional_syntax_link(nodes, revision, at, arguments, sites.arguments))
                         return InvalidCallSyntax:InvocationSyntax;
@@ -2600,22 +2600,22 @@ export func inspect_invocation(nodes:const ExprNodes in N, revision:UInt64, used
     };
 }
 
-export enum DeferSyntax:UInt8 { NotADefer; InvalidDefer; DeferCall; DeferBody; DeferFallback; }
-export data DeferSites { operand:UInt64; invocation:UInt64; clauses:UInt64; }
+export enum DeferSyntax:UInt8 { NotADefer, InvalidDefer, DeferCall, DeferBody, DeferFallback, }
+export data DeferSites { operand:UInt64, invocation:UInt64, clauses:UInt64, }
 
 export func inspect_defer(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                            sites:DeferSites in S) -> DeferSyntax where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidDefer:DeferSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidDefer:DeferSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (DeferredBlock { val body <- body; }) -> {
+                (DeferredBlock { val body <- body, }) -> {
                     if (!published_syntax_id(nodes, revision, at, body)) return InvalidDefer:DeferSyntax;
                     sites.operand <- body.index;
                     DeferBody:DeferSyntax
                 };
-                (DeferredInvocation { val operand <- operand; val invocation <- invocation; }) -> {
+                (DeferredInvocation { val operand <- operand, val invocation <- invocation, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand) ||
                         !published_syntax_id(nodes, revision, at, invocation) ||
                         ungrouped(nodes, revision, at, operand.index) != invocation.index ||
@@ -2624,7 +2624,7 @@ export func inspect_defer(nodes:const ExprNodes in N, revision:UInt64, used:UInt
                     sites.invocation <- invocation.index;
                     DeferCall:DeferSyntax
                 };
-                (DeferredClauses { val clauses <- clause_tail; }) -> {
+                (DeferredClauses { val clauses <- clause_tail, }) -> {
                     if (!published_syntax_id(nodes, revision, at, clauses)) return InvalidDefer:DeferSyntax;
                     sites.clauses <- clauses.index;
                     DeferFallback:DeferSyntax
@@ -2635,15 +2635,15 @@ export func inspect_defer(nodes:const ExprNodes in N, revision:UInt64, used:UInt
     };
 }
 
-export data IndexSites { target:UInt64; index:UInt64; }
+export data IndexSites { target:UInt64, index:UInt64, }
 
 export func inspect_index_selection(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     at:UInt64, sites:IndexSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
-                IndexSelection { val target <- target; val index <- index; } -> {
+                IndexSelection { val target <- target, val index <- index, } -> {
                     if (!published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, index)) return false;
                     sites.target <- target.index;
@@ -2658,16 +2658,16 @@ export func inspect_index_selection(nodes:const ExprNodes in N, revision:UInt64,
 }
 
 export enum CasePatternSyntax:UInt8 {
-    InvalidCasePattern; AnyCaseTarget; NullCaseTarget; FalseCaseTarget; TrueCaseTarget;
-    NamedCaseMember; ConstructorCaseTarget; ReferenceCaseTarget;
+    InvalidCasePattern, AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget,
+    NamedCaseMember, ConstructorCaseTarget, ReferenceCaseTarget,
 }
 
 export func inspect_reference_case(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     at:UInt64, binding:UInt64 in B) -> bool where {const owner N, owner B} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            ReferenceCasePattern { val receiver <- binding; } -> {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            ReferenceCasePattern { val receiver <- binding, } -> {
                 if (!published_syntax_id(nodes, revision, at, receiver)) return false;
                 binding <- receiver.index;
                 return true
@@ -2683,10 +2683,10 @@ export func case_pattern(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> 
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidCasePattern:CasePatternSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidCasePattern:CasePatternSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NullCasePattern) -> { NullCaseTarget:CasePatternSyntax };
-                (BooleanCasePattern { val truth <- truth; }) -> {
+                (BooleanCasePattern { val truth <- truth, }) -> {
                     if (truth) { TrueCaseTarget:CasePatternSyntax } else { FalseCaseTarget:CasePatternSyntax }
                 };
                 (MemberCasePattern) -> { NamedCaseMember:CasePatternSyntax };
@@ -2698,15 +2698,15 @@ export func case_pattern(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> 
     };
 }
 
-export enum TextLiteralSyntax:UInt8 { NotTextLiteral; NulFreeLiteral; InteriorNulLiteral; }
+export enum TextLiteralSyntax:UInt8 { NotTextLiteral, NulFreeLiteral, InteriorNulLiteral, }
 
 export func text_literal_syntax(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> TextLiteralSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return NotTextLiteral:TextLiteralSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotTextLiteral:TextLiteralSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (TextLiteral { val interior <- interior_zero; }) -> {
+                (TextLiteral { val interior <- interior_zero, }) -> {
                     if (interior) { InteriorNulLiteral:TextLiteralSyntax } else { NulFreeLiteral:TextLiteralSyntax }
                 };
                 (_) -> { NotTextLiteral:TextLiteralSyntax };
@@ -2719,9 +2719,9 @@ export func predicate_operand(nodes:const ExprNodes in N, revision:UInt64, used:
     -> UInt64 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return no_node();
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (PredicateAssertion { val predicate <-; }) -> {
+                (PredicateAssertion { val predicate <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, predicate)) return no_node();
                     predicate.index
                 };
@@ -2732,16 +2732,16 @@ export func predicate_operand(nodes:const ExprNodes in N, revision:UInt64, used:
     }
 }
 
-export data AssertionSites { operand:UInt64; annotation:UInt64; colon:UInt64; }
+export data AssertionSites { operand:UInt64, annotation:UInt64, colon:UInt64, }
 
 export func inspect_type_assertion(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                    sites:AssertionSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CheckedTypeAssertion { val operand <- operand; val annotation <- annotation; val colon <- colon; }) -> {
+                (CheckedTypeAssertion { val operand <- operand, val annotation <- annotation, val colon <- colon, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand) ||
                         !published_syntax_id(nodes, revision, at, annotation)) return false;
                     sites.operand <- operand.index;
@@ -2755,15 +2755,15 @@ export func inspect_type_assertion(nodes:const ExprNodes in N, revision:UInt64, 
     };
 }
 
-export enum OwnerConstraintSyntax:UInt8 { NotOwnerConstraint; ReadonlyOwnerConstraint; WritableOwnerConstraint; }
+export enum OwnerConstraintSyntax:UInt8 { NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint, }
 
 export func owner_constraint_syntax(nodes:const ExprNodes in N, at:UInt64) -> OwnerConstraintSyntax where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return NotOwnerConstraint:OwnerConstraintSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotOwnerConstraint:OwnerConstraintSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (OwnerConstraint { val readonly <- readonly; }) -> {
+                (OwnerConstraint { val readonly <- readonly, }) -> {
                     if (readonly) { ReadonlyOwnerConstraint:OwnerConstraintSyntax } else { WritableOwnerConstraint:OwnerConstraintSyntax }
                 };
                 (_) -> { NotOwnerConstraint:OwnerConstraintSyntax };
@@ -2776,9 +2776,9 @@ export func binds_local_storage(nodes:const ExprNodes in N, at:UInt64) -> bool w
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (LocalBinding { val mode <- mode; }) -> { mode != (ExceptionLocal:LocalMode) };
+                (LocalBinding { val mode <- mode, }) -> { mode != (ExceptionLocal:LocalMode) };
                 (_) -> { false };
             }
         };
@@ -2786,24 +2786,24 @@ export func binds_local_storage(nodes:const ExprNodes in N, at:UInt64) -> bool w
 }
 
 export enum ConstructionSyntax:UInt8 {
-    OtherConstruction;
-    InvalidConstruction;
-    StorageReservation;
-    PositionalConstruction;
-    BracedConstruction;
-    ExceptionConstructionSyntax;
+    OtherConstruction,
+    InvalidConstruction,
+    StorageReservation,
+    PositionalConstruction,
+    BracedConstruction,
+    ExceptionConstructionSyntax,
 }
 
-export data NamedThrowSites { requested:UInt64; fields:UInt64; cause:UInt64; }
+export data NamedThrowSites { requested:UInt64, fields:UInt64, cause:UInt64, }
 
 export func inspect_named_throw(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                 sites:NamedThrowSites in R) -> bool where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (NamedThrow { val requested <- requested; val fields <- fields; val cause <- cause;
+                (NamedThrow { val requested <- requested, val fields <- fields, val cause <- cause,
                     }) -> {
                     if (!published_syntax_id(nodes, revision, at, requested) ||
                         name_syntax(nodes, at, requested.index) != (OrdinaryName:NameSyntax) ||
@@ -2830,11 +2830,11 @@ export func first_named_throw(nodes:const ExprNodes in N, revision:UInt64,
 }
 
 export data ConstructionSites {
-    requested:UInt64;
-    queried_operand:UInt64;
-    placement:UInt64;
-    initializer:UInt64;
-    contents:UInt64;
+    requested:UInt64,
+    queried_operand:UInt64,
+    placement:UInt64,
+    initializer:UInt64,
+    contents:UInt64,
 }
 
 func optional_syntax_link(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
@@ -2842,7 +2842,7 @@ func optional_syntax_link(nodes:const ExprNodes in N, revision:UInt64, at:UInt64
     where {const owner N, const owner L, owner S} {
     return case link of {
         (NoLink) -> { selected <- no_node(); true };
-        (LinkTo { val id <- node; }) -> {
+        (LinkTo { val id <- node, }) -> {
             if (!published_syntax_id(nodes, revision, at, id)) return false;
             selected <- id.index;
             return true;
@@ -2856,15 +2856,15 @@ func construction_initializer(nodes:const ExprNodes in N, revision:UInt64, at:UI
     ref tail = make UInt64 { no_node() };
     return case nodes[at] of {
         (Vacant) -> { InvalidConstruction:ConstructionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ReserveStorage { val placement <- placement; }) -> {
+                (ReserveStorage { val placement <- placement, }) -> {
                     if (!optional_syntax_link(nodes, revision, at, placement, sites.placement))
                         return InvalidConstruction:ConstructionSyntax;
                     sites.contents <- no_node();
                     StorageReservation:ConstructionSyntax
                 };
-                (PositionalInitializer { val placement <- placement; val arguments <- arguments; }) -> {
+                (PositionalInitializer { val placement <- placement, val arguments <- arguments, }) -> {
                     if (!optional_syntax_link(nodes, revision, at, placement, sites.placement) ||
                         !optional_syntax_link(nodes, revision, at, arguments, sites.contents))
                         return InvalidConstruction:ConstructionSyntax;
@@ -2873,7 +2873,7 @@ func construction_initializer(nodes:const ExprNodes in N, revision:UInt64, at:UI
                         return InvalidConstruction:ConstructionSyntax;
                     PositionalConstruction:ConstructionSyntax
                 };
-                (BracedInitializer { val placement <- placement; val body <- body; }) -> {
+                (BracedInitializer { val placement <- placement, val body <- body, }) -> {
                     if (!optional_syntax_link(nodes, revision, at, placement, sites.placement) ||
                         !published_syntax_id(nodes, revision, at, body) ||
                         !block_tail(nodes, revision, at, body.index, tail)) return InvalidConstruction:ConstructionSyntax;
@@ -2893,11 +2893,11 @@ func read_construction_type(nodes:const ExprNodes in N, revision:UInt64, at:UInt
     sites.queried_operand <- no_node();
     return case nodes[requested.index] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> { true };
                 (AppliedType) -> { true };
-                (ConstructionTypeQuery { val operand <- operand; }) -> {
+                (ConstructionTypeQuery { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, revision, requested.index, operand)) return false;
                     sites.queried_operand <- operand.index;
                     true
@@ -2913,9 +2913,9 @@ export func inspect_construction(nodes:const ExprNodes in N, revision:UInt64, us
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidConstruction:ConstructionSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidConstruction:ConstructionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (NamedConstruction { val requested <- requested; val initializer <- initializer; }) -> {
+                (NamedConstruction { val requested <- requested, val initializer <- initializer, }) -> {
                     if (!read_construction_type(nodes, revision, at, requested, sites) ||
                         !published_syntax_id(nodes, revision, at, initializer)) return InvalidConstruction:ConstructionSyntax;
                     sites.initializer <- initializer.index;
@@ -2937,15 +2937,15 @@ export func reserves_storage(nodes:const ExprNodes in N, revision:UInt64, used:U
     return inspect_construction(nodes, revision, used, at, sites) == (StorageReservation:ConstructionSyntax);
 }
 
-export enum BooleanSyntax:UInt8 { OtherBooleanSyntax; LiteralFalse; LiteralTrue; }
+export enum BooleanSyntax:UInt8 { OtherBooleanSyntax, LiteralFalse, LiteralTrue, }
 
 export func boolean_literal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> BooleanSyntax where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return OtherBooleanSyntax:BooleanSyntax;
     return case nodes[at] of {
         (Vacant) -> { OtherBooleanSyntax:BooleanSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (BooleanLiteral { val truth <- truth; }) -> {
+                (BooleanLiteral { val truth <- truth, }) -> {
                     if (truth) { LiteralTrue:BooleanSyntax } else { LiteralFalse:BooleanSyntax }
                 };
                 (_) -> { OtherBooleanSyntax:BooleanSyntax };
@@ -2954,9 +2954,9 @@ export func boolean_literal(nodes:const ExprNodes in N, used:UInt64, at:UInt64) 
     };
 }
 
-export enum LogicalSyntax:UInt8 { OtherLogicalSyntax; InvalidLogical; LogicalNot; LogicalAnd; LogicalOr; }
-export enum RhsEvaluation:UInt8 { ConditionalRhs; SkipsRhs; TakesRhs; }
-export data LogicalSites { left_operand:UInt64; right_operand:UInt64; right_evaluation:RhsEvaluation; }
+export enum LogicalSyntax:UInt8 { OtherLogicalSyntax, InvalidLogical, LogicalNot, LogicalAnd, LogicalOr, }
+export enum RhsEvaluation:UInt8 { ConditionalRhs, SkipsRhs, TakesRhs, }
+export data LogicalSites { left_operand:UInt64, right_operand:UInt64, right_evaluation:RhsEvaluation, }
 
 func logical_operands(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
                       left:const NodeId in L, right:const NodeId in R,
@@ -2982,19 +2982,19 @@ export func inspect_logical(nodes:const ExprNodes in N, revision:UInt64, used:UI
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidLogical:LogicalSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidLogical:LogicalSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Negation { val operand <- operand; }) -> {
+                (Negation { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return InvalidLogical:LogicalSyntax;
                     sites.left_operand <- operand.index;
                     sites.right_operand <- no_node();
                     sites.right_evaluation <- (SkipsRhs:RhsEvaluation);
                     LogicalNot:LogicalSyntax
                 };
-                (Conjunction { val left <- left_operand; val right <- right_operand; }) -> {
+                (Conjunction { val left <- left_operand, val right <- right_operand, }) -> {
                     logical_operands(nodes, revision, at, left, right, sites, LogicalAnd:LogicalSyntax)
                 };
-                (Disjunction { val left <- left_operand; val right <- right_operand; }) -> {
+                (Disjunction { val left <- left_operand, val right <- right_operand, }) -> {
                     logical_operands(nodes, revision, at, left, right, sites, LogicalOr:LogicalSyntax)
                 };
                 (_) -> { OtherLogicalSyntax:LogicalSyntax };
@@ -3014,16 +3014,16 @@ export func procedure_definition() -> UInt64 { return 0u64; }
 export func function_definition() -> UInt64 { return 1u64; }
 export func no_node() -> UInt64 { return 18446744073709551615u64; }
 
-export enum GroupSyntax:UInt8 { OtherGroupSyntax; InvalidGroup; ParenthesizedExpression; }
+export enum GroupSyntax:UInt8 { OtherGroupSyntax, InvalidGroup, ParenthesizedExpression, }
 
 export func inspect_group(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                           inner:UInt64 in R) -> GroupSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return InvalidGroup:GroupSyntax;
     return case nodes[at] of {
         (Vacant) -> { InvalidGroup:GroupSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Parenthesized { val expression <- expression; }) -> {
+                (Parenthesized { val expression <- expression, }) -> {
                     if (!published_syntax_id(nodes, revision, at, expression)) return InvalidGroup:GroupSyntax;
                     inner <- expression.index;
                     ParenthesizedExpression:GroupSyntax
@@ -3052,7 +3052,7 @@ export func is_invocation(nodes:const ExprNodes in N, used:UInt64, at:UInt64) ->
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (Call) -> { true };
                 (EmptyCall) -> { true };
@@ -3067,11 +3067,11 @@ export func is_function(nodes:const ExprNodes in N, at:UInt64) -> bool where {co
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         Vacant -> false;
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (CallableDefinition { val function_form <-; }) -> { function_form };
-                (CEntryDefinition { val function_form <-; }) -> { function_form };
-                (CProviderDeclaration { val function_form <-; }) -> { function_form };
+                (CallableDefinition { val function_form <-, }) -> { function_form };
+                (CEntryDefinition { val function_form <-, }) -> { function_form };
+                (CProviderDeclaration { val function_form <-, }) -> { function_form };
                 _ -> false
             }
         }
@@ -3082,7 +3082,7 @@ export func is_scope_block(nodes:const ExprNodes in N, at:UInt64) -> bool where 
     if (at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ScopeSyntax) -> { true };
                 (_) -> { false };
@@ -3091,13 +3091,13 @@ export func is_scope_block(nodes:const ExprNodes in N, at:UInt64) -> bool where 
     };
 }
 
-export enum CompletionSyntax:UInt8 { NotACompletion; ReturnCompletion; ContinueCompletion; BreakCompletion; }
+export enum CompletionSyntax:UInt8 { NotACompletion, ReturnCompletion, ContinueCompletion, BreakCompletion, }
 
 export func completion_syntax(nodes:const ExprNodes in N, at:UInt64) -> CompletionSyntax where {const owner N} {
     if (at >= intrinsic (len)(nodes)) return NotACompletion:CompletionSyntax;
     return case nodes[at] of {
         (Vacant) -> { NotACompletion:CompletionSyntax };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ReturnValue) -> { ReturnCompletion:CompletionSyntax };
                 (ReturnVoid) -> { ReturnCompletion:CompletionSyntax };
@@ -3124,14 +3124,14 @@ export func completion_operand(nodes:const ExprNodes in N, revision:UInt64, used
     operand <- no_node();
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (ReturnVoid) -> { true };
                 (ContinueVoid) -> { true };
                 (BreakVoid) -> { true };
-                (ReturnValue { val value <- value; }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
-                (ContinueValue { val value <- value; }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
-                (BreakValue { val value <- value; }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
+                (ReturnValue { val value <- value, }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
+                (ContinueValue { val value <- value, }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
+                (BreakValue { val value <- value, }) -> { return ready_completion_value(nodes, revision, at, value, operand); };
                 (_) -> { false };
             }
         };
@@ -3149,9 +3149,9 @@ func len(nodes:const ExprNodes in N) -> UInt64 where {const owner N} {
 export func parse_report_code(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> UInt8 where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return 0u8;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ParseReport { val code <- diagnostic; }) -> { code };
+                (ParseReport { val code <- diagnostic, }) -> { code };
                 _ -> 0u8
             }
         };
@@ -3164,9 +3164,9 @@ export func inspect_error_report(nodes:const ExprNodes in N, revision:UInt64, us
     where {const owner N, owner R, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
     return case nodes[at] of {
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ErrorReport { val expected <- role; val link <- report; }) -> {
+                (ErrorReport { val expected <- role, val link <- report, }) -> {
                     if (!published_syntax_id(nodes, revision, at, link) ||
                         parse_report_code(nodes, at, link.index) == 0u8) return false;
                     role <- expected;

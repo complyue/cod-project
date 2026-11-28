@@ -70,7 +70,7 @@ func completed_primitive_namespace(visits:const Visits in G, used:UInt64, module
     where {const owner G} {
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
-        Checked { val primitive <- primitive_namespace; } -> primitive;
+        Checked { val primitive <- primitive_namespace, } -> primitive;
         _ -> false
     }
 }
@@ -133,9 +133,9 @@ func scalar_expression(nodes:const ExprNodes in N, names:const NameBindings in B
             scalar_expression(nodes, names, operands, definition, operation.right_operand, used, revision)
     };
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
-                IntegerLiteral { val width <- width; } ->
+                IntegerLiteral { val width <- width, } ->
                     width == 64u64 && operands[at].reception == independent_value();
                 NameReference ->
                     names[at].kind == formal_binding() && names[at].declaration < at &&
@@ -168,9 +168,9 @@ export func checked_scalar_body(nodes:const ExprNodes in N, names:const NameBind
         entry.previous != no_node() || entry.item >= tail) return false;
     ref expression = make UInt64 { entry.item };
     case nodes[entry.item] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
-                ReturnValue { val value <- value; } -> {
+                ReturnValue { val value <- value, } -> {
                     if (!published_syntax_id(nodes, revision, entry.item, value)) return false;
                     (expression <- value.index):void
                 };
@@ -240,24 +240,24 @@ export func mark_scalar_bodies(nodes:const ExprNodes in N, names:const NameBindi
 }
 
 export data ObjectPrefixes {
-    visits:UInt64;
-    exports:UInt64;
-    interfaces:UInt64;
-    units:UInt64;
-    commands:UInt64;
-    functions:UInt64;
+    visits:UInt64,
+    exports:UInt64,
+    interfaces:UInt64,
+    units:UInt64,
+    commands:UInt64,
+    functions:UInt64,
 }
 
 export data ObjectExportSite {
-    row:UInt64;
-    publisher:UInt64;
-    defining_module:UInt64;
-    declaration:UInt64;
+    row:UInt64,
+    publisher:UInt64,
+    defining_module:UInt64,
+    declaration:UInt64,
 }
 
 func completed_callable_context(visits:const Visits in G, module:UInt64) -> bool where {const owner G} {
     return case visits[module - 1u64] of {
-        Checked { val structural <- inherited_structural; } -> !structural;
+        Checked { val structural <- inherited_structural, } -> !structural;
         _ -> false
     }
 }
@@ -277,9 +277,9 @@ func published_callable_context(visits:const Visits in G, interfaces:const Modul
                 return no_node();
             case interfaces[header].object_view of {
                 PublishedObjectView {
-                    val row <- public_row; val publisher <- publisher;
-                    val defining_module <- defining_module; val declaration <- declaration;
-                    val incoming <- incoming_context; val selected <- selected_context;
+                    val row <- public_row, val publisher <- publisher,
+                    val defining_module <- defining_module, val declaration <- declaration,
+                    val incoming <- incoming_context, val selected <- selected_context,
                 } -> {
                     if (publisher != site.publisher) return no_node();
                     if (row == site.row) {
@@ -313,8 +313,8 @@ export func incoming_callable_context(visits:const Visits in G, exports:const Mo
         exports[site.row].shape != ordinary_callable_shape()) return no_node();
     return case visits[site.publisher - 1u64] of {
         Checked {
-            val export_first <- exports_first; val export_past <- exports_past;
-            val first <- interfaces_first; val past <- interfaces_past;
+            val export_first <- exports_first, val export_past <- exports_past,
+            val first <- interfaces_first, val past <- interfaces_past,
         } -> {
             if (site.row < export_first || site.row >= export_past || export_past > limits.exports)
                 return no_node();
@@ -350,13 +350,13 @@ export func completed_scalar_ordinal(visits:const Visits in G, interfaces:const 
     val header <- find_interface(interfaces, limits.interfaces, module, definition);
     if (header == no_node()) return no_node();
     return case visits[module - 1u64] of {
-        Checked { val first <- key_first; val past <- key_past; val primitive <- primitive_namespace;
-                  val interfaces_first <- interfaces_first; val interfaces_past <- interfaces_past;
-                  val object <- object; } -> {
+        Checked { val first <- key_first, val past <- key_past, val primitive <- primitive_namespace,
+                  val interfaces_first <- interfaces_first, val interfaces_past <- interfaces_past,
+                  val object <- object, } -> {
             if (!primitive) return no_node();
             case object of {
                 CompletedVisitObject {
-                    val unit <- unit_index; val functions_first <- functions_first; val functions_past <- functions_past;
+                    val unit <- unit_index, val functions_first <- functions_first, val functions_past <- functions_past,
                 } -> {
                     return verified_scalar_ordinal(interfaces, units, limits, header, definition, unit,
                         first, past, functions_first, functions_past, interfaces_first, interfaces_past)
@@ -395,9 +395,9 @@ func prepare_object_callable(view:const ObjectExportSite in E, mode:ModuleSelect
 func same_callable_contexts(proof:const CallableUseProofs in P, left:UInt64, right:UInt64)
     -> bool where {const owner P} {
     return case proof[left] of {
-        CheckedCallableUse { val incoming <- incoming_context; val context <- selected_context; } ->
+        CheckedCallableUse { val incoming <- incoming_context, val context <- selected_context, } ->
             case proof[right] of {
-                CheckedCallableUse { val other_incoming <- incoming_context; val other_context <- selected_context; } ->
+                CheckedCallableUse { val other_incoming <- incoming_context, val other_context <- selected_context, } ->
                     incoming == other_incoming && context == other_context;
                 _ -> false
             };
@@ -422,9 +422,9 @@ export func prepare_object_callables(source:const SourceBytes in S, catalog:cons
     for (row in 0u64 .. selected_used) {
         case selections[row] of {
             SelectedResource {
-                val site <- site; val selected_revision <- revision; val mode <- mode;
-                val kind <- export_kind; val shape <- shape; val publisher <- publishing_module;
-                val defining_module <- defining_module; val declaration <- identity; val public_row <- public_row;
+                val site <- site, val selected_revision <- revision, val mode <- mode,
+                val kind <- export_kind, val shape <- shape, val publisher <- publishing_module,
+                val defining_module <- defining_module, val declaration <- identity, val public_row <- public_row,
             } -> {
                 if (selected_revision != revision || site >= used) return false;
                 if (kind == callable_export() && shape == ordinary_callable_shape()) {
@@ -466,8 +466,8 @@ func publish_callable_view(proof:const CallableUseProofs in P, use:UInt64, revis
     if (use >= intrinsic (len)(proof)) return false;
     return case proof[use] of {
         CheckedCallableUse {
-            val chosen_revision <- revision; val origin <- defining_module; val method <- declaration;
-            val incoming <- incoming_context; val selected <- selected_context;
+            val chosen_revision <- revision, val origin <- defining_module, val method <- declaration,
+            val incoming <- incoming_context, val selected <- selected_context,
         } -> {{
             if (chosen_revision != revision || origin != defining_module || method != declaration) return false;
             ref view = make PublishedObjectView {

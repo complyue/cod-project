@@ -5,9 +5,9 @@ using "./SourceStorage.cod" SourceBytes;
 
 export data PackageResolution =
     MissingModule {} |
-    SearchFailed { os_error:UInt64; } |
-    AmbiguousModule { first_root:UInt64; second_root:UInt64; } |
-    PackageModule { root:UInt64; };
+    SearchFailed { os_error:UInt64, } |
+    AmbiguousModule { first_root:UInt64, second_root:UInt64, } |
+    PackageModule { root:UInt64, };
 
 export func absent_module() -> UInt64 { return 18446744073709551615u64 }
 

@@ -6,8 +6,8 @@ using "./InitializationFlow.cod" InitializationAccess { ResetAccess, EstablishAc
 using "./InitializationControl.cod" InitializationStates;
 
 export data InitializationResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 func unproved_initialization() -> UInt8 { return 13u8; }

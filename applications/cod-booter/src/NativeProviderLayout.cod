@@ -1,14 +1,14 @@
 using "std:exceptions" Exception;
 
 export enum ABIRepresentation:UInt8 {
-    ABIInt8 = 0;
-    ABIInt32 = 1;
-    ABIInt64 = 2;
-    ABIFloat32 = 3;
-    ABIFloat64 = 4;
+    ABIInt8 = 0,
+    ABIInt32 = 1,
+    ABIInt64 = 2,
+    ABIFloat32 = 3,
+    ABIFloat64 = 4,
 }
 export handle type ProviderLayout;
-export data ProviderLayoutException <: Exception { status:UInt8; }
+export data ProviderLayoutException <: Exception { status:UInt8, }
 
 proc "C" ProviderLayout() throws ProviderLayoutException;
 export proc "C" provider_alloc_size(handle layout:ProviderLayout in L, representation:ABIRepresentation) -> UInt64

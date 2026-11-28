@@ -7,43 +7,43 @@ using "./ParserStorage.cod" no_node;
 # and invocations consume preceding argument commands in source order.
 # A checked arithmetic command writes a value and a separate fault category.
 export data NativeCommand {
-    opcode:UInt8;
-    a:UInt64;
-    b:UInt64;
-    c:UInt64;
-    d:UInt64;
+    opcode:UInt8,
+    a:UInt64,
+    b:UInt64,
+    c:UInt64,
+    d:UInt64,
 }
 export array NativeCommands[UInt64]:NativeCommand;
 
 export data NativeLiteralRange {
-    first:UInt64;
-    past:UInt64;
+    first:UInt64,
+    past:UInt64,
 }
 export array NativeLiteralRanges[UInt64]:NativeLiteralRange;
 
 export data NativeUnitRow {
-    command_first:UInt64;
-    command_past:UInt64;
-    literal_first:UInt64;
-    literal_past:UInt64;
-    name_first:UInt64;
-    name_past:UInt64;
-    source_size:UInt64;
-    labels:UInt64;
-    slots:UInt64;
+    command_first:UInt64,
+    command_past:UInt64,
+    literal_first:UInt64,
+    literal_past:UInt64,
+    name_first:UInt64,
+    name_past:UInt64,
+    source_size:UInt64,
+    labels:UInt64,
+    slots:UInt64,
 }
 export array NativeUnitRows[UInt64]:NativeUnitRow;
 
 export data NativePlan {
-    used:UInt64;
-    functions:UInt64;
-    function_base:UInt64;
-    labels:UInt64;
-    slots:UInt64;
-    diagnostic:UInt8;
-    node:UInt64;
-    initialization_notes:bool;
-    initialization_obligations:bool;
+    used:UInt64,
+    functions:UInt64,
+    function_base:UInt64,
+    labels:UInt64,
+    slots:UInt64,
+    diagnostic:UInt8,
+    node:UInt64,
+    initialization_notes:bool,
+    initialization_obligations:bool,
 }
 
 export func declare_function() -> UInt8 { return 1u8; }

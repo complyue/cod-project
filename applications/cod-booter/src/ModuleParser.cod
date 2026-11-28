@@ -345,7 +345,7 @@ func parse_record_fields(source:const SourceBytes in S, tokens:const Tokens in T
         } else {};
         delimiter <- punct_at(source, tokens, result.next, past);
         if (delimiter == RIGHT_BRACE) { result.next <- result.next + 1u64; return last; } else {};
-        if (delimiter != SEMICOLON) { result.diagnostic <- expected_record_fields(); return no_node(); } else {};
+        if (delimiter != COMMA) { result.diagnostic <- expected_record_fields(); return no_node(); } else {};
         result.next <- result.next + 1u64;
     };
     result.diagnostic <- expected_record_fields();
@@ -714,10 +714,11 @@ func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, 
         if (!parse_enum_initializer(source, tokens, nodes, result, past)) return false;
         (initializer <- result.root):void;
     } else {};
-    if (punct_at(source, tokens, result.next, past) != SEMICOLON) {
-        result.diagnostic <- expected_module_separator();
+    val delimiter <- punct_at(source, tokens, result.next, past);
+    if (delimiter != COMMA && delimiter != RIGHT_BRACE) {
+        result.diagnostic <- expected_enum_member();
         return false;
-    } else {};
+    };
     ref preceding = make NoLink {};
     if (previous != no_node()) {
         preceding = make LinkTo { node <- make NodeId { revision <- result.revision; index <- previous; }; };
@@ -729,12 +730,14 @@ func parse_enum_member(source:const SourceBytes in S, tokens:const Tokens in T, 
         {};
     };
     val first <- syntax_first(nodes, result.used, name);
-    append_syntax_node(nodes, result, first, tokens[result.next].past, make EnumMember {
+    val last <- if (initializer == no_node()) { syntax_past(nodes, result.used, name) }
+        else { syntax_past(nodes, result.used, initializer) };
+    append_syntax_node(nodes, result, first, last, make EnumMember {
         previous <- preceding;
         name <- make NodeId { revision <- result.revision; index <- name; };
         initializer <- input;
     });
-    result.next <- result.next + 1u64;
+    if (delimiter == COMMA) { (result.next <- result.next + 1u64):void };
     return result.diagnostic == 0u8;
 }
 
@@ -857,7 +860,7 @@ func braced_callable_definition(nodes:const ExprNodes in N, used:UInt64, at:UInt
     if (at >= used) return false;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (CallableDefinition) -> { true };
                 (CEntryDefinition) -> { true };

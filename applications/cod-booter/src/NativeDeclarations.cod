@@ -113,8 +113,8 @@ using "./AggregateSchemas.cod" {
 };
 
 export data NativeDeclarationResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 func invalid_native_owner_type() -> UInt8 { return 16u8; }
@@ -184,9 +184,9 @@ export func native_declaration_first(nodes:const ExprNodes in N, used:UInt64,
     if (first == no_node() || report.diagnostic != invalid_array_shape()) return first;
     case nodes[report.node] of {
         (Vacant) -> {};
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (ArrayDefinition { val opening <- dimension_at; }) -> { return opening; };
+                (ArrayDefinition { val opening <- dimension_at, }) -> { return opening; };
                 (_) -> {};
             }
         };
@@ -439,8 +439,8 @@ func native_array_view(nodes:const ExprNodes in N, names:const NameBindings in B
 }
 
 data NativeOwnerType {
-    origin:UInt64;
-    identity:UInt64;
+    origin:UInt64,
+    identity:UInt64,
 }
 
 # Zero is the current module's local namespace during checking. A checked
@@ -787,9 +787,9 @@ func check_c_procedure(nodes:const ExprNodes in N, names:const NameBindings in B
 }
 
 data HandleLoan {
-    marker:UInt64;
-    owner:UInt64;
-    readonly:bool;
+    marker:UInt64,
+    owner:UInt64,
+    readonly:bool,
 }
 
 # Follow the binding's initializer, keeping the actual owner and access of
@@ -847,9 +847,9 @@ func scalar_operand_kind(nodes:const ExprNodes in N, names:const NameBindings in
     if (work[value].value_kind != 0u8) return work[value].value_kind;
     case nodes[value] of {
         (Vacant) -> { return 0u8; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (IntegerLiteral { val width <- width; }) -> {
+                (IntegerLiteral { val width <- width, }) -> {
                     if (width == 64u64) return builtin_u64();
                     return if (width == 8u64) { builtin_u8() } else { builtin_u32() };
                 };
@@ -1277,9 +1277,9 @@ func trace_installed_handle(nodes:const ExprNodes in N, names:const NameBindings
         if (install >= used) return false;
         case nodes[install] of {
             Vacant -> { return false; };
-            Occupied { val syntax <- node; } -> {
+            Occupied { val syntax <- node, } -> {
                 case syntax.payload of {
-                    InstallSymbolEffect { val bound <- name; val acquisition <- acquisition; } -> {
+                    InstallSymbolEffect { val bound <- name, val acquisition <- acquisition, } -> {
                         if (!published_syntax_id(nodes, revision, install, bound) ||
                             !published_syntax_id(nodes, revision, install, acquisition))
                             return false;
@@ -1313,9 +1313,9 @@ func check_effect_installation(nodes:const ExprNodes in N, names:const NameBindi
     where {const owner N, const owner B, const owner E, owner W, owner R} {
     return case nodes[at] of {
         (Vacant) -> { return false; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (BindSymbolEffect { val name <- name; val input <- input; }) -> {
+                (BindSymbolEffect { val name <- name, val input <- input, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) || !published_syntax_id(nodes, revision, at, input) ||
                         !reference_symbol(names, selected, name.index)) {
                         reject_declaration(report, at, mismatched_symbol_installation());
@@ -1323,7 +1323,7 @@ func check_effect_installation(nodes:const ExprNodes in N, names:const NameBindi
                     };
                     true
                 };
-                (InstallSymbolEffect { val name <- name; val acquisition <- acquisition; }) -> {
+                (InstallSymbolEffect { val name <- name, val acquisition <- acquisition, }) -> {
                     if (!published_syntax_id(nodes, revision, at, name) || !published_syntax_id(nodes, revision, at, acquisition) ||
                         reference_symbol(names, selected, name.index)) {
                         reject_declaration(report, at, mismatched_symbol_installation());
@@ -1472,94 +1472,94 @@ func check_here_receiver(nodes:const ExprNodes in N, names:const NameBindings in
 }
 
 export data ArraySlotType {
-    owner_site:UInt64;
-    type_module:UInt64;
-    type_identity:UInt64;
-    element_module:UInt64;
-    element_identity:UInt64;
+    owner_site:UInt64,
+    type_module:UInt64,
+    type_identity:UInt64,
+    element_module:UInt64,
+    element_identity:UInt64,
 }
 
 export enum ArraySlotElement:UInt8 {
-    ByteArrayElement; SumArrayElement; UInt64ArrayElement; ProductArrayElement; BoolArrayElement; EnumArrayElement;
+    ByteArrayElement, SumArrayElement, UInt64ArrayElement, ProductArrayElement, BoolArrayElement, EnumArrayElement,
 }
 
 export data SuppliedView =
     NoSuppliedView {} |
-    PreparedGenericConstruction { owner_site:UInt64; member:UInt64; } |
-    BoundGenericCall { header:UInt64; past:UInt64; arguments:UInt64; } |
-    SuppliedArrayView { type_module:UInt64; type_identity:UInt64; owner_role:UInt64; body:UInt64; readonly:bool;
+    PreparedGenericConstruction { owner_site:UInt64, member:UInt64, } |
+    BoundGenericCall { header:UInt64, past:UInt64, arguments:UInt64, } |
+    SuppliedArrayView { type_module:UInt64, type_identity:UInt64, owner_role:UInt64, body:UInt64, readonly:bool,
         } |
-    HereFormalContract { first_parameter:UInt64; result_kind:UInt8; result_module:UInt64;
-        result_identity:UInt64; } |
-    PreparedHereInvocation { formal:UInt64; } |
-    PreparedSourceHereRelay { formal:UInt64; } |
-    PreparedSynchronousHere { call:UInt64; } |
-    PreparedHandleFormal { marker:UInt64; owner_site:UInt64; readonly:bool; } |
-    PreparedNativeOperation { definition:UInt64; actual_owner:UInt64; } |
-    PreparedNativeLoanCall { module:UInt64; definition:UInt64; revision:UInt64;
-        activation:UInt64; arity:UInt64; requires_body:bool; function_form:bool; } |
-    PreparedNativeOperand { call_site:UInt64; revision:UInt64; position:UInt64; input:UInt64;
-        kind:UInt8; owner_role:UInt64; owner_site:UInt64; type_module:UInt64; type_identity:UInt64;
-        target_readonly:bool; owner_readonly:bool; } |
-    ReadonlyByteRead { array_site:UInt64; index:UInt64; formal:UInt64; owner_site:UInt64;
-        type_module:UInt64; type_identity:UInt64; } |
-    ArraySlotFormal { owner_site:UInt64; type_module:UInt64; type_identity:UInt64; slot:bool;
-        element:ArraySlotElement; element_module:UInt64; element_identity:UInt64; } |
-    CheckedArraySlotBody { failures:ByteArrayFailures; } |
-    CheckedImportedArraySlotCall { failures:ByteArrayFailures; } |
-    IndexedArrayDestination { assignment:UInt64; target:UInt64; index:UInt64; } |
-    IndexedArraySource { assignment:UInt64; target:UInt64; index:UInt64; } |
-    PreparedArrayConstruction { requested:UInt64; placement:UInt64; length:UInt64; fill:UInt64;
-        owner_site:UInt64; type_module:UInt64; type_identity:UInt64; element:ArraySlotElement;
-        element_module:UInt64; element_identity:UInt64; } |
-    EmptySumArrayFill { construction:UInt64; sum:UInt64; arm:UInt64; } |
-    PreparedByteFunction { enum_result:bool; completion:ArrayReadCompletion; } |
-    PreparedScalarLiteral { kind:UInt8; } |
-    BoundNiladicScalarReturn { kind:UInt8; callee:UInt64; } |
+    HereFormalContract { first_parameter:UInt64, result_kind:UInt8, result_module:UInt64,
+        result_identity:UInt64, } |
+    PreparedHereInvocation { formal:UInt64, } |
+    PreparedSourceHereRelay { formal:UInt64, } |
+    PreparedSynchronousHere { call:UInt64, } |
+    PreparedHandleFormal { marker:UInt64, owner_site:UInt64, readonly:bool, } |
+    PreparedNativeOperation { definition:UInt64, actual_owner:UInt64, } |
+    PreparedNativeLoanCall { module:UInt64, definition:UInt64, revision:UInt64,
+        activation:UInt64, arity:UInt64, requires_body:bool, function_form:bool, } |
+    PreparedNativeOperand { call_site:UInt64, revision:UInt64, position:UInt64, input:UInt64,
+        kind:UInt8, owner_role:UInt64, owner_site:UInt64, type_module:UInt64, type_identity:UInt64,
+        target_readonly:bool, owner_readonly:bool, } |
+    ReadonlyByteRead { array_site:UInt64, index:UInt64, formal:UInt64, owner_site:UInt64,
+        type_module:UInt64, type_identity:UInt64, } |
+    ArraySlotFormal { owner_site:UInt64, type_module:UInt64, type_identity:UInt64, slot:bool,
+        element:ArraySlotElement, element_module:UInt64, element_identity:UInt64, } |
+    CheckedArraySlotBody { failures:ByteArrayFailures, } |
+    CheckedImportedArraySlotCall { failures:ByteArrayFailures, } |
+    IndexedArrayDestination { assignment:UInt64, target:UInt64, index:UInt64, } |
+    IndexedArraySource { assignment:UInt64, target:UInt64, index:UInt64, } |
+    PreparedArrayConstruction { requested:UInt64, placement:UInt64, length:UInt64, fill:UInt64,
+        owner_site:UInt64, type_module:UInt64, type_identity:UInt64, element:ArraySlotElement,
+        element_module:UInt64, element_identity:UInt64, } |
+    EmptySumArrayFill { construction:UInt64, sum:UInt64, arm:UInt64, } |
+    PreparedByteFunction { enum_result:bool, completion:ArrayReadCompletion, } |
+    PreparedScalarLiteral { kind:UInt8, } |
+    BoundNiladicScalarReturn { kind:UInt8, callee:UInt64, } |
     PreparedScalarPredicate {} |
     CheckedScalarPredicate {} |
     PreparedScalarFunction {} |
-    CheckedScalarFunction { numeric_fault:bool; } |
+    CheckedScalarFunction { numeric_fault:bool, } |
     ImportedScalarPredicateCandidate {} |
     ReadonlyTextPredicate {} |
-    ReadonlyTextPredicateBody { first_formal:UInt64; test:UInt64; tail:UInt64; returns_true:bool; } |
+    ReadonlyTextPredicateBody { first_formal:UInt64, test:UInt64, tail:UInt64, returns_true:bool, } |
     ReadonlyIndexedByteReader {} |
     PreparedReadonlyQuery {} |
-    PreparedArrayProcedure { mixed_record:bool; } |
-    CheckedArrayProcedure { completion:ArrayReadCompletion; numeric_fault:bool; allocates:bool; } |
+    PreparedArrayProcedure { mixed_record:bool, } |
+    CheckedArrayProcedure { completion:ArrayReadCompletion, numeric_fault:bool, allocates:bool, } |
     PreparedProductWriter {} |
     PreparedAggregateWriter {} |
-    CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
-    PreparedArrayInspector { inline_product:bool; } |
-    CheckedArrayInspector { completion:ArrayReadCompletion; numeric_fault:bool; allocates:bool; } |
+    CheckedAggregateWriter { completion:ArrayReadCompletion, numeric_fault:bool, } |
+    PreparedArrayInspector { inline_product:bool, } |
+    CheckedArrayInspector { completion:ArrayReadCompletion, numeric_fault:bool, allocates:bool, } |
     PreparedParserWriter {} |
-    PreparedWorkspaceLoans { publication_signature:bool; } |
+    PreparedWorkspaceLoans { publication_signature:bool, } |
     PreparedWorkspaceWriter {} |
-    CheckedParserWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
-    CheckedWorkspaceWriter { completion:ArrayReadCompletion; numeric_fault:bool; allocates:bool; } |
+    CheckedParserWriter { completion:ArrayReadCompletion, numeric_fault:bool, } |
+    CheckedWorkspaceWriter { completion:ArrayReadCompletion, numeric_fault:bool, allocates:bool, } |
     PreparedProductWriterHelper {} |
-    CheckedProductWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
-    CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    CheckedProductWriter { completion:ArrayReadCompletion, numeric_fault:bool, } |
+    CheckedReadonlyReader { completion:ArrayReadCompletion, numeric_fault:bool, } |
     CheckedLiteralCall {} |
     CheckedScalarFunctionCall {} |
     CheckedScalarPredicateCall {} |
-    CheckedReadonlyCall { aggregate_loan:bool; } |
+    CheckedReadonlyCall { aggregate_loan:bool, } |
     CheckedWriterCall {} |
-    CheckedParserWriterCall { inline_input:bool; } |
-    CheckedWorkspaceWriterCall { allocates:bool; } |
+    CheckedParserWriterCall { inline_input:bool, } |
+    CheckedWorkspaceWriterCall { allocates:bool, } |
     CheckedSumWriterCall {} |
-    CheckedArrayCall { allocates:bool; } |
+    CheckedArrayCall { allocates:bool, } |
     CheckedArrayReaderCall {} |
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
     ImportedAggregateWriterCandidate {} |
     ImportedProductWriter {} |
-    PreparedArrayReaderLeaf { declared_array:UInt64; } |
-    PreparedArrayReaderForward { declared_array:UInt64; callee:UInt64; } |
-    CheckedArrayReaderForward { completion:ArrayReadCompletion; } |
-    PreparedArrayLengthMethod { type_module:UInt64; type_identity:UInt64; } |
-    ImportedArrayLengthCall { first:UInt64; past:UInt64; argument:UInt64; input:UInt64; } |
-    PreparedAcquisitionFailure { nominal:ExceptionType; };
+    PreparedArrayReaderLeaf { declared_array:UInt64, } |
+    PreparedArrayReaderForward { declared_array:UInt64, callee:UInt64, } |
+    CheckedArrayReaderForward { completion:ArrayReadCompletion, } |
+    PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
+    ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
+    PreparedAcquisitionFailure { nominal:ExceptionType, };
 export array SuppliedViews[UInt64]:SuppliedView;
 
 func describe_byte_array_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -1908,7 +1908,7 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
     return true
 }
 
-export enum SourceArrayFormals:UInt8 { NoSourceArrayFormal; EnumArrayLoanFormal; ArrayReferenceSlotFormal; }
+export enum SourceArrayFormals:UInt8 { NoSourceArrayFormal, EnumArrayLoanFormal, ArrayReferenceSlotFormal, }
 
 export func prepared_array_signature(nodes:const ExprNodes in N, work:const NameWork in W,
     views:const SuppliedViews in V, signature:UInt64, used:UInt64, revision:UInt64) -> SourceArrayFormals
@@ -1922,7 +1922,7 @@ export func prepared_array_signature(nodes:const ExprNodes in N, work:const Name
         if (at == no_node()) return profile;
         if (at >= used || at >= intrinsic (len)(views)) return (NoSourceArrayFormal:SourceArrayFormals);
         case views[at] of {
-            ArraySlotFormal { val passes_slot <- slot; val element <-; } -> {
+            ArraySlotFormal { val passes_slot <- slot, val element <-, } -> {
                 if (passes_slot) return (ArrayReferenceSlotFormal:SourceArrayFormals);
                 if (element == (EnumArrayElement:ArraySlotElement)) {
                     (profile <- (EnumArrayLoanFormal:SourceArrayFormals)):void
@@ -2098,7 +2098,7 @@ export func first_array_slot_work(views:const SuppliedViews in V, used:UInt64) -
     for (at in 0u64 .. used) {
         case views[at] of {
             PreparedArrayConstruction -> { return at };
-            ArraySlotFormal { val aliases_slot <- slot; val element <-; } -> {
+            ArraySlotFormal { val aliases_slot <- slot, val element <-, } -> {
                 if (aliases_slot || element == (EnumArrayElement:ArraySlotElement)) return at
             };
             _ -> {}
@@ -2197,8 +2197,8 @@ func prepare_niladic_scalar_source(nodes:const ExprNodes in N, names:const NameB
     val operand <- single_return_value(nodes, callable.body, used, revision);
     if (operand >= used) return;
     val literal <- case nodes[operand] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            IntegerLiteral { val width <- width; val value <- magnitude; } ->
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            IntegerLiteral { val width <- width, val value <- magnitude, } ->
                 (kind == builtin_u8() && width == 8u64 && value <= 255u64) ||
                 (kind == builtin_u64() && width == 64u64);
             _ -> false
@@ -2239,7 +2239,7 @@ func prepare_scalar_predicate(nodes:const ExprNodes in N, names:const NameBindin
     val operand <- single_return_value(nodes, callable.body, used, revision);
     if (operand >= used) return;
     if (case nodes[operand] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
             ComparisonExpression -> true;
             Conjunction -> true;
             Disjunction -> true;
@@ -2342,7 +2342,7 @@ export func source_literal_kind(views:const SuppliedViews in V, definition:UInt6
     where {const owner V} {
     if (definition >= intrinsic (len)(views)) return 0u8;
     return case views[definition] of {
-        PreparedScalarLiteral { val kind <-; } -> (kind);
+        PreparedScalarLiteral { val kind <-, } -> (kind);
         _ -> 0u8
     }
 }
@@ -2353,8 +2353,8 @@ export func completed_niladic_source_kind(views:const SuppliedViews in V, defini
     where {const owner V} {
     if (definition >= intrinsic (len)(views)) return 0u8;
     return case views[definition] of {
-        PreparedScalarLiteral { val kind <-; } -> { kind };
-        BoundNiladicScalarReturn { val kind <-; val callee <-; } ->
+        PreparedScalarLiteral { val kind <-, } -> { kind };
+        BoundNiladicScalarReturn { val kind <-, val callee <-, } ->
             if (source_literal_kind(views, callee) == kind) { kind } else { 0u8 };
         _ -> 0u8
     }
@@ -2366,8 +2366,8 @@ func returns_formal_length(nodes:const ExprNodes in N, names:const NameBindings 
     val value <- single_return_value(nodes, body, used, revision);
     if (value >= used) return false;
     return case nodes[value] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            ArrayLength { val target <-; } -> published_syntax_id(nodes, revision, value, target) &&
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            ArrayLength { val target <-, } -> published_syntax_id(nodes, revision, value, target) &&
                 names[target.index].kind == formal_binding() && names[target.index].declaration == formal;
             _ -> false
         };
@@ -2463,7 +2463,7 @@ func forwarded_read(nodes:const ExprNodes in N, names:const NameBindings in B,
         if (position < 3u64) {
             if (names[entry.item].kind != formal_binding() || names[entry.item].declaration != formal ||
                 !(case nodes[entry.item] of {
-                    Occupied { val syntax <- node; } -> case syntax.payload of {
+                    Occupied { val syntax <- node, } -> case syntax.payload of {
                         NameReference -> true; _ -> false
                     };
                     Vacant -> false
@@ -2519,10 +2519,10 @@ func prepare_array_reader(nodes:const ExprNodes in N, names:const NameBindings i
 
 export func forwarded_array_reader(views:const SuppliedViews in V, definition:UInt64) -> UInt64 where {const owner V} {
     return case views[definition] of {
-        PreparedArrayReaderForward { val declared_array <-; val callee <-; } -> {
+        PreparedArrayReaderForward { val declared_array <-, val callee <-, } -> {
             if (callee >= intrinsic (len)(views)) return no_node();
             return case views[callee] of {
-                PreparedArrayReaderLeaf { val target <- declared_array; } ->
+                PreparedArrayReaderLeaf { val target <- declared_array, } ->
                     if (target == declared_array) { callee } else { no_node() };
                 _ -> no_node()
             }
@@ -2875,8 +2875,8 @@ export func checked_source_array_call(views:const SuppliedViews in V, site:UInt6
 export func source_call_allocates(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
     return site < intrinsic (len)(views) && (case views[site] of {
-        CheckedArrayCall { val allocates <-; } -> allocates;
-        CheckedWorkspaceWriterCall { val allocates <-; } -> allocates;
+        CheckedArrayCall { val allocates <-, } -> allocates;
+        CheckedWorkspaceWriterCall { val allocates <-, } -> allocates;
         _ -> false
     })
 }
@@ -3556,7 +3556,7 @@ export func prepared_writable_product_formal(views:const SuppliedViews in V, sit
         PreparedProductWriter -> true;
         PreparedProductWriterHelper -> true;
         PreparedWorkspaceWriter -> true;
-        PreparedArrayInspector { val inline_product <-; } -> inline_product;
+        PreparedArrayInspector { val inline_product <-, } -> inline_product;
         _ -> false
     })
 }
@@ -3617,7 +3617,7 @@ export func prepared_byte_function(views:const SuppliedViews in V, at:UInt64, re
     -> bool where {const owner V} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        PreparedByteFunction { val enum_result <-; } -> { !require_enum || enum_result };
+        PreparedByteFunction { val enum_result <-, } -> { !require_enum || enum_result };
         _ -> false
     }
 }
@@ -3642,15 +3642,15 @@ func published_array_read_completion(views:const SuppliedViews in V, at:UInt64)
     -> ArrayReadCompletion where {const owner V} {
     if (at >= intrinsic (len)(views)) return NoArrayRead;
     return case views[at] of {
-        PreparedByteFunction { val completion <-; } -> completion;
-        CheckedArrayReaderForward { val completion <-; } -> completion;
-        CheckedReadonlyReader { val completion <-; } -> completion;
-        CheckedArrayProcedure { val completion <-; } -> completion;
-        CheckedProductWriter { val completion <-; } -> completion;
-        CheckedAggregateWriter { val completion <-; } -> completion;
-        CheckedParserWriter { val completion <-; } -> completion;
-        CheckedWorkspaceWriter { val completion <-; } -> completion;
-        CheckedArrayInspector { val completion <-; } -> completion;
+        PreparedByteFunction { val completion <-, } -> completion;
+        CheckedArrayReaderForward { val completion <-, } -> completion;
+        CheckedReadonlyReader { val completion <-, } -> completion;
+        CheckedArrayProcedure { val completion <-, } -> completion;
+        CheckedProductWriter { val completion <-, } -> completion;
+        CheckedAggregateWriter { val completion <-, } -> completion;
+        CheckedParserWriter { val completion <-, } -> completion;
+        CheckedWorkspaceWriter { val completion <-, } -> completion;
+        CheckedArrayInspector { val completion <-, } -> completion;
         _ -> NoArrayRead
     }
 }
@@ -3660,7 +3660,7 @@ export func read_acquisition_failure(
     where {const owner V, owner F} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        (PreparedAcquisitionFailure { val type <- nominal; }) -> {
+        (PreparedAcquisitionFailure { val type <- nominal, }) -> {
             failure.defining_module <- type.defining_module;
             failure.declaration <- type.declaration;
             failure.checked <- type.checked;
@@ -3683,7 +3683,7 @@ export func native_loan_requires_body(views:const SuppliedViews in V, at:UInt64)
     where {const owner V} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        PreparedNativeLoanCall { val requires_body <-; } -> requires_body;
+        PreparedNativeLoanCall { val requires_body <-, } -> requires_body;
         _ -> false
     }
 }
@@ -3694,7 +3694,7 @@ export func prepared_native_function(views:const SuppliedViews in V, at:UInt64,
     revision:UInt64) -> bool where {const owner V} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        PreparedNativeLoanCall { val origin <- revision; val function_form <-; } ->
+        PreparedNativeLoanCall { val origin <- revision, val function_form <-, } ->
             function_form && origin == revision;
         _ -> false
     }
@@ -3750,10 +3750,10 @@ func read_imported_constructor_failure(
 }
 
 export data HereContract {
-    first_parameter:UInt64;
-    result_kind:UInt8;
-    result_module:UInt64;
-    result_identity:UInt64;
+    first_parameter:UInt64,
+    result_kind:UInt8,
+    result_module:UInt64,
+    result_identity:UInt64,
 }
 
 export func inspect_here_contract(views:const SuppliedViews in V, formal:UInt64,
@@ -3761,8 +3761,8 @@ export func inspect_here_contract(views:const SuppliedViews in V, formal:UInt64,
     where {const owner V, owner C} {
     if (formal >= intrinsic (len)(views)) return false;
     return case views[formal] of {
-        (HereFormalContract { val first <- first_parameter; val kind <- result_kind;
-                              val module <- result_module; val identity <- result_identity; }) -> {
+        (HereFormalContract { val first <- first_parameter, val kind <- result_kind,
+                              val module <- result_module, val identity <- result_identity, }) -> {
             contract.first_parameter <- first;
             contract.result_kind <- kind;
             contract.result_module <- module;
@@ -3773,15 +3773,15 @@ export func inspect_here_contract(views:const SuppliedViews in V, formal:UInt64,
     }
 }
 
-export data HandleContract { marker:UInt64; owner_site:UInt64; readonly:bool; }
+export data HandleContract { marker:UInt64, owner_site:UInt64, readonly:bool, }
 
 export func inspect_handle_contract(views:const SuppliedViews in V, formal:UInt64,
     contract:HandleContract in H) -> bool
     where {const owner V, owner H} {
     if (formal >= intrinsic (len)(views)) return false;
     return case views[formal] of {
-        (PreparedHandleFormal { val marker <- marker; val owner_site <- owner_site; val readonly <-
-            readonly; }) -> {
+        (PreparedHandleFormal { val marker <- marker, val owner_site <- owner_site, val readonly <-
+            readonly, }) -> {
             contract.marker <- marker;
             contract.owner_site <- owner_site;
             contract.readonly <- readonly;
@@ -4010,9 +4010,9 @@ func forwarded_here_operand(nodes:const ExprNodes in N, names:const NameBindings
     val receiver <- names[actual].declaration;
     if (receiver >= used) return invalid_native_callback();
     return case views[receiver] of {
-        (SuppliedArrayView { val module <- type_module; val identity <- type_identity; val role <-
-            owner_role;
-                            val body <- body; val supplied_readonly <- readonly; }) -> {
+        (SuppliedArrayView { val module <- type_module, val identity <- type_identity, val role <-
+            owner_role,
+                            val body <- body, val supplied_readonly <- readonly, }) -> {
             if (role != owner_role) return mismatched_actual_handle_owner();
             if (supplied_readonly && !readonly) return invalid_native_access();
             if (body >= used || syntax_first(nodes, used, call) < syntax_first(nodes, used, body) ||
@@ -4115,7 +4115,7 @@ export func prepared_here_formal(views:const SuppliedViews in V,
     at:UInt64) -> UInt64 where {const owner V} {
     if (at >= intrinsic (len)(views)) return no_node();
     return case views[at] of {
-        (PreparedHereInvocation { val formal <- formal; }) -> { formal };
+        (PreparedHereInvocation { val formal <- formal, }) -> { formal };
         _ -> no_node()
     }
 }
@@ -4125,7 +4125,7 @@ export func prepared_native_operation(views:const SuppliedViews in V, at:UInt64,
     where {const owner V} {
     if (at >= intrinsic (len)(views)) return false;
     return case views[at] of {
-        (PreparedNativeOperation { val selected <- definition; val actual <- actual_owner; }) -> {
+        (PreparedNativeOperation { val selected <- definition, val actual <- actual_owner, }) -> {
             selected == definition && actual != no_node()
         };
         _ -> false
@@ -4292,7 +4292,7 @@ export func prepared_source_here_relay(views:const SuppliedViews in V, at:UInt64
     where {const owner V} {
     if (at >= intrinsic (len)(views)) return no_node();
     return case views[at] of {
-        PreparedSourceHereRelay { val formal <-; } -> formal;
+        PreparedSourceHereRelay { val formal <-, } -> formal;
         _ -> no_node()
     }
 }
@@ -5067,7 +5067,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             # The export marks the prepared signature as a body demand.
             # Local loan preparation alone does not demand another body.
             if (case views[public_item.item] of {
-                PreparedWorkspaceLoans { val publication_signature <-; } -> publication_signature;
+                PreparedWorkspaceLoans { val publication_signature <-, } -> publication_signature;
                 _ -> false
             }) {
                 (views[public_item.item] <- make PreparedWorkspaceWriter {}):void
@@ -5290,9 +5290,9 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
 }
 
 export data ModulePublication {
-    module_identity:UInt64;
-    selection_count:UInt64;
-    graph_spelling_count:UInt64;
+    module_identity:UInt64,
+    selection_count:UInt64,
+    graph_spelling_count:UInt64,
 }
 
 func count_owner_clauses(nodes:const ExprNodes in N, tail:UInt64, used:UInt64, revision:UInt64) -> UInt64 where {const owner N} {
@@ -5339,7 +5339,7 @@ func source_here_supplier(nodes:const ExprNodes in N, names:const NameBindings i
     return names[binding.owner_name].declaration
 }
 
-enum SourceHandleProfile:UInt8 { NoSourceHandle; SourceHandle; ArrayProcedure; MixedRecordProcedure; }
+enum SourceHandleProfile:UInt8 { NoSourceHandle, SourceHandle, ArrayProcedure, MixedRecordProcedure, }
 
 func source_handle_signature(
     nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
@@ -5764,7 +5764,7 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     val past <- first + 1u64 + count;
     for (row in first + 1u64 .. past) {
         case views[method] of {
-            PreparedArrayLengthMethod { val module <- type_module; val identity <- type_identity; } -> {
+            PreparedArrayLengthMethod { val module <- type_module, val identity <- type_identity, } -> {
                 write_interface_header(contracts[row], defining_module, method, 0u8, 0u8, 0u64);
                 contracts[row].value_kind <- array_type();
                 contracts[row].type_module <- if (module == 0u64) { defining_module } else { module };
@@ -5865,37 +5865,37 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             at, at, kind, callback, array_read_completion, source_writer, scalar_source_body, used, revision)):void;
                         if (count != no_node()) {
                             case views[at] of {
-                                CheckedScalarFunction { val numeric_fault <-; } -> {
+                                CheckedScalarFunction { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedReadonlyReader { val numeric_fault <-; } -> {
+                                CheckedReadonlyReader { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedArrayProcedure { val numeric_fault <-; val allocates <-; } -> {
+                                CheckedArrayProcedure { val numeric_fault <-, val allocates <-, } -> {
                                     contracts[first].source_numeric_fault <- numeric_fault;
                                     contracts[first].array_slot_failures.out_of_memory <- allocates;
                                     contracts[first].array_slot_failures.region_capacity <- allocates;
                                     (contracts[first].array_slot_failures.invalid_capacity <- allocates):void
                                 };
-                                CheckedProductWriter { val numeric_fault <-; } -> {
+                                CheckedProductWriter { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedAggregateWriter { val numeric_fault <-; } -> {
+                                CheckedAggregateWriter { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedArrayInspector { val numeric_fault <-; val allocates <-; } -> {
+                                CheckedArrayInspector { val numeric_fault <-, val allocates <-, } -> {
                                     contracts[first].source_numeric_fault <- numeric_fault;
                                     contracts[first].array_slot_failures.out_of_memory <- allocates;
                                     contracts[first].array_slot_failures.region_capacity <- allocates;
                                     (contracts[first].array_slot_failures.invalid_capacity <- allocates):void
                                 };
-                                CheckedWorkspaceWriter { val numeric_fault <-; val allocates <-; } -> {
+                                CheckedWorkspaceWriter { val numeric_fault <-, val allocates <-, } -> {
                                     contracts[first].source_numeric_fault <- numeric_fault;
                                     contracts[first].array_slot_failures.out_of_memory <- allocates;
                                     contracts[first].array_slot_failures.region_capacity <- allocates;
                                     (contracts[first].array_slot_failures.invalid_capacity <- allocates):void
                                 };
-                                CheckedParserWriter { val numeric_fault <-; } -> {
+                                CheckedParserWriter { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
                                 _ -> {}

@@ -5,10 +5,10 @@ using "std:text-storage" {
 using "std:exceptions" Error;
 
 export type Utf8StreamOut;
-export data Utf8WriteError <: Error { code:UInt64; }
+export data Utf8WriteError <: Error { code:UInt64, }
 export ref symbol @sout:Utf8StreamOut in O where {owner O};
 
-export data StringBuilder <: Utf8StreamOut { storage:Utf8BuilderStorage; }
+export data StringBuilder <: Utf8StreamOut { storage:Utf8BuilderStorage, }
 
 export func (++)(left:const String in A, right:const String in B) -> ref StringBuilder in D
     where {const owner A, const owner B, owner D} {

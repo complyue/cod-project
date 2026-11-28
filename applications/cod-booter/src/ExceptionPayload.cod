@@ -20,13 +20,13 @@ using "./ModuleExportStorage.cod" {
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type, exception_schema };
 
-export data PayloadField { first:UInt64; past:UInt64; kind:UInt8; readonly:bool; }
+export data PayloadField { first:UInt64, past:UInt64, kind:UInt8, readonly:bool, }
 export array PayloadFields[UInt64]:PayloadField;
 
-export data PayloadSchema { count:UInt64; local_first:UInt64; imported_header:UInt64; }
+export data PayloadSchema { count:UInt64, local_first:UInt64, imported_header:UInt64, }
 export data CaughtFieldUse =
     NoCaughtField {} |
-    CaughtField { binding:UInt64; nominal:ExceptionType; ordinal:UInt64; kind:UInt8; readonly:bool; };
+    CaughtField { binding:UInt64, nominal:ExceptionType, ordinal:UInt64, kind:UInt8, readonly:bool, };
 export array CaughtFieldUses[UInt64]:CaughtFieldUse;
 
 export func unknown_exception_field() -> UInt8 { return 47u8 }

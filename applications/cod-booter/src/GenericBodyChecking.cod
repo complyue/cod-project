@@ -13,28 +13,28 @@ using "./ModuleExportStorage.cod" {
 };
 
 data BodyValue {
-    binding:UInt64;
-    category:TypeCategory;
-    type_kind:UInt8;
-    module:UInt64;
-    identity:UInt64;
-    mode:FormalMode;
-    role:UInt64;
-    readonly:bool;
-    can_rebind:bool;
-    field_place:bool;
+    binding:UInt64,
+    category:TypeCategory,
+    type_kind:UInt8,
+    module:UInt64,
+    identity:UInt64,
+    mode:FormalMode,
+    role:UInt64,
+    readonly:bool,
+    can_rebind:bool,
+    field_place:bool,
 }
 array BodyValues[UInt64]:BodyValue;
 array InitializedFields[UInt64]:bool;
 
 data BodyCursor {
-    first:UInt64;
-    next:UInt64;
-    past:UInt64;
-    anchor:UInt64;
-    values:UInt64;
-    allocation:UInt64;
-    normal:bool;
+    first:UInt64,
+    next:UInt64,
+    past:UInt64,
+    anchor:UInt64,
+    values:UInt64,
+    allocation:UInt64,
+    normal:bool,
 }
 
 func read_body_type(rows:const ModuleInterfaces in I, products:const Products in M, arguments:const TypeKeys in A,
@@ -45,14 +45,14 @@ func read_body_type(rows:const ModuleInterfaces in I, products:const Products in
     val slot <- no_node();
     val equal <- false;
     case rows[term].payload of {
-        RecipeBuiltin { val kind <-; } -> {
+        RecipeBuiltin { val kind <-, } -> {
             value.category <- ScalarType;
             value.type_kind <- kind;
             value.module <- 0u64;
             value.identity <- 0u64;
             return term + 1u64
         };
-        RecipeTypeParameter { val binder <-; } -> {
+        RecipeTypeParameter { val binder <-, } -> {
             for (row in first .. past) {
                 if (case rows[row].payload of { RecipeParameter -> true; _ -> false }) {
                     if (rows[row].declaration == binder) {
@@ -69,7 +69,7 @@ func read_body_type(rows:const ModuleInterfaces in I, products:const Products in
             };
             return no_node()
         };
-        RecipeApplication { val defining_module <-; val declaration <-; val arity <- arguments; } -> {
+        RecipeApplication { val defining_module <-, val declaration <-, val arity <- arguments, } -> {
             if (arity != products[anchor].arity ||
                 !matches_member_application(rows, first, past, term, defining_module, declaration, arity)) return no_node();
             for (member in 0u64 .. intrinsic (len)(products)) {
@@ -144,7 +144,7 @@ func read_body_field(rows:const ModuleInterfaces in I, published:UInt64, product
     if (row == no_node() || read_body_type(rows, products, arguments, first, past, member, row + 1u64, value) == no_node())
         return false;
     return case rows[row].payload of {
-        RecipeField { val mode <-; val readonly <-; val fixed <-; } -> {
+        RecipeField { val mode <-, val readonly <-, val fixed <-, } -> {
             value.mode <- mode;
             value.readonly <- value.readonly || readonly;
             (value.can_rebind <- value.can_rebind && !fixed):void;
@@ -175,7 +175,7 @@ func read_body_operand(rows:const ModuleInterfaces in I, published:UInt64, produ
     if (row >= cursor.past) return false;
     cursor.next <- row + 1u64;
     return case rows[row].payload of {
-        RecipeBodyOperand { val binding <-; val field <-; val owner_role <-; } -> {
+        RecipeBodyOperand { val binding <-, val field <-, val owner_role <-, } -> {
             if (binding != no_node())
                 return read_body_place(rows, published, products, arguments, values, cursor.values, binding, field, result);
             result.category <- UnknownType;
@@ -208,7 +208,7 @@ func writable_body_role(rows:const ModuleInterfaces in I, first:UInt64, past:UIn
     where {const owner I} {
     for (row in first .. past) {
         if (rows[row].declaration == role &&
-            (case rows[row].payload of { RecipeOwner { val readonly <-; } -> !readonly; _ -> false })) return true
+            (case rows[row].payload of { RecipeOwner { val readonly <-, } -> !readonly; _ -> false })) return true
     };
     return false
 }
@@ -259,7 +259,7 @@ func finish_body_make(rows:const ModuleInterfaces in I, published:UInt64, produc
                 (cursor.allocation <- role):void;
                 return true
             };
-            RecipeBodyInitialize { val field <-; val transfer <-; } -> {
+            RecipeBodyInitialize { val field <-, val transfer <-, } -> {
                 destination.readonly <- false;
                 destination.can_rebind <- true;
                 field_row <- body_field_row(rows, first, past, field);
@@ -302,7 +302,7 @@ func finish_body_case(rows:const ModuleInterfaces in I, published:UInt64, produc
     val end <- read_body_type(rows, products, arguments, cursor.first, cursor.past, cursor.anchor, row + 1u64, values[incoming]);
     if (end == no_node() || !same_body_type(subject, values[incoming])) return false;
     case rows[row].payload of {
-        RecipeBodyRefArm { val binding <-; val owner_role <-; val readonly <-; } -> {
+        RecipeBodyRefArm { val binding <-, val owner_role <-, val readonly <-, } -> {
             if (subject.role != owner_role || (subject.readonly && !readonly)) return false;
             values[incoming].binding <- binding;
             values[incoming].role <- owner_role;
@@ -351,7 +351,7 @@ func finish_body_block(rows:const ModuleInterfaces in I, published:UInt64, produ
         cursor.next <- row + 1u64;
         case rows[row].payload of {
             RecipeBodyEnd -> { return true };
-            RecipeBodyMake { val binding <-; val owner_role <-; } -> {
+            RecipeBodyMake { val binding <-, val owner_role <-, } -> {
                 if (!finish_body_make(rows, published, products, arguments, values, cursor, binding, owner_role))
                     return false
             };
@@ -363,7 +363,7 @@ func finish_body_block(rows:const ModuleInterfaces in I, published:UInt64, produ
                     !legal_body_return(result, input)) return false;
                 (cursor.normal <- false):void
             };
-            RecipeBodyStore { val binding <-; val field <-; } -> {
+            RecipeBodyStore { val binding <-, val field <-, } -> {
                 if (!read_body_place(rows, published, products, arguments, values, cursor.values, binding, field, destination) ||
                     !destination.can_rebind ||
                     !read_body_operand(rows, published, products, arguments, values, cursor, input) ||
@@ -396,7 +396,7 @@ export func complete_generic_field_body(rows:const ModuleInterfaces in I, publis
     val slot <- 0u64;
     for (row in first .. body) {
         case rows[row].payload of {
-            RecipeResult { val mode <-; val owner_role <-; val readonly <-; } -> {
+            RecipeResult { val mode <-, val owner_role <-, val readonly <-, } -> {
                 if (result.category != UnknownType ||
                     read_body_type(rows, products, arguments, first, body, anchor, row + 1u64, result) == no_node())
                     return false;
@@ -410,7 +410,7 @@ export func complete_generic_field_body(rows:const ModuleInterfaces in I, publis
                     (result.readonly <- readonly):void
                 }
             };
-            RecipeFormal { val mode <-; val owner_role <-; val readonly <-; } -> {
+            RecipeFormal { val mode <-, val owner_role <-, val readonly <-, } -> {
                 if (read_body_type(rows, products, arguments, first, body, anchor, row + 1u64, values[slot]) == no_node()) return false;
                 values[slot].mode <- if (mode == ValueFormal && owner_role != no_node()) { ReferenceFormal } else { mode };
                 values[slot].binding <- rows[row].declaration;

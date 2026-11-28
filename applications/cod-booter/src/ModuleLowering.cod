@@ -81,34 +81,34 @@ using "./NativeCommands.cod" {
 };
 
 data LoweringState {
-    syntax_revision:UInt64;
-    syntax_used:UInt64;
-    active_function:UInt64;
-    active_scope:UInt64;
-    exception_target:UInt64;
-    return_target:UInt64;
-    return_slot:UInt64;
-    return_ready:UInt64;
-    caught_failure:UInt64;
-    live:bool;
-    local_return:bool;
-    scope_cleanup:UInt64;
-    scope_scan_flag:UInt64;
-    scope_scan_pending:bool;
-    case_index:UInt64;
-    case_join:UInt64;
-    case_arm:UInt64;
-    case_next:UInt64;
-    case_present_flag:UInt64;
-    case_read:bool;
-    case_completed:bool;
-    case_resumed:bool;
-    finalizer:UInt64;
-    break_landing:UInt64;
-    break_value:UInt64;
-    scan_landing:UInt64;
-    pending_break:bool;
-    pending_scan:bool;
+    syntax_revision:UInt64,
+    syntax_used:UInt64,
+    active_function:UInt64,
+    active_scope:UInt64,
+    exception_target:UInt64,
+    return_target:UInt64,
+    return_slot:UInt64,
+    return_ready:UInt64,
+    caught_failure:UInt64,
+    live:bool,
+    local_return:bool,
+    scope_cleanup:UInt64,
+    scope_scan_flag:UInt64,
+    scope_scan_pending:bool,
+    case_index:UInt64,
+    case_join:UInt64,
+    case_arm:UInt64,
+    case_next:UInt64,
+    case_present_flag:UInt64,
+    case_read:bool,
+    case_completed:bool,
+    case_resumed:bool,
+    finalizer:UInt64,
+    break_landing:UInt64,
+    break_value:UInt64,
+    scan_landing:UInt64,
+    pending_break:bool,
+    pending_scan:bool,
 }
 
 export func native_unsupported() -> UInt8 { return 1u8; }
@@ -1513,9 +1513,9 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
     plan.node <- at;
     case nodes[at] of {
         (Vacant) -> { plan.diagnostic <- invalid_native_module(); return; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Parenthesized { val expression <- expression; }) -> {
+                (Parenthesized { val expression <- expression, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, expression)) {
                         plan.diagnostic <- invalid_native_module();
                         return;
@@ -1550,7 +1550,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                     return;
                 };
                 (ScopeSyntax) -> { lower_full_scope(nodes, names, links, interfaces, facts, sites, code, plan, state, at); return; };
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, operand)) {
                         plan.diagnostic <- invalid_native_module();
                         return;
@@ -1558,7 +1558,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                     lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, operand.index);
                     return;
                 };
-                (PredicateAssertion { val predicate <-; }) -> {
+                (PredicateAssertion { val predicate <-, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, predicate)) {
                         plan.diagnostic <- invalid_native_module();
                         return
@@ -1569,7 +1569,7 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                     };
                     return
                 };
-                (CheckedTypeAssertion { val operand <- operand; val colon <- colon; }) -> {
+                (CheckedTypeAssertion { val operand <- operand, val colon <- colon, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, operand)) {
                         plan.diagnostic <- invalid_native_module();
                         return;
@@ -1589,15 +1589,15 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                 };
                 (RaisePending) -> { lower_caught_raise(code, plan, state); return; };
                 (RaiseValue) -> { lower_caught_raise(code, plan, state); return; };
-                (BooleanLiteral { val truth <- truth; }) -> {
+                (BooleanLiteral { val truth <- truth, }) -> {
                     emit(code, plan, word_constant(), slot(at), if (truth) { 1u64 } else { 0u64 });
                     return;
                 };
-                (IntegerLiteral { val magnitude <- magnitude; }) -> {
+                (IntegerLiteral { val magnitude <- magnitude, }) -> {
                     emit(code, plan, word_constant(), slot(at), magnitude);
                     return;
                 };
-                (Call { val callee <- callee; val arguments <- argument_tail; }) -> {
+                (Call { val callee <- callee, val arguments <- argument_tail, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, callee) ||
                         !published_syntax_id(nodes, state.syntax_revision, state.syntax_used, arguments)) {
                         plan.diagnostic <- invalid_native_module(); return;
@@ -1605,14 +1605,14 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
                     lower_call(nodes, names, links, interfaces, facts, sites, code, plan, state, at, arguments.index, syntax.span.first, false);
                     return;
                 };
-                (EmptyCall { val callee <- callee; }) -> {
+                (EmptyCall { val callee <- callee, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, callee)) {
                         plan.diagnostic <- invalid_native_module(); return;
                     };
                     lower_call(nodes, names, links, interfaces, facts, sites, code, plan, state, at, no_node(), syntax.span.first, false);
                     return;
                 };
-                (ReturnValue { val value <- value; }) -> {
+                (ReturnValue { val value <- value, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, value)) {
                         plan.diagnostic <- invalid_native_module(); return;
                     };

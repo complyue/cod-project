@@ -16,7 +16,7 @@ func classify_bool(ptr subject:const bool in O) -> UInt64 where {const owner O} 
     };
 }
 
-enum Status:UInt64 { Start = 0; Done = 18446744073709551615; Finished = Done; }
+enum Status:UInt64 { Start = 0, Done = 18446744073709551615, Finished = Done, }
 
 func classify_status(ptr subject:const Status in O) -> UInt64 where {const owner O} {
     return case subject of {

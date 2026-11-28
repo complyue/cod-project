@@ -1,12 +1,12 @@
 using symbol "std:io" @print;
 using "std:exceptions" NullPointerException;
 
-enum Route:UInt64 { Primary = 17; Secondary = 24; }
+enum Route:UInt64 { Primary = 17, Secondary = 24, }
 
 data Packet {
-    quantity:UInt64;
-    ready:bool;
-    route:const Route;
+    quantity:UInt64,
+    ready:bool,
+    route:const Route,
 }
 
 proc observe(value:UInt64) -> UInt64 {

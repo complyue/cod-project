@@ -19,14 +19,14 @@ using "./OperandChecking.cod" {
 export data ExceptionConstructionFact =
     NoExceptionConstruction {} |
     ConstructedException {
-        type:ExceptionType; first:UInt64; past:UInt64; field_count:UInt64; last_initializer:UInt64;
-            reaches_throw:bool;
+        type:ExceptionType, first:UInt64, past:UInt64, field_count:UInt64, last_initializer:UInt64,
+            reaches_throw:bool,
     } |
-    ExceptionInitializer { field:UInt64; value_kind:UInt8; operand:UInt64; };
+    ExceptionInitializer { field:UInt64, value_kind:UInt8, operand:UInt64, };
 
 export array ExceptionConstructionFacts[UInt64]:ExceptionConstructionFact;
 
-export data ExceptionConstructionResult { diagnostic:UInt8; node:UInt64; }
+export data ExceptionConstructionResult { diagnostic:UInt8, node:UInt64, }
 
 array FieldReadiness[UInt64]:bool;
 

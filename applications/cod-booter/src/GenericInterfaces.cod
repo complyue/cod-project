@@ -37,7 +37,7 @@ using "./ModuleExportStorage.cod" {
         RecipeBodyOperand, RecipeBodyMake, RecipeBodyInitialize, RecipeBodyStore, RecipeBodyReturn, RecipeBodyCase, RecipeBodyRefArm, RecipeBodyEnd },
 };
 
-data RecipeWriter { revision:UInt64; used:UInt64; module:UInt64; next:UInt64; exhausted:bool; }
+data RecipeWriter { revision:UInt64, used:UInt64, module:UInt64, next:UInt64, exhausted:bool, }
 
 func append_recipe(interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, site:UInt64,
     first:UInt64, past:UInt64, value:const InterfacePayload in P) -> bool
@@ -188,10 +188,10 @@ func written_null_owner(nodes:const ExprNodes in N, names:const NameBindings in 
     where {const owner N, const owner B, const owner W, owner R} {
     if (site >= writer.used) return false;
     return case nodes[site] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            NullLiteral { val owner_name <-; } -> case owner_name of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            NullLiteral { val owner_name <-, } -> case owner_name of {
                 NoLink -> { (role <- no_node()):void; true };
-                LinkTo { val name <- node; } -> {
+                LinkTo { val name <- node, } -> {
                     if (!published_syntax_id(nodes, writer.revision, site, name) ||
                         (names[name.index].kind != owner_binding() && names[name.index].kind != lexical_owner())) return false;
                     (role <- names[name.index].declaration):void;
@@ -208,8 +208,8 @@ func discarded_operand(nodes:const ExprNodes in N, writer:const RecipeWriter in 
     where {const owner N, const owner W} {
     if (site >= writer.used) return no_node();
     return case nodes[site] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
-            DiscardedExpression { val operand <-; } | published_syntax_id(nodes, writer.revision, site, operand) ->
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            DiscardedExpression { val operand <-, } | published_syntax_id(nodes, writer.revision, site, operand) ->
                 ungrouped(nodes, writer.revision, writer.used, operand.index);
             _ -> no_node()
         };
@@ -284,7 +284,7 @@ func body_receiver_marker(nodes:const ExprNodes in N, writer:const RecipeWriter 
     return binding.target_type
 }
 
-data BodyPlaceSites { binding:UInt64; field:UInt64; }
+data BodyPlaceSites { binding:UInt64, field:UInt64, }
 
 func body_place(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in L, writer:const RecipeWriter in W, at:UInt64, place:BodyPlaceSites in P) -> bool

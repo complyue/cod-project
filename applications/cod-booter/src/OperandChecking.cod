@@ -161,81 +161,81 @@ using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
 # An owner is a lexical scope or an owner parameter's declaration. Exception
 # type identity alone does not establish the incoming object's owner.
 export data OperandFact {
-    kind:UInt8;
-    reception:UInt8;
-    checked_exception:UInt8;
-    identity_module:UInt64;
-    reaches_constructed_throw:bool;
-    loans_owning_handle:bool;
-    loans_scoped_aggregate:bool;
-    case_receipt:UInt64;
-    checks_array_bounds:bool;
-    array_scalar:UInt8;
-    array_element_module:UInt64;
-    array_element_identity:UInt64;
-    loans_array_slot:bool;
-    array_slot:UInt64;
-    target_readonly:UInt8;
-    needs_target:UInt8;
-    target_presence:UInt8;
+    kind:UInt8,
+    reception:UInt8,
+    checked_exception:UInt8,
+    identity_module:UInt64,
+    reaches_constructed_throw:bool,
+    loans_owning_handle:bool,
+    loans_scoped_aggregate:bool,
+    case_receipt:UInt64,
+    checks_array_bounds:bool,
+    array_scalar:UInt8,
+    array_element_module:UInt64,
+    array_element_identity:UInt64,
+    loans_array_slot:bool,
+    array_slot:UInt64,
+    target_readonly:UInt8,
+    needs_target:UInt8,
+    target_presence:UInt8,
     # Only admitted stable pointer holders and their copied selections get an identity.
-    selection:UInt64;
-    discarded_result:UInt8;
-    arm_result:UInt8;
-    case_item:UInt8;
-    case_match:UInt8;
-    case_body:UInt8;
-    case_guard:UInt8;
-    case_resume:UInt8;
-    case_end:UInt8;
-    case_presence:UInt8;
-    case_selection:UInt64;
-    case_context:UInt64;
-    case_after_subject:UInt64;
-    case_discriminator:UInt8;
-    case_may_be_absent:UInt8;
-    enum_constant:UInt8;
-    enum_backing:UInt8;
-    discriminator_code:UInt64;
-    case_excluded_at:UInt64;
-    case_exclusion_member:UInt64;
-    case_exclusion_previous:UInt64;
-    case_exclusion_next:UInt64;
-    case_exit_link:UInt64;
-    case_exit_tail:UInt64;
-    owner:UInt64;
-    identity:UInt64;
-    reservation:UInt64;
-    product_words:UInt64;
-    bits_product:bool;
-    word_offset:UInt64;
-    last_initializer:UInt64;
-    writable_text_place:UInt8;
-    call_definition:UInt64;
-    text_nul:UInt8;
-    allocation_owner:UInt64;
-    owner_chain:UInt64;
-    owner_use_next:UInt64;
-    passes_owner:UInt8;
-    text_assertion:UInt8;
-    enum_assertion_check:bool;
-    predicate_assertion_check:bool;
-    text_intrinsic:UInt8;
-    omitted_result:bool;
-    statement_operand:bool;
+    selection:UInt64,
+    discarded_result:UInt8,
+    arm_result:UInt8,
+    case_item:UInt8,
+    case_match:UInt8,
+    case_body:UInt8,
+    case_guard:UInt8,
+    case_resume:UInt8,
+    case_end:UInt8,
+    case_presence:UInt8,
+    case_selection:UInt64,
+    case_context:UInt64,
+    case_after_subject:UInt64,
+    case_discriminator:UInt8,
+    case_may_be_absent:UInt8,
+    enum_constant:UInt8,
+    enum_backing:UInt8,
+    discriminator_code:UInt64,
+    case_excluded_at:UInt64,
+    case_exclusion_member:UInt64,
+    case_exclusion_previous:UInt64,
+    case_exclusion_next:UInt64,
+    case_exit_link:UInt64,
+    case_exit_tail:UInt64,
+    owner:UInt64,
+    identity:UInt64,
+    reservation:UInt64,
+    product_words:UInt64,
+    bits_product:bool,
+    word_offset:UInt64,
+    last_initializer:UInt64,
+    writable_text_place:UInt8,
+    call_definition:UInt64,
+    text_nul:UInt8,
+    allocation_owner:UInt64,
+    owner_chain:UInt64,
+    owner_use_next:UInt64,
+    passes_owner:UInt8,
+    text_assertion:UInt8,
+    enum_assertion_check:bool,
+    predicate_assertion_check:bool,
+    text_intrinsic:UInt8,
+    omitted_result:bool,
+    statement_operand:bool,
 }
 export array OperandFacts[UInt64]:OperandFact;
 
 export data OwnerEvidence {
-    call_site:UInt64;
-    actual_owner:UInt64;
-    uses:UInt64;
+    call_site:UInt64,
+    actual_owner:UInt64,
+    uses:UInt64,
 }
 export array CallOwners[UInt64]:OwnerEvidence;
 
 export data OperandCheckResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 export func void_result() -> UInt8 { return 1u8; }
@@ -614,8 +614,8 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     val form <- parameter.mode;
     if (source_only && formal < intrinsic (len)(cases)) {
         case cases[formal] of {
-            CaseSumFormal { val bound <- definition; val owner_site <- owner_site; val readonly <- readonly;
-                            val type <- value_type; } -> {
+            CaseSumFormal { val bound <- definition, val owner_site <- owner_site, val readonly <- readonly,
+                            val type <- value_type, } -> {
                 if (bound != definition || form != ReferenceFormal || binding.readonly != readonly ||
                     binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
                     !owner_parameter(nodes, owner_site)) return unproved_owner();
@@ -624,7 +624,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                 facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
                 return 0u8
             };
-            ArrayFieldRecordFormal { val bound <- definition; val owner_site <-; val type <- value_type; val readonly <-; } -> {
+            ArrayFieldRecordFormal { val bound <- definition, val owner_site <-, val type <- value_type, val readonly <-, } -> {
                 if (bound != definition || form != ReferenceFormal || binding.readonly != readonly ||
                     binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
                     !owner_parameter(nodes, owner_site)) return unproved_owner();
@@ -633,7 +633,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                 facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
                 return 0u8
             };
-            InlineProductFormal { val bound <- definition; val owner_site <- owner_site; val type <- value_type; val readonly <-; } -> {
+            InlineProductFormal { val bound <- definition, val owner_site <- owner_site, val type <- value_type, val readonly <-, } -> {
                 if (bound != definition || form != ReferenceFormal || binding.readonly != readonly ||
                     binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
                     owner_constraint_syntax(nodes, owner_site) !=
@@ -646,7 +646,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                     return 0u8
                 }
             };
-            WritableLocalProductFormal { val bound <- definition; val owner_site <-; val type <- value_type; } -> {
+            WritableLocalProductFormal { val bound <- definition, val owner_site <-, val type <- value_type, } -> {
                 if (bound != definition || form != ReferenceFormal || binding.readonly ||
                     binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
                     owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint) return unproved_owner();
@@ -712,8 +712,8 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
             if (formal < intrinsic (len)(views)) {
                 case views[formal] of {
                     ArraySlotFormal {
-                        val owner <- owner_site; val module <- type_module; val type <- type_identity;
-                        val aliases_slot <- slot; val element <-; val element_module <-; val element_identity <-;
+                        val owner <- owner_site, val module <- type_module, val type <- type_identity,
+                        val aliases_slot <- slot, val element <-, val element_module <-, val element_identity <-,
                     } -> {
                         if (owner != owner_site || module != facts[formal].identity_module ||
                             type != facts[formal].identity || slot != aliases_slot ||
@@ -855,7 +855,7 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
                     } else {
                         if (source_only && definition < intrinsic (len)(cases)) {
                             case cases[definition] of {
-                                SumValueResult { val type <- value_type; } -> {
+                                SumValueResult { val type <- value_type, } -> {
                                     kind <- independent_sum_bits();
                                     set_fact(facts, definition, kind, independent_value(),
                                         no_node(), type.identity, 0u8);
@@ -1258,8 +1258,8 @@ func check_construction(nodes:const ExprNodes in N, names:const NameBindings in 
 }
 
 data ProductInitialization {
-    count:UInt64;
-    abrupt:bool;
+    count:UInt64,
+    abrupt:bool,
 }
 
 func check_owner_access(nodes:const ExprNodes in N, actual_owner:UInt64, requires_allocation:bool) -> UInt8
@@ -1540,8 +1540,8 @@ func check_caught_field(nodes:const ExprNodes in N, names:const NameBindings in 
     if (name_syntax(nodes, used, name) != OrdinaryName || names[name].kind != exception_binding())
         return unknown_exception_field();
     return case fields[at] of {
-        (CaughtField { val binding <- binding; val nominal <- nominal; val kind <- kind; val
-            readonly <- readonly; }) -> {
+        (CaughtField { val binding <- binding, val nominal <- nominal, val kind <- kind, val
+            readonly <- readonly, }) -> {
             if (names[name].declaration != binding ||
                 facts[receiver].identity_module != nominal.defining_module ||
                 facts[receiver].identity != nominal.declaration) return unknown_exception_field();
@@ -1939,7 +1939,7 @@ func writable_inline_product_actual(facts:const OperandFacts in F, cases:const C
     val site <- value;
     for (unused in 0u64 .. value + 1u64) {
         case cases[site] of {
-            InlineProductField { val receiver <-; val readonly <-; } -> {
+            InlineProductField { val receiver <-, val readonly <-, } -> {
                 if (readonly || receiver >= site || facts[site].selection != site) return false;
                 (site <- receiver):void
             };
@@ -1964,7 +1964,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (source_only && argument < intrinsic (len)(cases)) {
         case cases[argument] of {
             FreshSumArgument {
-                val consumer <- invocation; val parameter <- formal; val input <- construction; val lexical_owner <-;
+                val consumer <- invocation, val parameter <- formal, val input <- construction, val lexical_owner <-,
             } -> {
                 if (consumer != invocation || parameter != formal || operand != input || input >= argument ||
                     lexical_owner != names[invocation].scope) return invalid_operand_tree();
@@ -1999,7 +1999,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
         val forwarded <- names[operand].kind == formal_binding() && facts[operand].identity_module != 0u64;
         val indexed <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
             (case cases[operand] of {
-                IndexedAggregateLoan { val consumer <-; val writable <-; } -> consumer == argument && !writable;
+                IndexedAggregateLoan { val consumer <-, val writable <-, } -> consumer == argument && !writable;
                 _ -> false
             });
         # Each writable array formal is still an ordinary target loan, checked
@@ -2020,14 +2020,14 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             val lexical <- names[operand].kind == local_binding() && local < operand &&
                 ((mixed_aggregate_loan && completed_lexical_bits_target(facts, operand, names[invocation].scope)) ||
                  (local < intrinsic (len)(cases) && (case cases[local] of {
-                    LexicalProductReference { val owner_site <-; val readonly <-; } ->
+                    LexicalProductReference { val owner_site <-, val readonly <-, } ->
                         !readonly && owner_site == facts[operand].owner;
                     _ -> false
                  })));
             val inline_output <- mixed_aggregate_loan && writable_inline_product_actual(facts, cases, operand);
             val projected_output <- inline_output || (operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
                 (case cases[operand] of {
-                    IndexedAggregateLoan { val consumer <-; val writable <-; } ->
+                    IndexedAggregateLoan { val consumer <-, val writable <-, } ->
                         consumer == argument && writable;
                     _ -> false
                 }));
@@ -2181,7 +2181,7 @@ func check_prepared_native_view(nodes:const ExprNodes in N, names:const NameBind
     };
     if (names[value].kind != here_receiver_binding() || binding >= used) return unproved_owner();
     return case views[binding] of {
-        SuppliedArrayView { val body <- body; } -> {
+        SuppliedArrayView { val body <- body, } -> {
             if (body < used && syntax_first(nodes, used, body) <= syntax_first(nodes, used, call) &&
                 syntax_past(nodes, used, call) <= syntax_past(nodes, used, body) &&
                 enclosing_callable(nodes, names, names[body].scope) ==
@@ -2199,7 +2199,7 @@ func first_native_role(links:const NameWork in L, views:const SuppliedViews in H
     for (unused in 0u64 .. position) {
         if (previous >= argument) return no_node();
         if (case views[previous] of {
-            PreparedNativeOperand { val earlier <- owner_role; } -> earlier == role;
+            PreparedNativeOperand { val earlier <- owner_role, } -> earlier == role;
             _ -> false
         }) return previous;
         previous <- links[previous].next
@@ -2236,10 +2236,10 @@ func check_prepared_native_operand(nodes:const ExprNodes in N, names:const NameB
     val diagnostic <- 0u8;
     return case views[argument] of {
         PreparedNativeOperand {
-            val expected_call <- call_site; val origin <- revision; val ordinal <- position;
-            val expected_input <- input; val kind <- kind; val role <- owner_role;
-            val owner <- owner_site; val module <- type_module; val identity <- type_identity;
-            val readonly <- target_readonly; val const_owner <- owner_readonly;
+            val expected_call <- call_site, val origin <- revision, val ordinal <- position,
+            val expected_input <- input, val kind <- kind, val role <- owner_role,
+            val owner <- owner_site, val module <- type_module, val identity <- type_identity,
+            val readonly <- target_readonly, val const_owner <- owner_readonly,
         } -> {
             if (expected_call != at || origin != revision || ordinal != position ||
                 expected_input != input) return unproved_call_target();
@@ -2315,8 +2315,8 @@ func check_prepared_native_loans(nodes:const ExprNodes in N, names:const NameBin
     where {const owner N, const owner B, const owner L, owner F, const owner H} {
     return case views[at] of {
         PreparedNativeLoanCall {
-            val module <- module; val definition <- definition;
-            val origin <- revision; val activation <- activation; val arity <- arity;
+            val module <- module, val definition <- definition,
+            val origin <- revision, val activation <- activation, val arity <- arity,
         } -> {
             if (module != selected_module || definition != selected_definition || origin != revision ||
                 activation != enclosing_callable(nodes, names, names[at].scope))
@@ -2417,7 +2417,7 @@ func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, f
     return operand_problem(report, family, invalid_operand_tree())
 }
 
-enum ValueApplicability:UInt8 { InapplicableValue; ApplicableValue; UnrepresentedValue; }
+enum ValueApplicability:UInt8 { InapplicableValue, ApplicableValue, UnrepresentedValue, }
 
 func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
                          first:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> ValueApplicability
@@ -2474,7 +2474,7 @@ func better_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
     return false
 }
 
-data ValueMethodChoice { method:UInt64; formals:UInt64; }
+data ValueMethodChoice { method:UInt64, formals:UInt64, }
 
 func find_value_candidate(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
                            family:UInt64, arguments:UInt64, used:UInt64, revision:UInt64, result:ValueMethodChoice in R) -> UInt8
@@ -2624,8 +2624,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     val checked_mixed_loan <- mixed_aggregate_loan || (source_only && prepared_workspace_loans(views, definition));
     val checks_scoped_call <- checked_mixed_loan || (source_only && at < intrinsic (len)(cases) &&
         (case cases[at] of {
-            FreshSumInvocation { val target <- definition; } -> target == definition;
-            ProductLoanInvocation { val target <- definition; } -> target == definition;
+            FreshSumInvocation { val target <- definition, } -> target == definition;
+            ProductLoanInvocation { val target <- definition, } -> target == definition;
             _ -> false
         }));
     val can_enter <- true;
@@ -2673,7 +2673,7 @@ func lend_imported_fresh_sum(names:const NameBindings in B, facts:OperandFacts i
     if (lexical_owner == no_node() || names[input].scope != lexical_owner ||
         facts[input].reception != independent_value() || input >= intrinsic (len)(cases) ||
         !(case cases[input] of {
-            BitsConstruction { val consumer <- transfer; } -> consumer == argument;
+            BitsConstruction { val consumer <- transfer, } -> consumer == argument;
             _ -> false
         })) return unproved_owner();
     set_fact(facts, argument, source_sum_target(), borrowed_ref(), lexical_owner, facts[input].identity, 0u8);
@@ -2691,14 +2691,14 @@ func scoped_imported_product_actual(names:const NameBindings in B, facts:const O
         val declaration <- names[value].declaration;
         return declaration < value && declaration < intrinsic (len)(cases) &&
             (case cases[declaration] of {
-                LexicalProductReference { val owner_site <-; } ->
+                LexicalProductReference { val owner_site <-, } ->
                     owner_site == facts[value].owner && owner_site == names[at].scope;
                 _ -> false
             })
     };
     return value < intrinsic (len)(cases) && facts[value].selection == value &&
         (case cases[value] of {
-            IndexedAggregateLoan { val consumer <-; val write_access <- writable; } ->
+            IndexedAggregateLoan { val consumer <-, val write_access <- writable, } ->
                 consumer == argument && write_access == writable;
             InlineProductField -> inline_output || (inline_product_loan && !writable);
             CaseProductField -> readonly_call && !writable && facts[value].target_readonly != 0u8 &&
@@ -2739,7 +2739,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
     val returned_kind <- links[at].imported_kind;
     val readonly_call <- source_only && (case views[at] of { CheckedReadonlyCall -> true; _ -> false });
     val inline_product_loan <- source_only && (case views[at] of {
-        CheckedParserWriterCall { val inline_input <-; } -> inline_input;
+        CheckedParserWriterCall { val inline_input <-, } -> inline_input;
         CheckedWorkspaceWriterCall -> true;
         _ -> false
     });
@@ -4549,7 +4549,7 @@ export func append_array_slot_interfaces(nodes:const ExprNodes in N, names:const
     for (definition in 0u64 .. used) {
         if (inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
             case views[definition] of {
-                CheckedArraySlotBody { val failures <-; } -> {
+                CheckedArraySlotBody { val failures <-, } -> {
                     if (publishes_ordinary_call(exports, export_count, module, definition, false)) {
                         kind <- facts[definition].kind;
                         result <- if (kind == void_result()) { builtin_void() }
@@ -4898,13 +4898,13 @@ func check_predicate_assertion(nodes:const ExprNodes in N, facts:OperandFacts in
 # Remaining canonical members are tracked by count and exclusion markers.
 # A possible write through another view starts a fresh scan generation.
 data CaseCoverage {
-    total:UInt64;
-    remaining:UInt64;
-    absent:bool;
-    only:UInt64;
-    generation:UInt64;
-    exclusions:UInt64;
-    imported_enum:bool;
+    total:UInt64,
+    remaining:UInt64,
+    absent:bool,
+    only:UInt64,
+    generation:UInt64,
+    exclusions:UInt64,
+    imported_enum:bool,
 }
 
 # A case proof belongs to a saved address. An enclosing proof for another
@@ -5021,14 +5021,14 @@ func case_may_write(nodes:const ExprNodes in N, links:const NameWork in L,
     if (at >= used || at >= syntax_len(nodes)) return true;
     case nodes[at] of {
         (Vacant) -> { return true; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (BooleanLiteral) -> { return false; };
                 (IntegerLiteral) -> { return false; };
                 (NameReference) -> { return false; };
                 (NullLiteral) -> { return false; };
                 (CaseFallthrough) -> { return false; };
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     return !published_syntax_id(nodes, revision, at, operand) ||
                         case_may_write(nodes, links, operand.index, used, revision);
                 };
@@ -5202,7 +5202,7 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
         if ((mode != NamedCaseMember && mode != ConstructorCaseTarget) ||
             pattern >= intrinsic (len)(cases)) return unsupported_case_pattern();
         return case cases[pattern] of {
-            CaseConstructor { val choice <- case_site; val representative <- representative; } -> {
+            CaseConstructor { val choice <- case_site, val representative <- representative, } -> {
                 if (choice != at || representative <= subject || representative > pattern)
                     return invalid_operand_tree();
                 member <- representative;
@@ -5399,20 +5399,20 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     if (kind == source_sum_target() || kind == independent_sum_bits()) {
         if (at >= intrinsic (len)(cases)) return operand_problem(report, at, invalid_operand_tree());
         case cases[at] of {
-            ValueCaseSubject { val expression <-; val type <- value_type; val count <-; } -> {
+            ValueCaseSubject { val expression <-, val type <- value_type, val count <-, } -> {
                 if (expression != subject || count == 0u64 || kind != independent_sum_bits() || borrowed ||
                     facts[subject].identity != type.identity || facts[subject].identity_module != type.defining_module)
                     return operand_problem(report, at, invalid_operand_tree());
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
-            IndexedCaseSubject { val expression <- expression; val count <- count; } -> {
+            IndexedCaseSubject { val expression <- expression, val count <- count, } -> {
                 if (expression != subject || count == 0u64)
                     return operand_problem(report, at, invalid_operand_tree());
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
-            DirectCaseSubject { val expression <- expression; val formal <- formal; val count <- count; } -> {
+            DirectCaseSubject { val expression <- expression, val formal <- formal, val count <- count, } -> {
                 if (expression != subject || formal >= subject || count == 0u64 ||
                     names[subject].kind != formal_binding() || names[subject].declaration != formal ||
                     facts[subject].reception != borrowed_ref() || facts[subject].target_readonly == 0u8 ||
@@ -5423,7 +5423,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 coverage.total <- count;
                 (coverage.remaining <- count):void
             };
-            FieldLoanCaseSubject { val expression <-; val receiver <-; val count <-; } -> {
+            FieldLoanCaseSubject { val expression <-, val receiver <-, val count <-, } -> {
                 if (expression != subject || receiver >= subject || count == 0u64 ||
                     facts[subject].selection != subject || facts[subject].reception != borrowed_ref() ||
                     facts[subject].target_readonly == 0u8 || facts[subject].target_presence != present_target() ||
@@ -5433,7 +5433,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
                 (coverage.remaining <- count):void
             };
             ReceiptCaseSubject {
-                val expression <- expression; val receipt <- receipt; val arm <- arm; val count <- count;
+                val expression <- expression, val receipt <- receipt, val arm <- arm, val count <- count,
             } -> {
                 if (expression != subject || count == 0u64 || receipt >= subject ||
                     facts[subject].case_receipt != receipt || facts[receipt].case_context != arm ||
@@ -5905,8 +5905,8 @@ func check_bound_name(names:const NameBindings in B, links:const NameWork in L,
     } else {
         if (binding == here_receiver_binding() && names[at].declaration < intrinsic (len)(views)) {
             case views[names[at].declaration] of {
-                (SuppliedArrayView { val module <- type_module; val identity <- type_identity;
-                                     val role <- owner_role; val readonly <- readonly; }) -> {
+                (SuppliedArrayView { val module <- type_module, val identity <- type_identity,
+                                     val role <- owner_role, val readonly <- readonly, }) -> {
                     set_fact(facts, at, source_array_loan(), borrowed_ref(), role, identity, 0u8);
                     facts[at].identity_module <- module;
                     (facts[at].target_readonly <- if (readonly) { 1u8 } else { 0u8 }):void
@@ -6064,7 +6064,7 @@ func check_slot_sum_transfer(cases:const ConstructorCaseFacts in C, facts:Operan
         facts[input].identity_module != 0u64) return wrong_operand_type();
     if (!facts[input].checks_array_bounds && (input >= intrinsic (len)(cases) ||
         (case cases[input] of {
-            BitsConstruction { val transfer <-; } -> transfer != at;
+            BitsConstruction { val transfer <-, } -> transfer != at;
             _ -> true
         }))) return unsupported_transfer_signature();
     if (facts[at].discarded_result == 0u8) return unsupported_transfer_signature();
@@ -6232,7 +6232,7 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
     if (parent <= at || parent >= used || parent >= intrinsic (len)(views) ||
         arm >= used) return invalid_operand_tree();
     val prepared <- case views[parent] of {
-        PreparedArrayConstruction { val fill <-; val element <-; val expected_sum <- element_identity; } ->
+        PreparedArrayConstruction { val fill <-, val element <-, val expected_sum <- element_identity, } ->
             fill == at && element == (SumArrayElement:ArraySlotElement) && expected_sum == sum;
         _ -> false
     };
@@ -6362,8 +6362,8 @@ func check_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
         if (item >= at) return invalid_operand_tree();
         case cases[item] of {
             BitsFieldInitializer {
-                val parent <- construction; val ordinal <-; val operand <-; val field <- value_type;
-                val readonly <-; val repeated <-; val binds_storage <-;
+                val parent <- construction, val ordinal <-, val operand <-, val field <- value_type,
+                val readonly <-, val repeated <-, val binds_storage <-,
             } -> {
                 if (parent != at || operand >= item || ordinal >= count) return invalid_operand_tree();
                 if (readonly && repeated) return repeated_readonly_initializer();
@@ -6410,11 +6410,11 @@ func check_indexed_bits_transfer(names:const NameBindings in B, facts:OperandFac
         facts[input].reception == borrowed_ref() && facts[input].target_presence == present_target() &&
         facts[input].selection == input && facts[input].checks_array_bounds &&
         (case cases[input] of {
-            IndexedAggregateLoan { val consumer <-; val writable <-; } -> consumer == at && !writable;
+            IndexedAggregateLoan { val consumer <-, val writable <-, } -> consumer == at && !writable;
             _ -> false
         });
     if (!copied_product && !indexed_product && (facts[input].kind != value_kind || facts[input].reception != independent_value() ||
-        (case cases[input] of { BitsConstruction { val transfer <-; } -> transfer != at; _ -> true })))
+        (case cases[input] of { BitsConstruction { val transfer <-, } -> transfer != at; _ -> true })))
         return wrong_operand_type();
     only_void(facts, at);
     return 0u8
@@ -6468,19 +6468,19 @@ func check_imported_array_length(nodes:const ExprNodes in N, interfaces:const Mo
 }
 
 data GenericCallSignature {
-    count:UInt64;
-    result:UInt64;
-    null_return:UInt64;
-    body:UInt64;
-    exit:GenericMethodExit;
-    function_form:bool;
+    count:UInt64,
+    result:UInt64,
+    null_return:UInt64,
+    body:UInt64,
+    exit:GenericMethodExit,
+    function_form:bool,
 }
 array PreparedGenericOwners[UInt64]:UInt64;
 
 func generic_call_signature(interfaces:const ModuleInterfaces in I, header:UInt64, past:UInt64,
     signature:GenericCallSignature in S) -> bool where {const owner I, owner S} {
     case interfaces[header].payload of {
-        GenericCallable { val parameters <-; val constructor_of <-; val method_exit <-; val function_form <-; } -> {
+        GenericCallable { val parameters <-, val constructor_of <-, val method_exit <-, val function_form <-, } -> {
             if (parameters == 0u64 || constructor_of != no_node()) return false;
             signature.count <- parameters;
             signature.function_form <- function_form;
@@ -6536,14 +6536,14 @@ func scalar_generic_term(interfaces:const ModuleInterfaces in I, first:UInt64, p
     val ordinal <- no_node();
     val slot <- no_node();
     return case interfaces[term].payload of {
-        RecipeBuiltin { val kind <-; } -> {
+        RecipeBuiltin { val kind <-, } -> {
             key.category <- ScalarType;
             key.type_kind <- kind;
             key.module <- 0u64;
             (key.identity <- 0u64):void;
             true
         };
-        RecipeTypeParameter { val binder <-; } -> {
+        RecipeTypeParameter { val binder <-, } -> {
             ordinal <- type_argument_ordinal(interfaces, first, past, binder);
             if (ordinal >= products[anchor].arity) return false;
             slot <- products[anchor].arguments + ordinal;
@@ -6577,7 +6577,7 @@ func check_generic_actual(nodes:const ExprNodes in N, facts:const OperandFacts i
     val readonly <- false;
     val by_value <- false;
     case interfaces[formal].payload of {
-        RecipeFormal { val mode <-; val owner <- owner_role; val access <- readonly; } -> {
+        RecipeFormal { val mode <-, val owner <- owner_role, val access <- readonly, } -> {
             if (mode != ValueFormal && mode != ReferenceFormal && mode != ExplicitValueFormal)
                 return unsupported_generic_type();
             role <- owner;
@@ -6608,7 +6608,7 @@ func check_generic_actual(nodes:const ExprNodes in N, facts:const OperandFacts i
     };
     val owner_row <- generic_owner_row(interfaces, first, past, role);
     if (owner_row == no_node()) return unproved_owner();
-    val readonly_owner <- case interfaces[owner_row].payload of { RecipeOwner { val readonly <-; } -> readonly; _ -> false };
+    val readonly_owner <- case interfaces[owner_row].payload of { RecipeOwner { val readonly <-, } -> readonly; _ -> false };
     val temporary <- facts[operand].reception == independent_value();
     if (!readonly && (temporary || facts[operand].target_readonly != 0u8)) return expected_writable_place();
     val actual_owner <- if (temporary) { invocation_owner } else { (facts[operand].owner) };
@@ -6629,7 +6629,7 @@ func apply_generic_result(nodes:const ExprNodes in N, facts:OperandFacts in F, i
     val mode <- ValueRecipe;
     val readonly <- false;
     case interfaces[signature.result].payload of {
-        RecipeResult { val result_mode <- mode; val owner <- owner_role; val access <- readonly; } -> {
+        RecipeResult { val result_mode <- mode, val owner <- owner_role, val access <- readonly, } -> {
             role <- owner;
             mode <- result_mode;
             (readonly <- access):void
@@ -6677,7 +6677,7 @@ func apply_generic_result(nodes:const ExprNodes in N, facts:OperandFacts in F, i
     if (signature.exit != FieldOperationsBody) {
         if (signature.exit != NullMethodResult || signature.null_return == no_node()) return unproved_generic_body();
         if (!(case interfaces[signature.null_return].payload of {
-            RecipeReturnNull { val written <- owner_role; } -> written == no_node() || written == role;
+            RecipeReturnNull { val written <- owner_role, } -> written == no_node() || written == role;
             _ -> false
         })) return unproved_owner();
         (presence <- absent_target()):void
@@ -6749,22 +6749,22 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (links[at].enum_assertion == FoldedEnumOperand) return 0u8;
     if (source_only && at < intrinsic (len)(views)) {
         case views[at] of {
-            BoundGenericCall { val header <-; val past <-; val tail <- arguments; } -> {
+            BoundGenericCall { val header <-, val past <-, val tail <- arguments, } -> {
                 return check_generic_call(nodes, names, links, facts, interfaces, products, arguments, at, used, revision,
                     header, past, tail, published)
             };
-            PreparedGenericConstruction { val owner_site <-; val member <-; } -> {
+            PreparedGenericConstruction { val owner_site <-, val member <-, } -> {
                 if (owner_site >= used || names[at].scope != owner_site) return unproved_owner();
                 set_fact(facts, at, generic_member_loan(), borrowed_ref(), owner_site, member, 0u8);
                 return 0u8
             };
-            ImportedArrayLengthCall { val first <-; val past <-; val argument <-; val input <-; } -> {
+            ImportedArrayLengthCall { val first <-, val past <-, val argument <-, val input <-, } -> {
                 return check_imported_array_length(nodes, interfaces, facts, at, first, past, argument, input)
             };
             PreparedArrayConstruction {
-                val requested <-; val placement <-; val length <-; val fill <-; val owner_site <-;
-                val module <- type_module; val identity <- type_identity; val element <-;
-                val element_module <-; val declared_element <- element_identity;
+                val requested <-, val placement <-, val length <-, val fill <-, val owner_site <-,
+                val module <- type_module, val identity <- type_identity, val element <-,
+                val element_module <-, val declared_element <- element_identity,
             } -> {
                 if (element == (ProductArrayElement:ArraySlotElement) ||
                     (element == (SumArrayElement:ArraySlotElement) && element_module != 0u64)) {
@@ -6777,12 +6777,12 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 return check_prepared_array_construction(nodes, names, selected, facts, at, used, revision,
                     requested, placement, length, fill, owner_site, module, identity, element, element_module, declared_element)
             };
-            EmptySumArrayFill { val parent <- construction; val sum <-; val arm <-; } -> {
+            EmptySumArrayFill { val parent <- construction, val sum <-, val arm <-, } -> {
                 return check_empty_sum_array_fill(nodes, names, facts, views, at, used, revision, parent, sum, arm)
             };
             ReadonlyByteRead {
-                val array_site <-; val index <-; val formal <-; val owner_site <-;
-                val module <- type_module; val identity <- type_identity;
+                val array_site <-, val index <-, val formal <-, val owner_site <-,
+                val module <- type_module, val identity <- type_identity,
             } -> {
                 return check_byte_read(nodes, names, facts, at, used, revision, array_site, index,
                     formal, owner_site, module, identity)
@@ -6793,60 +6793,60 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (at < intrinsic (len)(cases)) {
         case cases[at] of {
             IndexedAggregateLoan {
-                val array <-; val index <-; val owner_site <-; val array_module <-; val declared_array <- array_type;
-                val index_binds_storage <-; val writable <-; val element <-;
+                val array <-, val index <-, val owner_site <-, val array_module <-, val declared_array <- array_type,
+                val index_binds_storage <-, val writable <-, val element <-,
             } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_indexed_aggregate_element(facts, at, array, index, owner_site, array_module, declared_array,
                     element, index_binds_storage, writable)
             };
             IndexedAggregateDestination {
-                val array <-; val index <-; val owner_site <-; val array_module <-; val declared_array <- array_type;
-                val element <-; val index_binds_storage <-;
+                val array <-, val index <-, val owner_site <-, val array_module <-, val declared_array <- array_type,
+                val element <-, val index_binds_storage <-,
             } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_indexed_aggregate_element(facts, at, array, index, owner_site, array_module, declared_array,
                     element, index_binds_storage, true)
             };
-            LexicalSumReference { val construction <-; val owner_site <-; val readonly <-; } -> {
+            LexicalSumReference { val construction <-, val owner_site <-, val readonly <-, } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_lexical_bits_reference(facts, at, construction, owner_site, readonly,
                     independent_sum_bits(), source_sum_target())
             };
-            LexicalProductReference { val construction <-; val owner_site <-; val readonly <-; } -> {
+            LexicalProductReference { val construction <-, val owner_site <-, val readonly <-, } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_lexical_bits_reference(facts, at, construction, owner_site, readonly,
                     independent_product_bits(), source_product_loan())
             };
-            LexicalSumRebind { val destination <-; val construction <-; val owner_site <-; } -> {
+            LexicalSumRebind { val destination <-, val construction <-, val owner_site <-, } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_lexical_sum_rebind(facts, at, destination, construction, owner_site)
             };
             BitsConstruction {
-                val type <- value_type; val count <- field_count;
-                val begin <- first_initializer; val last <- last_initializer;
+                val type <- value_type, val count <- field_count,
+                val begin <- first_initializer, val last <- last_initializer,
             } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_bits_construction(facts, links, cases, at, type, count, begin, last, used)
             };
             IndexedCaseSubject {
-                val expression <- expression; val array_site <- array_site; val index <- index;
-                val owner_site <- owner_site; val array_module <-; val declared_array <- array_type; val schema <- value_type;
+                val expression <- expression, val array_site <- array_site, val index <- index,
+                val owner_site <- owner_site, val array_module <-, val declared_array <- array_type, val schema <- value_type,
             } -> { return check_indexed_case_subject(nodes, facts, at, expression, array_site,
                 index, owner_site, array_module, declared_array, schema) };
-            CaseFieldReceipt { val header <- arm; val pattern <- pattern; val schema <- value_type; } ->
+            CaseFieldReceipt { val header <- arm, val pattern <- pattern, val schema <- value_type, } ->
                 { return check_case_receipt(nodes, names, facts, at, used, revision, header, pattern, schema) };
-            CaseSumReceipt { val receipt <- receipt; val arm <- arm; val schema <- value_type; } -> {
+            CaseSumReceipt { val receipt <- receipt, val arm <- arm, val schema <- value_type, } -> {
                 return select_received_case_subject(names, facts, at, receipt, arm, schema)
             };
             CaseSumProjection {
-                val receiver <- receiver; val field <- field; val receipt <- receipt; val arm <- arm;
-                val record <- record; val sum <- value_type;
+                val receiver <- receiver, val field <- field, val receipt <- receipt, val arm <- arm,
+                val record <- record, val sum <- value_type,
             } -> {
                 return check_case_projection(nodes, names, facts, at, used, revision,
                     receiver, field, receipt, arm, record, sum)
             };
-            StoredArrayElementReference { val input <-; val readonly <-; } -> {
+            StoredArrayElementReference { val input <-, val readonly <-, } -> {
                 if (!source_only || input >= at) return unsupported_product_layout();
                 if (facts[input].kind == never_result()) { copy_fact(facts, at, input); return 0u8 };
                 if (facts[input].kind != source_product_loan() || !facts[input].checks_array_bounds ||
@@ -6857,13 +6857,13 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 (facts[at].checks_array_bounds <- false):void;
                 return 0u8
             };
-            StoredArrayElementTransfer { val destination <-; val input <-; val type <- value_type; } -> {
+            StoredArrayElementTransfer { val destination <-, val input <-, val type <- value_type, } -> {
                 if (!source_only) return unsupported_product_layout();
                 return check_stored_element_transfer(facts, at, destination, input, type)
             };
             StoredArrayField {
-                val receiver <-; val owner_site <-; val record <-; val array_module <-; val array_identity <-;
-                val element <-; val target_readonly <-;
+                val receiver <-, val owner_site <-, val record <-, val array_module <-, val array_identity <-,
+                val element <-, val target_readonly <-,
             } -> {
                 if (!source_only || receiver >= at) return unsupported_product_layout();
                 if (facts[receiver].kind == never_result()) { copy_fact(facts, at, receiver); return 0u8 };
@@ -6878,8 +6878,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 return 0u8
             };
             InlineProductField {
-                val receiver <- receiver; val field <- field; val ordinal <- ordinal;
-                val record <- record; val readonly <-; val writable <-; val schema <- value_type;
+                val receiver <- receiver, val field <- field, val ordinal <- ordinal,
+                val record <- record, val readonly <-, val writable <-, val schema <- value_type,
             } -> {
                 if (!source_only) return unsupported_product_layout();
                 if (receiver >= at) return invalid_operand_tree();
@@ -6889,8 +6889,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                         ordinal, readonly, writable, record, schema)
             };
             CaseProductField {
-                val receiver <- receiver; val field <- field; val ordinal <- ordinal;
-                val record <- record; val schema <- value_type;
+                val receiver <- receiver, val field <- field, val ordinal <- ordinal,
+                val record <- record, val schema <- value_type,
             } -> {
                 return check_case_product_field(nodes, names, facts, at, used, revision, receiver, field,
                     ordinal, record, schema, source_only)
@@ -6904,13 +6904,13 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             has_slot_array(facts, indexed.target)) {
             ref transfer = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
             case views[at] of {
-                IndexedArrayDestination { val assignment <-; val target <-; val index <-; } -> {
+                IndexedArrayDestination { val assignment <-, val target <-, val index <-, } -> {
                     if (assignment <= at || inspect_assignment(nodes, revision, used, assignment, transfer) != PlaceTransfer ||
                         transfer.destination != at || target != indexed.target || index != indexed.index ||
                         names[assignment].kind != 0u8) return invalid_operand_tree();
                     return check_slot_array_index(nodes, facts, at, target, index, true)
                 };
-                IndexedArraySource { val assignment <-; val target <-; val index <-; } -> {
+                IndexedArraySource { val assignment <-, val target <-, val index <-, } -> {
                     if (assignment <= at || inspect_assignment(nodes, revision, used, assignment, transfer) != PlaceTransfer ||
                         transfer.input != at || target != indexed.target || index != indexed.index ||
                         names[assignment].kind != 0u8) return invalid_operand_tree();
@@ -6934,15 +6934,15 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     val null_owner <- no_node();
     case nodes[at] of {
         (Vacant) -> { return invalid_operand_tree(); };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Parenthesized { val expression <- expression; }) -> {
+                (Parenthesized { val expression <- expression, }) -> {
                     if (!published_syntax_id(nodes, revision, at, expression)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_group(nodes, facts, at, expression.index);
                 };
                 (NameReference) -> { return check_bound_name(names, links, facts, views, at); };
-                (ArrayLength { val target <- target; }) -> {
+                (ArrayLength { val target <- target, }) -> {
                     if (!published_syntax_id(nodes, revision, at, target)) return invalid_operand_tree();
                     if (facts[target.index].kind == never_result()) {
                         set_result(facts, at, never_result());
@@ -6960,7 +6960,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     set_result(facts, at, scalar_bool());
                     return 0u8;
                 };
-                (IntegerLiteral { val width <- width; }) -> {
+                (IntegerLiteral { val width <- width, }) -> {
                     if (names[at].scope == no_node()) return 0u8;
                     if (width == 64u64) {
                         scalar_fact(facts, at, independent_value(), no_node());
@@ -6974,23 +6974,23 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     set_result(facts, at, scalar_u8());
                     return 0u8;
                 };
-                (Call { val callee <- callee; val arguments <- argument_tail; }) -> {
+                (Call { val callee <- callee, val arguments <- argument_tail, }) -> {
                     if (!published_syntax_id(nodes, revision, used, callee) ||
                         !published_syntax_id(nodes, revision, used, arguments)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_direct_call(source, nodes, names, links, selected, facts, owners, views, cases,
                         at, callee.index, arguments.index, used, revision, source_only, mixed_aggregate_loan);
                 };
-                (EmptyCall { val callee <- callee; }) -> {
+                (EmptyCall { val callee <- callee, }) -> {
                     if (!published_syntax_id(nodes, revision, used, callee)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_direct_call(source, nodes, names, links, selected, facts, owners, views, cases,
                         at, callee.index, no_node(), used, revision, source_only, false);
                 };
-                (HereInvocation { val call <- call; }) -> {
+                (HereInvocation { val call <- call, }) -> {
                     return check_native_here_value(nodes, links, facts, at, call, used, revision)
                 };
-                (ReturnValue { val value <- value; }) -> {
+                (ReturnValue { val value <- value, }) -> {
                     if (!published_syntax_id(nodes, revision, used, value)) return invalid_operand_tree();
                     return check_return(nodes, names, facts, at, value.index, used, revision);
                 };
@@ -6999,28 +6999,28 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     used, revision); };
                 (ContinueVoid) -> { return check_here_continue(nodes, names, links, facts, at, used,
                     revision); };
-                (PredicateAssertion { val predicate <-; }) -> {
+                (PredicateAssertion { val predicate <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, predicate)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_predicate_assertion(nodes, facts, at, predicate.index, used, revision)
                 };
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     return check_explicit_discard(nodes, facts, at, operand.index);
                 };
-                (TextLiteral { val interior <- interior_zero; }) -> {
+                (TextLiteral { val interior <- interior_zero, }) -> {
                     if (names[at].scope == no_node()) return 0u8;
                     set_fact(facts, at, string_kind(), borrowed_ref(), static_text_owner(), 0u64, 0u8);
                     facts[at].target_readonly <- 1u8;
                     facts[at].text_nul <- if (interior) { nul_present() } else { nul_absent() };
                     return 0u8;
                 };
-                (NullLiteral { val owner <- owner_name; }) -> {
+                (NullLiteral { val owner <- owner_name, }) -> {
                     if (names[at].scope == no_node()) return 0u8;
                     case owner of {
                         (NoLink) -> {};
-                        (LinkTo { val name <- node; }) -> {
+                        (LinkTo { val name <- node, }) -> {
                             if (!published_syntax_id(nodes, revision, at, name)) return invalid_operand_tree();
                             (null_owner <- names[name.index].declaration):void;
                         };
@@ -7028,7 +7028,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     set_fact(facts, at, null_literal(), 0u8, null_owner, 0u64, 0u8);
                     return 0u8;
                 };
-                (RaiseValue { val operand <- exception_value; }) -> {
+                (RaiseValue { val operand <- exception_value, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return invalid_operand_tree();
                     if (names[at].scope == no_node()) return 0u8;
                     if (facts[operand.index].kind != exception_type()) return expected_exception_type();
@@ -7061,7 +7061,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (mode == PlaceRebind) {
         if (source_only && destination < intrinsic (len)(cases)) {
             case cases[destination] of {
-                StoredArrayField { val receiver <-; val fixed <-; val target_readonly <-; } -> {
+                StoredArrayField { val receiver <-, val fixed <-, val target_readonly <-, } -> {
                     if (facts[destination].kind == never_result()) {
                         copy_fact(facts, at, destination);
                         return 0u8
@@ -7087,7 +7087,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         val input <- assignment.input;
         if (source_only && mode == PlaceTransfer && destination < intrinsic (len)(cases)) {
             case cases[destination] of {
-                IndexedAggregateDestination { val transfer <-; val element <-; } -> {
+                IndexedAggregateDestination { val transfer <-, val element <-, } -> {
                     if (transfer != at) return invalid_operand_tree();
                     return check_indexed_bits_transfer(names, facts, cases, at, destination, input, element)
                 };
@@ -7097,7 +7097,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         if (source_only && mode == PlaceTransfer && destination < intrinsic (len)(views) &&
             facts[destination].checks_array_bounds) {
             case views[destination] of {
-                IndexedArrayDestination { val transfer <- assignment; val target <-; } -> {
+                IndexedArrayDestination { val transfer <- assignment, val target <-, } -> {
                     if (transfer == at && target < destination && has_slot_array(facts, target)) {
                         if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
                             set_result(facts, at, never_result());
@@ -7293,14 +7293,14 @@ func discard_aggregate_statement(nodes:const ExprNodes in N, cases:const Constru
     if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer ||
         assignment.input >= intrinsic (len)(cases) || assignment.destination >= intrinsic (len)(cases)) return;
     if (case cases[assignment.destination] of {
-        IndexedAggregateDestination { val transfer <-; } -> transfer == at;
+        IndexedAggregateDestination { val transfer <-, } -> transfer == at;
         _ -> false
     }) {
         discard_result(facts, at, explicit_discard());
         return
     };
     case cases[assignment.input] of {
-        BitsConstruction { val transfer <-; } -> {
+        BitsConstruction { val transfer <-, } -> {
             if (transfer == at) { discard_result(facts, at, explicit_discard()) }
         };
         _ -> {}
@@ -7314,7 +7314,7 @@ func is_braced_statement_guard(nodes:const ExprNodes in N, branch:const Conditio
         !block_tail(nodes, revision, used, branch.consequent, tail) ||
         !block_tail(nodes, revision, used, branch.alternative, tail) || tail != no_node()) return false;
     return case nodes[branch.test] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
             ReturningCondition -> false;
             _ -> true
         };
@@ -7356,9 +7356,9 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     # An explicit discard still requires its operand to establish its type.
     case nodes[at] of {
         (Vacant) -> { return; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     if (published_syntax_id(nodes, revision, at, operand))
                         { discard_result(facts, operand.index, explicit_discard()); } else {};
                     return;
@@ -7400,7 +7400,7 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
 # Result evidence is computed only for demanded omitted-result functions.
 # This profile requires a normal void tail or a reached void return, with
 # no unproved call on the path used as evidence.
-data ResultPath { normal:bool; returns_void:bool; }
+data ResultPath { normal:bool, returns_void:bool, }
 array ResultPaths[UInt64]:ResultPath;
 
 func path_normal(paths:const ResultPaths in P, at:UInt64) -> bool where {const owner P} {
@@ -7532,19 +7532,19 @@ func collect_result_path(nodes:const ExprNodes in N, names:const NameBindings in
         return
     };
     case nodes[at] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of {
                 NameReference -> { (paths[at].normal <- true):void };
                 IntegerLiteral -> { (paths[at].normal <- true):void };
                 BooleanLiteral -> { (paths[at].normal <- true):void };
                 TextLiteral -> { (paths[at].normal <- true):void };
                 NullLiteral -> { (paths[at].normal <- true):void };
-                ArrayLength { val target <-; } -> {
+                ArrayLength { val target <-, } -> {
                     if (published_syntax_id(nodes, revision, at, target)) {
                         append_result_path(paths, at, target.index, no_node())
                     }
                 };
-                DiscardedExpression { val operand <-; } -> {
+                DiscardedExpression { val operand <-, } -> {
                     if (published_syntax_id(nodes, revision, at, operand)) {
                         append_result_path(paths, at, operand.index, no_node())
                     }

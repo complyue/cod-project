@@ -1,12 +1,12 @@
 data Link[T] {
-    item:T;
-    ptr previous:Link[T];
-    ptr next:Link[T];
+    item:T,
+    ptr previous:Link[T],
+    ptr next:Link[T],
 }
 
 export data deque[T] {
-    ptr first:Link[T];
-    ptr last:Link[T];
+    ptr first:Link[T],
+    ptr last:Link[T],
 }
 
 func deque() -> ref deque[T] in R where {T, owner R} {

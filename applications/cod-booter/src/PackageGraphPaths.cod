@@ -27,12 +27,12 @@ using "./PackageModuleResolution.cod" {
 };
 
 export data PackageEdge {
-    first:UInt64;
-    past:UInt64;
-    spelling_first:UInt64;
-    spelling_past:UInt64;
-    importer_first:UInt64;
-    importer_past:UInt64;
+    first:UInt64,
+    past:UInt64,
+    spelling_first:UInt64,
+    spelling_past:UInt64,
+    importer_first:UInt64,
+    importer_past:UInt64,
 }
 
 func package_rejection_code(status:CompilerStatus) -> UInt8 {
@@ -201,16 +201,16 @@ proc prepare_resolved_module(
     case probe_package_roots(rows, paths, row_count, path_used, spelling,
         edge.spelling_first, edge.spelling_past) of {
         (MissingModule) -> {};
-        (SearchFailed { val os_error <-; }) -> {
+        (SearchFailed { val os_error <-, }) -> {
             return report_package_issue(
                 opened, diagnostic, PackageLookupFailure, os_error, keys, spelling, edge, run)
         };
-        (AmbiguousModule { val first_root <-; val second_root <-; }) -> {
+        (AmbiguousModule { val first_root <-, val second_root <-, }) -> {
             return package_rejection_code(report_claims(opened, diagnostic, PackageAmbiguity, keys, spelling, edge,
                 paths, rows[first_root].path_first, rows[first_root].path_past,
                 paths, rows[second_root].path_first, rows[second_root].path_past, run))
         };
-        (PackageModule { val root <-; }) -> { (selected <- root):void };
+        (PackageModule { val root <-, }) -> { (selected <- root):void };
     };
     try {
         own handle directory:BundledDirectory <- make own handle BundledDirectory();

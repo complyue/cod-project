@@ -3,25 +3,25 @@ using "./InitializationFlow.cod" { InitializationOperations, InitializationIndic
 using "./InitializationFlow.cod" FlowFlagWrite { KeepFlags, SetFlag, CopyFlag, UnknownFailure };
 
 export data InitializationState {
-    operation:UInt64;
-    history:UInt64;
-    previous:UInt64;
-    first:UInt64;
-    second:UInt64;
+    operation:UInt64,
+    history:UInt64,
+    previous:UInt64,
+    first:UInt64,
+    second:UInt64,
 }
 export array InitializationStates[UInt64]:InitializationState;
 
 export data InitializationFlag {
-    previous:UInt64;
-    slot:UInt64;
-    value:UInt64;
+    previous:UInt64,
+    slot:UInt64,
+    value:UInt64,
 }
 export array InitializationFlags[UInt64]:InitializationFlag;
 
 export data InitializationControlResult {
-    states:UInt64;
-    flags:UInt64;
-    exhausted:bool;
+    states:UInt64,
+    flags:UInt64,
+    exhausted:bool,
 }
 
 func flag_value(flags:const InitializationFlags in F, history:UInt64, slot:UInt64) -> UInt64 where {const owner F} {

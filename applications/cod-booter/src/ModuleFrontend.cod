@@ -76,13 +76,13 @@ using "./CompletionChecking.cod" {
 };
 
 export data ModuleBindingResult {
-    frontend:FrontendResult;
-    stage:UInt8;
-    diagnostic:UInt8;
-    related_first:UInt64;
-    symbol_binder:UInt64;
-    requires_operand_checks:bool;
-    has_closed_application:bool;
+    frontend:FrontendResult,
+    stage:UInt8,
+    diagnostic:UInt8,
+    related_first:UInt64,
+    symbol_binder:UInt64,
+    requires_operand_checks:bool,
+    has_closed_application:bool,
 }
 
 export func module_read_failed() -> UInt8 { return 1u8; }
@@ -196,14 +196,14 @@ func uses_native_boundary(nodes:const ExprNodes in N, used:UInt64) -> bool where
 func native_boundary_form(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (OwningHandleBinding) -> { true };
                 (BorrowedHandleBinding) -> { true };
                 (OwnHandleConstruction) -> { true };
                 (BorrowHandleConstruction) -> { true };
                 (HereInvocation) -> { true };
-                (Formal { val mode <- mode; }) -> { mode == HandleFormal || mode == RetainedHandleFormal };
+                (Formal { val mode <- mode, }) -> { mode == HandleFormal || mode == RetainedHandleFormal };
                 (_) -> { false };
             }
         };
@@ -214,10 +214,10 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:UInt64) ->
     if (operand == no_node()) return true;
     return case nodes[operand] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (NameReference) -> { true };
-                (IntegerLiteral { val width <- width; }) -> { width == 64u64 };
+                (IntegerLiteral { val width <- width, }) -> { width == 64u64 };
                 (BooleanLiteral) -> { true };
                 (_) -> { false };
             }
@@ -256,13 +256,13 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
         caught.annotation != no_node()) return 36u8;
     return case nodes[at] of {
         (Vacant) -> { unsupported_module_declaration() };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (Publication { val nature <- nature; }) -> {
+                (Publication { val nature <- nature, }) -> {
                     if (nature != OrdinaryResource) { unsupported_module_declaration() }
                         else { 0u8 }
                 };
-                (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
+                (LocalBinding { val mode <- mode, val declaration_const <- declaration_const, }) -> {
                     if (declaration_const) {
                         if (mode != ReferenceLocal && mode != ValueLocal) return unsupported_const_local();
                         (requires_operand_checks <- true):void
@@ -285,7 +285,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 BareReferenceBinding -> unsupported_reference_group();
                 ReferenceBindingGroup -> unsupported_reference_group();
                 InitializeReservation -> unsupported_reserved_initializer();
-                (PredicateAssertion { val message <-; }) -> {
+                (PredicateAssertion { val message <-, }) -> {
                     case message of {
                         NoLink -> { (requires_operand_checks <- true):void; 0u8 };
                         (_) -> { unsupported_assertion_message() };
@@ -293,7 +293,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 };
                 ReferenceIdentity -> unsupported_reference_identity();
                 ReturningCondition -> unsupported_returning_condition();
-                (Formal { val mode <- mode; val fixed <- binding_const; val binding <-; }) -> {
+                (Formal { val mode <- mode, val fixed <- binding_const, val binding <-, }) -> {
                     # The graph's source route validates this reception against a bound callable.
                     if (mode == ReferenceSlotFormal && emit_object)
                         return unsupported_reference_slot_formal();
@@ -315,7 +315,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 (ArrayLength) -> { if (emit_object) { unsupported_array_length() } else { 0u8 } };
                 (DeferredClauses) -> { 40u8 };
                 (LocalCallableSlot) -> { 41u8 };
-                (CallableDefinition { val lexical <- lexical; }) -> {
+                (CallableDefinition { val lexical <- lexical, }) -> {
                     if (emit_object && lexical) { unsupported_lexical_callable() } else { 0u8 }
                 };
                 (RaiseWithCause) -> { 42u8 };
@@ -432,7 +432,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             }
         };
         if (!product_application_binding(bindings[at].kind) && (case nodes[at] of {
-            Occupied { val syntax <- node; } -> case syntax.payload of {
+            Occupied { val syntax <- node, } -> case syntax.payload of {
                 AppliedType -> true; _ -> false
             };
             Vacant -> false

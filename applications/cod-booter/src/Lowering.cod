@@ -9,11 +9,11 @@ using "./ParserInput.cod" ParseResult;
 # This small expression backend accepts only its existing four operations.
 # The slots here are backend operands in postorder.
 export data ArithmeticOperands {
-    opcode:UInt8;
-    immediate:UInt64;
-    left_slot:UInt64;
-    right_slot:UInt64;
-    source_at:UInt64;
+    opcode:UInt8,
+    immediate:UInt64,
+    left_slot:UInt64,
+    right_slot:UInt64,
+    source_at:UInt64,
 }
 
 func checked_anchor(first:UInt64, past:UInt64, at:UInt64) -> bool {
@@ -28,22 +28,22 @@ export func arithmetic_operands(nodes:const ExprNodes in N, revision:UInt64, use
     operation.right_slot <- 0u64;
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             operation.source_at <- syntax.span.first;
             case syntax.payload of {
-                (IntegerLiteral { val magnitude <- magnitude; val width <- width; }) -> {
+                (IntegerLiteral { val magnitude <- magnitude, val width <- width, }) -> {
                     if (width != 64u64) return false;
                     operation.opcode <- literal_node();
                     operation.immediate <- magnitude;
                     checked_anchor(syntax.span.first, syntax.span.past, operation.source_at)
                 };
-                (Parenthesized { val inner <- expression; }) -> {
+                (Parenthesized { val inner <- expression, }) -> {
                     if (!published_syntax_id(nodes, revision, at, inner)) return false;
                     operation.opcode <- group_node();
                     operation.left_slot <- inner.index;
                     checked_anchor(syntax.span.first, syntax.span.past, operation.source_at)
                 };
-                (ArithmeticExpression { val operands <- operands; val kind <- operation; }) -> {
+                (ArithmeticExpression { val operands <- operands, val kind <- operation, }) -> {
                     if (kind != Addition && kind != Multiplication) return false;
                     if (!published_syntax_id(nodes, revision, at, operands.left_operand) ||
                         !published_syntax_id(nodes, revision, at, operands.right_operand)) return false;

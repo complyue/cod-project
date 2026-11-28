@@ -11,9 +11,9 @@ export func "C" diagnostic_limit(handle destination:const DiagnosticDestination 
     -> UInt64 where {const owner D};
 
 export data DiagnosticRun {
-    limit:UInt64;
-    retained:UInt64;
-    package_input_failure:UInt64;
+    limit:UInt64,
+    retained:UInt64,
+    package_input_failure:UInt64,
 }
 export array DiagnosticRuns[UInt64]:DiagnosticRun;
 
@@ -26,13 +26,13 @@ func "C" write_diagnostic(handle destination:DiagnosticDestination in D, stage:U
                           related_line:UInt64, related_column:UInt64, os_error:UInt64) -> UInt8 where {owner D};
 
 data "C" SourceDiagnosticRow {
-    code:UInt8;
-    first_line:UInt64;
-    first_column:UInt64;
-    past_line:UInt64;
-    past_column:UInt64;
-    related_line:UInt64;
-    related_column:UInt64;
+    code:UInt8,
+    first_line:UInt64,
+    first_column:UInt64,
+    past_line:UInt64,
+    past_column:UInt64,
+    related_line:UInt64,
+    related_column:UInt64,
 }
 array SourceDiagnosticRows[UInt64]:SourceDiagnosticRow;
 array ReportIndices[UInt64]:UInt64;
@@ -95,12 +95,12 @@ export proc report_dependency_note(source:const SourceBytes in S, lines:const So
 }
 
 export enum PackageDiagnosticKind:UInt8 {
-    PackageShadow = 1u8;
-    PackageAmbiguity = 2u8;
-    PackageMissing = 3u8;
-    PackageLookupFailure = 4u8;
-    PackageInputFailure = 5u8;
-    InvalidModulePath = 6u8;
+    PackageShadow = 1u8,
+    PackageAmbiguity = 2u8,
+    PackageMissing = 3u8,
+    PackageLookupFailure = 4u8,
+    PackageInputFailure = 5u8,
+    InvalidModulePath = 6u8,
 }
 
 export func "C" append_package_diagnostic(

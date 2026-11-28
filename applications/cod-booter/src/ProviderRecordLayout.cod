@@ -1,8 +1,8 @@
 using "./ParserStorage.cod" no_node;
 
 export data ABIRecordLayout {
-    size:UInt64;
-    alignment:UInt64;
+    size:UInt64,
+    alignment:UInt64,
 }
 
 func aligned_offset(value:UInt64, alignment:UInt64) -> UInt64 {

@@ -71,9 +71,9 @@ using "./ParserStorage.cod" SyntaxRole {
 };
 using "./SourceStorage.cod" { SourceBytes, Token };
 
-enum BlockItemMode:UInt8 { OrdinaryBlockItem; ConstructorInitializerItem; CaseBodyItem; DirectCaseArmItem; }
+enum BlockItemMode:UInt8 { OrdinaryBlockItem, ConstructorInitializerItem, CaseBodyItem, DirectCaseArmItem, }
 
-data ParseControls { supplied_here:bool; case_control:bool }
+data ParseControls { supplied_here:bool, case_control:bool }
 
 func restore_controls(result:ParseResult in R, saved:const ParseControls in C) -> void
     where {owner R, const owner C} {
@@ -260,7 +260,7 @@ func follows_braced_if(source:const SourceBytes in S, tokens:const Tokens in T,
         punct != LEFT_BRACE && punct != LEFT_PAREN && punct != MINUS && punct != EXCLAMATION) return false;
     # A postfix or binary operation wrapping the conditional still needs a separator.
     return case nodes[expression] of {
-        Occupied { val syntax <- node; } -> {
+        Occupied { val syntax <- node, } -> {
             case syntax.payload of { Conditional -> true; _ -> false }
         };
         _ -> false
@@ -1188,16 +1188,17 @@ func parse_case_value_receiver(source:const SourceBytes in S, tokens:const Token
     ref selected = make NoLink {};
     val last <- tokens[operator].past;
     val delimiter <- punct_at(source, tokens, result.next, past);
-    if (delimiter != SEMICOLON && delimiter != RIGHT_BRACE) {
+    if (delimiter != COMMA && delimiter != RIGHT_BRACE) {
         if (!parse_identifier(source, tokens, nodes, result, past, expected_name())) return false;
         selected = make LinkTo { node <- make NodeId { revision <- result.revision; index <- result.root; }; };
         (last <- syntax_past(nodes, result.used, result.root)):void;
     };
-    if (punct_at(source, tokens, result.next, past) != SEMICOLON) {
+    val separator <- punct_at(source, tokens, result.next, past);
+    if (separator != COMMA && separator != RIGHT_BRACE) {
         result.diagnostic <- expected_block_separator();
         return false;
     };
-    result.next <- result.next + 1u64;
+    if (separator == COMMA) { (result.next <- result.next + 1u64):void };
     ref previous = make NoLink {};
     if (preceding != no_node()) {
         previous = make LinkTo { node <- make NodeId { revision <- result.revision; index <- preceding; }; };
@@ -2418,11 +2419,12 @@ func parse_here_receivers(source:const SourceBytes in S, tokens:const Tokens in 
         if (!parse_here_receiver(source, tokens, nodes, result, receivers, close)) return no_node();
         receivers <- result.root;
         if (result.next == close) return receivers;
-        if (punct_at(source, tokens, result.next, close) != COMMA || result.next + 1u64 == close) {
+        if (punct_at(source, tokens, result.next, close) != COMMA) {
             result.diagnostic <- expected_here_receiver();
             return no_node();
         } else {};
         result.next <- result.next + 1u64;
+        if (result.next == close) return receivers
     };
     return receivers;
 }
@@ -2461,13 +2463,13 @@ func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
     });
 }
 
-enum HereSuffix:UInt8 { Unavailable; CanAttach; AlreadyAttached; }
+enum HereSuffix:UInt8 { Unavailable, CanAttach, AlreadyAttached, }
 
 func here_suffix(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> HereSuffix where {const owner N} {
     if (at >= used) return (Unavailable:HereSuffix);
     return case nodes[at] of {
         (Vacant) -> { (Unavailable:HereSuffix) };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (Call) -> { (CanAttach:HereSuffix) };
                 (EmptyCall) -> { (CanAttach:HereSuffix) };
@@ -2702,13 +2704,13 @@ func parse_predicate_assertion(source:const SourceBytes in S, tokens:const Token
 func equality_binding() -> UInt8 { return 3u8 }
 
 enum FixedInfixOperation:UInt8 {
-    NoFixedInfix;
-    AddInfix; SubtractInfix; MultiplyInfix; DivideInfix; RemainderInfix;
-    EqualInfix; UnequalInfix; LessInfix; AtMostInfix; GreaterInfix; AtLeastInfix;
-    IsInfix; IsNotInfix; ConcatenateInfix; AndInfix; OrInfix;
+    NoFixedInfix,
+    AddInfix, SubtractInfix, MultiplyInfix, DivideInfix, RemainderInfix,
+    EqualInfix, UnequalInfix, LessInfix, AtMostInfix, GreaterInfix, AtLeastInfix,
+    IsInfix, IsNotInfix, ConcatenateInfix, AndInfix, OrInfix,
 }
 
-data FixedInfix { operation:FixedInfixOperation; first:UInt64; past:UInt64 }
+data FixedInfix { operation:FixedInfixOperation, first:UInt64, past:UInt64 }
 
 func select_infix(infix:FixedInfix in I, operation:FixedInfixOperation, binding:UInt8)
     -> UInt8 where {owner I} {

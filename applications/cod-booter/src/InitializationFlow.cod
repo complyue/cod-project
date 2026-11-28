@@ -7,24 +7,24 @@ using "./NativeCommands.cod" {
     copy_completion, pending_category,
 };
 
-export enum InitializationAccess:UInt8 { NoAccess; ResetAccess; EstablishAccess; ReadPayload; ReadBinding; PromiseWrite; }
-export enum FlowFlagWrite:UInt8 { KeepFlags; SetFlag; CopyFlag; UnknownFailure; }
+export enum InitializationAccess:UInt8 { NoAccess, ResetAccess, EstablishAccess, ReadPayload, ReadBinding, PromiseWrite, }
+export enum FlowFlagWrite:UInt8 { KeepFlags, SetFlag, CopyFlag, UnknownFailure, }
 
 export data InitializationOperation {
-    activation:UInt64;
-    first:UInt64;
-    second:UInt64;
-    labels:bool;
-    pending_guard:bool;
-    access:InitializationAccess;
-    tag:UInt64;
-    site:UInt64;
-    writes:FlowFlagWrite;
-    write_slot:UInt64;
-    write_input:UInt64;
-    guard_slot:UInt64;
-    guard_expected:UInt64;
-    known_guard:UInt64;
+    activation:UInt64,
+    first:UInt64,
+    second:UInt64,
+    labels:bool,
+    pending_guard:bool,
+    access:InitializationAccess,
+    tag:UInt64,
+    site:UInt64,
+    writes:FlowFlagWrite,
+    write_slot:UInt64,
+    write_input:UInt64,
+    guard_slot:UInt64,
+    guard_expected:UInt64,
+    known_guard:UInt64,
 }
 export array InitializationOperations[UInt64]:InitializationOperation;
 export array InitializationIndices[UInt64]:UInt64;

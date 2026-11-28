@@ -19,12 +19,12 @@ export proc finish_provider_header(header:StringBuilder in H) -> void where {own
 }
 
 export data ProviderPreamble {
-    boolean_results:bool;
-    here_steps:bool;
-    incoming_loans:bool;
-    incoming_text:bool;
-    bounded_text_output:bool;
-    c_string_output:bool;
+    boolean_results:bool,
+    here_steps:bool,
+    incoming_loans:bool,
+    incoming_text:bool,
+    bounded_text_output:bool,
+    c_string_output:bool,
 }
 
 export func prepare_provider_preamble(interfaces:const ModuleInterfaces in G, used:UInt64,

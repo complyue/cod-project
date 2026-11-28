@@ -22,22 +22,22 @@ array FieldWrites[UInt64]:bool;
 array ConstructorChecks[UInt64]:bool;
 array RequestMembers[UInt64]:UInt64;
 data Layouts {
-    product_count:UInt64;
-    argument_count:UInt64;
-    field_count:UInt64;
-    exhausted:bool;
+    product_count:UInt64,
+    argument_count:UInt64,
+    field_count:UInt64,
+    exhausted:bool,
 }
-data TypeCursor { next:UInt64; past:UInt64; parameters:UInt64; substitution:UInt64; }
+data TypeCursor { next:UInt64, past:UInt64, parameters:UInt64, substitution:UInt64, }
 data RecipeRanges {
-    local_count:UInt64;
-    imported_count:UInt64;
-    module:UInt64;
+    local_count:UInt64,
+    imported_count:UInt64,
+    module:UInt64,
 }
 
-export enum GenericConstructionForm:UInt8 { NoConstruction; ByInitializer; ByConstructor; }
+export enum GenericConstructionForm:UInt8 { NoConstruction, ByInitializer, ByConstructor, }
 export data GenericConstructionRequest {
-    first:UInt64; past:UInt64; site:UInt64; owner_site:UInt64;
-    form:GenericConstructionForm; has_arguments:bool;
+    first:UInt64, past:UInt64, site:UInt64, owner_site:UInt64,
+    form:GenericConstructionForm, has_arguments:bool,
 }
 export array GenericConstructionRequests[UInt64]:GenericConstructionRequest;
 
@@ -97,7 +97,7 @@ func fill_product(rows:const ModuleInterfaces in I, published:UInt64, local:cons
     val arity <- members.products[product].arity;
     val past <- header + 1u64 + rows[header].entry_count;
     case rows[header].payload of {
-        GenericProduct { val parameters <-; val constructor <-; } -> {
+        GenericProduct { val parameters <-, val constructor <-, } -> {
             if (parameters != arity || parameters > rows[header].entry_count) return false;
             (members.products[product].constructor <- constructor):void
         };
@@ -122,7 +122,7 @@ func fill_product(rows:const ModuleInterfaces in I, published:UInt64, local:cons
         recipe <- cursor.next;
         cursor.next <- recipe + 1u64;
         case rows[recipe].payload of {
-            RecipeField { val mode <-; val fixed <-; } -> {
+            RecipeField { val mode <-, val fixed <-, } -> {
                 if (!read_type(rows, local, imported, ranges, members, layouts, cursor, field_type, depth + 1u64)) return false;
                 if (mode == ValueFormal || mode == ExplicitValueFormal) {
                     if (field_type.category == (ConcreteProductType:TypeCategory) &&
@@ -180,7 +180,7 @@ func read_type(rows:const ModuleInterfaces in I, local:const ModuleInterfaces in
     val product <- no_node();
     val first <- no_node();
     case rows[row].payload of {
-        RecipeBuiltin { val kind <-; } -> {
+        RecipeBuiltin { val kind <-, } -> {
             if (!native_scalar(kind)) return false;
             result.category <- (ScalarType:TypeCategory);
             result.module <- 0u64;
@@ -188,10 +188,10 @@ func read_type(rows:const ModuleInterfaces in I, local:const ModuleInterfaces in
             (result.identity <- 0u64):void;
             return true
         };
-        RecipeNominal { val defining_module <-; val declaration <-; } -> {
+        RecipeNominal { val defining_module <-, val declaration <-, } -> {
             return read_nominal(imported, ranges.imported_count, defining_module, declaration, result)
         };
-        RecipeTypeParameter { val binder <-; } -> {
+        RecipeTypeParameter { val binder <-, } -> {
             product <- cursor.substitution;
             if (product >= layouts.product_count) return false;
             for (ordinal in 0u64 .. members.products[product].arity) {
@@ -202,7 +202,7 @@ func read_type(rows:const ModuleInterfaces in I, local:const ModuleInterfaces in
             };
             return false
         };
-        RecipeApplication { val defining_module <-; val declaration <-; val arguments <-; } -> {
+        RecipeApplication { val defining_module <-, val declaration <-, val arguments <-, } -> {
             first <- layouts.argument_count;
             if (arguments == 0u64 || arguments > intrinsic (len)(members.arguments) - first) {
                 (layouts.exhausted <- arguments != 0u64):void;
@@ -243,7 +243,7 @@ func check_null_initializer(rows:const ModuleInterfaces in I, published:UInt64, 
     if (head == no_node() || rows[head].interface_kind != generic_callable_interface()) return 159u8;
     val available <- false;
     case rows[head].payload of {
-        GenericCallable { val parameters <-; val constructor_of <-; val function_form <-; val null_initialization <-; } -> {
+        GenericCallable { val parameters <-, val constructor_of <-, val function_form <-, val null_initialization <-, } -> {
             if (!function_form || constructor_of != member.declaration || parameters != member.arity) return 159u8;
             (available <- null_initialization):void
         };
@@ -256,7 +256,7 @@ func check_null_initializer(rows:const ModuleInterfaces in I, published:UInt64, 
     for (site in first .. past) {
         case rows[site].payload of {
             RecipeFormal -> { return 159u8 };
-            RecipeResult { val mode <-; val owner <- owner_role; val readonly <-; } -> {
+            RecipeResult { val mode <-, val owner <- owner_role, val readonly <-, } -> {
                 if (owner_role != no_node() || mode != ReferenceRecipe || readonly || owner == no_node() ||
                     !matches_member_application(rows, first, past, site + 1u64, member.module, member.declaration, member.arity)) return 159u8;
                 (owner_role <- owner):void
@@ -266,7 +266,7 @@ func check_null_initializer(rows:const ModuleInterfaces in I, published:UInt64, 
     };
     for (site in first .. past) {
         if (rows[site].declaration == owner_role) {
-            (writable_owner <- case rows[site].payload of { RecipeOwner { val readonly <-; } -> !readonly; _ -> false }):void
+            (writable_owner <- case rows[site].payload of { RecipeOwner { val readonly <-, } -> !readonly; _ -> false }):void
         }
     };
     if (!writable_owner) return 159u8;
@@ -274,7 +274,7 @@ func check_null_initializer(rows:const ModuleInterfaces in I, published:UInt64, 
     val field <- no_node();
     for (site in first .. past) {
         case rows[site].payload of {
-            RecipeNullInitializer { val destination <- field; val owner <- owner_role; } -> {
+            RecipeNullInitializer { val destination <- field, val owner <- owner_role, } -> {
                 if (owner != no_node() && owner != owner_role) return 163u8;
                 field <- member_field(members, layouts.field_count, member.first_field, destination);
                 if (field == no_node() || !members.fields[field].pointer ||

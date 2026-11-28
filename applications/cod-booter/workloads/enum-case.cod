@@ -1,9 +1,9 @@
 using symbol "std:io" @print;
 
 enum Delivery:Int64 {
-    Pending = -17;
-    Ready = 921;
-    LegacyReady = Ready;
+    Pending = -17,
+    Ready = 921,
+    LegacyReady = Ready,
 }
 
 proc defer_delivery(state:Delivery in O) -> bool where {owner O} {

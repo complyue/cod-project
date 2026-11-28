@@ -5,9 +5,9 @@ using "./SourceStorage.cod" SourceBytes;
 export handle type PathOwner;
 export handle type Path in PathOwner;
 export handle type SourceRevision;
-export data PathStorageException <: Exception { os_error:UInt64; }
-export data PathNotReadyException <: Exception { status:UInt64; }
-export data SourceOpenException <: Exception { os_error:UInt64; }
+export data PathStorageException <: Exception { os_error:UInt64, }
+export data PathNotReadyException <: Exception { status:UInt64, }
+export data SourceOpenException <: Exception { os_error:UInt64, }
 
 func "C" PathOwner() throws PathStorageException;
 func "C" Path() throws PathNotReadyException;

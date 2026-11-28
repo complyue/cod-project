@@ -42,13 +42,13 @@ using "./ModuleExportStorage.cod" {
 };
 
 enum ContractOperationKind:UInt8 {
-    NoContractOperation; PendingExpression; CheckedLeaf; FalseValue; TrueValue;
-    ForwardValue; NegateValue; ConjoinValues; DisjoinValues; ReturnFalseOrTail;
+    NoContractOperation, PendingExpression, CheckedLeaf, FalseValue, TrueValue,
+    ForwardValue, NegateValue, ConjoinValues, DisjoinValues, ReturnFalseOrTail,
 }
 data ContractOperation {
-    kind:ContractOperationKind;
-    first:UInt64;
-    second:UInt64;
+    kind:ContractOperationKind,
+    first:UInt64,
+    second:UInt64,
 }
 array ContractOperations[UInt64]:ContractOperation;
 
@@ -117,7 +117,7 @@ func collect_predicate_operations(nodes:const ExprNodes in N, names:const NameBi
                     (operations[at].kind <- (CheckedLeaf:ContractOperationKind)):void
                 }
             };
-            ReadonlyTextPredicateBody { val formal <- first_formal; val test <-; val tail <-; val returns_true <-; } -> {
+            ReadonlyTextPredicateBody { val formal <- first_formal, val test <-, val tail <-, val returns_true <-, } -> {
                 if (facts[at].kind == scalar_bool()) {
                     if (test == no_node()) {
                         operations[at].kind <- (ForwardValue:ContractOperationKind);
@@ -144,11 +144,11 @@ func collect_predicate_operations(nodes:const ExprNodes in N, names:const NameBi
 }
 
 
-enum ContractVisit:UInt8 { Unvisited; VisitingFirst; VisitingSecond; Leaving; Finished; Cyclic; }
+enum ContractVisit:UInt8 { Unvisited, VisitingFirst, VisitingSecond, Leaving, Finished, Cyclic, }
 data ContractTraversal {
-    visit:ContractVisit;
-    stack_site:UInt64;
-    ordered_site:UInt64;
+    visit:ContractVisit,
+    stack_site:UInt64,
+    ordered_site:UInt64,
 }
 array ContractTraversals[UInt64]:ContractTraversal;
 
@@ -214,7 +214,7 @@ func order_contract_operations(operations:const ContractOperations in P, scratch
 
 # No completed normal Bool alternative means the profile could not prove
 # the operation. The admitted leaf conservatively allows both values.
-data PredicateOutcome { can_true:bool; can_false:bool; bounds:bool; numeric:bool; }
+data PredicateOutcome { can_true:bool, can_false:bool, bounds:bool, numeric:bool, }
 array PredicateOutcomes[UInt64]:PredicateOutcome;
 
 func apply_predicate_operation(operation:const ContractOperation in P, sites:const CompletionSites in X,
@@ -315,12 +315,12 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
     };
 }
 
-data FunctionEffects { available:bool; bounds:bool; numeric:bool; allocates:bool; }
+data FunctionEffects { available:bool, bounds:bool, numeric:bool, allocates:bool, }
 array FunctionEffectRows[UInt64]:FunctionEffects;
 
-data FunctionCallNode { first_caller:UInt64; caller:UInt64; next_caller:UInt64; }
+data FunctionCallNode { first_caller:UInt64, caller:UInt64, next_caller:UInt64, }
 array FunctionCallGraph[UInt64]:FunctionCallNode;
-enum FunctionEffect:UInt8 { UnavailableBody; EscapingBounds; FatalArithmetic; LexicalArrayAllocation; }
+enum FunctionEffect:UInt8 { UnavailableBody, EscapingBounds, FatalArithmetic, LexicalArrayAllocation, }
 
 func checked_unsigned_arithmetic_kind(kind:UInt8) -> bool {
     return kind == scalar_u8() || kind == scalar_u64()
@@ -330,7 +330,7 @@ func prepared_synchronous_here(views:const SuppliedViews in V, site:UInt64, call
     -> bool where {const owner V} {
     if (site >= intrinsic (len)(views)) return false;
     return case views[site] of {
-        PreparedSynchronousHere { val invocation <- call; } -> call == no_node() || invocation == call;
+        PreparedSynchronousHere { val invocation <- call, } -> call == no_node() || invocation == call;
         _ -> false
     }
 }
@@ -339,7 +339,7 @@ func lexical_array_allocation(names:const NameBindings in B, facts:const Operand
     views:const SuppliedViews in V, at:UInt64) -> bool
     where {const owner B, const owner F, const owner V} {
     return case views[at] of {
-        PreparedArrayConstruction { val placement <-; val owner_site <-; } ->
+        PreparedArrayConstruction { val placement <-, val owner_site <-, } ->
             placement == no_node() && owner_site == names[at].scope && allocated_source_array(facts, at);
         _ -> false
     }
@@ -357,7 +357,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             _ -> false
         })) return true;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
             NameReference -> true;
             BooleanLiteral -> true;
             IntegerLiteral -> true;
@@ -396,7 +396,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ArgumentItem -> true;
             ReturnVoid -> true;
             ReturnValue -> true;
-            LocalBinding { val mode <-; val initializer <-; } -> mode == ValueLocal ||
+            LocalBinding { val mode <-, val initializer <-, } -> mode == ValueLocal ||
                 (mode == ReferenceLocal && (completed_lexical_bits_target(facts, at, names[at].scope) ||
                     (initializer.index < at && lexical_array_allocation(names, facts, views, initializer.index))));
             AnnotatedBinding -> true;
@@ -495,7 +495,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     if ((imported_effects && work[at].imported_numeric_fault) ||
                         (checked_unsigned_arithmetic_kind(facts[at].kind) &&
                          (case nodes[at] of {
-                            Occupied { val syntax <- node; } -> case syntax.payload of {
+                            Occupied { val syntax <- node, } -> case syntax.payload of {
                                 ArithmeticExpression -> true; _ -> false
                             };
                             Vacant -> false
@@ -638,7 +638,7 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
             }):void
         };
         case views[at] of {
-            PreparedArrayProcedure { val mixed_record <-; } -> {
+            PreparedArrayProcedure { val mixed_record <-, } -> {
                 if (outcomes[at].available && (mixed_record || !outcomes[at].allocates)) {
                     (views[at] <- make CheckedArrayProcedure {
                         completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };

@@ -4,8 +4,8 @@ using "./Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
 using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
 
 export data ModuleWorkspacePlan {
-    source:ExpressionScratchPlan;
-    commands:UInt64;
+    source:ExpressionScratchPlan,
+    commands:UInt64,
 }
 
 # A normalized grouped selection may need one extra node per item. Each

@@ -107,138 +107,138 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./ModuleExportStorage.cod" ReceiverImportCheck { NoReceiverCallables };
 
 export enum ModuleNameUse:UInt8 {
-    LexicalName;
-    SelectedValue;
-    SelectedType;
-    SelectedSymbol;
-    SelectedPublication;
-    SelectedGenericType;
+    LexicalName,
+    SelectedValue,
+    SelectedType,
+    SelectedSymbol,
+    SelectedPublication,
+    SelectedGenericType,
 }
 
 export data NameBinding {
-    kind:UInt8;
+    kind:UInt8,
     # A using node records the category supplied by its checked export.
-    imported_kind:UInt8;
-    module_use:ModuleNameUse;
-    guarded_local:UInt8;
-    declaration:UInt64;
+    imported_kind:UInt8,
+    module_use:ModuleNameUse,
+    guarded_local:UInt8,
+    declaration:UInt64,
     # Expressions record the full lexical scope that contains them.
-    scope:UInt64;
+    scope:UInt64,
     # Nearest try whose finalizer must run when leaving its protected group.
-    finalizer:UInt64;
+    finalizer:UInt64,
     # A scope owns this list. Each guarded declaration links to its predecessor.
-    guarded_local_link:UInt64;
-    handle_guard:UInt64;
+    guarded_local_link:UInt64,
+    handle_guard:UInt64,
 }
 export array NameBindings[UInt64]:NameBinding;
 
 export data ProductTypeRecovery {
-    maximum:UInt64;
-    count:UInt64;
-    incomplete:bool;
-    first_diagnostic:UInt8;
-    first_site:UInt64;
+    maximum:UInt64,
+    count:UInt64,
+    incomplete:bool,
+    first_diagnostic:UInt8,
+    first_site:UInt64,
 }
 
 export enum EnumAssertion:UInt8 {
-    NoEnumAssertion;
-    FoldedEnumOperand;
-    ConstantEnumAssertion;
-    ValueEnumAssertion;
+    NoEnumAssertion,
+    FoldedEnumOperand,
+    ConstantEnumAssertion,
+    ValueEnumAssertion,
 }
 
 export data NameWorkSlot {
-    receiver_import:ReceiverImportCheck;
-    active:UInt64;
-    module_selection:UInt64;
-    module_kind:UInt8;
-    module_scalar:UInt8;
-    local_symbol_conflict:UInt64;
-    case_schema_prepared:bool;
-    declaring_sum:UInt64;
-    enclosing_case_arm:UInt64;
-    arm_case:UInt64;
-    sum_loan_formals:bool;
-    array_construction:bool;
-    repeated_indexed_initializer:bool;
-    inline_sum_initializer:bool;
-    selected_constructor:bool;
-    selected_aggregate_writer:UInt64;
-    product_type_diagnostic:UInt8;
-    product_type_site:UInt64;
+    receiver_import:ReceiverImportCheck,
+    active:UInt64,
+    module_selection:UInt64,
+    module_kind:UInt8,
+    module_scalar:UInt8,
+    local_symbol_conflict:UInt64,
+    case_schema_prepared:bool,
+    declaring_sum:UInt64,
+    enclosing_case_arm:UInt64,
+    arm_case:UInt64,
+    sum_loan_formals:bool,
+    array_construction:bool,
+    repeated_indexed_initializer:bool,
+    inline_sum_initializer:bool,
+    selected_constructor:bool,
+    selected_aggregate_writer:UInt64,
+    product_type_diagnostic:UInt8,
+    product_type_site:UInt64,
     # Reaching installation at expression entry. The syntax count denotes
     # a join with no single proven installation.
-    native_installation:UInt64;
-    next:UInt64;
-    next_method:UInt64;
-    imported_interface:UInt64;
-    imported_type_module:UInt64;
-    imported_type_identity:UInt64;
-    imported_function:UInt64;
-    imported_owner_argument:UInt64;
-    imported_failure:UInt64;
-    imported_failure_module:UInt64;
-    imported_kind:UInt8;
-    imported_callable_kind:InterfaceCallableKind;
-    imported_array_read_completion:ArrayReadCompletion;
-    imported_numeric_fault:bool;
-    imported_reception:UInt8;
-    imported_ref_slot:bool;
-    imported_target_readonly:UInt8;
-    imported_owner_readonly:UInt8;
-    imported_passes_owner:UInt8;
-    imported_failure_checked:UInt8;
-    enum_code:UInt64;
+    native_installation:UInt64,
+    next:UInt64,
+    next_method:UInt64,
+    imported_interface:UInt64,
+    imported_type_module:UInt64,
+    imported_type_identity:UInt64,
+    imported_function:UInt64,
+    imported_owner_argument:UInt64,
+    imported_failure:UInt64,
+    imported_failure_module:UInt64,
+    imported_kind:UInt8,
+    imported_callable_kind:InterfaceCallableKind,
+    imported_array_read_completion:ArrayReadCompletion,
+    imported_numeric_fault:bool,
+    imported_reception:UInt8,
+    imported_ref_slot:bool,
+    imported_target_readonly:UInt8,
+    imported_owner_readonly:UInt8,
+    imported_passes_owner:UInt8,
+    imported_failure_checked:UInt8,
+    enum_code:UInt64,
     # Interface header for an imported assertion, or local first member.
-    enum_members:UInt64;
-    enum_assertion:EnumAssertion;
-    enum_backing:UInt8;
-    value_module:UInt64;
-    value_identity:UInt64;
-    value_kind:UInt8;
-    expects_here:UInt8;
+    enum_members:UInt64,
+    enum_assertion:EnumAssertion,
+    enum_backing:UInt8,
+    value_module:UInt64,
+    value_identity:UInt64,
+    value_kind:UInt8,
+    expects_here:UInt8,
 }
 export array NameWork[UInt64]:NameWorkSlot;
 
 export data NameResolutionResult {
-    diagnostic:UInt8;
-    node:UInt64;
-    enclosing_defer:UInt64;
-    has_closed_application:bool;
+    diagnostic:UInt8,
+    node:UInt64,
+    enclosing_defer:UInt64,
+    has_closed_application:bool,
 }
 
 data NameState {
-    syntax_revision:UInt64;
-    syntax_used:UInt64;
-    used:UInt64;
-    first:UInt64;
-    module_names:UInt64;
-    module_candidates:bool;
-    source_only:bool;
-    local_sum_input:UInt64;
-    inline_field_input:UInt64;
-    lexical_reference_initializer:UInt64;
-    runtime_floor:UInt64;
-    transfer_binding:UInt64;
-    transfer_resolved:bool;
-    native_installation:UInt64;
-    scope_node:UInt64;
-    generic_method:UInt64;
-    inside_type_argument:bool;
-    has_closed_application:bool;
-    delayed:UInt64;
-    guard:UInt64;
-    finalizer:UInt64;
-    loop_arm:bool;
-    repeated:bool;
-    here_group:bool;
-    handoff:UInt64;
-    case_target:UInt64;
-    case_arm:UInt64;
-    receiving_arm:UInt64;
-    diagnostic:UInt8;
-    failed_node:UInt64;
-    enclosing_defer:UInt64;
+    syntax_revision:UInt64,
+    syntax_used:UInt64,
+    used:UInt64,
+    first:UInt64,
+    module_names:UInt64,
+    module_candidates:bool,
+    source_only:bool,
+    local_sum_input:UInt64,
+    inline_field_input:UInt64,
+    lexical_reference_initializer:UInt64,
+    runtime_floor:UInt64,
+    transfer_binding:UInt64,
+    transfer_resolved:bool,
+    native_installation:UInt64,
+    scope_node:UInt64,
+    generic_method:UInt64,
+    inside_type_argument:bool,
+    has_closed_application:bool,
+    delayed:UInt64,
+    guard:UInt64,
+    finalizer:UInt64,
+    loop_arm:bool,
+    repeated:bool,
+    here_group:bool,
+    handoff:UInt64,
+    case_target:UInt64,
+    case_arm:UInt64,
+    receiving_arm:UInt64,
+    diagnostic:UInt8,
+    failed_node:UInt64,
+    enclosing_defer:UInt64,
 }
 
 export func ordinary_selection() -> UInt8 { return 1u8; }
@@ -504,7 +504,7 @@ export func project_module_selection_candidates(
                 work[at].module_kind <- kind;
                 if (kind == scalar_type_export()) {
                     case selections[candidate] of {
-                        SelectedResource { val shape <-; val origin <- defining_module; val identity <-; } -> {
+                        SelectedResource { val shape <-, val origin <- defining_module, val identity <-, } -> {
                             scalar_identity <- shape;
                             if (origin != 0u64 || identity != scalar_identity || !builtin_type_kind(shape)) return false;
                             (work[at].module_scalar <- shape):void
@@ -1140,7 +1140,7 @@ func resolve_expression_links(source:const SourceBytes in S, nodes:const ExprNod
     where {const owner S, const owner N, owner B, owner W, owner R, const owner I} {
     case items of {
         (NoLink) -> {};
-        (LinkTo { val tail <- node; }) -> {
+        (LinkTo { val tail <- node, }) -> {
             if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, tail)) {
                 reject_name(state, at, invalid_module_tree());
                 return;
@@ -2241,12 +2241,12 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
     };
     case nodes[at] of {
         (Vacant) -> { reject_name(state, no_node(), invalid_module_tree()); return; };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             bindings[at].scope <- state.scope_node;
             bindings[at].finalizer <- state.finalizer;
             work[at].native_installation <- state.native_installation;
             case syntax.payload of {
-                (Parenthesized { val expression <- expression; }) -> {
+                (Parenthesized { val expression <- expression, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, expression)) {
                         reject_name(state, at, invalid_module_tree());
                         return;
@@ -2275,7 +2275,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_construction(source, nodes, bindings, work, state, at);
                     return;
                 };
-                (LocalBinding { val binding <- binding; val initializer <- initializer; val mode <- mode; }) -> {
+                (LocalBinding { val binding <- binding, val initializer <- initializer, val mode <- mode, }) -> {
                     if (mode == ExceptionLocal) { reject_name(state, at, invalid_module_tree()); return; };
                     resolve_local(source, nodes, bindings, work, state, at, binding, initializer, mode);
                     return;
@@ -2290,35 +2290,35 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_handle_construction(source, nodes, bindings, work, state, at, false);
                     return;
                 };
-                (BindSymbolEffect { val name <- name; val input <- input; }) -> {
+                (BindSymbolEffect { val name <- name, val input <- input, }) -> {
                     resolve_effect(source, nodes, bindings, work, state, at, name, input, false);
                     return;
                 };
-                (InstallSymbolEffect { val name <- name; val input <- acquisition; }) -> {
+                (InstallSymbolEffect { val name <- name, val input <- acquisition, }) -> {
                     resolve_effect(source, nodes, bindings, work, state, at, name, input, true);
                     return;
                 };
-                (PredicateAssertion { val predicate <-; }) -> {
+                (PredicateAssertion { val predicate <-, }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, predicate);
                     return
                 };
-                (CheckedTypeAssertion { val operand <- operand; val annotation <- annotation; }) -> {
+                (CheckedTypeAssertion { val operand <- operand, val annotation <- annotation, }) -> {
                     resolve_assertion(source, nodes, bindings, work, state, at, operand, annotation);
                     return;
                 };
                 (CaseExpression) -> { resolve_case(source, nodes, bindings, work, state, at); return; };
                 (CaseArm) -> { resolve_case_arm(source, nodes, bindings, work, state, at); return; };
-                (CallableDefinition { val lexical <- lexical; }) -> {
+                (CallableDefinition { val lexical <- lexical, }) -> {
                     if (!lexical) { reject_name(state, at, invalid_module_tree()); return; };
                     resolve_lexical_callable(source, nodes, bindings, work, state, at);
                     return;
                 };
                 (ProtectedBlock) -> { resolve_try(source, nodes, bindings, work, state, at); return; };
-                (DeferredBlock { val body <- body; }) -> {
+                (DeferredBlock { val body <- body, }) -> {
                     resolve_defer(source, nodes, bindings, work, state, at, body, true);
                     return;
                 };
-                (DeferredInvocation { val operand <- operand; val invocation <- invocation; }) -> {
+                (DeferredInvocation { val operand <- operand, val invocation <- invocation, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, invocation)) {
                         reject_name(state, at, invalid_module_tree());
                         return;
@@ -2326,33 +2326,33 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_defer(source, nodes, bindings, work, state, at, operand, false);
                     return;
                 };
-                (Conditional { val condition <- condition; val yes <- consequent; val no <- alternative; }) -> {
+                (Conditional { val condition <- condition, val yes <- consequent, val no <- alternative, }) -> {
                     resolve_conditional(source, nodes, bindings, work, state, at, condition, yes, no);
                     return;
                 };
-                (ArithmeticExpression { val operands <- operands; }) -> {
+                (ArithmeticExpression { val operands <- operands, }) -> {
                     resolve_binary_operands(source, nodes, bindings, work, state, at, operands);
                     return;
                 };
-                (ComparisonExpression { val operands <- operands; }) -> {
+                (ComparisonExpression { val operands <- operands, }) -> {
                     resolve_binary_operands(source, nodes, bindings, work, state, at, operands);
                     return;
                 };
-                (Concatenation { val operands <- operands; }) -> {
+                (Concatenation { val operands <- operands, }) -> {
                     resolve_value(source, nodes, bindings, work, state, at, false);
                     if (state.diagnostic == 0u8) {
                         resolve_binary_operands(source, nodes, bindings, work, state, at, operands);
                     };
                     return;
                 };
-                (IndexSelection { val target <- target; val index <- index; }) -> {
+                (IndexSelection { val target <- target, val index <- index, }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, target);
                     if (state.diagnostic == 0u8) {
                         resolve_child_expression(source, nodes, bindings, work, state, at, index);
                     };
                     return;
                 };
-                (FieldSelection { val target <- target; val field <- field; }) -> {
+                (FieldSelection { val target <- target, val field <- field, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, at, field) ||
                         name_syntax(nodes, at, field.index) != OrdinaryName) {
                         reject_name(state, at, invalid_module_tree());
@@ -2361,11 +2361,11 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_child_expression(source, nodes, bindings, work, state, at, target);
                     return;
                 };
-                (ArrayLength { val target <- target; }) -> {
+                (ArrayLength { val target <- target, }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, target);
                     return;
                 };
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, operand);
                     return;
                 };
@@ -2373,14 +2373,14 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 (RaisePending) -> { return; };
                 (NamedThrow) -> { resolve_constructing_throw(source, nodes, bindings, work, state,
                     at); return; };
-                (RaiseValue { val operand <- exception_value; }) -> {
+                (RaiseValue { val operand <- exception_value, }) -> {
                     resolve_child_expression(source, nodes, bindings, work, state, at, operand);
                     return;
                 };
-                (NullLiteral { val owner_name <- owner_name; }) -> {
+                (NullLiteral { val owner_name <- owner_name, }) -> {
                     case owner_name of {
                         (NoLink) -> {};
-                        (LinkTo { val name <- node; }) -> {
+                        (LinkTo { val name <- node, }) -> {
                             if (!published_syntax_id(nodes, state.syntax_revision, at, name)) {
                                 reject_name(state, at, invalid_module_tree()); return;
                             };
@@ -2425,7 +2425,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_here_call(source, nodes, bindings, work, state, at);
                     return;
                 };
-                (BlockSyntax { val items <- items; }) -> {
+                (BlockSyntax { val items <- items, }) -> {
                     resolve_expression_links(source, nodes, bindings, work, state, items, at);
                     return;
                 };
@@ -2437,7 +2437,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_value(source, nodes, bindings, work, state, at, true);
                     return;
                 };
-                (SymbolicInvocation { val target <- callee; val arguments <- arguments; }) -> {
+                (SymbolicInvocation { val target <- callee, val arguments <- arguments, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, target)) {
                         reject_name(state, at, invalid_module_tree());
                         return;
@@ -2452,7 +2452,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     resolve_value(source, nodes, bindings, work, state, at, false);
                     return;
                 };
-                (Call { val callee <- callee; val arguments <- argument_tail; }) -> {
+                (Call { val callee <- callee, val arguments <- argument_tail, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, callee) ||
                         !published_syntax_id(nodes, state.syntax_revision, state.syntax_used, arguments)) {
                         reject_name(state, at, invalid_module_tree());
@@ -2467,7 +2467,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                              work[bindings[callee.index].declaration].selected_aggregate_writer != no_node())));
                     return;
                 };
-                (EmptyCall { val callee <- callee; }) -> {
+                (EmptyCall { val callee <- callee, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, callee)) {
                         reject_name(state, at, invalid_module_tree());
                         return;
@@ -2476,7 +2476,7 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                     reject_noncallable_shadow(nodes, bindings, work, state, callee.index);
                     return;
                 };
-                (ReturnValue { val value <- value; }) -> {
+                (ReturnValue { val value <- value, }) -> {
                     if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, value)) {
                         reject_name(state, at, invalid_module_tree());
                         return;
@@ -2672,17 +2672,17 @@ func declaration_binding_kind(shape:DeclarationSyntax) -> UInt8 {
 }
 
 data TypeSynonymEdge {
-    target:UInt64;
-    declaration:UInt64;
-    kind:UInt8;
-    selects_import:bool;
+    target:UInt64,
+    declaration:UInt64,
+    kind:UInt8,
+    selects_import:bool,
 }
 array TypeSynonymEdges[UInt64]:TypeSynonymEdge;
 
 data CompletedSynonym {
-    declaration:UInt64;
-    kind:UInt8;
-    visiting:bool;
+    declaration:UInt64,
+    kind:UInt8,
+    visiting:bool,
 }
 array CompletedSynonyms[UInt64]:CompletedSynonym;
 array SynonymPath[UInt64]:UInt64;
@@ -2972,8 +2972,8 @@ func checked_selection_membership(selections:const CheckedSelections in C, used:
     if (at >= used || used > intrinsic (len)(selections)) return (UnprovedMembership:FamilyMembership);
     return case selections[at] of {
         SelectedResource {
-            val origin <- revision; val kind <- export_kind; val shape <- shape;
-            val module <- defining_module; val declaration <- identity;
+            val origin <- revision, val kind <- export_kind, val shape <- shape,
+            val module <- defining_module, val declaration <- identity,
         } -> {
             if (origin != revision) return (UnprovedMembership:FamilyMembership);
             return published_family_membership(interfaces, published, kind, shape, module, declaration)
@@ -3262,7 +3262,7 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     };
 }
 
-enum FormalNameRole:UInt8 { OrdinaryParameters; OtherCallableParameters; AggregateFields; }
+enum FormalNameRole:UInt8 { OrdinaryParameters, OtherCallableParameters, AggregateFields, }
 
 func resolve_ordinary_formal(source:const SourceBytes in S, nodes:const ExprNodes in N,
     bindings:NameBindings in B, work:NameWork in W, state:NameState in R, parameter:UInt64,
@@ -3656,10 +3656,10 @@ export func find_enum_code(nodes:const ExprNodes in N, bindings:const NameBindin
 }
 
 data EnumNumbering {
-    limit:UInt64;
-    signed:bool;
-    previous:UInt64;
-    has_previous:bool;
+    limit:UInt64,
+    signed:bool,
+    previous:UInt64,
+    has_previous:bool,
 }
 
 func resolve_enum_member(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,

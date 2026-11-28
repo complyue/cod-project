@@ -84,38 +84,38 @@ using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length
 using "./NativeDeclarations.cod" { source_call_allocates, SuppliedView { CheckedImportedArraySlotCall, BoundGenericCall } };
 
 export data CompletionSite {
-    event:UInt8;
-    presence:UInt8;
-    can_continue:UInt8;
-    local_return:UInt8;
-    retains_caught:UInt8;
-    forwarded_operand:UInt8;
-    in_delayed_body:UInt8;
-    in_supplied_body:bool;
-    array_read_completion:ArrayReadCompletion;
-    numeric_fault:bool;
-    slot_summary:bool;
-    array_failures:ByteArrayFailures;
-    case_break:UInt8;
-    case_scan:UInt8;
-    guarded_by:UInt64;
-    incoming_handler:UInt64;
-    throws_clause:UInt64;
-    category:UInt64;
-    category_module:UInt64;
-    destination:UInt64;
-    cleanup_first:UInt64;
-    cleanup_stop:UInt64;
-    registration:UInt64;
-    previous_defer:UInt64;
-    last_defer:UInt64;
-    replacing_try:UInt64;
+    event:UInt8,
+    presence:UInt8,
+    can_continue:UInt8,
+    local_return:UInt8,
+    retains_caught:UInt8,
+    forwarded_operand:UInt8,
+    in_delayed_body:UInt8,
+    in_supplied_body:bool,
+    array_read_completion:ArrayReadCompletion,
+    numeric_fault:bool,
+    slot_summary:bool,
+    array_failures:ByteArrayFailures,
+    case_break:UInt8,
+    case_scan:UInt8,
+    guarded_by:UInt64,
+    incoming_handler:UInt64,
+    throws_clause:UInt64,
+    category:UInt64,
+    category_module:UInt64,
+    destination:UInt64,
+    cleanup_first:UInt64,
+    cleanup_stop:UInt64,
+    registration:UInt64,
+    previous_defer:UInt64,
+    last_defer:UInt64,
+    replacing_try:UInt64,
 }
 export array CompletionSites[UInt64]:CompletionSite;
 
 export data CompletionCheckResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 export func possible_failure() -> UInt8 { return 1u8; }
@@ -413,24 +413,24 @@ func direct_operand(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at
     };
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
-                (DiscardedExpression { val operand <- operand; }) -> {
+                (DiscardedExpression { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return false;
                     child <- operand.index;
                     true
                 };
-                (PredicateAssertion { val predicate <-; }) -> {
+                (PredicateAssertion { val predicate <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, predicate)) return false;
                     (child <- predicate.index):void;
                     true
                 };
-                (CheckedTypeAssertion { val operand <- operand; }) -> {
+                (CheckedTypeAssertion { val operand <- operand, }) -> {
                     if (!runtime_assertion || !published_syntax_id(nodes, revision, at, operand)) return false;
                     child <- operand.index;
                     true
                 };
-                (RaiseValue { val operand <- exception_value; }) -> {
+                (RaiseValue { val operand <- exception_value, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return false;
                     child <- operand.index;
                     true
@@ -935,7 +935,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (completion == BreakCompletion) return check_case_transfer(nodes, names, facts, sites, at, used, revision, true);
     case nodes[at] of {
         (Vacant) -> { return invalid_completion_tree(); };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (CaseFallthrough) -> { return check_case_transfer(nodes, names, facts, sites, at, used, revision, false); };
                 (CaseFailure) -> {
@@ -1020,7 +1020,7 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
     val literal_call <- result == builtin_u8() && checked_literal_call(views, at);
     if (target != no_node() && source_literal_kind(views, target) != literal_kind) return false;
     return case nodes[at] of {
-        Occupied { val syntax <- node; } -> case syntax.payload of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
             NameReference -> true;
             IntegerLiteral -> true;
             BooleanLiteral -> true;
@@ -1039,7 +1039,7 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
             ArgumentItem -> result == builtin_bool();
             RangeHeader -> result == builtin_bool();
             RangeLoop -> result == builtin_bool();
-            LocalBinding { val mode <-; } -> numeric_reader && mode == ValueLocal;
+            LocalBinding { val mode <-, } -> numeric_reader && mode == ValueLocal;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             EmptyCall -> literal_call || target != no_node();
             CaseExpression -> true;
@@ -1099,7 +1099,7 @@ func has_terminal_defer(nodes:const ExprNodes in N, links:const NameWork in L, f
 func is_failure_statement(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
     return case nodes[at] of {
         (Vacant) -> { false };
-        (Occupied { val syntax <- node; }) -> {
+        (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
                 (CaseFailure) -> { true };
                 (RaisePending) -> { true };
@@ -1111,16 +1111,16 @@ func is_failure_statement(nodes:const ExprNodes in N, at:UInt64) -> bool where {
 }
 
 data EscapingFailureEdge {
-    first_use:UInt64;
-    next_use:UInt64;
-    caller:UInt64;
-    delayed_use:UInt64;
+    first_use:UInt64,
+    next_use:UInt64,
+    caller:UInt64,
+    delayed_use:UInt64,
 }
 array EscapingFailureEdges[UInt64]:EscapingFailureEdge;
 
 data ReachedFailure {
-    seen:bool;
-    order:UInt64;
+    seen:bool,
+    order:UInt64,
 }
 array ReachedFailures[UInt64]:ReachedFailure;
 
@@ -1212,7 +1212,7 @@ func in_slot_summary(demand:const DeclarationDemands in D, sites:const Completio
 func imported_array_escapes(views:const SuppliedViews in H, at:UInt64, category:UInt64)
     -> bool where {const owner H} {
     return case views[at] of {
-        CheckedImportedArraySlotCall { val failures <-; } ->
+        CheckedImportedArraySlotCall { val failures <-, } ->
             (category == index_out_of_bounds_identity() && failures.bounds) ||
             (category == out_of_memory_identity() && failures.out_of_memory) ||
             (category == region_capacity_identity() && failures.region_capacity) ||

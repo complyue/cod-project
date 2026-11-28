@@ -44,8 +44,8 @@ func handoff(own region stock:Stock) -> own region :Stock { return stock }
 
 # 03 — Data alternatives, enums and cases
 
-export enum Priority:UInt8 { Standard; Urgent; }
-data Receipt = Accepted { id:UInt64; ptr prior:Receipt; } | Skipped {}
+export enum Priority:UInt8 { Standard, Urgent, }
+data Receipt = Accepted { id:UInt64, ptr prior:Receipt, } | Skipped {}
 func Accepted(raw:UInt64) {
     id <- raw
     prior = null
@@ -58,7 +58,7 @@ val accepted <- receipt isa Accepted
 func checked_id(ptr r:const Receipt in O, limit:UInt64) -> UInt64 where {const owner O} {
     case r of {
         null -> 0u64;
-        Accepted { val n <- id; } | n >= limit -> n;
+        Accepted { val n <- id } | n >= limit -> n;
         Accepted -> 0u64;
         Skipped -> 0u64
     }

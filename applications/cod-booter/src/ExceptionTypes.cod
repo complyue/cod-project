@@ -12,7 +12,7 @@ using "./ParserStorage.cod" {
 
 # Module zero identifies the builtin exception catalog. User definitions keep
 # the identity assigned by their defining module through every publication.
-export data ExceptionType { defining_module:UInt64; declaration:UInt64; checked:bool; }
+export data ExceptionType { defining_module:UInt64, declaration:UInt64, checked:bool, }
 
 export func exception_schema(type:const ExceptionType in T) -> ExceptionSchema where {const owner T}
     {

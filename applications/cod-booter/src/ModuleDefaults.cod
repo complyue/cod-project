@@ -17,19 +17,19 @@ using "./ParserStorage.cod" {
 };
 
 export data StagedDefaultExport {
-    local_row:UInt64;
-    nature:ResourceNature;
-    members:DefaultMemberRange;
+    local_row:UInt64,
+    nature:ResourceNature,
+    members:DefaultMemberRange,
 }
 export array StagedDefaultExports[UInt64]:StagedDefaultExport;
 
 export enum DefaultPublicationStatus:UInt8 {
-    DefaultsReady;
-    InvalidDefaultTree;
-    UnknownDefaultName;
-    WrongDefaultKind;
-    DefaultStorageExhausted;
-    UnknownDefaultMember;
+    DefaultsReady,
+    InvalidDefaultTree,
+    UnknownDefaultName,
+    WrongDefaultKind,
+    DefaultStorageExhausted,
+    UnknownDefaultMember,
 }
 
 array DefaultMarkOrder[UInt64]:UInt64;

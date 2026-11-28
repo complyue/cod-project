@@ -4,7 +4,7 @@ using "./SourceStorage.cod" SourceBytes;
 
 export handle type LLVMSession;
 export symbol @llvmSession :own handle LLVMSession;
-export data LLVMOpenException <: Exception { status:UInt8; }
+export data LLVMOpenException <: Exception { status:UInt8, }
 
 proc "C" LLVMSession() throws LLVMOpenException;
 export proc "C" llvm_construct(handle session:LLVMSession in L, ref rows:const NativeCommands in W,

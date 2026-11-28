@@ -28,9 +28,9 @@ using "./ModuleIndex.cod" { Visits, ModuleSelectionRanges, checked_module_select
 using "./ParserStorage.cod" { SourceSpan, PublicView, PublicView { DefaultPublic } };
 
 export data SelectionSpelling =
-    SourceSpelling { span:SourceSpan; } |
-    CatalogSpelling { span:SourceSpan; } |
-    GraphSpelling { span:SourceSpan; };
+    SourceSpelling { span:SourceSpan, } |
+    CatalogSpelling { span:SourceSpan, } |
+    GraphSpelling { span:SourceSpan, };
 
 export array StagedExportNames[UInt64]:SelectionSpelling;
 export array StagedExportUses[UInt64]:UInt64;
@@ -38,40 +38,40 @@ export array StagedExportUses[UInt64]:UInt64;
 export data CheckedSelection =
     UnpublishedSelection {} |
     SelectedResource {
-        revision:UInt64;
-        site:UInt64;
-        mode:ModuleSelectionMode;
-        nature:ResourceNature;
-        members:UInt64;
-        default_member_first:UInt64;
-        default_member_past:UInt64;
-        local:SelectionSpelling;
-        published:SelectionSpelling;
-        public_row:UInt64;
-        export_kind:UInt8;
-        checked:UInt8;
-        publishing_module:UInt64;
-        defining_module:UInt64;
-        identity:UInt64;
-        owner_module:UInt64;
-        owner_identity:UInt64;
-        shape:UInt8;
+        revision:UInt64,
+        site:UInt64,
+        mode:ModuleSelectionMode,
+        nature:ResourceNature,
+        members:UInt64,
+        default_member_first:UInt64,
+        default_member_past:UInt64,
+        local:SelectionSpelling,
+        published:SelectionSpelling,
+        public_row:UInt64,
+        export_kind:UInt8,
+        checked:UInt8,
+        publishing_module:UInt64,
+        defining_module:UInt64,
+        identity:UInt64,
+        owner_module:UInt64,
+        owner_identity:UInt64,
+        shape:UInt8,
     };
 export array CheckedSelections[UInt64]:CheckedSelection;
 export enum SelectionComparison:UInt8 {
-    DistinctSpelling;
-    RepeatedSelection;
-    ConflictingSelection;
-    UnprovedSelection;
+    DistinctSpelling,
+    RepeatedSelection,
+    ConflictingSelection,
+    UnprovedSelection,
 }
 
 func bounded_selection_spelling(
     spelling:const SelectionSpelling in L, source_size:UInt64, catalog_size:UInt64, graph_used:UInt64)
     -> bool where {const owner L} {
     return case spelling of {
-        SourceSpelling { val range <- span; } -> range.first < range.past && range.past <= source_size;
-        CatalogSpelling { val range <- span; } -> range.first < range.past && range.past <= catalog_size;
-        GraphSpelling { val range <- span; } -> range.first < range.past && range.past <= graph_used
+        SourceSpelling { val range <- span, } -> range.first < range.past && range.past <= source_size;
+        CatalogSpelling { val range <- span, } -> range.first < range.past && range.past <= catalog_size;
+        GraphSpelling { val range <- span, } -> range.first < range.past && range.past <= graph_used
     }
 }
 
@@ -83,15 +83,15 @@ export func selected_spelling_matches(
     if (first >= past || past > intrinsic (len)(name) || graph_used > intrinsic (len)(graph))
         return false;
     return case spelling of {
-        (SourceSpelling { val range <- span; }) -> {
+        (SourceSpelling { val range <- span, }) -> {
             range.first < range.past && range.past <= intrinsic (len)(source) &&
                 same_bytes(source, range.first, range.past, name, first, past)
         };
-        (CatalogSpelling { val range <- span; }) -> {
+        (CatalogSpelling { val range <- span, }) -> {
             range.first < range.past && range.past <= intrinsic (len)(catalog) &&
                 same_bytes(catalog, range.first, range.past, name, first, past)
         };
-        (GraphSpelling { val range <- span; }) -> {
+        (GraphSpelling { val range <- span, }) -> {
             range.first < range.past && range.past <= graph_used &&
                 same_bytes(graph, range.first, range.past, name, first, past)
         };
@@ -105,7 +105,7 @@ export func selected_name_matches(
     -> bool where {const owner F, const owner S, const owner B, const owner G} {
     if (index >= used || used > intrinsic (len)(selections)) return false;
     return case selections[index] of {
-        (SelectedResource { val origin <- revision; val spelling <- local; val verb <- mode; }) -> {
+        (SelectedResource { val origin <- revision, val spelling <- local, val verb <- mode, }) -> {
             origin == revision && verb != ReexportResource &&
                 selected_spelling_matches(spelling, source, catalog, graph, graph_used,
                                           source, first, past)
@@ -133,15 +133,15 @@ export func same_selection_spelling(
     graph:const SourceBytes in G, graph_used:UInt64)
     -> bool where {const owner L, const owner R, const owner S, const owner B, const owner G} {
     return case left of {
-        (SourceSpelling { val range <- span; }) -> {
+        (SourceSpelling { val range <- span, }) -> {
             selected_spelling_matches(right, source, catalog, graph, graph_used,
                                       source, range.first, range.past)
         };
-        (CatalogSpelling { val range <- span; }) -> {
+        (CatalogSpelling { val range <- span, }) -> {
             selected_spelling_matches(right, source, catalog, graph, graph_used,
                                       catalog, range.first, range.past)
         };
-        (GraphSpelling { val range <- span; }) -> {
+        (GraphSpelling { val range <- span, }) -> {
             range.past <= graph_used &&
                 selected_spelling_matches(right, source, catalog, graph, graph_used,
                                           graph, range.first, range.past)
@@ -159,15 +159,15 @@ export func compare_selected_bindings(
         return UnprovedSelection:SelectionComparison;
     return case selections[before] of {
         (SelectedResource {
-            val old_revision <- revision; val old_name <- local; val old_kind <- export_kind;
-            val old_mode <- mode; val old_context <- publishing_module;
-            val old_origin <- defining_module; val old_identity <- identity;
+            val old_revision <- revision, val old_name <- local, val old_kind <- export_kind,
+            val old_mode <- mode, val old_context <- publishing_module,
+            val old_origin <- defining_module, val old_identity <- identity,
         }) -> {
             case selections[after] of {
                 (SelectedResource {
-                    val new_revision <- revision; val new_name <- local; val new_kind <- export_kind;
-                    val new_mode <- mode; val new_context <- publishing_module;
-                    val new_origin <- defining_module; val new_identity <- identity;
+                    val new_revision <- revision, val new_name <- local, val new_kind <- export_kind,
+                    val new_mode <- mode, val new_context <- publishing_module,
+                    val new_origin <- defining_module, val new_identity <- identity,
                 }) -> {
                     if (old_revision != revision || new_revision != revision ||
                         !bounded_selection_spelling(old_name, intrinsic (len)(source),
@@ -203,8 +203,8 @@ func validate_checked_selections(
     val comparison <- DistinctSpelling:SelectionComparison;
     for (after in 0u64 .. used) {
         report.node <- case selections[after] of {
-            (SelectedResource { val revision <- revision; val site <- site;
-                val local <- local; val published <- published; }) -> {
+            (SelectedResource { val revision <- revision, val site <- site,
+                val local <- local, val published <- published, }) -> {
                 if (revision == tree.revision &&
                     bounded_selection_spelling(local, source_size, catalog_size, graph_used) &&
                     bounded_selection_spelling(published, source_size, catalog_size, graph_used)) { (site) }
@@ -231,29 +231,29 @@ func validate_checked_selections(
 
 export data SelectedExport {
     # Input from dependency discovery. Zero selects the builtin namespace.
-    dependency_module:UInt64;
-    checked_resource:UInt64;
-    selection_site:UInt64;
-    selection_public_row:UInt64;
-    identity:UInt64;
-    kind:UInt8;
-    checked:UInt8;
-    origin_module:UInt64;
-    owner_module:UInt64;
-    owner_identity:UInt64;
-    shape:UInt8;
-    enum_head:UInt64;
-    enum_code:UInt64;
-    sum_head:UInt64;
-    next_sum_selection:UInt64;
-    constructor_selection:UInt64;
-    constructor_row:UInt64;
+    dependency_module:UInt64,
+    checked_resource:UInt64,
+    selection_site:UInt64,
+    selection_public_row:UInt64,
+    identity:UInt64,
+    kind:UInt8,
+    checked:UInt8,
+    origin_module:UInt64,
+    owner_module:UInt64,
+    owner_identity:UInt64,
+    shape:UInt8,
+    enum_head:UInt64,
+    enum_code:UInt64,
+    sum_head:UInt64,
+    next_sum_selection:UInt64,
+    constructor_selection:UInt64,
+    constructor_row:UInt64,
 }
 export array SelectedExports[UInt64]:SelectedExport;
 
 export data ExportResolutionResult {
-    diagnostic:UInt8;
-    node:UInt64;
+    diagnostic:UInt8,
+    node:UInt64,
 }
 
 export func exception_type_export() -> UInt8 { return 1u8; }
@@ -835,8 +835,8 @@ export func checked_lexical_selection_kind(selections:const CheckedSelections in
     if (row >= used || used > intrinsic (len)(selections)) return 0u8;
     return case selections[row] of {
         SelectedResource {
-            val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
-            val identity <- identity; val defining <- defining_module;
+            val origin <- revision, val directive <- site, val kind <- export_kind, val verb <- mode,
+            val identity <- identity, val defining <- defining_module,
         } -> {
             if (origin != revision || directive >= syntax_used || verb == ReexportResource ||
                 identity == no_node() || defining == no_node()) { 0u8 }
@@ -852,10 +852,10 @@ export func project_checked_resource(selections:const CheckedSelections in F, us
     if (row >= used || used > intrinsic (len)(selections)) return false;
     return case selections[row] of {
         SelectedResource {
-            val origin <- revision; val directive <- site; val kind <- export_kind; val verb <- mode;
-            val identity <- identity; val defining <- defining_module; val publisher <- publishing_module;
-            val checked <- checked; val owner_module <- owner_module; val owner_identity <- owner_identity;
-            val shape <- shape; val public_row <- public_row;
+            val origin <- revision, val directive <- site, val kind <- export_kind, val verb <- mode,
+            val identity <- identity, val defining <- defining_module, val publisher <- publishing_module,
+            val checked <- checked, val owner_module <- owner_module, val owner_identity <- owner_identity,
+            val shape <- shape, val public_row <- public_row,
         } -> {
             if (origin != revision || directive >= syntax_used || kind == 0u8 ||
                 (lexical_use && verb == ReexportResource)) return false;
@@ -880,7 +880,7 @@ export func checked_selection_site(selections:const CheckedSelections in F, used
     row:UInt64, revision:UInt64) -> UInt64 where {const owner F} {
     if (row >= used || used > intrinsic (len)(selections)) return no_node();
     return case selections[row] of {
-        SelectedResource { val origin <- revision; val directive <- site; } ->
+        SelectedResource { val origin <- revision, val directive <- site, } ->
             if (origin == revision) { directive } else { no_node() };
         UnpublishedSelection -> no_node()
     }
@@ -893,15 +893,15 @@ export func project_public_import(selections:const CheckedSelections in F, used:
     if (row >= used || used > intrinsic (len)(selections) || facade == 0u64) return false;
     return case selections[row] of {
         SelectedResource {
-            val origin <- revision; val directive <- site; val verb <- mode; val local <- local;
-            val kind <- export_kind; val checked <- checked; val publisher <- publishing_module;
-            val definition <- defining_module; val identity <- identity;
-            val owner_module <- owner_module; val owner_identity <- owner_identity; val shape <- shape;
+            val origin <- revision, val directive <- site, val verb <- mode, val local <- local,
+            val kind <- export_kind, val checked <- checked, val publisher <- publishing_module,
+            val definition <- defining_module, val identity <- identity,
+            val owner_module <- owner_module, val owner_identity <- owner_identity, val shape <- shape,
         } -> {
             if (origin != revision || directive != site || verb != ImportResource ||
                 publisher == 0u64 || publisher == facade || kind == 0u8) return false;
             case local of {
-                GraphSpelling { val span <- span; } -> {
+                GraphSpelling { val span <- span, } -> {
                     if (span.first >= span.past || span.past > graph_used) return false;
                     output.name_first <- span.first;
                     (output.name_past <- span.past):void
@@ -929,8 +929,8 @@ export func permits_module_family_extension(selections:const CheckedSelections i
     if (row >= used || used > intrinsic (len)(selections)) return false;
     return case selections[row] of {
         SelectedResource {
-            val origin <- revision; val verb <- mode; val kind <- export_kind;
-            val shape <- shape; val nature <- nature;
+            val origin <- revision, val verb <- mode, val kind <- export_kind,
+            val shape <- shape, val nature <- nature,
         } -> origin == revision && verb == ImportResource && nature == OrdinaryResource &&
             kind == callable_export() && shape == ordinary_callable_shape();
         UnpublishedSelection -> false
@@ -955,9 +955,9 @@ export func project_written_selections(
     for (index in 0u64 .. used) {
         case selections[index] of {
             (SelectedResource {
-                val revision <- revision; val site <- site; val publisher <- publishing_module;
-                val verb <- mode; val member_list <- members;
-                val first <- default_member_first; val past <- default_member_past;
+                val revision <- revision, val site <- site, val publisher <- publishing_module,
+                val verb <- mode, val member_list <- members,
+                val first <- default_member_first, val past <- default_member_past,
             }) -> {
                 report.node <- site;
                 if (revision != tree.revision || site >= tree.used) return false;
@@ -1072,10 +1072,10 @@ func exposes_spelling(source:const SourceBytes in S, nodes:const ExprNodes in N,
 }
 
 data EnumSelection {
-    head:UInt64;
-    selector:UInt64;
-    first_ordinal:UInt64;
-    past_ordinal:UInt64;
+    head:UInt64,
+    selector:UInt64,
+    first_ordinal:UInt64,
+    past_ordinal:UInt64,
 }
 array EnumSelections[UInt64]:EnumSelection;
 
@@ -1204,9 +1204,9 @@ export func resolve_enum_selections(source:const SourceBytes in S, nodes:const E
     for (at in 0u64 .. checked_used) {
         case checked[at] of {
             (SelectedResource {
-                val origin <- revision; val site <- site; val verb <- mode; val kind <- export_kind;
-                val selector <- members; val first <- default_member_first; val past <- default_member_past;
-                val defining <- defining_module; val identity <- identity;
+                val origin <- revision, val site <- site, val verb <- mode, val kind <- export_kind,
+                val selector <- members, val first <- default_member_first, val past <- default_member_past,
+                val defining <- defining_module, val identity <- identity,
             }) -> {
                 if (origin != revision || site >= used) return false;
                 if (kind == enum_export() && verb != ReexportResource &&

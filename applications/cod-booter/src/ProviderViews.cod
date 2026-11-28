@@ -13,10 +13,10 @@ using "./NativeProviderLayout.cod" {
 using "./ProviderRecordLayout.cod" { ABIRecordLayout, append_layout_field, finish_layout };
 using "./ProviderNames.cod" emit_provider_member;
 
-enum ScalarSpelling:UInt8 { UnsupportedScalar; Unsigned8; Unsigned32; Unsigned64; Signed64; Binary32; Binary64; }
+enum ScalarSpelling:UInt8 { UnsupportedScalar, Unsigned8, Unsigned32, Unsigned64, Signed64, Binary32, Binary64, }
 array FieldOffsets[UInt64]:UInt64;
 
-export data ABIPrimitiveLayout { size:UInt64; alignment:UInt64; }
+export data ABIPrimitiveLayout { size:UInt64, alignment:UInt64, }
 export array ABIPrimitiveLayouts[UInt64]:ABIPrimitiveLayout;
 
 func primitive_layout_index(representation:ABIRepresentation) -> UInt64 {

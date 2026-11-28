@@ -18,28 +18,28 @@ using "./ModuleExportStorage.cod" {
 
 export array AggregateFacts[UInt64]:AggregateStorage;
 
-enum SchemaKind:UInt8 { NoSchema; ProductSchema; NativeSchema; SumSchema; }
-data SchemaDeclaration { kind:SchemaKind; referent:bool; entries:UInt64; }
+enum SchemaKind:UInt8 { NoSchema, ProductSchema, NativeSchema, SumSchema, }
+data SchemaDeclaration { kind:SchemaKind, referent:bool, entries:UInt64, }
 array SchemaDeclarations[UInt64]:SchemaDeclaration;
 
 # Steps are indexed by their original declaration, arm or field site.
 data SchemaStep =
     NoSchemaStep {} |
     InvalidSchemaStart {} |
-    SchemaStart { arm:UInt64; field:UInt64; storage:AggregateStorage; native:bool; } |
-    ArmSuccessor { arm:UInt64; field:UInt64; } |
+    SchemaStart { arm:UInt64, field:UInt64, storage:AggregateStorage, native:bool, } |
+    ArmSuccessor { arm:UInt64, field:UInt64, } |
     FieldInput {
-        site:UInt64; next:UInt64; next_valid:bool; storage:AggregateStorage; dependency:UInt64;
+        site:UInt64, next:UInt64, next_valid:bool, storage:AggregateStorage, dependency:UInt64,
     };
 array SchemaSteps[UInt64]:SchemaStep;
 
-enum SchemaProgress:UInt8 { Unvisited; Active; Complete; }
+enum SchemaProgress:UInt8 { Unvisited, Active, Complete, }
 data SchemaCursor {
-    progress:SchemaProgress; parent:UInt64; arm:UInt64; field:UInt64; storage:AggregateStorage; native:bool;
+    progress:SchemaProgress, parent:UInt64, arm:UInt64, field:UInt64, storage:AggregateStorage, native:bool,
 }
 array SchemaCursors[UInt64]:SchemaCursor;
 
-export data SchemaCheck { diagnostic:UInt8; node:UInt64; }
+export data SchemaCheck { diagnostic:UInt8, node:UInt64, }
 
 func reject_schema(check:SchemaCheck in R, at:UInt64, cycle:bool) -> bool where {owner R} {
     check.diagnostic <- if (cycle) { 18u8 } else { 17u8 };
@@ -132,7 +132,7 @@ func collect_schema_declarations(nodes:const ExprNodes in N, names:const NameBin
 }
 
 data SchemaFieldReceipt {
-    site:UInt64; next:UInt64; next_valid:bool; storage:AggregateStorage; dependency:UInt64;
+    site:UInt64, next:UInt64, next_valid:bool, storage:AggregateStorage, dependency:UInt64,
 }
 
 func collect_field_input(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -258,7 +258,7 @@ func collect_schema_steps(nodes:const ExprNodes in N, names:const NameBindings i
 func begin_schema(steps:const SchemaSteps in T, cursors:SchemaCursors in C, schema:UInt64, parent:UInt64)
     -> bool where {const owner T, owner C} {
     return case steps[schema] of {
-        SchemaStart { val arm <-; val field <-; val storage <-; val native <-; } -> {
+        SchemaStart { val arm <-, val field <-, val storage <-, val native <-, } -> {
             cursors[schema] <- make SchemaCursor {
                 progress <- (Active:SchemaProgress); parent <- parent; arm <- arm; field <- field; storage <- storage; native <- native;
             };
@@ -274,7 +274,7 @@ func advance_schema_field(steps:const SchemaSteps in T, cursors:SchemaCursors in
     val field <- cursors[schema].field;
     val resolved <- UnprovedAggregate;
     return case steps[field] of {
-        FieldInput { val site <-; val next <-; val next_valid <-; val storage <-; val dependency <-; } -> {
+        FieldInput { val site <-, val next <-, val next_valid <-, val storage <-, val dependency <-, } -> {
             resolved <- storage;
             if (dependency != no_node()) {
                 case cursors[dependency].progress of {
@@ -301,7 +301,7 @@ func advance_schema_field(steps:const SchemaSteps in T, cursors:SchemaCursors in
 func advance_schema_arm(steps:const SchemaSteps in T, cursors:SchemaCursors in C, schema:UInt64) -> bool
     where {const owner T, owner C} {
     return case steps[cursors[schema].arm] of {
-        ArmSuccessor { val arm <-; val field <-; } -> {
+        ArmSuccessor { val arm <-, val field <-, } -> {
             cursors[schema].arm <- arm;
             cursors[schema].field <- field;
             true

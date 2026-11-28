@@ -4,7 +4,7 @@ using "./SourceStorage.cod" SourceBytes;
 using "std:exceptions" Exception;
 
 export handle type DirectorySnapshot;
-export data DirectoryStorageException <: Exception { os_error:UInt64; }
+export data DirectoryStorageException <: Exception { os_error:UInt64, }
 
 func "C" DirectorySnapshot() throws DirectoryStorageException;
 
@@ -31,7 +31,7 @@ export proc use_directory_name(
 }
 
 export handle type BundledDirectory;
-export data BundledDirectoryException <: Exception { os_error:UInt64; }
+export data BundledDirectoryException <: Exception { os_error:UInt64, }
 
 func "C" BundledDirectory() throws BundledDirectoryException;
 

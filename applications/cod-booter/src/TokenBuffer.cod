@@ -9,10 +9,10 @@ using "./ParserStorage.cod" { Tokens, len, no_node };
 using "./Lexer.cod" { scan_token, end_of_source, lexical_error };
 
 export data ScanResult {
-    used:UInt64;
-    next:UInt64;
-    complete:bool;
-    invalid_source:bool;
+    used:UInt64,
+    next:UInt64,
+    complete:bool,
+    invalid_source:bool,
 }
 
 func opener_for(mark:UInt8) -> UInt8 {
@@ -40,7 +40,7 @@ func close_delimiter(source:const SourceBytes in S, tokens:Tokens in T, open:UIn
     for (step in 0u64 .. closing) {
         if (open == no_node() || open >= closing) return;
         case tokens[open].delimiter of {
-            (UnmatchedDelimiter { val before <- previous; }) -> { (previous <- before):void };
+            (UnmatchedDelimiter { val before <- previous, }) -> { (previous <- before):void };
             _ -> { return }
         };
         if (punct_at(source, tokens, open, closing) == expected) {

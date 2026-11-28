@@ -4,58 +4,58 @@ using "./NativeSource.cod" { PathOwner, PathNotReadyException, path_key };
 using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
 
 export data VariadicProfileStop {
-    first_byte:UInt64;
-    past_byte:UInt64;
-    first:SourcePosition;
-    past:SourcePosition;
+    first_byte:UInt64,
+    past_byte:UInt64,
+    first:SourcePosition,
+    past:SourcePosition,
 }
 
 export data ModuleSelectionRanges {
-    exports_first:UInt64;
-    exports_past:UInt64;
-    defaults_first:UInt64;
-    defaults_past:UInt64;
+    exports_first:UInt64,
+    exports_past:UInt64,
+    defaults_first:UInt64,
+    defaults_past:UInt64,
 }
 
 export data VisitObject =
     NoVisitObject {} |
     CompletedVisitObject {
-        unit_index:UInt64;
-        functions_first:UInt64;
-        functions_past:UInt64;
+        unit_index:UInt64,
+        functions_first:UInt64,
+        functions_past:UInt64,
     };
 
-export data VisitFailure { rejection:UInt8; finding:UInt64; }
+export data VisitFailure { rejection:UInt8, finding:UInt64, }
 
 export data VisitSlot =
     Vacant {} |
-    Visiting { key_first:UInt64; key_past:UInt64; revision:UInt64; } |
-    FailedVisit { key_first:UInt64; key_past:UInt64; revision:UInt64; failure:VisitFailure; } |
+    Visiting { key_first:UInt64, key_past:UInt64, revision:UInt64, } |
+    FailedVisit { key_first:UInt64, key_past:UInt64, revision:UInt64, failure:VisitFailure, } |
     Checked {
-        key_first:UInt64;
-        key_past:UInt64;
-        revision:UInt64;
-        exports_first:UInt64;
-        exports_past:UInt64;
-        defaults_first:UInt64;
-        defaults_past:UInt64;
-        interfaces_first:UInt64;
-        interfaces_past:UInt64;
-        primitive_namespace:bool;
-        object:VisitObject;
-        inherited_structural:bool;
+        key_first:UInt64,
+        key_past:UInt64,
+        revision:UInt64,
+        exports_first:UInt64,
+        exports_past:UInt64,
+        defaults_first:UInt64,
+        defaults_past:UInt64,
+        interfaces_first:UInt64,
+        interfaces_past:UInt64,
+        primitive_namespace:bool,
+        object:VisitObject,
+        inherited_structural:bool,
     } |
     StructuralOnly {
-        key_first:UInt64; key_past:UInt64; revision:UInt64; exports_first:UInt64; exports_past:UInt64;
-        defaults_first:UInt64; defaults_past:UInt64;
-        interfaces_first:UInt64; interfaces_past:UInt64; stop:VariadicProfileStop;
+        key_first:UInt64, key_past:UInt64, revision:UInt64, exports_first:UInt64, exports_past:UInt64,
+        defaults_first:UInt64, defaults_past:UInt64,
+        interfaces_first:UInt64, interfaces_past:UInt64, stop:VariadicProfileStop,
     };
 
 export array Visits [UInt64]:VisitSlot;
-export data KeyLookup { id:UInt64; length:UInt64; }
+export data KeyLookup { id:UInt64, length:UInt64, }
 
 export data SourceBytePool {
-    ref spare:SourceBytes;
+    ref spare:SourceBytes,
 }
 
 func same_key(bytes:const SourceBytes in G, first:UInt64, past:UInt64, canonical:const SourceBytes in P)
@@ -73,16 +73,16 @@ export func find_visit(visits:const Visits in G, bytes:const SourceBytes in G, u
     for (id in 0u64 .. used) {
         case visits[id] of {
             (Vacant) -> {};
-            (Visiting { val first <- key_first; val past <- key_past; }) -> {
+            (Visiting { val first <- key_first, val past <- key_past, }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
             };
-            (FailedVisit { val first <- key_first; val past <- key_past; }) -> {
+            (FailedVisit { val first <- key_first, val past <- key_past, }) -> {
                 if (same_key(bytes, first, past, canonical)) return id
             };
-            (Checked { val first <- key_first; val past <- key_past; }) -> {
+            (Checked { val first <- key_first, val past <- key_past, }) -> {
                 if (same_key(bytes, first, past, canonical)) return id;
             };
-            (StructuralOnly { val first <- key_first; val past <- key_past; }) -> {
+            (StructuralOnly { val first <- key_first, val past <- key_past, }) -> {
                 if (same_key(bytes, first, past, canonical)) return id
             };
         };
@@ -189,7 +189,7 @@ export func visit_rejection(visits:const Visits in G, id:UInt64, result:VisitFai
     -> bool where {const owner G, owner F} {
     if (id >= intrinsic (len)(visits)) return false;
     return case visits[id] of {
-        FailedVisit { val failure <-; } -> {
+        FailedVisit { val failure <-, } -> {
             result.rejection <- failure.rejection;
             result.finding <- failure.finding;
             true
@@ -202,7 +202,7 @@ export proc mark_failed_visit(visits:Visits in G, id:UInt64, failure:const Visit
     -> bool where {owner G, const owner F} {
     if (id >= intrinsic (len)(visits) || failure.rejection == 0u8) return false;
     case visits[id] of {
-        Visiting { val first <- key_first; val past <- key_past; val opening <- revision; } -> {
+        Visiting { val first <- key_first, val past <- key_past, val opening <- revision, } -> {
             visits[id] <- make FailedVisit {
                 key_first <- first; key_past <- past; revision <- opening; failure <- failure
             };
@@ -216,12 +216,12 @@ export func structural_visit_dependency(visits:const Visits in G,
     id:UInt64) -> bool where {const owner G} {
     return case visits[id] of {
         StructuralOnly -> true;
-        (Checked { val inherited <- inherited_structural; }) -> { inherited };
+        (Checked { val inherited <- inherited_structural, }) -> { inherited };
         _ -> false
     }
 }
 
-export data CanonicalKeyRange { first:UInt64; past:UInt64; }
+export data CanonicalKeyRange { first:UInt64, past:UInt64, }
 
 export func earliest_profile_stop(visits:const Visits in G, used:UInt64, key_used:UInt64,
     interface_used:UInt64,
@@ -232,8 +232,8 @@ export func earliest_profile_stop(visits:const Visits in G, used:UInt64, key_use
     for (id in 0u64 .. used) {
         case visits[id] of {
             (StructuralOnly {
-                val first <- key_first; val past <- key_past; val interfaces <- interfaces_first;
-                val end <- interfaces_past; val pending <- stop;
+                val first <- key_first, val past <- key_past, val interfaces <- interfaces_first,
+                val end <- interfaces_past, val pending <- stop,
             }) -> {
                 if (first >= past || past > key_used || interfaces >= end || end > interface_used ||
                     pending.first_byte >= pending.past_byte || pending.first.line == 0u64)
@@ -254,7 +254,7 @@ export func checked_module_key(visits:const Visits in G, used:UInt64, key_used:U
                                key:CanonicalKeyRange in K) -> bool where {const owner G, owner K} {
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
-        (Checked { val first <- key_first; val past <- key_past; }) -> {
+        (Checked { val first <- key_first, val past <- key_past, }) -> {
             if (first >= past || past > key_used) return false;
             key.first <- first;
             key.past <- past;
@@ -268,7 +268,7 @@ export func published_module_key(visits:const Visits in G, used:UInt64, key_used
     key:CanonicalKeyRange in K) -> bool where {const owner G, owner K} {
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
-        StructuralOnly { val first <- key_first; val past <- key_past; } -> {
+        StructuralOnly { val first <- key_first, val past <- key_past, } -> {
             if (first >= past || past > key_used) return false;
             key.first <- first;
             key.past <- past;
@@ -296,15 +296,15 @@ export func checked_module_selections(
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
         (Checked {
-            val first_export <- exports_first;
-            val past_export <- exports_past;
-            val first_default <- defaults_first;
-            val past_default <- defaults_past;
+            val first_export <- exports_first,
+            val past_export <- exports_past,
+            val first_default <- defaults_first,
+            val past_default <- defaults_past,
         }) -> { record_selection_ranges(ranges, export_used, default_used,
                                         first_export, past_export, first_default, past_default) };
         StructuralOnly {
-            val first_export <- exports_first; val past_export <- exports_past;
-            val first_default <- defaults_first; val past_default <- defaults_past;
+            val first_export <- exports_first, val past_export <- exports_past,
+            val first_default <- defaults_first, val past_default <- defaults_past,
         } -> {
             record_selection_ranges(ranges, export_used, default_used,
                                     first_export, past_export, first_default, past_default)
@@ -317,7 +317,7 @@ export func contains_checked_interface(visits:const Visits in G, used:UInt64,
     module:UInt64, row:UInt64, published:UInt64) -> bool where {const owner G} {
     if (module == 0u64 || module > used || used > intrinsic (len)(visits)) return false;
     return case visits[module - 1u64] of {
-        Checked { val first <- interfaces_first; val past <- interfaces_past; } ->
+        Checked { val first <- interfaces_first, val past <- interfaces_past, } ->
             first <= row && row < past && past <= published;
         _ -> false
     }
@@ -336,7 +336,7 @@ export proc mark_checked(visits:Visits in G, id:UInt64, ranges:const ModuleSelec
     if (id >= intrinsic (len)(visits) || ranges.exports_first > ranges.exports_past ||
         ranges.defaults_first > ranges.defaults_past || interfaces_first > interfaces_past) return false;
     case visits[id] of {
-        (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
+        (Visiting { val first <- key_first, val past <- key_past, val opening <- revision, }) -> {
             visits[id] <- make Checked {
                 key_first <- first;
                 key_past <- past;
@@ -367,7 +367,7 @@ export proc mark_structural_only(visits:Visits in G, id:UInt64, ranges:const Mod
         interfaces_first >= interfaces_past ||
         stop.first_byte >= stop.past_byte || stop.first.line == 0u64) return false;
     case visits[id] of {
-        (Visiting { val first <- key_first; val past <- key_past; val opening <- revision; }) -> {
+        (Visiting { val first <- key_first, val past <- key_past, val opening <- revision, }) -> {
             visits[id] <- make StructuralOnly {
                 key_first <- first; key_past <- past; revision <- opening;
                 exports_first <- ranges.exports_first; exports_past <- ranges.exports_past;

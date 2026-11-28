@@ -1,5 +1,5 @@
 export data PackageSourceRoot {
-    path_first:UInt64;
-    path_past:UInt64;
+    path_first:UInt64,
+    path_past:UInt64,
 }
 export array PackageSourceRoots[UInt64]:PackageSourceRoot;

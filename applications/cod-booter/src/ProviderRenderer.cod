@@ -22,7 +22,7 @@ using "./ProviderCalls.cod" {
 using "./ProviderHere.cod" write_provider_here;
 using "./ParserStorage.cod" no_node;
 
-data ProviderTypeUse { seen:bool; borrowed:bool; }
+data ProviderTypeUse { seen:bool, borrowed:bool, }
 array ProviderTypeUses[UInt64]:ProviderTypeUse;
 
 func native_group(ordinal:UInt64) -> UInt8 {

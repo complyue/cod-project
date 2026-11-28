@@ -14,7 +14,7 @@ using "./ProviderTypeNames.cod" {
 using "./ProviderViews.cod" { ABIPrimitiveLayouts, write_provider_view, emit_provider_scalar_type };
 using "./ParserStorage.cod" no_node;
 
-enum ArgumentABI:UInt8 { CallInput; ImplementationInput; EntryInput; }
+enum ArgumentABI:UInt8 { CallInput, ImplementationInput, EntryInput, }
 
 proc emit_call_name(name:const String in N, ending:const String in E) -> void
     where {const owner N, const owner E} {

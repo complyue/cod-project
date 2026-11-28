@@ -8,10 +8,10 @@ using "./ProviderViews.cod" emit_provider_scalar_type;
 using "./ParserStorage.cod" no_node;
 
 export data ProviderPrefixes {
-    modules:UInt64;
-    keys:UInt64;
-    spellings:UInt64;
-    interfaces:UInt64;
+    modules:UInt64,
+    keys:UInt64,
+    spellings:UInt64,
+    interfaces:UInt64,
 }
 
 export proc emit_provider_interface_name(spellings:const SourceBytes in G, spelling_used:UInt64,
