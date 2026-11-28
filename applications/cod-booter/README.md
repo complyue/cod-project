@@ -447,7 +447,9 @@ Both source commands check local workspace products with fixed references to ini
 
 Both source commands check the direct import of `ModuleExports.file_dependency_path` in dependency enumeration. The completed interface carries an independent `UInt64` result and two initialized writable products under one owner role. The result may be a path node or the no-edge sentinel. A completing call can update either output according to the selected parser operation.
 
-In the complete `ModuleGraph.cod` source check, both commands pass the recovered-parse call to `NativeDiagnostics.report_parse_rejection`. They stop at the unsupported imported signature of `ModuleExports.resolve_enum_selections` in `bind_graph_names`. Completion of the actual `@followDependency` body remains open.
+Both source commands check `resolve_enum_selections`, `resolve_sum_selections` and `verify_aggregate_selections` in `ModuleExports` and through direct renamed imports. The completed interfaces retain each table's nominal type, access and owner, the writable selection rows and diagnostic report where applicable, and the independent Boolean result. Enum selection's lexical workspace contributes its allocation failure set. A writable scalar counter used by a local helper stays within its defining visit and uses ordinary local argument preparation.
+
+In the complete `ModuleGraph.cod` source check, both commands pass the recovered-parse call to `NativeDiagnostics.report_parse_rejection` and the call to `ModuleExports.resolve_enum_selections` in `bind_graph_names`. The failure arm stops at the imported `ModuleFrontend.binding_diagnostic` signature. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 

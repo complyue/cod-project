@@ -3335,6 +3335,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val writable_sum_array <- false;
     val readonly_bytes <- false;
     val value_parameters <- false;
+    val local_scalar_loan <- false;
     val publication_signature <- false;
     val indexed_product_outputs <- false;
     val element <- 0u8;
@@ -3342,8 +3343,6 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val adjacent_arrays <- false;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) {
-            # Schema helpers read checked inputs and fill one initialized
-            # product or product array.
             # Name binding receives a parse record and paired writable tables.
             # Operand checking lends the parse record with readonly tables
             # and two writable result arrays separated by input loans. Each
@@ -3357,9 +3356,14 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             # under one owner. The result promises no particular field write.
             indexed_product_outputs <- result_kind == builtin_u64() && readonly_arrays != 0u64 &&
                 !reads_record && writable_arrays == 0u64 && writable_records == 2u64 && shared_product_owner;
-            publication_signature <- indexed_product_outputs || (published_result && ((reads_record && readonly_arrays != 0u64 &&
-                ((writable_arrays == 0u64 && writable_records == 1u64) ||
-                 (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
+            # Member and schema validation give a Boolean with a report.
+            # Member selection also writes product rows using source bytes.
+            publication_signature <- !local_scalar_loan && (indexed_product_outputs || (published_result &&
+                ((reads_record && readonly_arrays != 0u64 &&
+                    ((writable_arrays == 0u64 && writable_records == 1u64) ||
+                     (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
+                (!reads_record && result_kind == builtin_bool() && readonly_arrays > 1u64 && writable_records == 1u64 &&
+                    (writable_arrays == 0u64 || (readonly_bytes && writable_arrays == 1u64 && writable_record_array))) ||
                 (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
                 (adjacent_arrays || (writable_record_array && readonly_bytes))) ||
                 (!reads_record && writable_records == 1u64 &&
@@ -3373,7 +3377,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 (writable_arrays == 1u64 && writable_record_array &&
                     readonly_arrays == 0u64 && writable_records == 0u64 && !reads_record &&
                     first < used && preceding < used && work[first].next == preceding &&
-                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64()))));
+                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64())))));
             if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
                 (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
@@ -3408,12 +3412,18 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                     (writable_arrays <- writable_arrays + 1u64):void
                 }
             } else {
-                if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
-                    !checked_bits_record(contracts, published, aggregate, type)) return;
-                if (binding.readonly) { (reads_record <- true):void } else {
-                    if (writable_records == 0u64) { (product_owner <- role):void }
-                    else { (shared_product_owner <- shared_product_owner && product_owner == role):void };
-                    (writable_records <- writable_records + 1u64):void
+                if (!binding.readonly && names[marker].kind == builtin_u64()) {
+                    # Local selection helpers can update an ordinary counter loan.
+                    # The published workspace interface has no scalar loan row.
+                    (local_scalar_loan <- true):void
+                } else {
+                    if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
+                        !checked_bits_record(contracts, published, aggregate, type)) return;
+                    if (binding.readonly) { (reads_record <- true):void } else {
+                        if (writable_records == 0u64) { (product_owner <- role):void }
+                        else { (shared_product_owner <- shared_product_owner && product_owner == role):void };
+                        (writable_records <- writable_records + 1u64):void
+                    }
                 }
             };
         } else { (value_parameters <- true):void };
