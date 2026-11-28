@@ -243,6 +243,8 @@ Both source commands also check lexical references initialized by an unplaced br
 
 ### Array growth and reference-slot calls
 
+The source commands check construction of an imported named Boolean array with `UInt64` indices. They select the array's published nominal identity even under a rename, check the Boolean fill and each indexed access, and use the actual owner and access for readonly loans and writes. A checked ordinary function can read the array and report through an initialized writable product. This covers the Boolean workspace type used by `InitializationReadiness.cod`.
+
 Both source commands can consume a completed direct import of an admitted fixed scalar function. The body can use guarded early returns and a final return, or a single return of a conditional or arithmetic expression. The defining module checks the body and publishes the fixed signature with its possible arithmetic failure. This covers `NativeCommands.reservation_tag` and `NativeCommands.slot`. The caller checks the ordered arguments and uses the reported completion at the written call, including under a rename. The contract keeps fatal arithmetic distinct from bounds failure. A possible arithmetic failure still requires a supported immediate cleanup route.
 
 The declaration and C provider commands check `reserve_keys` with its original `SourceBytes` type and `growth_capacity` helper. Within the same module, a `ref var` formal can forward the caller's initialized writable slot. An ordinary reference formal lends its own local slot. Rebinding requires the same nominal array and actual owner, and construction separately requires a writable allocator role. Fixed slots, readonly targets and temporary arrays cannot supply a writable reference slot.
@@ -330,6 +332,8 @@ Object emission for the writable loan has its own admission checks.
 ### Imported byte predicates
 
 In a body already required to be checked, a direct source-preserving `using` selection can call an ordinary fixed function with one independent `UInt8` value and a `bool` result. The defining visit checks the single returned predicate and completes its exact local call dependencies before publishing the result and signature. Only a proved normal contract with no possible bounds or fatal arithmetic outcome after entry is published in this profile. The caller evaluates and checks the actual once. An indexed read can still fail before entry. Cyclic or unrepresented dependencies leave the contract unavailable.
+
+This proof also covers a unary predicate with a by-value enum parameter. The caller must supply the published nominal enum type. `InitializationFlow.initialization_obligation` uses this path for `InitializationAccess` comparisons.
 
 Both source commands accept the full unchanged `TokenBuffer`, including its imported `Lexer.lexical_error` call.
 
@@ -425,7 +429,7 @@ The source checker accepts a workspace record with fixed reference fields for na
 
 `ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`.
 
-The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The first remaining stop in the `ModuleGraph.cod` source closure is construction of the imported Boolean array `InitializationTags` in `InitializationReadiness.cod`.
+The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The `ModuleGraph.cod` source closure now checks `InitializationReadiness.cod` and reaches the imported `extract_initialization_flow` call in `InitializationChecking.cod`.
 
 ### Readonly queries
 

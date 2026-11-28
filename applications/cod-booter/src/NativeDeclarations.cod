@@ -1797,8 +1797,11 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
             proof.element_module <- contracts[head].type_module;
             (proof.element_identity <- contracts[head].type_identity):void
         } else {
-            if ((kind != builtin_u8() && kind != builtin_u64()) || module == 0u64 ||
-                selected[selection].shape != readonly_numeric_array()) return 0u8;
+            # The published element/index pair qualifies ordinary Boolean
+            # storage independently of the native numeric loan shape.
+            if (module == 0u64 || (kind != builtin_bool() &&
+                ((kind != builtin_u8() && kind != builtin_u64()) ||
+                 selected[selection].shape != readonly_numeric_array()))) return 0u8;
             proof.element_module <- 0u64;
             (proof.element_identity <- no_node()):void
         };
@@ -2219,8 +2222,9 @@ func prepare_niladic_scalar_source(nodes:const ExprNodes in N, names:const NameB
 }
 
 func prepare_scalar_predicate(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, views:SuppliedViews in V, definition:UInt64, used:UInt64, revision:UInt64)
-    -> void where {const owner N, const owner B, const owner W, owner V} {
+    selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
+    definition:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner E, const owner W, owner V} {
     if (names[definition].kind != callable_binding() || names[definition].declaration != definition ||
         work[definition].next_method != no_node() || work[definition].active != no_node()) return;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -2231,8 +2235,11 @@ func prepare_scalar_predicate(nodes:const ExprNodes in N, names:const NameBindin
     };
     if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause ||
         signature.annotation >= used || names[signature.annotation].kind != builtin_bool() ||
-        inspect_signature(nodes, revision, used, signature.previous, signature) != SignatureHead ||
-        !independent_scalar_formal(nodes, names, signature.parameter_tail, used, revision, builtin_u8())) return;
+        inspect_signature(nodes, revision, used, signature.previous, signature) != SignatureHead) return;
+    val parameter_type <- independent_formal_type(nodes, signature.parameter_tail, used, revision);
+    if (parameter_type >= used) return;
+    val parameter_kind <- native_value_kind(names, selected, parameter_type);
+    if (parameter_kind != builtin_u8() && parameter_kind != enum_type()) return;
     val first <- no_node();
     if (!first_sequence_entry(nodes, revision, used, signature.parameter_tail, FormalSequence, first) ||
         first != signature.parameter_tail) return;
@@ -2777,7 +2784,8 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
             if (marker >= used) return false;
             array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 marker, used, revision, bytes);
-            if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
+            if (array_kind != builtin_u8() && array_kind != builtin_bool() &&
+                array_kind != enum_type() && array_kind != sum_type() &&
                 !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
                 storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
                     aggregate, marker, used, revision);
@@ -5105,7 +5113,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                 (views[at] <- make PreparedArrayProcedure { mixed_record <- profile == (MixedRecordProcedure:SourceHandleProfile) }):void
             }
         };
-        prepare_scalar_predicate(nodes, names, work, views, at, used, revision);
+        prepare_scalar_predicate(nodes, names, selected, work, views, at, used, revision);
         if (case views[at] of { NoSuppliedView -> true; _ -> false }) {
             prepare_scalar_function(nodes, names, selected, work, views, at, used, revision)
         };

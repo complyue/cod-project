@@ -3565,13 +3565,13 @@ func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published
     return past
 }
 
-func checked_readonly_byte_loan(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64, role:UInt64)
-    -> bool where {const owner I} {
-    if (!checked_readonly_loan_row(contracts[row], array_type(), role)) return false;
+func readonly_array_element(contracts:const ModuleInterfaces in I, published:UInt64, row:UInt64, role:UInt64)
+    -> UInt8 where {const owner I} {
+    if (!checked_readonly_loan_row(contracts[row], array_type(), role)) return 0u8;
     val array <- find_interface(contracts, published, contracts[row].type_module, contracts[row].type_identity);
-    return array < published && contracts[array].interface_kind == array_type() &&
-        contracts[array].entry_count == 0u64 && contracts[array].array_index_kind == builtin_u64() &&
-        contracts[array].element_kind == builtin_u8()
+    if (array >= published || contracts[array].interface_kind != array_type() ||
+        contracts[array].entry_count != 0u64 || contracts[array].array_index_kind != builtin_u64()) return 0u8;
+    return contracts[array].element_kind
 }
 
 func checked_readonly_query_inputs(contracts:const ModuleInterfaces in I, published:UInt64,
@@ -3580,6 +3580,7 @@ func checked_readonly_query_inputs(contracts:const ModuleInterfaces in I, publis
     val role <- 0u64;
     val kind <- 0u8;
     val storage <- UnprovedAggregate;
+    val element <- 0u8;
     for (row in first .. past) {
         if (!checked_source_scalar_parameter(contracts, published, row)) {
             kind <- contracts[row].value_kind;
@@ -3597,8 +3598,10 @@ func checked_readonly_query_inputs(contracts:const ModuleInterfaces in I, publis
                     storage <- published_record_array_storage(contracts, published, contracts[row].type_module, contracts[row].type_identity);
                     if (storage != CoDBitsAggregate && storage != CLayoutBitsRecord &&
                         !published_sum_array(contracts, published, contracts[row].type_module, contracts[row].type_identity) &&
-                        published_enum_array_header(contracts, published, contracts[row].type_module, contracts[row].type_identity) == no_node() &&
-                        !checked_readonly_byte_loan(contracts, published, row, role)) return false
+                        published_enum_array_header(contracts, published, contracts[row].type_module, contracts[row].type_identity) == no_node()) {
+                        element <- readonly_array_element(contracts, published, row, role);
+                        if (element != builtin_u8() && element != builtin_bool()) return false
+                    }
                 }
             };
             (role <- role + 1u64):void
@@ -3699,7 +3702,7 @@ func checked_readonly_reader_past(contracts:const ModuleInterfaces in I, publish
          contracts[header].array_read_completion != ArrayReadMayFailBounds)) return no_node();
     val bytes <- header + 1u64;
     val second <- header + 2u64;
-    if (!checked_readonly_byte_loan(contracts, published, bytes, 0u64)) return no_node();
+    if (readonly_array_element(contracts, published, bytes, 0u64) != builtin_u8()) return no_node();
     val past <- header + 1u64 + parameters;
     if (text_predicate) {
         if (!checked_readonly_loan_row(contracts[second], record_type(), 1u64) ||
