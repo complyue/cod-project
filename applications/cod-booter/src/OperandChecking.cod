@@ -2809,7 +2809,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
                 <- 0u64
         };
         if (callback >= used || !inspect_here_contract(views, callback, contract)) return unproved_call_target();
-        if (source_only && at < intrinsic (len)(views) && (case views[at] of {
+        if (at < intrinsic (len)(views) && (case views[at] of {
             OrdinaryHereInvocation { val selected <- formal, } -> selected == callback;
             _ -> false
         })) return check_ordinary_here_invocation(nodes, names, links, facts, contract, at, arguments, used, revision);
@@ -2882,7 +2882,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (pending && !facts[at].statement_operand) return unproved_result_contract();
     val result_owner <- facts[definition].owner;
     val first_formal <- formal;
-    val ordinary_here <- source_only && at < intrinsic (len)(views) && (case views[at] of {
+    val ordinary_here <- at < intrinsic (len)(views) && (case views[at] of {
         OrdinaryHereCall { val selected <- definition, } -> selected == definition;
         _ -> false
     });

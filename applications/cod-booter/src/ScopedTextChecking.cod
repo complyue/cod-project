@@ -343,7 +343,7 @@ func use_text_supply(nodes:const ExprNodes in N, names:const NameBindings in B,
     uses:const TextUses in U, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64)
     -> TextSupply where {const owner N, const owner B, const owner V, const owner F, const owner X,
         const owner S, const owner U, const owner K} {
-    if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)
+    if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 || sites[at].supplied_body != no_node())
         return (Unproved:TextSupply);
     val input <- installation_input(names, views, facts, required, module, at, used, uses[at].installation_prefix);
     if (input != no_node()) {

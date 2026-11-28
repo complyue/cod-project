@@ -4652,7 +4652,7 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
         };
         if (direct == DirectInvocationReady) {
             callee <- invocation.callee;
-            if (!emit_object && names[callee].kind == formal_binding() &&
+            if (names[callee].kind == formal_binding() &&
                 inspect_here_contract(views, names[callee].declaration, expected) &&
                 scalar_here_contract(nodes, names, work, expected, used, revision)) {
                 views[at] <- make OrdinaryHereInvocation { formal <- names[callee].declaration };
@@ -5829,7 +5829,7 @@ export func check_native_declarations(source:const SourceBytes in S, nodes:const
             prepare_here_contract(nodes, names, selected, views, at, formal.signature, used, revision);
             (ordinary_here_work <- true):void
         };
-        if (!emit_object && !ordinary_here_work) {
+        if (!ordinary_here_work) {
             ordinary_here_work <- case nodes[at] of {
                 Occupied { val syntax <- node, } -> case syntax.payload of {
                     HereSupply -> true;
@@ -5858,7 +5858,7 @@ export func check_native_declarations(source:const SourceBytes in S, nodes:const
         if (report.diagnostic != 0u8) return false;
     };
     return check_handle_expressions(nodes, names, selected, work, used, revision, emit_object, report) &&
-        (emit_object || !ordinary_here_work || prepare_ordinary_here_calls(source, nodes, names, work, views, used, revision, report)) &&
+        (!ordinary_here_work || prepare_ordinary_here_calls(source, nodes, names, work, views, used, revision, report)) &&
         prepare_local_calls(nodes, names, selected, work, views, used, revision, emit_object,
             report) &&
         (!emit_object ||

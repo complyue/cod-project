@@ -6,7 +6,7 @@ using "./ParserStorage.cod" ExprPayload {
     NameReference, IntegerLiteral, BooleanLiteral, NamedThrow, LocalBinding, Formal, ExceptionResult, TypeConstraint, SumDefinition,
     IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
-    BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
+    BorrowHandleConstruction, HereFormal, HereInvocation, HereSupply, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, SymbolicInvocation, ValueSymbol,
     Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
@@ -39,7 +39,7 @@ using "./ParserStorage.cod" {
     ExprNodes, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, first_sequence_entry, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
-    SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
+    SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding,
     NamedThrowSites, inspect_named_throw, TypeApplicationSites, inspect_type_application, type_list_count,
     case_pattern, CasePatternSyntax { ReferenceCaseTarget },
     ProcedureSymbolSites, inspect_procedure_symbol, ProcedureTypeSites, inspect_procedure_type,
@@ -64,7 +64,7 @@ using "./NameResolution.cod" {
 };
 using "./NativeDeclarations.cod" {
     NativeDeclarationResult, check_native_declarations, declared_exception_type, native_declaration_first, unsupported_owning_region_result,
-    SuppliedViews, SuppliedView { NoSuppliedView },
+    SuppliedViews,
 };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
@@ -99,7 +99,6 @@ export func module_binding_failed() -> UInt8 { return 3u8; }
 export func module_operands_failed() -> UInt8 { return 4u8; }
 export func module_completion_failed() -> UInt8 { return 5u8; }
 func unsupported_array_length() -> UInt8 { return 74u8; }
-func unsupported_ordinary_here() -> UInt8 { return 76u8; }
 func invalid_catch_annotation() -> UInt8 { return 77u8; }
 func unsupported_lexical_callable() -> UInt8 { return 108u8; }
 func unsupported_nominal_sum() -> UInt8 { return 114u8; }
@@ -209,6 +208,9 @@ func native_boundary_form(nodes:const ExprNodes in N, at:UInt64) -> bool where {
                 (OwnHandleConstruction) -> { true };
                 (BorrowHandleConstruction) -> { true };
                 (HereInvocation) -> { true };
+                (HereSupply) -> { true };
+                (HereFormal) -> { true };
+                (NamedArgument) -> { true };
                 (Formal { val mode <- mode, }) -> { mode == HandleFormal || mode == RetainedHandleFormal };
                 (_) -> { false };
             }
@@ -332,7 +334,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 (RaiseWithCause) -> { 42u8 };
                 (NamedThrow) -> { constructing_throw_profile(nodes, revision, used, at) };
                 (RethrowWithCause) -> { 44u8 };
-                (NamedArgument) -> { if (emit_object) { 45u8 } else { 0u8 } };
                 (_) -> { 0u8 };
             }
         };
@@ -674,22 +675,16 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
 export func analyze_bound_operands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
                                    work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:UInt64, facts:OperandFacts in F,
-                                   owners:CallOwners in O, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner X, const owner Y, const owner W, const owner I, owner F, owner O, owner R} {
+                                   owners:CallOwners in O, views:const SuppliedViews in H, result:ModuleBindingResult in R) -> bool
+    where {const owner S, const owner N, const owner X, const owner Y, const owner W, const owner I,
+           owner F, owner O, const owner H, owner R} {
     val declaration <- first_extended_declaration(nodes, work, result.frontend.tree, true);
     if (declaration != no_node()) {
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), declaration);
         return false;
     } else {};
-    for (at in 0u64 .. result.frontend.tree.used) {
-        if (is_here_formal(nodes, result.frontend.tree.used, at)) {
-            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_ordinary_here(), at);
-            return false;
-        } else {};
-    };
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     ref fields = make CaughtFieldUses(0u64, make NoCaughtField {});
-    ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructor_cases = make ConstructorCaseFacts(0u64, make NoConstructorCase {});
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
@@ -707,7 +702,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, interfaces, interface_count, owners,
-                               fields, no_native_loans, products, arguments, no_constructor_cases, executable, operands)) {
+                               fields, views, products, arguments, no_constructor_cases, executable, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         return false;
     } else {};
@@ -716,8 +711,8 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
 
 export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const NameBindings in Y,
                                      work:const NameWork in W, facts:const OperandFacts in F,
-                                     sites:CompletionSites in C, result:ModuleBindingResult in R) -> bool
-    where {const owner N, const owner Y, const owner W, const owner F, owner C, owner R} {
+                                     views:const SuppliedViews in H, sites:CompletionSites in C, result:ModuleBindingResult in R) -> bool
+    where {const owner N, const owner Y, const owner W, const owner F, const owner H, owner C, owner R} {
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
@@ -725,11 +720,10 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
         slot_body <- false; fixed_borrow <- false; text_call <- false; public_text_routine <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });
-    ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructions = make ExceptionConstructionFacts(0u64, make NoExceptionConstruction {});
     ref no_scoped_text = make ScopedTextOutcomes(0u64, make ScopedTextOutcome { out_of_memory <- false; invalid_slice <- false; numeric_fault <- false; bounds <- false });
     return analyze_bound_declaration_completion(
-        nodes, bindings, work, facts, no_native_loans, executable, no_scoped_text, no_constructions, sites, result)
+        nodes, bindings, work, facts, views, executable, no_scoped_text, no_constructions, sites, result)
 }
 
 export func analyze_bound_declaration_completion(nodes:const ExprNodes in N,

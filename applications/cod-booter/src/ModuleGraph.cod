@@ -676,10 +676,10 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
                         interfaces:const ModuleInterfaces in G, interface_count:UInt64,
                         progress:ModuleProgressRows in W, facts:OperandFacts in W,
                             owners:CallOwners in W,
-                        sites:CompletionSites in W, commands:NativeCommands in W,
+                        sites:CompletionSites in W, commands:NativeCommands in W, views:const SuppliedViews in H,
                             result:ModuleBindingResult in R, keys:const SourceBytes in G,
                             key_first:UInt64, key_past:UInt64, run:DiagnosticRuns in G) -> CompilerStatus
-    where {const owner S, owner D, owner W, owner R, owner G} {
+    where {const owner S, owner D, owner W, const owner H, owner R, owner G} {
     val delivered <- Complete;
     if (progress[0u64].entry == 0u8) {
         val initializer <- first_library_initialization(nodes, work, result.frontend.tree);
@@ -695,7 +695,7 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
         initialization_notes <- false; initialization_obligations <- false;
     };
     if (!compile_bound_commands(source, nodes, selected, names, work, interfaces, interface_count, facts, owners, sites, commands,
-                                 plan, result, progress[0u64].function_base, progress[0u64].entry != 0u8)) {
+                                 views, plan, result, progress[0u64].function_base, progress[0u64].entry != 0u8)) {
         if (result.stage != 0u8) {
             delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic, result.frontend.diagnostic_first,
                              result.frontend.diagnostic_past, result.related_first, keys, key_first, key_past, run);
@@ -1242,7 +1242,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     };
     if (native) {
         val checked_unit <- compile_graph_unit(source, lines, diagnostic, nodes, selected, names,
-            work, published_interfaces, interface_count, progress, facts, owners, sites, commands, result, keys, key_first, key_past, run);
+            work, published_interfaces, interface_count, progress, facts, owners, sites, commands, views, result, keys, key_first, key_past, run);
         if (checked_unit != Complete) return checked_unit;
     };
     ref publication = make ModulePublication {
@@ -1621,7 +1621,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             array_read_completion <- NoArrayRead; numeric_fault <- false; slot_summary <- false; array_failures <- make ByteArrayFailures {
                 bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
             };
-            forwarded_operand <- 0u8; in_delayed_body <- 0u8; in_supplied_body <- false;
+            forwarded_operand <- 0u8; in_delayed_body <- 0u8; supplied_body <- no_node();
             case_break <- 0u8; case_scan <- 0u8;
             guarded_by <- no_node(); incoming_handler <- no_node(); throws_clause <- no_node(); category <- 0u64;
             category_module <- 0u64;

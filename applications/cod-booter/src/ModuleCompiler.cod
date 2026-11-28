@@ -1,5 +1,6 @@
 using "./SourceStorage.cod" SourceBytes;
-using "./ParserStorage.cod" { ExprNodes, no_node };
+using "./ParserStorage.cod" { ExprNodes, no_node, is_here_formal };
+using "./NativeDeclarations.cod" SuppliedViews;
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" ModuleInterfaces;
 using "./NameResolution.cod" { NameBindings, NameWork };
@@ -7,29 +8,38 @@ using "./OperandChecking.cod" { OperandFacts, CallOwners };
 using "./CompletionChecking.cod" CompletionSites;
 using "./ModuleFrontend.cod" {
     ModuleBindingResult, analyze_bound_operands, analyze_bound_completion, binding_diagnostic,
-    module_completion_failed,
+    module_binding_failed, module_completion_failed,
 };
 using "./NativeCommands.cod" { NativeCommands, NativePlan };
 using "./ModuleLowering.cod" lower_native_module;
 using "./InitializationChecking.cod" check_native_initialization;
 using "./InitializationReadiness.cod" InitializationResult;
 
+func unsupported_ordinary_here() -> UInt8 { return 76u8; }
+
 export func compile_bound_commands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
                                    work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:UInt64,
                                    facts:OperandFacts in F, owners:CallOwners in O,
                                    sites:CompletionSites in K, commands:NativeCommands in C,
-                                   plan:NativePlan in P, report:ModuleBindingResult in R, base:UInt64, entry:bool) -> bool
+                                   views:const SuppliedViews in H, plan:NativePlan in P, report:ModuleBindingResult in R, base:UInt64, entry:bool) -> bool
     where {const owner S, const owner N, const owner X, const owner Y, const owner W,
-           const owner I, owner F, owner O, owner K, owner C, owner P, owner R} {
+           const owner I, owner F, owner O, owner K, owner C, const owner H, owner P, owner R} {
     plan.used <- 0u64;
     plan.functions <- 0u64;
     plan.labels <- 0u64;
     plan.slots <- 0u64;
     plan.diagnostic <- 0u8;
     plan.node <- no_node();
-    if (!analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, interface_count, facts, owners, report) ||
-        !analyze_bound_completion(nodes, bindings, work, facts, sites, report)) return false;
+    if (!analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, interface_count, facts, owners, views, report) ||
+        !analyze_bound_completion(nodes, bindings, work, facts, views, sites, report)) return false;
+    # Demand completed operands and exits before reporting a lowering limit.
+    for (at in 0u64 .. report.frontend.tree.used) {
+        if (is_here_formal(nodes, report.frontend.tree.used, at)) {
+            binding_diagnostic(nodes, report, module_binding_failed(), unsupported_ordinary_here(), at);
+            return false
+        }
+    };
     if (!lower_native_module(nodes, report.frontend.tree, bindings, work, interfaces, facts, sites, commands, plan, base, entry)) return false;
     ref initialization = make InitializationResult { diagnostic <- 0u8; node <- no_node(); };
     if (!check_native_initialization(commands, plan, initialization)) {

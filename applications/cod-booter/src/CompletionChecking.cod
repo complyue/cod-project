@@ -95,7 +95,8 @@ export data CompletionSite {
     retains_caught:UInt8,
     forwarded_operand:UInt8,
     in_delayed_body:UInt8,
-    in_supplied_body:bool,
+    # The innermost supplying syntax site for this invoked body.
+    supplied_body:UInt64,
     array_read_completion:ArrayReadCompletion,
     numeric_fault:bool,
     slot_summary:bool,
@@ -152,7 +153,7 @@ func initialize_site(sites:CompletionSites in X, at:UInt64) -> void where {owner
     sites[at].retains_caught <- 0u8;
     sites[at].forwarded_operand <- 0u8;
     sites[at].in_delayed_body <- 0u8;
-    sites[at].in_supplied_body <- false;
+    sites[at].supplied_body <- no_node();
     sites[at].array_read_completion <- NoArrayRead;
     sites[at].numeric_fault <- false;
     sites[at].slot_summary <- false;
@@ -186,7 +187,7 @@ func inherit_context(sites:CompletionSites in X, parent:UInt64, child:UInt64, gu
     sites[child].incoming_handler <- incoming_handler;
     sites[child].replacing_try <- replacing_try;
     sites[child].in_delayed_body <- sites[parent].in_delayed_body;
-    sites[child].in_supplied_body <- sites[parent].in_supplied_body;
+    sites[child].supplied_body <- sites[parent].supplied_body;
     if (sites[parent].event == skipped_operand()) { (sites[child].event <- skipped_operand()):void; } else {};
     return;
 }
@@ -378,7 +379,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F, 
                         inherit_context(sites, at, supplied.body, guard, incoming, replacing)
                     };
                     # The body is an invoked scope even when it is supplied inside another call.
-                    sites[supplied.body].in_supplied_body <- true;
+                    sites[supplied.body].supplied_body <- at;
                     (sites[supplied.body].in_delayed_body <- 0u8):void
                 };
                 return
@@ -393,7 +394,7 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F, 
             inherit_context(sites, at, supplied.supplied, guard, incoming, replacing)
         } else {
             inherit_context(sites, at, supplied.body, guard, incoming, replacing);
-            (sites[supplied.body].in_supplied_body <- true):void
+            (sites[supplied.body].supplied_body <- at):void
         };
         return
     };
@@ -829,7 +830,7 @@ func check_case_transfer(nodes:const ExprNodes in N, names:const NameBindings in
 func supports_immediate_numeric_exit(nodes:const ExprNodes in N, names:const NameBindings in B,
     sites:const CompletionSites in X, at:UInt64, used:UInt64) -> bool
     where {const owner N, const owner B, const owner X} {
-    if (sites[at].in_supplied_body) return false;
+    if (sites[at].supplied_body != no_node()) return false;
     val scope <- names[at].scope;
     for (unused in 0u64 .. used) {
         if (scope == no_node()) return true;
@@ -896,7 +897,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (facts[at].allocation_owner != no_node()) {
         val generic <- at < intrinsic (len)(views) && (case views[at] of { BoundGenericCall -> true; _ -> false });
         if ((allocated_source_array(facts, at) || generic) && (sites[at].registration != no_node() ||
-            sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)) return unproved_deferred_error();
+            sites[at].in_delayed_body != 0u8 || sites[at].supplied_body != no_node())) return unproved_deferred_error();
         return route_failure(nodes, names, links, facts, sites, at, used, revision,
             out_of_memory_identity(), 0u8, possible_failure())
     };
@@ -912,7 +913,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
     if (inspect_invocation(nodes, revision, used, at, call) == OrdinaryInvocation) {
         if (facts[at].loans_scoped_aggregate && has_prepared_native_loans(views, at) &&
             (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 ||
-             sites[at].in_supplied_body)) return unproved_deferred_error();
+             sites[at].supplied_body != no_node())) return unproved_deferred_error();
         if (prepared_array_length_call(views, at)) {
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8)
                 return unproved_deferred_error();
@@ -926,7 +927,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             # The declaration alone cannot prove coverage of residual
             # failures raised while draining an imported deferred call.
             if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 ||
-                ((facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && sites[at].in_supplied_body))
+                ((facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && sites[at].supplied_body != no_node()))
                 return unproved_deferred_error();
             # Keep the declared exit in the ordinary completion row. For a
             # slot call the distinct unchecked escapes use the published
@@ -946,7 +947,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if ((text_oom || slice || text_bounds || (at < intrinsic (len)(text) && text[at].invalid_slice)) &&
             (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
-        if (slice && sites[at].in_supplied_body) return unproved_deferred_error();
+        if (slice && sites[at].supplied_body != no_node()) return unproved_deferred_error();
         if (facts[at].text_intrinsic == builder_append_export() || text_oom || slice)
             return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic == text_byte_export() || text_bounds)
@@ -954,7 +955,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (facts[at].text_intrinsic != 0u8) return 0u8;
     };
     if (facts[at].call_definition != no_node()) {
-        if ((facts[at].loans_owning_handle || facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && (sites[at].in_supplied_body ||
+        if ((facts[at].loans_owning_handle || facts[at].loans_scoped_aggregate || facts[at].loans_array_slot) && (sites[at].supplied_body != no_node() ||
             sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;
