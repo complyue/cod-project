@@ -281,6 +281,8 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 
 普通 region 在 `make` 时无须指定 swarm，可作为本地工作空间，也可在满足消息契约时作为 packet 经 `chan` 发送。主进程持有 `own swarm s <- ...`。child go process 持有借用的 `swarm s`。声明 `own region within(s) r <- ...` 后，region 的绑定可在同一 swarm 内随启动参数移交。始终由原来那个仍然 live 的 `s` 释放 `r`。即使同一 swarm 的两个线程共享地址空间，向 `chan` 发送 swarm region 也不合法。同机进程可用共享内存支持启动时的移交。待检验的选择包括成员身份怎样进入静态签名、如何验证动态招募的 worker，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
+声明 `handle type H within(s)` 可要求某种 handle 只能在指定类型的 live swarm 中构造。假如同类型的两个 swarm 分别为 `a`、`b`，在 `a` 中创建的 handle 只由 `a` 释放；即使移交给子 go process，释放责任仍属于 `a`。未声明该限定的 handle 继续按原有规则构造、借用和释放。[handle 的 swarm 限定](../design/ActorChannels.md#swarm-bound-handle-types)
+
 CoD 程序指定目标 swarm 和入口。物理 worker 由 provider 内部管理，没有可指称的 CoD worker 对象或 handle。provider 通过公开接口声明可移交的资源与放置条件。拟用 `swarm type XXX` 上的 transfer method specialization 表达这项能力。找不到匹配 handler 的 owning 实参在编译期报错。同一类型的两个 swarm 可以复用方法，但各自拥有独立身份。一次启动携带的所有 owning 实参必须能交给同一个子 go process。应用用任务标识和类型化回复端点关联结果。provider 的准入与故障处理仍待设计。[provider 声明示例](../design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations)
 
 发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)

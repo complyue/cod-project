@@ -1,8 +1,10 @@
 # Native C providers, LLVM bindings and scoped cleanup
 
-Revision 33 · 2026-11-27 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
+Revision 34 · 2026-11-28 · Confirmed for the first booter: synchronous calls, scoped native handles, LLVM session ownership, C declaration direction, typed `SourceRevision` failure generation and declared owner CTypes for borrowed handles.
 
 ## Design authority
+
+At r34 the [swarm-bound handle decision](../../../CHANGELOG.md#h-swarm-bound-handle-types-20261128) qualifies the production concurrency design. [D-20-C-HANDLES](../../../design/DesignAuthorityRegistry.md#d-20-c-handles) continues to govern the first booter’s native handles.
 
 At r33 the [project user's provider decision](../../../CHANGELOG.md#h-native-package-toolchain-20261127) extends the r32 generated native interface to [nominal region packages](#native-package-providers-for-nominal-regions) under [D-13-NOMINAL-REGIONS](../../../design/DesignAuthorityRegistry.md#d-13-nominal-regions). A C++ package implementation can reuse the declared C boundary. The existing booter providers and their ownership, failure and release rules continue. The package toolchain is planned production work.
 
@@ -99,6 +101,8 @@ Verify generated header and stub parity, a real ordinary call returning zero, a 
 
 A fieldless `handle type` declaration identifies a nominal native resource type. Its public identity carries the associated constructor contracts through module selection, including a renamed re-export. Declare a C-layout record with fields as `data "C" Record { ... }`. Each native handle payload is an opaque 64-bit word. CoD declares each constructor's parameters under the bits-or-handle rule. Generate C stubs for declared constructors and a disposal hook for CoD-owned resources. Handwritten C implements the resource operations.
 
+For the swarm-independent handles supported by the booter, the following rules apply.
+
 - `make own handle SomeCType(...)` acquires an `own handle`. A lexical owning variable or a [scoped effect installation](#owning-native-handle-effects) holds the release obligation. At the owning scope’s exit, CoD releases the resource it still owns through the generated destructor stub. An owning handle cannot be a field.
 - `make handle View(...) in oh` constructs a borrow under the actual live owner `oh` of the CType declared by `View`. The borrow carries no independent destruction responsibility. When creating the borrow also creates a native child requiring disposal, the provider attaches the child to `oh` before publishing the loan. The provider preserves the child's native dependencies for the duration of that loan.
 - A borrowed `handle in oh` crossing from CoD to C carries both opaque 64-bit words, one for its own payload and one for `oh`. They supply the native context even when a signature has no separate owner argument. The checked reference to the actual owner instance supplies the lifetime relationship. The words convey no proof of liveness or release authority.
@@ -135,6 +139,12 @@ handle type DiagnosticDestination in LauncherDiagnostics;
 
 The launcher supplies a ready path and keeps its backing live during this invocation. The OS path provider can also stage a child path under a separately acquired instance of the same nominal CType, as specified in the [dependency-edge design](ModuleGraph.md#first-dependency-edge). In the [launcher entry](../src/__main__.cod), the input `Path in A` constrains A to `PathOwner`. The launcher can also lend the [bounded output filename](../../../design/Utf8Strings.md#borrowing-text-for-a-c-call) under that same actual A. It supplies a separate writable record owner D. The diagnostic parameter constrains D to `LauncherDiagnostics`. The generated adapter binds the incoming owner evidence for A and D separately and checks agreement for the two uses of A. The native caller supplies truthful typed provenance and valid backing and keeps both loans live through the synchronous call. The boundary words alone cannot authenticate arbitrary C input. Merely naming an owner CType grants no constructor, allocation or disposal permission. The entry borrows both owners. The launcher retains responsibility for their storage. A host payload may differ from its owner word, as it does for a path; equality for the current diagnostic record is a private provider convention.
 
+### Swarm-qualified owning handles
+
+In the planned production compiler, `handle type H within(s)` constrains every owning acquisition of `H` to a live swarm of the declared type. Successful acquisition makes that actual swarm responsible for release. It can invoke the native destructor to discharge the obligation. Both normal and exceptional cleanup use that single release obligation. Borrowing the handle adds no destructor. If construction fails, the provider rolls back its partial acquisition and the swarm has no published handle to release. [Swarm type and instance at construction](../../../design/ActorChannels.md#swarm-bound-handle-types)
+
+The qualifier applies to the nominal handle declaration. A constructor parameter such as `handle within:Database` specifies which native parent must survive the child’s destruction. The swarm qualifier supplies no evidence for that separate lifetime requirement.
+
 ### Dependent owning handle construction
 
 ```cod
@@ -162,7 +172,7 @@ Check this relationship against the selected constructor signature and the actua
 
 In the constructor form `func "C" S(handle within:C);`, the indicated parameter borrows the actual container through destruction of S. The call passes the existing `c` to `make own handle S(c)` as a borrow. The named constructor contract supplies the lifetime check at the call site, including across module boundaries. Native access still follows the declared capabilities. Publication preserves that role for the selected constructor. An ordinary handle argument can be needed only during acquisition. For instance, the [source provider](../native/source_provider.c) uses `Path` to open a revision. Its [destructor](../../../include/cod_source.h) releases the mapping and line storage; it has no use for the filename. If S requires a parent, every construction path for S must provide one. The first native profile already admits one constructor declaration per CType.
 
-**Who releases the resource.** Only a successful `make own handle` establishes a CoD handle cleanup. Each cleanup scope runs its live owning handle destructors exactly once in reverse order of successful acquisition. Each enclosing owner survives the complete destruction of its dependent resources. New bindings of existing borrows, ordinary handle arguments, native entry loans and `make handle ... in owner` establish no CoD destructor. A generated owning destructor can call the C provider, which releases its own attached resources. A constructor that returns a view of existing storage may have nothing new to dispose.
+**Who releases a swarm-independent handle.** Only a successful `make own handle` establishes a CoD handle cleanup. Each cleanup scope runs its live owning handle destructors exactly once in reverse order of successful acquisition. Each enclosing owner survives the complete destruction of its dependent resources. New bindings of existing borrows, ordinary handle arguments, native entry loans and `make handle ... in owner` establish no CoD destructor. A generated owning destructor can call the C provider, which releases its own attached resources. A constructor that returns a view of existing storage may have nothing new to dispose.
 
 ```cod
 own handle db:Database <- make own handle Database();
