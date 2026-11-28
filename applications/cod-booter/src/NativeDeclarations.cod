@@ -1486,6 +1486,7 @@ export enum ArraySlotElement:UInt8 {
 export data SuppliedView =
     NoSuppliedView {} |
     PreparedGenericConstruction { owner_site:UInt64; member:UInt64; } |
+    BoundGenericCall { header:UInt64; past:UInt64; arguments:UInt64; } |
     SuppliedArrayView { type_module:UInt64; type_identity:UInt64; owner_role:UInt64; body:UInt64; readonly:bool;
         } |
     HereFormalContract { first_parameter:UInt64; result_kind:UInt8; result_module:UInt64;
@@ -3329,12 +3330,13 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
         if (formal == no_node()) {
             # Name binding receives a parse record and paired writable tables.
             # Operand checking lends the parse record with readonly tables
-            # and two writable result arrays separated by an input loan.
+            # and two writable result arrays separated by input loans. Each
+            # readonly table was checked above, independently of their count.
             # Schema completion writes an enum table. Enum selection updates
             # binding and work tables among readonly schema inputs. Native
             # declaration checking also writes aggregate and supplied views.
             publication_signature <- (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
-                (adjacent_arrays || (writable_record_array && readonly_bytes && readonly_arrays == 10u64))) ||
+                (adjacent_arrays || (writable_record_array && readonly_bytes))) ||
                 (!reads_record && writable_records == 1u64 &&
                     ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||
                      (writable_arrays == 2u64 && writable_record_array && readonly_arrays == 5u64 && readonly_bytes) ||

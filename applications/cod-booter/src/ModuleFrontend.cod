@@ -1,3 +1,4 @@
+using "./GenericTypes.cod" { Products, Product, TypeKeys, TypeKey, TypeCategory { UnknownType } };
 using "./ParserStorage.cod" NodeLink { NoLink };
 using "./NameResolution.cod" { unsupported_reference_slot_formal, unsupported_fixed_formal };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
@@ -521,9 +522,16 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
         slot_body <- false; signature <- false; body <- false;
     });
+    ref products = make Products(0u64, make Product {
+        module <- 0u64; declaration <- no_node(); arguments <- no_node(); arity <- 0u64;
+        complete <- false; bits <- true; constructor <- no_node(); first_field <- no_node()
+    });
+    ref arguments = make TypeKeys(0u64, make TypeKey {
+        category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node()
+    });
     if (!check_module_operands(source, nodes, result.frontend.tree, bindings, work, selected, 1u64,
         facts, interfaces, interface_count, owners,
-                               fields, no_native_loans, no_constructor_cases, executable, operands)) {
+                               fields, no_native_loans, products, arguments, no_constructor_cases, executable, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
         return false;
     } else {};

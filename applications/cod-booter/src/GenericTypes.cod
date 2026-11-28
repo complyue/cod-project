@@ -1,0 +1,52 @@
+using "./ParserStorage.cod" no_node;
+using "./ModuleExportStorage.cod" {
+    ModuleInterfaces, InterfacePayload { RecipeApplication, RecipeParameter, RecipeTypeParameter },
+};
+
+# Concrete product IDs index Products. Ordinary nominal IDs retain their defining declaration.
+export enum TypeCategory:UInt8 { UnknownType; ScalarType; BitsNominal; ConcreteProductType; }
+export data TypeKey { category:TypeCategory; type_kind:UInt8; module:UInt64; identity:UInt64; }
+export array TypeKeys[UInt64]:TypeKey;
+
+export data Product {
+    module:UInt64;
+    declaration:UInt64;
+    arguments:UInt64;
+    arity:UInt64;
+    complete:bool;
+    bits:bool;
+    constructor:UInt64;
+    first_field:UInt64;
+}
+export array Products[UInt64]:Product;
+export data MemberField { declaration:UInt64; pointer:bool; fixed:bool; next:UInt64; }
+export array MemberFields[UInt64]:MemberField;
+export data ConcreteMembers {
+    const ref products:Products;
+    const ref arguments:TypeKeys;
+    const ref fields:MemberFields;
+}
+
+export func matches_member_application(rows:const ModuleInterfaces in I, first:UInt64, past:UInt64,
+    result:UInt64, module:UInt64, declaration:UInt64, arity:UInt64) -> bool where {const owner I} {
+    if (result >= past || arity >= past - result) return false;
+    if (!(case rows[result].payload of {
+        RecipeApplication { val defining_module <-; val origin <- declaration; val arguments <-; } ->
+            defining_module == module && origin == declaration && arguments == arity;
+        _ -> false
+    })) return false;
+    val ordinal <- 0u64;
+    val binder <- no_node();
+    for (site in first .. past) {
+        if (case rows[site].payload of { RecipeParameter -> true; _ -> false }) {
+            if (ordinal >= arity) return false;
+            binder <- rows[site].declaration;
+            if (!(case rows[result + 1u64 + ordinal].payload of {
+                RecipeTypeParameter { val parameter <- binder; } -> parameter == binder;
+                _ -> false
+            })) return false;
+            (ordinal <- ordinal + 1u64):void
+        }
+    };
+    return ordinal == arity
+}

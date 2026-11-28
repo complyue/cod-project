@@ -352,6 +352,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: scoped symbolic procedure checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 18)
         fputs(": error: condition must have type bool\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 167)
+        fputs(": error: this generic method has no completed body for the selected member type\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 152)
         fputs(": error: generic call instantiation is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 147)

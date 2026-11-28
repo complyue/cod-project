@@ -96,6 +96,9 @@ using "./NativeDeclarations.cod" {
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
 using "./GenericInterfaces.cod" { stage_generic_interfaces, stage_closed_type };
+using "./GenericTypes.cod" {
+    ConcreteMembers, Products, Product, TypeKeys, TypeKey, MemberFields, MemberField, TypeCategory { UnknownType }
+};
 using "./GenericLayouts.cod" {
     complete_generic_constructions, GenericConstructionRequests, GenericConstructionRequest,
     GenericConstructionForm { NoConstruction, ByInitializer, ByConstructor },
@@ -731,11 +734,11 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
                                 spellings:const SourceBytes in G, spelling_used:UInt64,
                                     interfaces:const ModuleInterfaces in G,
                                 interface_count:UInt64, aggregate_facts:const AggregateFacts in A,
-                                views:SuppliedViews in H, cases:const ConstructorCaseFacts in C,
+                                views:SuppliedViews in H, products:const Products in M, arguments:const TypeKeys in M, cases:const ConstructorCaseFacts in C,
                                 module:UInt64, first:UInt64, caught_field:UInt64, executable:bool,
                                 facts:OperandFacts in W, owners:CallOwners in W,
                                     sites:CompletionSites in W, result:ModuleBindingResult in R)
-    -> bool where {const owner S, owner W, const owner G, const owner A, owner H, const owner C, owner R} {
+    -> bool where {const owner S, owner W, const owner G, const owner A, owner H, const owner M, const owner C, owner R} {
     ref operands = make OperandCheckResult { diagnostic <- 0u8; node <- no_node(); };
     val used <- result.frontend.tree.used;
     val revision <- result.frontend.tree.revision;
@@ -766,7 +769,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         return false
     };
     if (!check_module_operands(source, nodes, result.frontend.tree, names, work, selected, module,
-        facts, interfaces, interface_count, owners, fields, views, cases, demand, operands)) {
+        facts, interfaces, interface_count, owners, fields, views, products, arguments, cases, demand, operands)) {
         binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic,
             operands.node);
         return false
@@ -927,8 +930,8 @@ data ModuleBindingWorkspace {
 func prepare_generic_constructions(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, staged:ModuleInterfaces in I,
     imported:const ModuleInterfaces in G, imported_count:UInt64, module:UInt64, prefix:UInt64,
-    views:SuppliedViews in V, report:NativeDeclarationResult in R, used:UInt64, revision:UInt64, native:bool) -> bool
-    where {const owner N, const owner B, const owner E, const owner W, owner I, const owner G, owner V, owner R} {
+    members:ConcreteMembers in M, views:SuppliedViews in V, report:NativeDeclarationResult in R, used:UInt64, revision:UInt64, native:bool) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, owner I, const owner G, owner M, owner V, owner R} {
     ref requests = make GenericConstructionRequests(used, make GenericConstructionRequest {
         first <- no_node(); past <- no_node(); site <- no_node(); owner_site <- no_node();
         form <- NoConstruction; has_arguments <- false
@@ -972,7 +975,7 @@ func prepare_generic_constructions(nodes:const ExprNodes in N, names:const NameB
             (requests[at].past <- next):void
         }
     };
-    return complete_generic_constructions(staged, prefix, next, imported, imported_count, module, requests, views, report)
+    return complete_generic_constructions(staged, prefix, next, imported, imported_count, module, requests, members, views, report)
 }
 
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
@@ -1084,13 +1087,29 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         return Rejected;
     } else {};
     ref interface_report = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
+    val member_capacity <- 0u64;
+    if (result.has_closed_application) {
+        if (intrinsic (len)(staged_interfaces) > no_node() - interface_count) return ScratchFailed;
+        (member_capacity <- intrinsic (len)(staged_interfaces) + interface_count):void
+    };
+    ref member_products = make Products(member_capacity, make Product {
+        module <- 0u64; declaration <- no_node(); arguments <- no_node(); arity <- 0u64;
+        complete <- false; bits <- true; constructor <- no_node(); first_field <- no_node()
+    });
+    ref member_arguments = make TypeKeys(member_capacity, make TypeKey {
+        category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node()
+    });
+    ref member_fields = make MemberFields(member_capacity, make MemberField {
+        declaration <- no_node(); pointer <- false; fixed <- false; next <- no_node()
+    });
+    ref members = make ConcreteMembers { products = member_products; arguments = member_arguments; fields = member_fields };
     val generic_prefix <- stage_generic_interfaces(nodes, names, selected, work, staged_interfaces, interface_report,
         used, revision, progress[0u64].identity, 0u64);
     if (generic_prefix == no_node() ||
         (result.has_closed_application &&
          !prepare_generic_constructions(nodes, names, selected, work, staged_interfaces,
              published_interfaces, interface_count, progress[0u64].identity, generic_prefix,
-             views, interface_report, used, revision, native))) {
+             members, views, interface_report, used, revision, native))) {
         if (interface_report.diagnostic == 0u8) {
             report_scratch_error(diagnostic, 1u32);
             return ScratchFailed
@@ -1177,7 +1196,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,
                                         published_interfaces, interface_count, aggregate_facts,
-                                            views, cases, progress[0u64].identity,
+                                            views, member_products, member_arguments, cases, progress[0u64].identity,
                                         constructed, caught_field, native, facts, owners, sites,
                                             result)) {
             delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,

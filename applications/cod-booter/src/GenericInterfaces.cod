@@ -1,5 +1,6 @@
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, block_tail, ungrouped, published_syntax_id, syntax_first, syntax_past, SequenceEntry, inspect_sequence_entry, first_sequence_entry,
+    ExprNodes, no_node, block_tail, ungrouped, published_syntax_id, completion_operand, completion_syntax,
+    CompletionSyntax { ReturnCompletion }, syntax_first, syntax_past, SequenceEntry, inspect_sequence_entry, first_sequence_entry,
     GenericProductSites, inspect_generic_product, TypeApplicationSites, inspect_type_application, type_list_count,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, formal_binding_is_fixed,
     AssignmentSites, inspect_assignment,
@@ -23,9 +24,10 @@ using "./NativeDeclarations.cod" NativeDeclarationResult;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, write_payload_row, recipe_entry, generic_product_interface, generic_callable_interface,
     RecipeResultMode { ValueRecipe, ReferenceRecipe, PointerRecipe },
+    GenericMethodExit { UnprovedMethodBody, EmptyMethodBody, NullMethodResult },
     InterfacePayload { NoInterfacePayload, GenericProduct, GenericCallable, RecipeParameter, RecipeOwner,
         RecipeFormal, RecipeField, RecipeResult, RecipeBuiltin, RecipeNominal, RecipeTypeParameter, RecipeApplication,
-        RecipeNullInitializer },
+        RecipeNullInitializer, RecipeReturnNull },
 };
 
 data RecipeWriter { revision:UInt64; used:UInt64; module:UInt64; next:UInt64; exhausted:bool; }
@@ -242,15 +244,36 @@ func append_null_initializers(nodes:const ExprNodes in N, names:const NameBindin
     return false
 }
 
+# Seal simple exits directly from bound source. A more involved body
+# leaves a signature but no usable completion proof.
+func append_method_exit(nodes:const ExprNodes in N, names:const NameBindings in B,
+    interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, body:UInt64) -> GenericMethodExit
+    where {const owner N, const owner B, owner I, owner W} {
+    ref tail = make UInt64 { no_node() };
+    if (!block_tail(nodes, writer.revision, writer.used, body, tail)) return UnprovedMethodBody;
+    if (tail == no_node()) return EmptyMethodBody;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref value = make UInt64 { no_node() };
+    ref owner_role = make UInt64 { no_node() };
+    if (inspect_sequence_entry(nodes, writer.revision, writer.used, tail, entry) != BlockSequence ||
+        entry.previous != no_node() || completion_syntax(nodes, entry.item) != ReturnCompletion ||
+        !completion_operand(nodes, writer.revision, writer.used, entry.item, value) ||
+        !written_null_owner(nodes, names, writer, ungrouped(nodes, writer.revision, writer.used, value), owner_role))
+        return UnprovedMethodBody;
+    if (!append_recipe(interfaces, writer, entry.item, 0u64, 0u64, make RecipeReturnNull { owner_role <- owner_role }))
+        return UnprovedMethodBody;
+    return NullMethodResult
+}
+
 func seal_callable_recipe(nodes:const ExprNodes in N, interfaces:ModuleInterfaces in I, writer:const RecipeWriter in W,
     start:UInt64, site:UInt64, name:UInt64, parameters:UInt64, constructor_of:UInt64, function_form:bool,
-    null_initialization:bool) -> void
+    null_initialization:bool, method_exit:GenericMethodExit) -> void
     where {const owner N, owner I, const owner W} {
     write_payload_row(interfaces, start, writer.module, site, generic_callable_interface(), writer.next - start - 1u64,
         syntax_first(nodes, writer.used, name), syntax_past(nodes, writer.used, name),
         make GenericCallable {
             parameters <- parameters; constructor_of <- constructor_of; function_form <- function_form;
-            null_initialization <- null_initialization;
+            null_initialization <- null_initialization; method_exit <- method_exit;
         })
 }
 
@@ -280,6 +303,7 @@ func stage_callable_recipe(nodes:const ExprNodes in N, names:const NameBindings 
     val mode <- ValueRecipe;
     val body_first <- no_node();
     val null_initialization <- false;
+    val method_exit <- UnprovedMethodBody;
     for (unused in 0u64 .. writer.used) {
         if (clause == no_node()) {
             if (count == 0u64 || !result ||
@@ -287,10 +311,13 @@ func stage_callable_recipe(nodes:const ExprNodes in N, names:const NameBindings 
             body_first <- writer.next;
             null_initialization <- constructor_of != no_node() &&
                 append_null_initializers(nodes, names, work, interfaces, writer, callable.body);
-            if (writer.exhausted) return false;
             if (!null_initialization) { (writer.next <- body_first):void };
+            if (constructor_of == no_node()) {
+                (method_exit <- append_method_exit(nodes, names, interfaces, writer, callable.body)):void
+            };
+            if (writer.exhausted) return false;
             seal_callable_recipe(nodes, interfaces, writer, start, site, name, count, constructor_of,
-                callable.function_form, null_initialization);
+                callable.function_form, null_initialization, method_exit);
             return true
         };
         shape <- inspect_signature(nodes, writer.revision, site, clause, syntax);

@@ -114,6 +114,8 @@ export func matches_object_call(proof:const CallableUseProofs in F, row:UInt64, 
     }
 }
 
+export enum GenericMethodExit:UInt8 { UnprovedMethodBody; EmptyMethodBody; NullMethodResult; }
+
 export enum RecipeResultMode:UInt8 { ValueRecipe; ReferenceRecipe; PointerRecipe; }
 
 export data InterfacePayload =
@@ -123,7 +125,8 @@ export data InterfacePayload =
     ConstructorInterface { sum_module:UInt64; sum_declaration:UInt64; } |
     ConstructorField { field_kind:UInt8; field_module:UInt64; field_identity:UInt64; mode:FormalMode; readonly:bool; } |
     GenericProduct { parameters:UInt64; constructor:UInt64; } |
-    GenericCallable { parameters:UInt64; constructor_of:UInt64; function_form:bool; null_initialization:bool; } |
+    GenericCallable { parameters:UInt64; constructor_of:UInt64; function_form:bool; null_initialization:bool; method_exit:GenericMethodExit; } |
+    RecipeReturnNull { owner_role:UInt64; } |
     RecipeNullInitializer { field:UInt64; owner_role:UInt64; } |
     RecipeParameter {} |
     RecipeOwner { readonly:bool; } |
