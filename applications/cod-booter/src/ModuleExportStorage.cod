@@ -142,6 +142,8 @@ export data ModuleInterfaceRow {
     failure_identity:UInt64;
     name_first:UInt64;
     name_past:UInt64;
+    # Member rows carry the backing code. An enum header carries the count
+    # of canonical values, independently of its count of written spellings.
     enum_code:UInt64;
     native_function:UInt64;
     callable_kind:InterfaceCallableKind;

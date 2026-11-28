@@ -3177,12 +3177,10 @@ func checked_parameterized_scalar_past(contracts:const ModuleInterfaces in I, pu
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val arity <- contracts[header].entry_count;
     val result <- contracts[header].result_kind;
-    val predicate <- result == builtin_bool();
     if (arity == 0u64 || arity >= published - header || !contracts[header].scalar_source_body ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
-        (!predicate && result != builtin_u64() && result != builtin_u8()) ||
-        (predicate && (arity != 1u64 || contracts[header].source_numeric_fault)) ||
+        (result != builtin_u64() && result != builtin_u8() && result != builtin_bool()) ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
         contracts[header].target_readonly != 0u8 || contracts[header].owner_count != 0u64 ||
         contracts[header].owner_role != no_node() || contracts[header].has_here != 0u8 ||
@@ -3192,8 +3190,7 @@ func checked_parameterized_scalar_past(contracts:const ModuleInterfaces in I, pu
     val first <- header + 1u64;
     val past <- first + arity;
     for (row in first .. past) {
-        if (!checked_source_scalar_parameter(contracts, published, row) ||
-            (predicate && contracts[row].value_kind != builtin_u8())) return no_node();
+        if (!checked_source_scalar_parameter(contracts, published, row)) return no_node();
     };
     return past
 }
@@ -3853,7 +3850,10 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         remember_imported_call(links, contracts, at, header, true);
-        if (contracts[header].result_kind != builtin_bool()) {
+        val unary_byte_predicate <- contracts[header].result_kind == builtin_bool() &&
+            contracts[header].entry_count == 1u64 && contracts[header + 1u64].value_kind == builtin_u8() &&
+            !contracts[header].source_numeric_fault;
+        if (!unary_byte_predicate) {
             links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
             supplied[at] <- make CheckedScalarFunctionCall {};
             if (required == no_node()) { (required <- at):void }
@@ -4725,6 +4725,7 @@ data CaseCoverage {
     only:UInt64;
     generation:UInt64;
     exclusions:UInt64;
+    imported_enum:bool;
 }
 
 # A case proof belongs to a saved address. An enclosing proof for another
@@ -4777,9 +4778,10 @@ func case_presence(present:bool, absent:bool) -> UInt8 {
 }
 
 func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindings in B,
-                              links:const NameWork in L, facts:OperandFacts in F, at:UInt64, subject:UInt64,
+                              links:const NameWork in L, facts:OperandFacts in F,
+                              interfaces:const ModuleInterfaces in I, published:UInt64, at:UInt64, subject:UInt64,
                               coverage:CaseCoverage in V, used:UInt64, revision:UInt64) -> bool
-    where {const owner N, const owner B, const owner L, owner F, owner V} {
+    where {const owner N, const owner B, const owner L, owner F, const owner I, owner V} {
     val kind <- facts[subject].kind;
     if (kind == never_result()) return true;
     val present <- selected_target_presence(facts, subject);
@@ -4798,6 +4800,16 @@ func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindin
         return true;
     } else {};
     val domain <- facts[subject].identity;
+    if (coverage.imported_enum) {
+        val head <- find_interface(interfaces, published, facts[subject].identity_module, domain);
+        if (head == no_node() || interfaces[head].interface_kind != enum_type() ||
+            interfaces[head].entry_count >= published - head) return false;
+        val distinct <- interfaces[head].enum_code;
+        if (distinct == 0u64 || distinct > interfaces[head].entry_count) return false;
+        coverage.total <- distinct;
+        coverage.remaining <- distinct;
+        return true
+    };
     ref enumeration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
@@ -4997,6 +5009,16 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
         return 0u8;
     };
     if (mode != NamedCaseMember) return unsupported_case_pattern();
+    if (facts[subject].identity_module != 0u64) {
+        # The declaration pass already looked up the name in the complete
+        # enum. Keep the exclusion at a local syntax site, never a foreign ID.
+        if (links[pattern].value_kind != enum_type() ||
+            links[pattern].value_module != facts[subject].identity_module ||
+            links[pattern].value_identity != facts[subject].identity) return unsupported_case_pattern();
+        member <- pattern;
+        facts[pattern].discriminator_code <- links[pattern].enum_code;
+        return 0u8
+    };
     ref enumeration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
@@ -5010,6 +5032,21 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
     return 0u8;
 }
 
+func case_member_excluded(facts:const OperandFacts in F, coverage:const CaseCoverage in V,
+    member:UInt64) -> bool where {const owner F, const owner V} {
+    if (!coverage.imported_enum) return facts[member].case_excluded_at == coverage.generation;
+    # Independent enum subjects cannot change during scanning. Spellings
+    # bound in this domain denote the same value exactly when their codes agree.
+    val code <- facts[member].discriminator_code;
+    val prior <- coverage.exclusions;
+    for (unused in 0u64 .. intrinsic (len)(facts)) {
+        if (prior == no_node()) return false;
+        if (facts[facts[prior].case_exclusion_member].discriminator_code == code) return true;
+        prior <- facts[prior].case_exclusion_next;
+    };
+    return false
+}
+
 func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
                     subject:UInt64, arm:UInt64, member:UInt64, pattern:CasePatternSyntax) -> void
     where {owner F, const owner V} {
@@ -5020,7 +5057,7 @@ func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
     facts[arm].case_discriminator <- if (member != no_node() && had_present) { 1u8 } else { 0u8 };
     facts[arm].case_may_be_absent <- if (had_absence) { 1u8 } else { 0u8 };
     if (member != no_node() && (!had_present || (coverage.only != no_node() && coverage.only != member) ||
-        facts[member].case_excluded_at == coverage.generation)) return;
+        case_member_excluded(facts, coverage, member))) return;
     if (null_pattern && !had_absence) return;
     val matches_present <- !null_pattern && had_present;
     val matches_absence <- (null_pattern || all_pattern) && had_absence;
@@ -5132,11 +5169,13 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     if (completed && kind != scalar_bool() && kind != scalar_enum() &&
         kind != null_literal() && kind != source_sum_target() && kind != independent_sum_bits())
         return operand_problem(report, at, unsupported_case_subject());
-    if (kind == scalar_enum() && facts[subject].identity_module != 0u64)
-        return operand_problem(report, at, unsupported_case_subject());
     val borrowed <- facts[subject].reception != independent_value();
+    val imported_enum <- kind == scalar_enum() && facts[subject].identity_module != 0u64;
+    if (imported_enum && (borrowed || intrinsic (len)(demand) == 0u64))
+        return operand_problem(report, at, unsupported_case_subject());
     ref coverage = make CaseCoverage {
         total <- 0u64; remaining <- 0u64; absent <- false; only <- no_node(); generation <- at; exclusions <- no_node();
+        imported_enum <- imported_enum
     };
     if (kind == source_sum_target() || kind == independent_sum_bits()) {
         if (at >= intrinsic (len)(cases)) return operand_problem(report, at, invalid_operand_tree());
@@ -5189,7 +5228,7 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
             _ -> { return operand_problem(report, at, invalid_operand_tree()) }
         }
     } else {
-        if (!initialize_case_coverage(nodes, names, links, facts, at, subject, coverage, used, revision))
+        if (!initialize_case_coverage(nodes, names, links, facts, interfaces, published, at, subject, coverage, used, revision))
             return operand_problem(report, at, invalid_operand_tree())
     };
     ref item = make UInt64 { no_node() };

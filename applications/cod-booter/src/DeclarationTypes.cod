@@ -913,16 +913,19 @@ func stage_enum(nodes:const ExprNodes in N, names:const NameBindings in B, work:
     if (!first_sequence_entry(nodes, revision, used, domain.entries, EnumSequence, member)) return no_node();
     ref entry = make EnumMemberSites { name <- no_node(); previous <- no_node(); initializer <- no_node(); };
     val row <- start + 1u64;
+    val distinct <- 0u64;
     val name <- domain.name;
     for (unused in 0u64 .. intrinsic (len)(nodes)) {
         if (member == no_node()) {
             write_interface_header(interfaces[start], module, declaration, enum_type(), 0u8, row - start - 1u64);
             interfaces[start].element_kind <- names[domain.value_type].kind;
+            interfaces[start].enum_code <- distinct;
             interfaces[start].name_first <- syntax_first(nodes, used, name);
             interfaces[start].name_past <- syntax_past(nodes, used, name);
             return row;
         } else {};
         if (row >= limit || !inspect_enum_member(nodes, revision, used, member, entry)) return no_node();
+        if (names[member].declaration == member) { (distinct <- distinct + 1u64):void };
         write_interface_header(interfaces[row], 0u64, names[member].declaration, 0u8, 0u8, 0u64);
         interfaces[row].value_kind <- enum_type();
         interfaces[row].enum_code <- work[member].enum_code;

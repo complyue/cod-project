@@ -2259,16 +2259,22 @@ func guarded_scalar_returns(nodes:const ExprNodes in N, body:UInt64, used:UInt64
     for (unused in 0u64 .. used) {
         if (inspect_sequence_entry(nodes, revision, used, item.previous, item) != BlockSequence ||
             !inspect_conditional(nodes, revision, used, item.item, branch) ||
-            !block_tail(nodes, revision, used, branch.alternative, empty) || empty != no_node() ||
-            completion_syntax(nodes, branch.consequent) != ReturnCompletion ||
-            !completion_operand(nodes, revision, used, branch.consequent, result) || result >= branch.consequent)
-            return false;
+            !block_tail(nodes, revision, used, branch.alternative, empty) || empty != no_node()) return false;
+        if (completion_syntax(nodes, branch.consequent) == ReturnCompletion) {
+            if (!completion_operand(nodes, revision, used, branch.consequent, result) ||
+                result >= branch.consequent) return false
+        } else {
+            # Binding the outer guard need not inspect its whole body.
+            # Ordinary body checking and completion cover the statements inside.
+            if (is_scope_block(nodes, branch.consequent) ||
+                !block_tail(nodes, revision, used, branch.consequent, result)) return false
+        };
         if (item.previous == no_node()) return true
     };
     return false
 }
 
-# Demand the ordinary checker for an independent integer function with
+# Demand the ordinary checker for an independent scalar function with
 # guarded early returns and a final return. The shape supplies no exit proof.
 func prepare_scalar_function(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
@@ -2285,7 +2291,7 @@ func prepare_scalar_function(nodes:const ExprNodes in N, names:const NameBinding
     if (inspect_signature(nodes, revision, used, callable.signature, signature) != ValueResultClause ||
         signature.annotation >= used) return;
     val result_kind <- names[signature.annotation].kind;
-    if ((result_kind != builtin_u64() && result_kind != builtin_u8()) ||
+    if ((result_kind != builtin_u64() && result_kind != builtin_u8() && result_kind != builtin_bool()) ||
         inspect_signature(nodes, revision, used, signature.previous, signature) != SignatureHead ||
         !guarded_scalar_returns(nodes, callable.body, used, revision)) return;
     val formal <- no_node();
