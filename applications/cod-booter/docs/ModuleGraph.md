@@ -1141,6 +1141,14 @@ For a checked builder installation into a non-null reference symbol, compare the
 
 The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs a completed imported callable contract for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
 
+### Importing ordinary text procedures
+
+For the bundled `emit` family, the defining visit stages both fixed methods, including the unmarked definition after the exported head. Each method in this profile has one readonly text loan under a const owner and an explicit void result. Record its resolved formal type and method identity in the defining family's interface. The visit publishes the range only when it has a signature for every member. An unrepresented member keeps the family outside this profile.
+
+A direct source-preserving selection, including a rename, validates the published range and uses the prepared operand to identify a method. An immutable String or CString can supply the String loan. A builder loan requires the exact defining type. A failure during operand evaluation prevents entry. Signature selection leaves entered calls pending the selected method's completed behavior and the visible family's completed symbol requirements.
+
+The source commands check the catalog-selected `append_utf8` operation used by `string.cod`. It borrows the writable builder under its allocation-capable owner, followed by the immutable text or builder piece. The operation has a normal void result and can raise the standard allocation failure after operand preparation.
+
 ### Target layout for provider rows
 
 Acquire one owning native layout handle for a provider render that needs row layout. Readonly loans select that handle’s immutable target data. Use the current native target selection and ensure target registration is available on the provider command path. Declaration checking alone needs no layout acquisition. The service can create a target machine to obtain its data layout, then release the machine. Keep the layout and any LLVM context used for queries live until their last use. Dispose of diagnostics and partial acquisitions before reporting a checked acquisition failure. Release a successfully acquired handle once through ordinary CoD cleanup. This operation needs no IR module, builder, assembly printer or output file.

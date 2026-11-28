@@ -71,6 +71,7 @@ export func array_length_family_interface() -> UInt8 { return 42u8 }
 export func generic_product_interface() -> UInt8 { return 43u8 }
 export func generic_callable_interface() -> UInt8 { return 44u8 }
 export func recipe_entry() -> UInt8 { return 45u8 }
+export func source_text_family_interface() -> UInt8 { return 46u8 }
 
 export data CallableUseProof =
     UnselectedCallable {} |

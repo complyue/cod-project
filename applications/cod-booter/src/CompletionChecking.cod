@@ -76,7 +76,7 @@ using "./OperandChecking.cod" {
 using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
     out_of_memory_identity, region_capacity_identity, invalid_capacity_identity, index_out_of_bounds_identity,
-    type_assertion_failed_identity, assertion_failed_identity, text_byte_export, text_size_export,
+    type_assertion_failed_identity, assertion_failed_identity, text_byte_export, text_size_export, builder_append_export,
 };
 using "./ExceptionTypes.cod" exception_type_covers;
 using "./ModuleExportStorage.cod" ByteArrayFailures;
@@ -910,6 +910,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
                     index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8;
         };
+        if (facts[at].text_intrinsic == builder_append_export())
+            return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, revision, index_out_of_bounds_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic != 0u8) return 0u8;

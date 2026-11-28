@@ -74,7 +74,7 @@ using "./NameResolution.cod" { source_call_scalar, source_place_scalar,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
     ordinary_selection, symbolic_selection, native_symbol_binding, reference_symbol_binding, abstract_type_binding,
-    has_exception_parent, lexical_builder_record, is_lexical_builder, definition_name, native_scalar, builtin_type_kind, builtin_bool,
+    has_exception_parent, lexical_builder_record, is_lexical_builder, lexical_builder_type, definition_name, native_scalar, builtin_type_kind, builtin_bool,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_string, builtin_c_string, text_type,
     variadic_method_formal, unprovided_callable_promise, unsupported_ordinary_construction, unsupported_reference_slot_formal,
     local_sum_value_type,
@@ -97,7 +97,7 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
-    array_length_family_interface,
+    array_length_family_interface, source_text_family_interface,
     InterfacePayload { NoInterfacePayload }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
@@ -1559,6 +1559,7 @@ export data SuppliedView =
     CheckedArrayReaderForward { completion:ArrayReadCompletion, } |
     PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
+    ImportedSourceTextCall { family:UInt64, past:UInt64, } |
     PreparedAcquisitionFailure { nominal:ExceptionType, };
 export array SuppliedViews[UInt64]:SuppliedView;
 
@@ -5845,6 +5846,68 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     return past
 }
 
+func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, definition:UInt64, used:UInt64, revision:UInt64) -> UInt64
+    where {const owner N, const owner B, const owner W} {
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        callable.function_form || callable.body == no_node()) return no_node();
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val role <- callable.signature;
+    if (inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+        clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead)
+        return no_node();
+    ref first = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
+        first >= used || work[first].next != no_node()) return no_node();
+    return readonly_formal_marker(nodes, names, first, role, used, revision)
+}
+
+# Keep the signature range private unless every member in the defining
+# family fits. These rows carry no body completion or symbol requirement.
+func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, head:UInt64, used:UInt64,
+    defining_module:UInt64, revision:UInt64, contracts:ModuleInterfaces in C, first:UInt64) -> UInt64
+    where {const owner N, const owner B, const owner E, const owner W, owner C} {
+    if (first >= intrinsic (len)(contracts)) return no_node();
+    val next <- first + 1u64;
+    val method <- head;
+    val marker <- no_node();
+    val builder <- false;
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) {
+            write_interface_header(contracts[first], defining_module, head,
+                source_text_family_interface(), 0u8, next - first - 1u64);
+            contracts[first].membership <- FixedMethods;
+            (contracts[first].callable_kind <- CheckedProcedure):void;
+            return next
+        };
+        if (method >= used || names[method].declaration != head) return first;
+        marker <- unary_text_method(nodes, names, work, method, used, revision);
+        if (marker == no_node()) return first;
+        builder <- is_lexical_builder(nodes, names, marker, revision, used);
+        if (!builder && names[marker].kind != builtin_string()) return first;
+        if (next >= intrinsic (len)(contracts)) return no_node();
+        write_interface_header(contracts[next], defining_module, method, 0u8, builtin_void(), 0u64);
+        contracts[next].value_kind <- if (builder) { lexical_builder_type() } else { builtin_string() };
+        if (builder) {
+            contracts[next].type_module <- type_module(names, selected, marker, defining_module);
+            (contracts[next].type_identity <- type_identity(names, selected, marker)):void
+        };
+        contracts[next].field_mode <- ReferenceFormal;
+        contracts[next].owner_role <- 0u64;
+        contracts[next].target_readonly <- 1u8;
+        contracts[next].owner_readonly <- 1u8;
+        method <- work[method].next_method;
+        (next <- next + 1u64):void
+    };
+    return first
+}
+
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
                                views:const SuppliedViews in V, used:UInt64, revision:UInt64,
@@ -5904,6 +5967,10 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     if (ordinary && failure == no_node()) {
                         (count <- stage_array_length_family(names, work, views, at, used,
                             defining_module, contracts, count)):void
+                    };
+                    if (count == first && ordinary && failure == no_node()) {
+                        (count <- stage_source_text_family(nodes, names, selected, work, at, used,
+                            defining_module, revision, contracts, count)):void
                     };
                     if (count == no_node()) return no_node();
                     if (count == first) {

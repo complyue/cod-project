@@ -259,6 +259,7 @@ export data ExportResolutionResult {
 export func exception_type_export() -> UInt8 { return 1u8; }
 export func symbol_export() -> UInt8 { return 2u8; }
 export func builder_storage_export() -> UInt8 { return 11u8; }
+export func builder_append_export() -> UInt8 { return 12u8; }
 export func lexical_result_export() -> UInt8 { return 14u8; }
 export func text_size_export() -> UInt8 { return 15u8; }
 export func text_byte_export() -> UInt8 { return 16u8; }
