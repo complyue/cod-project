@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 287 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 288 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r288 the [swarm-bound handle decision](../CHANGELOG.md#h-swarm-bound-handle-types-20261128) qualifies cleanup after an owning launch. Both entry forms continue the r287 handoff and fresh TLS rules.
 
 At r287 the [swarm ownership decision](../CHANGELOG.md#h-main-owns-swarm-20261128) qualifies P-788/P-789 for both launch forms. The main process owns the swarm, the child borrows it, and the actual live swarm releases its regions.
 
@@ -2442,7 +2444,7 @@ go on(p) { own region r <-, own handle h <- } {{
 }}
 ```
 
-In either form the child can receive the region binding and use the region through the admitted handoff. The same live swarm releases a region declared `within(p)`, including when child cleanup is triggered by an exception. A transferred native handle follows its provider’s use and release contract at the selected placement. The child borrows `p` and cannot destroy it. [Swarm ownership and region release](ActorChannels.md#swarm-ownership-and-region-release) In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
+In either form the child can receive the region binding and use the region through the admitted handoff. The same live swarm releases a region declared `within(p)`, including when child cleanup is triggered by an exception. A transferred handle declared [within a swarm](ActorChannels.md#swarm-bound-handle-types) carries the same live swarm through cleanup. A swarm-independent native handle follows its existing provider contract at the selected placement. The child borrows `p` and cannot destroy it. [Swarm ownership and region release](ActorChannels.md#swarm-ownership-and-region-release) In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
 
 **The effects boundary is at `go`.** The worker thread starts this invocation with initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
 

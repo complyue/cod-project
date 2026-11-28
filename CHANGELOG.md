@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Require a swarm on selected owning handle types
+
+<a id="h-swarm-bound-handle-types-20261128"></a>
+**H-SWARM-BOUND-HANDLE-TYPES-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirms `handle type ... within(s)` for owning handle types that require construction within a specified swarm type and release by the actual swarm. [D-32 r12→13](design/ActorChannels.md#swarm-bound-handle-types) extends the [region release decision](https://github.com/complyue/cod-project/blob/cc82189320b7f971854dd3689c3e6b015c2a2419/design/ActorChannels.md#swarm-ownership-and-region-release). P-790 records the opt-in type contract. P-789 and [D-10 r287→288](design/SymbolicDynamicScope.md#go-process-launch) continue the owning launch and provider handoff rules. [Interop r33→34](applications/cod-booter/docs/LLVMInterop.md#swarm-qualified-owning-handles) continues the [swarm-independent acquisition, borrow and release rules](https://github.com/complyue/cod-project/blob/cc82189320b7f971854dd3689c3e6b015c2a2419/applications/cod-booter/docs/LLVMInterop.md#native-handles-and-c-records). The qualifier belongs to the production compiler plan. Registry r1395→1396.
+
 ## 2026-11-28 — Main owns the swarm and the live swarm releases its regions
 
 <a id="h-main-owns-swarm-20261128"></a>

@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 12 · 2026-11-28
+Design and research revision: 13 · 2026-11-28
 
 ## Design authority
+
+At r13 the [swarm-bound handle decision](../CHANGELOG.md#h-swarm-bound-handle-types-20261128) extends release by the actual swarm to owning handle types whose declaration requires it. P-789 continues the independent handoff requirement.
 
 At r12 the [main-process swarm ownership decision](../CHANGELOG.md#h-main-owns-swarm-20261128) assigns the owning swarm binding to the main process and a borrow to each child. D-32-RESOURCE-POOLS/P-789 requires the actual live swarm to release every region declared within it. P-788 continues entry transfer and fresh TLS.
 
@@ -139,6 +141,12 @@ Here the right-hand sides stand for acquisitions. The declaration of `r` ties it
 
 Compare a local declaration, `own region scratch <- ...`. Its ordinary lifetime remains local and it needs no swarm for release. With the candidate launch spelling `go on(s) build_index(r)`, the target must match the swarm in `within(s)`. Passing local scratch as a swarm region is invalid. The main process must keep `s` live through outstanding child borrows and all releases owed by `s`. How shutdown coordinates these obligations, and the precise constructor and launch spellings, remain open.
 
+### Swarm-bound handle types
+
+An owning handle type may require construction within a swarm of a declared type. For example, in `handle type IndexLease within(s)`, let `s` range over swarms of type `LocalProcessPool`. Every owning constructor for `IndexLease` requires a live instance of that type at `make`. Ordinary module selection, including a rename, preserves the requirement. The detailed spelling for typing `s` and supplying it at construction remains open.
+
+Suppose `east` and `west` are distinct live instances of `LocalProcessPool`. Either can host a new lease. Once a lease is made within `east`, only `east` releases it, exactly once on normal or exceptional cleanup. A child borrowing `east` can receive the owning handle at launch if the swarm provider supports that handoff at the chosen placement. The release still belongs to `east`. A handle declared without the qualifier follows its existing native ownership and cleanup contract, including inside that child. [Native handle construction and cleanup](../applications/cod-booter/docs/LLVMInterop.md#swarm-qualified-owning-handles)
+
 ### A shared-memory region between local processes
 
 A swarm region with the structural `Partition` schema can use OS shared memory for an owning launch to another process on the same host. Consider one partition whose nodes refer to each other through region-relative locators. The parent finishes its writes. A local subprocess maps the same backing at its own base address and resolves the same root, shared nodes and cycles. The handoff must publish the completed writes before the receiving entry can use the region. Linux shared-memory objects and descriptor passing provide the native pieces for such a transport. The source root schema can stay the same. [Regional graph representation](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph) · [POSIX shared memory on Linux](https://man7.org/linux/man-pages/man7/shm_overview.7.html) · [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html)
@@ -152,6 +160,9 @@ Mapping the bytes and transferring the owner are separate events. After successf
 | Niladic entry or owner-free block with no target pool | Reject the launch. Having no ownership to check does not supply a target. |
 | Owning launch within one swarm, different OS processes on one host, relocatable shared backing | Permit the swarm-region handoff. Verify a different mapping base, preserved graph edges, visible completed writes and exactly one release by the original live swarm. |
 | Child attempts to take ownership of its borrowed swarm, or to release a region of `s` through a distinct swarm of the same type | Reject both. A swarm cannot finish destruction while a child still needs its borrow or while any region still requires its release. |
+| Make an `IndexLease` without a swarm, or within a swarm of the wrong type | Reject the construction before calling the native provider. |
+| Native construction fails within a valid `east` | The provider rolls back partial acquisition. There is no published lease for `east` to release. |
+| Make one lease within `east` and another within `west` | Each swarm releases its own lease exactly once. Reject substitution of `west` for `east`, including at an owning launch. A same-swarm launch still requires an applicable transfer handler. |
 | Two threads in one swarm send the swarm’s region through a typed chan | Reject the send even when the root matches the message schema and both threads can address the bytes. |
 | Owning launch across two distinct swarms in the same address space | Reject transfer of the swarm region. |
 | A recruited worker on another machine receives an ordinary packet via chan | Apply ordinary packet type and whole-region validation. Swarm membership supplies no mapping for a host-local resource. |
