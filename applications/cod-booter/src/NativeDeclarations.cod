@@ -3185,14 +3185,14 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
 func array_inspector_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, tail:UInt64, last_owner:UInt64, result:UInt64,
-    used:UInt64, revision:UInt64) -> bool
+    used:UInt64, revision:UInt64, sum_output:bool) -> bool
     where {const owner N, const owner B, const owner E, const owner C, const owner A} {
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
     if (inspect_signature(nodes, revision, used, last_owner, clause) != OwnerSignatureClause) return false;
     if (clause.readonly)
-        return check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
+        return !sum_output && check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
             tail, last_owner, result, used, revision, true);
 
     val input_owner <- clause.previous;
@@ -3212,9 +3212,12 @@ func array_inspector_inputs(nodes:const ExprNodes in N, names:const NameBindings
         kind <- if (annotation < used) { native_value_kind(names, selected, annotation) } else { 0u8 };
         if (!source_call_scalar(kind) && kind != enum_type()) {
             marker <- reference_formal_marker(nodes, names, formal, last_owner, false, used, revision);
-            return marker < used &&
+            return marker < used && (if (sum_output) {
+                checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)
+            } else {
                 describe_slot_array(nodes, names, selected, contracts, published, aggregate,
-                    marker, used, revision, output) == enum_type() &&
+                    marker, used, revision, output) == enum_type()
+            }) &&
                 check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
                     entry.previous, input_owner, result, used, revision, true)
         };
@@ -3240,7 +3243,8 @@ func inspector_product_after_scalars(nodes:const ExprNodes in N, names:const Nam
 }
 
 # An inspector receives readonly arrays and initialized output places. A
-# trailing writable scalar group can follow the product under its own owner.
+# void inspector writes one finite-bits sum array before its scalar suffix.
+# A scalar-result inspector can take a product followed by writable scalars.
 func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -3262,9 +3266,16 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
         inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
         clause.annotation >= used) return;
     val kind <- native_value_kind(names, selected, clause.annotation);
-    if ((kind != builtin_bool() && kind != builtin_u8() && kind != builtin_u64() && kind != enum_type()) ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     val tail <- clause.parameter_tail;
+    if (kind == builtin_void()) {
+        if (array_inspector_inputs(nodes, names, selected, contracts, published, aggregate,
+            tail, output_owner, result, used, revision, true)) {
+            (views[at] <- make PreparedArrayInspector { inline_product <- false }):void
+        };
+        return
+    };
+    if (kind != builtin_bool() && kind != builtin_u8() && kind != builtin_u64() && kind != enum_type()) return;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     if (inspect_sequence_entry(nodes, revision, used, tail, entry) != FormalSequence ||
         entry.previous == no_node() || last_input_owner == result) return;
@@ -3272,7 +3283,7 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
     if (output >= used) return;
     val scalar_output <- source_place_scalar(names[output].kind);
     if (scalar_output && array_inspector_inputs(nodes, names, selected, contracts, published, aggregate,
-        entry.previous, last_input_owner, result, used, revision)) {
+        entry.previous, last_input_owner, result, used, revision, false)) {
         (views[at] <- make PreparedArrayInspector { inline_product <- false }):void;
         return
     };
@@ -3285,7 +3296,7 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
             output_owner, used, revision, entry)):void
     };
     if (output >= used || !array_inspector_inputs(nodes, names, selected, contracts, published, aggregate,
-        entry.previous, last_input_owner, result, used, revision)) return;
+        entry.previous, last_input_owner, result, used, revision, false)) return;
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
         type.kind != record_type()) return;
