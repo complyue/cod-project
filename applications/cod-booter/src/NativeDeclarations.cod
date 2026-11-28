@@ -3333,7 +3333,11 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                      (writable_arrays == 4u64 && readonly_arrays >= 3u64))) ||
                 (!value_parameters && !reads_record && readonly_arrays == 1u64 && readonly_bytes &&
                     writable_records == 1u64 && writable_record_array &&
-                    (writable_arrays == 1u64 || (writable_arrays == 2u64 && writable_sum_array)));
+                    (writable_arrays == 1u64 || (writable_arrays == 2u64 && writable_sum_array))) ||
+                (writable_arrays == 1u64 && writable_record_array &&
+                    readonly_arrays == 0u64 && writable_records == 0u64 && !reads_record &&
+                    first < used && preceding < used && work[first].next == preceding &&
+                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64()));
             if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
                 (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
