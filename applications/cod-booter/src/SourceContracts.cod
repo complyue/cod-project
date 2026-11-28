@@ -898,8 +898,8 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
             }):void
         };
         case views[at] of {
-            PreparedArrayProcedure { val mixed_record <-, } -> {
-                if (available && (mixed_record || !outcomes[at].allocates)) {
+            PreparedArrayProcedure { val allows_allocation <-, } -> {
+                if (available && (allows_allocation || !outcomes[at].allocates)) {
                     (views[at] <- make CheckedArrayProcedure {
                         completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                         numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
