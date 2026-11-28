@@ -409,7 +409,9 @@ Both source commands can check the imported `prepare_enum_assertions` call with 
 
 The source commands check `check_module_operands` with the parsed revision and readonly tables. Its writable operand facts and call owner tables keep their written positions even with a readonly interface table between them. `check_module_completion` borrows the checked operands and writes its own sites and report. Its completed workspace contract includes possible scratch allocation. Readonly output tables reject at the call. Linked object checks cover ordinary returns and the located runtime failure when a value result falls through. Both source commands accept `ModuleFrontend.cod`.
 
-The source closure rooted at `ModuleGraph.cod` reaches the typed reference case arm on the deque pop in `SourceContracts.cod`. The booter reader reports that pattern as unsupported.
+Typed reference case arms accept ready borrowed `UInt64`, `UInt8` and `bool` targets of the exact written type. The arm binds the address and owner saved when the case evaluates its subject. Only a present target supplies the binding, which is visible in that arm's guard and body. A readonly target requires a readonly reception. If a guard changes the original ref slot, later arms still use the saved selection. Both source commands and linked objects exercise this profile.
+
+The `ModuleGraph.cod` source closure reads the typed reference arm on the deque pop in `SourceContracts.cod`. Its next reader boundary is the generic `Link[T]` declaration in `Deque.cod`.
 
 ### Readonly queries
 

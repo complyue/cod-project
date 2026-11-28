@@ -133,6 +133,7 @@ export data ExprPayload =
     | BooleanCasePattern { truth:bool; }
     | NullCasePattern {}
     | MemberCasePattern {}
+    | ReferenceCasePattern { binding:NodeId; }
     | ConstructorCasePattern { constructor:NodeId; receivers:NodeLink; }
     | CaseValueReceiver { previous:NodeLink; destination:NodeId; selected_field:NodeLink; transfer_at:UInt64; }
     | CaseArm { pattern:NodeLink; guard:NodeLink; body:NodeId; arrow:UInt64; }
@@ -2561,7 +2562,23 @@ export func inspect_index_selection(nodes:const ExprNodes in N, revision:UInt64,
 
 export enum CasePatternSyntax:UInt8 {
     InvalidCasePattern; AnyCaseTarget; NullCaseTarget; FalseCaseTarget; TrueCaseTarget;
-    NamedCaseMember; ConstructorCaseTarget;
+    NamedCaseMember; ConstructorCaseTarget; ReferenceCaseTarget;
+}
+
+export func inspect_reference_case(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    at:UInt64, binding:UInt64 in B) -> bool where {const owner N, owner B} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            ReferenceCasePattern { val receiver <- binding; } -> {
+                if (!published_syntax_id(nodes, revision, at, receiver)) return false;
+                binding <- receiver.index;
+                return true
+            };
+            _ -> false
+        };
+        Vacant -> false
+    }
 }
 
 export func case_pattern(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> CasePatternSyntax where {const owner N} {
@@ -2577,6 +2594,7 @@ export func case_pattern(nodes:const ExprNodes in N, used:UInt64, at:UInt64) -> 
                 };
                 (MemberCasePattern) -> { NamedCaseMember:CasePatternSyntax };
                 (ConstructorCasePattern) -> { ConstructorCaseTarget:CasePatternSyntax };
+                (ReferenceCasePattern) -> { ReferenceCaseTarget:CasePatternSyntax };
                 (_) -> { InvalidCasePattern:CasePatternSyntax };
             }
         };

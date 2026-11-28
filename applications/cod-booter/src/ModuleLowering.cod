@@ -30,7 +30,7 @@ using "./ParserStorage.cod" ComparisonRelation { Equal, Unequal, Less, AtMost, G
 using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, ExceptionLocal };
 using "./ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause };
-using "./ParserStorage.cod" CasePatternSyntax { NullCaseTarget };
+using "./ParserStorage.cod" CasePatternSyntax { NullCaseTarget, ReferenceCaseTarget };
 using "./ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
 using "./ParserStorage.cod" InvocationSyntax { OrdinaryInvocation, EffectfulInvocation };
 using "./ParserStorage.cod" DeferSyntax { DeferCall, DeferBody, NotADefer };
@@ -758,6 +758,7 @@ func lower_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B, l
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R, const owner I} {
     val mode <- facts[arm].case_match;
     val pattern <- syntax.pattern;
+    val pattern_kind <- case_pattern(nodes, state.syntax_used, pattern);
     val loads_target <- facts[arm].case_discriminator != 0u8 && facts[subject].reception != independent_value();
     val test_presence <- loads_target && facts[arm].case_may_be_absent != 0u8;
     val next <- if (mode != misses_case_arm() || test_presence) { new_block(plan) } else { no_node() };
@@ -783,13 +784,18 @@ func lower_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B, l
     val resumes <- mode == tests_case_arm();
     if (resumes) {
         val matched <- new_block(plan);
-        if (case_pattern(nodes, state.syntax_used, pattern) == NullCaseTarget) {
-            command(code, plan, branch_on_flow_flag(), state.case_present_flag, 0u64, matched, next);
+        if (pattern_kind == NullCaseTarget || pattern_kind == ReferenceCaseTarget) {
+            val absent <- if (pattern_kind == NullCaseTarget) { matched } else { next };
+            val present <- if (pattern_kind == NullCaseTarget) { next } else { matched };
+            command(code, plan, branch_on_flow_flag(), state.case_present_flag, 0u64, absent, present);
         } else {
             command(code, plan, branch_equal(), discriminator, facts[pattern].discriminator_code, matched, next);
         };
         position(code, plan, state, matched);
     } else {};
+    if (pattern_kind == ReferenceCaseTarget) {
+        emit(code, plan, copy_word(), slot(pattern), slot(subject))
+    };
     val guard <- syntax.guard;
     if (guard != no_node()) {
         lower_bits(nodes, names, links, interfaces, facts, sites, code, plan, state, guard);

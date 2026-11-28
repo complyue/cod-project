@@ -10,7 +10,7 @@ using "./ParserStorage.cod" ExprPayload {
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, ScopeSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
-    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, CheckedTypeAssertion,
+    CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
     HereInvocation, HereSupply, HereReceiver, ContinueValue, Formal
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
@@ -384,6 +384,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             CaseExpression -> true;
             CaseArm -> true;
             ConstructorCasePattern -> true;
+            ReferenceCasePattern -> facts[at].reception == borrowed_ref();
             CaseValueReceiver -> true;
             Conditional -> true;
             ReturningCondition -> true;

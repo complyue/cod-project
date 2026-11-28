@@ -10,6 +10,7 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
+using "./ParserStorage.cod" { case_pattern, CasePatternSyntax { ReferenceCaseTarget } };
 using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type };
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
@@ -389,6 +390,7 @@ export func discover_declaration_demand(
         if (links[site].case_schema_prepared || aggregate_operation || selects_caught_field(fields, site) || checked_call ||
             native_loan_requires_body(views, site) || read_acquisition_failure(views, site, failure) ||
             inspect_named_throw(nodes, revision, used, site, construction) ||
+            case_pattern(nodes, used, site) == ReferenceCaseTarget ||
             predicate_operand(nodes, revision, used, site) != no_node() ||
             (inspect_local_binding(nodes, revision, used, site, local) && local.declaration_const &&
                 (local.mode == ValueLocal || local.mode == ReferenceLocal)) ||

@@ -39,14 +39,14 @@ using "./ParserStorage.cod" DeferSyntax { InvalidDefer, DeferCall };
 using "./ParserStorage.cod" InvocationSyntax { InvalidCallSyntax };
 using "./ParserStorage.cod" GuardClauseSyntax { HandlerClause, CleanupClause, InvalidGuardClause };
 using "./ParserStorage.cod" CasePatternSyntax {
-    AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember, ConstructorCaseTarget
+    AnyCaseTarget, NullCaseTarget, FalseCaseTarget, TrueCaseTarget, NamedCaseMember, ConstructorCaseTarget, ReferenceCaseTarget
 };
 using "./ParserStorage.cod" SequenceSyntax {
     ModuleSequence, ClauseSequence, EnumSequence, InvalidSequence
 };
 using "./ParserStorage.cod" {
     ProtectedSites, inspect_protected, CatchSites, inspect_catch_binding, HandlerSites, inspect_handler,
-    GuardClauseSites, inspect_guard_clause, CaseArmSites, CasePatternSyntax, inspect_case_arm, case_pattern, completion_operand,
+    GuardClauseSites, inspect_guard_clause, CaseArmSites, CasePatternSyntax, inspect_case_arm, case_pattern, inspect_reference_case, completion_operand,
 };
 using "./ParserStorage.cod" {
     ExprNodes, published_syntax_id, len as syntax_len, no_node,
@@ -4919,6 +4919,11 @@ func initialize_case_coverage(nodes:const ExprNodes in N, names:const NameBindin
     val present <- selected_target_presence(facts, subject);
     coverage.absent <- present != present_target();
     if (present == absent_target()) return true;
+    if (kind == scalar_u64() || kind == scalar_u8()) {
+        coverage.total <- 1u64;
+        coverage.remaining <- 1u64;
+        return true
+    };
     if (kind == scalar_bool()) {
         coverage.total <- 2u64;
         coverage.remaining <- 2u64;
@@ -5111,6 +5116,30 @@ func prepare_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B,
     return 0u8;
 }
 
+func prepare_reference_case(nodes:const ExprNodes in N, names:const NameBindings in B, facts:OperandFacts in F,
+                            subject:UInt64, pattern:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, owner F} {
+    ref binding = make UInt64 { no_node() };
+    ref receiver = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+    };
+    if (!inspect_reference_case(nodes, revision, used, pattern, binding) ||
+        inspect_binding(nodes, revision, used, binding, receiver) != TypedBinding) return invalid_operand_tree();
+    val kind <- declared_scalar(names[receiver.target_type].kind);
+    val mode <- facts[subject].reception;
+    if (!native_scalar(kind) || kind != facts[subject].kind ||
+        (mode != nullable_ptr() && mode != borrowed_ref() && mode != local_place()) ||
+        facts[subject].reservation != no_node()) return unsupported_case_pattern();
+    val owner_site <- facts[subject].owner;
+    if (owner_site == no_node()) return unproved_owner();
+    if (receiver.owner_name != no_node() && names[receiver.owner_name].declaration != owner_site)
+        return owner_conflict(nodes, owner_site, names[receiver.owner_name].declaration);
+    if (facts[subject].target_readonly != 0u8 && !receiver.readonly) return expected_writable_place();
+    set_fact(facts, pattern, kind, borrowed_ref(), owner_site, 0u64, 0u8);
+    facts[pattern].target_readonly <- if (receiver.readonly) { 1u8 } else { 0u8 };
+    return 0u8
+}
+
 func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes in N,
                           names:const NameBindings in B, links:const NameWork in L, facts:OperandFacts in F,
                           cases:const ConstructorCaseFacts in C,
@@ -5119,6 +5148,7 @@ func prepare_case_pattern(source:const SourceBytes in S, nodes:const ExprNodes i
     where {const owner S, const owner N, const owner B, const owner L, owner F, const owner C, owner M} {
     member <- no_node();
     if (mode == AnyCaseTarget || mode == NullCaseTarget) return 0u8;
+    if (mode == ReferenceCaseTarget) return prepare_reference_case(nodes, names, facts, subject, pattern, used, revision);
     val kind <- facts[subject].kind;
     if (kind == never_result()) return 0u8;
     if (kind == source_sum_target() || kind == independent_sum_bits()) {
@@ -5187,6 +5217,7 @@ func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
     where {owner F, const owner V} {
     val null_pattern <- pattern == NullCaseTarget;
     val all_pattern <- pattern == AnyCaseTarget;
+    val ref_pattern <- pattern == ReferenceCaseTarget;
     val had_present <- coverage.remaining != 0u64;
     val had_absence <- coverage.absent;
     facts[arm].case_discriminator <- if (member != no_node() && had_present) { 1u8 } else { 0u8 };
@@ -5194,9 +5225,11 @@ func match_case_arm(facts:OperandFacts in F, coverage:const CaseCoverage in V,
     if (member != no_node() && (!had_present || (coverage.only != no_node() && coverage.only != member) ||
         case_member_excluded(facts, coverage, member))) return;
     if (null_pattern && !had_absence) return;
+    if (ref_pattern && !had_present) return;
     val matches_present <- !null_pattern && had_present;
     val matches_absence <- (null_pattern || all_pattern) && had_absence;
     val matches_all <- all_pattern || (null_pattern && !had_present) ||
+        (ref_pattern && !had_absence) ||
         (member != no_node() && coverage.remaining == 1u64 && !had_absence);
     facts[arm].case_match <- if (matches_all) { matches_case_arm() } else { tests_case_arm() };
     facts[arm].case_presence <- case_presence(matches_present, matches_absence);
@@ -5246,7 +5279,7 @@ func finish_case_arm(nodes:const ExprNodes in N, links:const NameWork in L, fact
         } else {};
     } else {
         if (matches_absence) { (coverage.absent <- false):void; } else {};
-        if (pattern == AnyCaseTarget) { (coverage.remaining <- 0u64):void; } else {
+        if (pattern == AnyCaseTarget || pattern == ReferenceCaseTarget) { (coverage.remaining <- 0u64):void; } else {
             if (member != no_node()) {
                 exclude_case_member(facts, coverage, member, arm);
                 (coverage.remaining <- coverage.remaining - 1u64):void;
@@ -5301,10 +5334,11 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
     val subject <- selection.subject;
     val kind <- facts[subject].kind;
     val completed <- kind != never_result();
-    if (completed && kind != scalar_bool() && kind != scalar_enum() &&
-        kind != null_literal() && kind != source_sum_target() && kind != independent_sum_bits())
-        return operand_problem(report, at, unsupported_case_subject());
     val borrowed <- facts[subject].reception != independent_value();
+    if (completed && kind != scalar_bool() && kind != scalar_enum() &&
+        kind != null_literal() && kind != source_sum_target() && kind != independent_sum_bits() &&
+        !(borrowed && (kind == scalar_u64() || kind == scalar_u8())))
+        return operand_problem(report, at, unsupported_case_subject());
     val imported_enum <- kind == scalar_enum() && facts[subject].identity_module != 0u64;
     if (imported_enum &&
         ((borrowed && (facts[subject].reception != local_place() ||
@@ -5404,7 +5438,8 @@ func check_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names
             mode <- case_pattern(nodes, used, arm.pattern);
             diagnostic <- prepare_case_pattern(source, nodes, names, links, facts, cases,
                 at, subject, arm.pattern, mode, member, used, revision);
-            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic);
+            if (diagnostic != 0u8)
+                return operand_problem(report, if (mode == ReferenceCaseTarget) { (arm.pattern) } else { at }, diagnostic);
             if (reached) { match_case_arm(facts, coverage, subject, expression, member, mode); } else {};
             context <- enter_case_context(facts, outer, expression);
             if (!check_operand_range(source, nodes, names, links, selected, facts, interfaces, published, owners, fields,

@@ -9,7 +9,7 @@ using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./ParserStorage.cod" LocalMode { ValueLocal, ExceptionLocal };
 using "./ParserStorage.cod" SignatureSyntax { OwnerSignatureClause };
 using "./ParserStorage.cod" CasePatternSyntax {
-    TrueCaseTarget, FalseCaseTarget, NullCaseTarget, NamedCaseMember
+    TrueCaseTarget, FalseCaseTarget, NullCaseTarget, NamedCaseMember, ReferenceCaseTarget
 };
 using "./ParserStorage.cod" TextLiteralSyntax { InteriorNulLiteral };
 using "./ParserStorage.cod" BinarySyntax { ComparisonBinary };
@@ -733,7 +733,8 @@ func check_case_declaration(source:const SourceBytes in S, nodes:const ExprNodes
             return declared_expression_failure(report, unproved_case_subject(), item);
         if (inspect_case_arm(nodes, revision, used, entry.item, arm)) {
             pattern <- arm.pattern;
-            if (pattern != no_node() && case_pattern(nodes, used, pattern) != NullCaseTarget) {
+            if (pattern != no_node() && case_pattern(nodes, used, pattern) != NullCaseTarget &&
+                case_pattern(nodes, used, pattern) != ReferenceCaseTarget) {
                 if (!known) return declared_expression_failure(report, unproved_case_subject(), operand);
                 code <- check_case_pattern(source, nodes, names, work, spellings, interfaces, interface_count, pattern, subject, used, revision);
                 if (code != 0u8) return declared_expression_failure(report, code, pattern);

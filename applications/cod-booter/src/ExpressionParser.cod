@@ -43,7 +43,7 @@ using "./ParserStorage.cod" ExprPayload {
     NullLiteral, Conditional, ReturningCondition, ArrayLength, FieldSelection, IndexSelection,
     CheckedTypeAssertion, DiscardedExpression,
     TextLiteral, ArithmeticExpression, ComparisonExpression, ReferenceIdentity, Concatenation, BindSymbolEffect, InstallSymbolEffect,
-    BooleanCasePattern, NullCasePattern, MemberCasePattern, ConstructorCasePattern, CaseValueReceiver,
+    BooleanCasePattern, NullCasePattern, MemberCasePattern, ReferenceCasePattern, ConstructorCasePattern, CaseValueReceiver,
     CaseArm, CaseExpression, CaseFailure, CaseFallthrough,
 };
 using "./ParserStorage.cod" { LocalMode, ArithmeticOperation, ComparisonRelation, BinaryOperands, SourceSpan };
@@ -1305,24 +1305,34 @@ func parse_case_arm(source:const SourceBytes in S, tokens:const Tokens in T, nod
     val guard <- no_node();
     val at <- if (short) { head } else { head + 1u64 };
     result.next <- at;
-    if (punct_at(source, tokens, at + 1u64, past) == LEFT_BRACE) {
-        if (!parse_constructor_case(source, tokens, nodes, result, past)) return;
-        (pattern <- result.root):void;
+    if (!short && at < past && ref_word(source, tokens[at]) && punct_at(source, tokens, at + 2u64, past) == COLON) {
+        result.next <- at + 1u64;
+        if (!parse_binding_name(source, tokens, nodes, result, past, true, true, false)) return;
+        val binding <- result.root;
+        append_syntax_node(nodes, result, tokens[at].first, syntax_past(nodes, result.used, binding),
+            make ReferenceCasePattern { binding <- make NodeId { revision <- result.revision; index <- binding }; });
+        if (result.diagnostic != 0u8) return;
+        (pattern <- result.root):void
     } else {
-        if (short || punct_at(source, tokens, at, past) != RIGHT_PAREN) {
-            if (at >= past || tokens[at].kind != identifier() ||
-                (short && reserved_module_name(source, tokens[at])) ||
-                (!short && punct_at(source, tokens, at + 1u64, past) != RIGHT_PAREN)) {
-                result.diagnostic <- unsupported_case_pattern();
-                return
-            };
-            if (tokens[at].past - tokens[at].first != 1u64 || source[tokens[at].first] != UNDERSCORE) {
-                append_case_pattern(source, tokens[at], nodes, result);
-                if (result.diagnostic != 0u8) return;
-                (pattern <- result.root):void
-            };
-            (result.next <- at + 1u64):void
-        }
+        if (punct_at(source, tokens, at + 1u64, past) == LEFT_BRACE) {
+            if (!parse_constructor_case(source, tokens, nodes, result, past)) return;
+            (pattern <- result.root):void
+        } else {
+            if (short || punct_at(source, tokens, at, past) != RIGHT_PAREN) {
+                if (at >= past || tokens[at].kind != identifier() ||
+                    (short && reserved_module_name(source, tokens[at])) ||
+                    (!short && punct_at(source, tokens, at + 1u64, past) != RIGHT_PAREN)) {
+                    result.diagnostic <- unsupported_case_pattern();
+                    return
+                };
+                if (tokens[at].past - tokens[at].first != 1u64 || source[tokens[at].first] != UNDERSCORE) {
+                    append_case_pattern(source, tokens[at], nodes, result);
+                    if (result.diagnostic != 0u8) return;
+                    (pattern <- result.root):void
+                };
+                (result.next <- at + 1u64):void
+            }
+        };
     };
     if (!short) {
         if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) {

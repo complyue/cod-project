@@ -7,7 +7,7 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" ExprPayload {
     ArrayLength, IndexSelection, NameReference, IntegerLiteral, BooleanLiteral, ComparisonExpression,
     ReturningCondition, Conditional, Disjunction, Conjunction, Parenthesized, FieldSelection, EmptyCall,
-    CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, BlockSyntax, BlockItem, ReturnValue,
+    CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, BlockSyntax, BlockItem, ReturnValue,
     Call, ArgumentItem, RangeHeader, RangeLoop, LocalBinding, ArithmeticExpression,
 };
 using "./NameResolution.cod" { builtin_u8, builtin_u64, builtin_bool };
@@ -1044,6 +1044,7 @@ func array_reader_operation(nodes:const ExprNodes in N, facts:const OperandFacts
             CaseExpression -> true;
             CaseArm -> true;
             ConstructorCasePattern -> true;
+            ReferenceCasePattern -> true;
             CaseValueReceiver -> true;
             BlockSyntax -> true;
             BlockItem -> true;

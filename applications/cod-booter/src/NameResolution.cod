@@ -25,7 +25,7 @@ using "./ParserStorage.cod" SequenceSyntax {
     OtherSequenceSyntax, InvalidSequence, ModuleSequence, BlockSequence, ArgumentSequence, HereReceiverSequence, FormalSequence, ClauseSequence, EnumSequence, SumSequence,
     CaseReceiverSequence,
 };
-using "./ParserStorage.cod" CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget };
+using "./ParserStorage.cod" { inspect_reference_case, CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, ReferenceCaseTarget } };
 using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
     EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
@@ -1809,6 +1809,23 @@ func resolve_case_arm_body(source:const SourceBytes in S, nodes:const ExprNodes 
         constructor <- pattern.constructor;
         register_case_receivers(source, nodes, bindings, work, state, pattern.receiver_tail);
         if (state.diagnostic != 0u8) return
+    };
+    if (mode == ReferenceCaseTarget) {
+        ref binding = make UInt64 { no_node() };
+        ref receiver = make BindingSites {
+            name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
+        };
+        if (!inspect_reference_case(nodes, state.syntax_revision, state.syntax_used, arm.pattern, binding) ||
+            inspect_binding(nodes, state.syntax_revision, state.syntax_used, binding, receiver) != TypedBinding) {
+            reject_name(state, arm.pattern, invalid_module_tree());
+            return
+        };
+        resolve_type_annotation(source, nodes, bindings, work, state, receiver.annotation, state.used);
+        if (state.diagnostic != 0u8) return;
+        declare_name(source, nodes, bindings, work, state, receiver.name, arm.pattern, local_binding(), duplicate_binding());
+        if (state.diagnostic != 0u8) return;
+        bindings[arm.pattern].scope <- state.scope_node;
+        (work[arm.pattern].enclosing_case_arm <- at):void
     };
     # A constructor uses module selection. An enum member still uses only its subject's type.
     if (mode == NamedCaseMember || mode == ConstructorCaseTarget) {
