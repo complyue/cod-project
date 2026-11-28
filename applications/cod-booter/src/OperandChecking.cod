@@ -1906,14 +1906,21 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
     val kind <- 0u8;
     val reception <- 0u8;
     val product <- no_node();
+    val scalar_input <- false;
+    val scoped_reference <- false;
     ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
     for (unused in 0u64 .. used) {
         if (parameter == no_node()) return true;
         if (parameter >= used) return false;
         kind <- facts[parameter].kind;
         reception <- facts[parameter].reception;
-        if (procedure_call && kind == source_handle_loan()) {
-            if (reception != borrowed_ref() || !owner_parameter(nodes, facts[parameter].owner)) return false
+        scalar_input <- scalar_kind(kind) || kind == source_u32();
+        scoped_reference <- scoped_procedure && (kind == source_builder_loan() || (scalar_input && reception == borrowed_ref()));
+        if ((procedure_call && kind == source_handle_loan()) || scoped_reference) {
+            if (reception != borrowed_ref() || !owner_parameter(nodes, facts[parameter].owner))
+                return false;
+            if (scoped_reference && (inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
+                syntax.mode != ReferenceFormal)) return false
         } else {
             if (kind == product_kind()) {
                 product <- facts[parameter].identity;
@@ -1929,7 +1936,7 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
                     }
                 }
             } else {
-                if (scalar_kind(kind) || kind == source_u32()) {
+                if (scalar_input) {
                     if (reception != local_place() && (procedure_call || reception != borrowed_ref())) return false
                 } else {
                     if ((kind != source_array_loan() && kind != source_sum_target() &&
@@ -1939,7 +1946,8 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
                         !((kind == string_kind() || (mixed_aggregate_loan && kind == source_sum_target())) &&
                           facts[parameter].target_readonly != 0u8)) return false;
                     if (facts[parameter].target_readonly == 0u8) {
-                        if (procedure_call && !mixed_aggregate_loan) return false;
+                        if (procedure_call && !mixed_aggregate_loan &&
+                            !(scoped_procedure && allow_writable_array && kind == source_array_loan())) return false;
                         if (kind == source_array_loan()) {
                             # A writable target can be borrowed without authority to allocate in its owner.
                             if ((!allow_writable_array && !mixed_aggregate_loan) ||
@@ -2152,7 +2160,8 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             facts[actual].identity_module != facts[formal].identity_module)
                 return wrong_operand_type();
         if (facts[actual].reception != borrowed_ref() ||
-            (mixed_aggregate_loan && (facts[actual].target_presence != present_target() || facts[actual].reservation != no_node())))
+            ((mixed_aggregate_loan || scoped_product_call) &&
+                (facts[actual].target_presence != present_target() || facts[actual].reservation != no_node())))
             return unproved_owner();
         if (facts[actual].target_readonly != 0u8 && facts[formal].target_readonly == 0u8)
             return expected_writable_place();
@@ -2180,7 +2189,11 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             invocation)
     };
     val wanted <- facts[formal].reception;
-    val diagnostic <- check_argument_operand(nodes, facts, argument, facts[formal].kind, wanted,
+    if (scoped_product_call && wanted == borrowed_ref() && operand < used &&
+        (kind == source_builder_loan() || scalar_kind(kind) || kind == source_u32()) &&
+        (facts[operand].target_presence != present_target() || facts[operand].reservation != no_node()))
+        return unproved_nonnull_borrow();
+    val diagnostic <- check_argument_operand(nodes, facts, argument, kind, wanted,
                                              facts[formal].identity, facts[formal].identity_module,
                                              facts[formal].target_readonly, used, revision);
     if (diagnostic != 0u8 || wanted == local_place()) return diagnostic;
