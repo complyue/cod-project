@@ -126,9 +126,8 @@ export data InterfacePayload =
         symbol_module:UInt64, symbol_identity:UInt64, target_module:UInt64, target_identity:UInt64,
     } |
     CheckedTextReceiver {
-        operation:UInt64, writer:UInt64,
         symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
-        out_of_memory:bool,
+        out_of_memory:bool, invalid_slice:bool, numeric_fault:bool,
     } |
     SumInterface {} |
     ConstructorReference { defining_module:UInt64, declaration:UInt64, } |

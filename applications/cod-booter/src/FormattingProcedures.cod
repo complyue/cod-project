@@ -1,0 +1,403 @@
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, direct_invocation, DirectCallSites, DirectInvocationSyntax { DirectInvocationReady },
+};
+using "./ParserStorage.cod" AstSlot { Occupied };
+using "./ParserStorage.cod" ExprPayload {
+    NameReference, IntegerLiteral, BooleanLiteral, TextLiteral, ArgumentItem, Call,
+    Parenthesized, ArithmeticExpression, ComparisonExpression, Conditional, BlockSyntax, BlockItem, ReturnVoid,
+};
+using "./NameResolution.cod" {
+    NameBindings, NameWork, callable_binding, ordinary_selection, builtin_u64, builtin_string, enclosing_callable,
+};
+using "./ModuleExports.cod" { SelectedExports, text_slice_export };
+using "./DeclarationTypes.cod" { type_module, type_identity };
+using "./NativeDeclarations.cod" {
+    SuppliedViews, SuppliedView { NoSuppliedView, PreparedFormattingMethod, CompletedFormattingMethod },
+    SourceTextMethodSites, unary_text_method, TextReceiverSite, bind_text_receiver, complete_text_receiver,
+    prepared_formatting_method, prepared_text_writer,
+};
+using "./ModuleExportStorage.cod" InterfacePayload { CheckedTextReceiver, NoInterfacePayload };
+using "./OperandChecking.cod" { OperandFacts, void_result, scalar_u64 };
+using "./CompletionChecking.cod" { CompletionSites, skipped_operand, possible_failure, invocation_reached };
+using "./DeclarationDemand.cod" DeclarationDemands;
+
+data FormatPlan {
+    marker:UInt64, body:UInt64, signature:UInt64, head:UInt64, operation:UInt64, receiver:UInt64, writer:UInt64,
+    first_use:UInt64, next_use:UInt64, caller:UInt64,
+    missing:bool, numeric:bool, text:bool, terminal:bool,
+}
+array FormatPlans[UInt64]:FormatPlan;
+array FormatFlags[UInt64]:bool;
+array MethodOrder[UInt64]:UInt64;
+
+func format_expression(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            NameReference -> true;
+            IntegerLiteral -> true;
+            BooleanLiteral -> true;
+            TextLiteral -> true;
+            ArgumentItem -> true;
+            Parenthesized -> true;
+            ArithmeticExpression -> true;
+            ComparisonExpression -> true;
+            Conditional -> true;
+            BlockSyntax -> true;
+            BlockItem -> true;
+            ReturnVoid -> true;
+            _ -> false
+        };
+        _ -> false
+    }
+}
+
+func complete_format_family(work:const NameWork in W, plans:const FormatPlans in P,
+    head:UInt64, first:UInt64, used:UInt64) -> bool where {const owner W, const owner P} {
+    val method <- first;
+    for (step in 0u64 .. used) {
+        if (method == no_node()) return true;
+        if (method >= used || plans[method].head != head) return false;
+        (method <- work[method].next_method):void
+    };
+    return false
+}
+
+func collect_format_plans(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, views:const SuppliedViews in V,
+    plans:FormatPlans in P, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner W, const owner V, owner P} {
+    ref sites = make SourceTextMethodSites { formal <- no_node(); body <- no_node(); signature <- no_node() };
+    ref bound = make TextReceiverSite { operation <- no_node(); receiver <- no_node(); writer <- no_node() };
+    val head <- no_node();
+    val marker <- no_node();
+    for (at in 0u64 .. used) {
+        if (names[at].kind == callable_binding()) {
+            head <- names[at].declaration;
+            # Ordinary call uses also carry the callable binding. Only the
+            # signature reader can establish a method at this source node.
+            marker <- unary_text_method(nodes, names, work, at, used, revision, sites);
+            if (marker < used && head < used &&
+                (case views[at] of { NoSuppliedView -> true; _ -> false })) {
+                plans[at].marker <- marker;
+                plans[at].body <- sites.body;
+                plans[at].signature <- sites.signature;
+                plans[at].head <- head;
+                plans[head].numeric <- plans[head].numeric || names[marker].kind == builtin_u64();
+                plans[head].text <- plans[head].text || names[marker].kind == builtin_string();
+                if (names[marker].kind != builtin_u64() &&
+                    bind_text_receiver(nodes, names, views, sites, bound, used, revision)) {
+                    plans[at].operation <- bound.operation;
+                    plans[at].receiver <- bound.receiver;
+                    plans[at].writer <- bound.writer;
+                    (plans[head].terminal <- true):void
+                }
+            }
+        }
+    };
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    val method <- no_node();
+    val target <- no_node();
+    val definition <- no_node();
+    for (at in 0u64 .. used) {
+        if (plans[at].head == at) {
+            method <- work[at].next_method;
+            (plans[at].missing <- plans[at].missing || !complete_format_family(work, plans, at, method, used)):void
+        };
+        definition <- enclosing_callable(nodes, names, names[at].scope);
+        if (definition < used && plans[definition].head < used && at > plans[definition].signature && at <= plans[definition].body &&
+            plans[definition].operation == no_node()) {
+            head <- plans[definition].head;
+            if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
+                target <- names[call.callee].declaration;
+                if (names[call.callee].kind == callable_binding() && target < used && plans[target].head == target) {
+                    plans[at].caller <- head;
+                    plans[at].next_use <- plans[target].first_use;
+                    (plans[target].first_use <- at):void
+                } else {
+                    if (names[call.callee].kind != ordinary_selection() || target >= used ||
+                        selected[target].kind != text_slice_export()) { (plans[head].missing <- true):void }
+                }
+            } else {
+                if (!format_expression(nodes, at)) { (plans[head].missing <- true):void }
+            }
+        }
+    }
+}
+
+# Mark callers of missing families and, independently, of a bound terminal.
+# These queues carry only a family index over the frozen call records.
+func close_format_plans(plans:const FormatPlans in P, flags:FormatFlags in F, missing:bool, used:UInt64)
+    -> void where {const owner P, owner F} {
+    ref order = make MethodOrder(used, no_node());
+    val count <- 0u64;
+    for (at in 0u64 .. used) {
+        if (plans[at].head == at && (if (missing) { (plans[at].missing) } else { (plans[at].terminal) })) {
+            flags[at] <- true;
+            order[count] <- at;
+            (count <- count + 1u64):void
+        }
+    };
+    val item <- 0u64;
+    val use <- no_node();
+    val caller <- no_node();
+    for (step in 0u64 .. used + used) {
+        if (use == no_node()) {
+            if (item == count) return;
+            use <- plans[order[item]].first_use;
+            (item <- item + 1u64):void
+        } else {
+            caller <- plans[use].caller;
+            if (!flags[caller]) {
+                flags[caller] <- true;
+                order[count] <- caller;
+                (count <- count + 1u64):void
+            };
+            (use <- plans[use].next_use):void
+        }
+    }
+}
+
+func has_format_writer(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
+    for (at in 0u64 .. used) {
+        if (prepared_text_writer(views, at)) return true
+    };
+    return false
+}
+
+export func prepare_formatting_procedures(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
+    used:UInt64, revision:UInt64) -> UInt64
+    where {const owner N, const owner B, const owner E, const owner W, owner V} {
+    if (used > 9223372036854775807u64 || !has_format_writer(views, used)) return no_node();
+    ref plans = make FormatPlans(used, make FormatPlan {
+        marker <- no_node(); body <- no_node(); signature <- no_node(); head <- no_node(); operation <- no_node(); receiver <- no_node();
+        writer <- no_node(); first_use <- no_node(); next_use <- no_node(); caller <- no_node();
+        missing <- false; numeric <- false; text <- false; terminal <- false
+    });
+    collect_format_plans(nodes, names, selected, work, views, plans, used, revision);
+    ref missing = make FormatFlags(used, false);
+    ref writes = make FormatFlags(used, false);
+    close_format_plans(plans, missing, true, used);
+    close_format_plans(plans, writes, false, used);
+    for (at in 0u64 .. used) {
+        if (plans[at].head == at && plans[at].numeric && plans[at].text && !missing[at] && writes[at]) {
+            prepare_known_formatters(plans, views, missing, writes, used);
+            return at
+        }
+    };
+    return no_node()
+}
+
+func prepare_known_formatters(plans:const FormatPlans in P, views:SuppliedViews in V,
+    missing:const FormatFlags in M, writes:const FormatFlags in W, used:UInt64)
+    -> void where {const owner P, owner V, const owner M, const owner W} {
+    val head <- no_node();
+    for (at in 0u64 .. used) {
+        head <- plans[at].head;
+        if (head < used && !missing[head] && writes[head]) {
+            (views[at] <- make PreparedFormattingMethod {
+                marker <- plans[at].marker; operation <- plans[at].operation;
+                receiver <- plans[at].receiver; writer <- plans[at].writer
+            }):void
+        }
+    };
+    return
+}
+
+data FormatBody {
+    available:bool, leaf:InterfacePayload, first_call:UInt64,
+    out_of_memory:bool, invalid_slice:bool, numeric_fault:bool,
+}
+array FormatBodies[UInt64]:FormatBody;
+
+data FormatCall { method:UInt64, family:UInt64, next:UInt64, }
+array FormatCalls[UInt64]:FormatCall;
+
+func collect_format_bodies(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    views:const SuppliedViews in V, facts:const OperandFacts in F, sites:const CompletionSites in X,
+    demand:const DeclarationDemands in D, bodies:FormatBodies in C, calls:FormatCalls in P,
+    module:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner W, const owner V, const owner F, const owner X, const owner D,
+        owner C, owner P} {
+    for (method in 0u64 .. used) {
+        case views[method] of {
+            PreparedFormattingMethod { val marker <-, val operation <-, val receiver <-, val writer <-, } -> {
+                if (operation == no_node()) {
+                    (bodies[method].available <- demand[method].body && facts[method].kind == void_result()):void
+                } else {
+                    complete_text_receiver(work, views, operation, receiver, writer,
+                        names[marker].kind == builtin_string(), type_module(names, selected, marker, 0u64),
+                        type_identity(names, selected, marker), module, used, bodies[method].leaf);
+                    (bodies[method].available <- case bodies[method].leaf of { CheckedTextReceiver -> true; _ -> false }):void
+                }
+            };
+            _ -> {}
+        }
+    };
+    val method <- no_node();
+    val callee <- no_node();
+    val family <- no_node();
+    for (at in 0u64 .. used) {
+        method <- demand[at].scope;
+        if (method < used && method != at && bodies[method].available && demand[method].body &&
+            sites[at].event != skipped_operand()) {
+            if (facts[at].text_intrinsic == text_slice_export() && sites[at].event == possible_failure()) {
+                bodies[method].out_of_memory <- true;
+                (bodies[method].invalid_slice <- true):void
+            };
+            if (facts[at].kind == scalar_u64() && (case nodes[at] of {
+                Occupied { val syntax <- node, } -> case syntax.payload of { ArithmeticExpression -> true; _ -> false };
+                _ -> false
+            })) { (bodies[method].numeric_fault <- true):void };
+            callee <- facts[at].call_definition;
+            family <- demand[at].callee;
+            if (callee < used && family < used && invocation_reached(nodes, sites, at, used, revision)) {
+                calls[at].method <- callee;
+                calls[at].family <- family;
+                calls[at].next <- bodies[method].first_call;
+                (bodies[method].first_call <- at):void
+            };
+        }
+    }
+}
+
+data FormatOutcome {
+    symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
+    out_of_memory:bool, invalid_slice:bool, numeric_fault:bool,
+}
+
+func add_format_method(seen:FormatFlags in S, order:MethodOrder in O, method:UInt64, count:UInt64 in C)
+    -> void where {owner S, owner O, owner C} {
+    if (!seen[method]) {
+        seen[method] <- true;
+        order[count] <- method;
+        (count <- count + 1u64):void
+    };
+    return
+}
+
+# Collect the union from immutable procedure records. Family-wide symbol
+# coverage and selected receiver/outcome closure use different call edges.
+func summarize_formatter(work:const NameWork in W, bodies:const FormatBodies in B,
+    calls:const FormatCalls in P, definition:UInt64, used:UInt64, all_members:bool,
+    result:FormatOutcome in R) -> bool where {const owner W, const owner B, const owner P, owner R} {
+    ref seen = make FormatFlags(used, false);
+    ref families = make FormatFlags(if (all_members) { used } else { 0u64 }, false);
+    ref order = make MethodOrder(used, no_node());
+    ref count = make UInt64 { 0u64 };
+    add_format_method(seen, order, definition, count);
+    val pending <- 0u64;
+    val method <- no_node();
+    val call <- no_node();
+    val member <- no_node();
+    for (step in 0u64 .. used + used) {
+        if (call == no_node()) {
+            if (pending == count) return result.symbol_identity != no_node();
+            method <- order[pending];
+            pending <- pending + 1u64;
+            if (!bodies[method].available) return false;
+            case bodies[method].leaf of {
+                CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-,
+                    val out_of_memory <-, } -> {
+                    if (result.symbol_identity == no_node()) {
+                        result.symbol_module <- symbol_module;
+                        result.symbol_identity <- symbol_identity;
+                        if (!all_members) {
+                            result.receiver_module <- receiver_module;
+                            (result.receiver_identity <- receiver_identity):void
+                        }
+                    } else {
+                        if (result.symbol_module != symbol_module || result.symbol_identity != symbol_identity ||
+                            (!all_members && (result.receiver_module != receiver_module ||
+                                result.receiver_identity != receiver_identity))) return false
+                    };
+                    if (!all_members) { (result.out_of_memory <- result.out_of_memory || out_of_memory):void }
+                };
+                _ -> {}
+            };
+            if (!all_members) {
+                result.out_of_memory <- result.out_of_memory || bodies[method].out_of_memory;
+                result.invalid_slice <- result.invalid_slice || bodies[method].invalid_slice;
+                (result.numeric_fault <- result.numeric_fault || bodies[method].numeric_fault):void
+            };
+            (call <- bodies[method].first_call):void
+        } else {
+            if (all_members) {
+                member <- calls[call].family;
+                if (!families[member]) {
+                    families[member] <- true;
+                    enqueue_format_family(work, seen, order, member, used, count)
+                }
+            } else { add_format_method(seen, order, calls[call].method, count) };
+            (call <- calls[call].next):void
+        }
+    };
+    return pending == count && call == no_node() && result.symbol_identity != no_node()
+}
+
+func enqueue_format_family(work:const NameWork in W, seen:FormatFlags in S, order:MethodOrder in O,
+    head:UInt64, used:UInt64, count:UInt64 in C) -> void where {const owner W, owner S, owner O, owner C} {
+    val method <- head;
+    for (step in 0u64 .. used) {
+        if (method == no_node()) return;
+        add_format_method(seen, order, method, count);
+        (method <- work[method].next_method):void
+    }
+}
+
+func reset_format_outcome(result:FormatOutcome in R) -> void where {owner R} {
+    result.symbol_module <- no_node();
+    result.symbol_identity <- no_node();
+    result.receiver_module <- no_node();
+    result.receiver_identity <- no_node();
+    result.out_of_memory <- false;
+    result.invalid_slice <- false;
+    result.numeric_fault <- false;
+    return
+}
+
+func has_prepared_formatter(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
+    for (at in 0u64 .. used) {
+        if (prepared_formatting_method(views, at)) return true
+    };
+    return false
+}
+
+export func finish_formatting_procedures(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
+    facts:const OperandFacts in F, sites:const CompletionSites in X, demand:const DeclarationDemands in D,
+    module:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, const owner W, owner V, const owner F, const owner X, const owner D} {
+    if (!has_prepared_formatter(views, used)) return;
+    ref bodies = make FormatBodies(used, make FormatBody {
+        available <- false; leaf <- make NoInterfacePayload {}; first_call <- no_node();
+        out_of_memory <- false; invalid_slice <- false; numeric_fault <- false
+    });
+    ref calls = make FormatCalls(used, make FormatCall { method <- no_node(); family <- no_node(); next <- no_node() });
+    collect_format_bodies(nodes, names, selected, work, views, facts, sites, demand, bodies, calls, module, used, revision);
+    ref availability = make FormatOutcome {
+        symbol_module <- no_node(); symbol_identity <- no_node(); receiver_module <- no_node(); receiver_identity <- no_node();
+        out_of_memory <- false; invalid_slice <- false; numeric_fault <- false
+    };
+    ref outcome = make FormatOutcome {
+        symbol_module <- no_node(); symbol_identity <- no_node(); receiver_module <- no_node(); receiver_identity <- no_node();
+        out_of_memory <- false; invalid_slice <- false; numeric_fault <- false
+    };
+    for (method in 0u64 .. used) {
+        if (bodies[method].available) {
+            reset_format_outcome(availability);
+            reset_format_outcome(outcome);
+            if (summarize_formatter(work, bodies, calls, method, used, true, availability) &&
+                summarize_formatter(work, bodies, calls, method, used, false, outcome) &&
+                availability.symbol_module == outcome.symbol_module && availability.symbol_identity == outcome.symbol_identity) {
+                (views[method] <- make CompletedFormattingMethod {
+                    symbol_module <- outcome.symbol_module; symbol_identity <- outcome.symbol_identity;
+                    receiver_module <- outcome.receiver_module; receiver_identity <- outcome.receiver_identity;
+                    out_of_memory <- outcome.out_of_memory; invalid_slice <- outcome.invalid_slice;
+                    numeric_fault <- outcome.numeric_fault
+                }):void
+            }
+        }
+    };
+    return
+}

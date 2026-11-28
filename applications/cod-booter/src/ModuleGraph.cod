@@ -1,3 +1,4 @@
+using "./FormattingProcedures.cod" { prepare_formatting_procedures, finish_formatting_procedures };
 using "./ScopedTextChecking.cod" check_scoped_text_requirements;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter };
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
@@ -114,7 +115,7 @@ using "./DeclarationTypes.cod" {
 using "./ModuleWorkspace.cod" { plan_module_source, plan_module_workspace, ExpressionScratchPlan, ModuleWorkspacePlan };
 using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult,
-        prepare_imported_calls, ScopedTextOutcomes, collect_text_outcomes, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
+        prepare_imported_calls, ScopedTextOutcomes, ScopedTextOutcome, collect_text_outcomes, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
     check_module_operands,
 };
 using "./CompletionChecking.cod" { CompletionSite, CompletionSites };
@@ -773,7 +774,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         return false
     };
     val text_capacity <- if (executable) { 0u64 } else { used };
-    ref text_outcomes = make ScopedTextOutcomes(text_capacity, false);
+    ref text_outcomes = make ScopedTextOutcomes(text_capacity, make ScopedTextOutcome { out_of_memory <- false; invalid_slice <- false; numeric_fault <- false });
     if (!executable) { collect_text_outcomes(interfaces, facts, text_outcomes, used) };
     if (result.unchecked_scoped != no_node()) {
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_scoped_procedure(),
@@ -806,7 +807,8 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
     if (!executable) {
         finish_text_predicates(nodes, names, work, views, facts, sites, used, revision);
         finish_closed_source_functions(nodes, names, work, views, facts, demand, sites, cases, used, revision);
-        finish_text_writer_contracts(nodes, names, work, views, facts, sites, used, revision)
+        finish_text_writer_contracts(nodes, names, work, views, facts, sites, used, revision);
+        finish_formatting_procedures(nodes, names, selected, work, views, facts, sites, demand, module, used, revision)
     };
     val callee <- no_node();
     for (at in 0u64 .. used) {
@@ -1202,9 +1204,12 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             return Rejected
         }
     };
+    val formatter <- if (native) { no_node() } else {
+        prepare_formatting_procedures(nodes, names, selected, work, views, used, revision)
+    };
     if (constructed != no_node() || caught_field != no_node() ||
         (!native && (first_case != no_node() || declared != no_node() || required != no_node() || source_helper != no_node() ||
-                     native_body_evidence != no_node() || byte_function != no_node() || array_slot_work != no_node() ||
+                     native_body_evidence != no_node() || formatter != no_node() || byte_function != no_node() || array_slot_work != no_node() ||
                      result.requires_operand_checks))) {
         if (!check_graph_exception_body(source, nodes, selected, names, work, spellings,
             spelling_size,

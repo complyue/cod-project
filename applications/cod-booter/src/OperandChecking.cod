@@ -8,7 +8,7 @@ using "./ModuleExportStorage.cod" {
 };
 using "./GenericTypes.cod" { Products, TypeKeys, TypeKey, TypeCategory { BitsNominal, ScalarType }, matches_member_application };
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
-using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, prepared_text_writer };
+using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, prepared_text_writer, prepared_formatting_method };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -231,7 +231,8 @@ export data OperandFact {
     text_call:bool,
 }
 export array OperandFacts[UInt64]:OperandFact;
-export array ScopedTextOutcomes[UInt64]:bool;
+export data ScopedTextOutcome { out_of_memory:bool, invalid_slice:bool, numeric_fault:bool, }
+export array ScopedTextOutcomes[UInt64]:ScopedTextOutcome;
 
 export data OwnerEvidence {
     call_site:UInt64,
@@ -2762,6 +2763,19 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument))
         return invalid_operand_tree();
     val text_writer <- source_only && prepared_text_writer(views, definition);
+    val formatting <- source_only && prepared_formatting_method(views, definition);
+    if (formatting) {
+        if (argument >= at || links[argument].next != no_node()) return wrong_argument_count();
+        val input <- ordinary_argument_value(nodes, used, revision, argument);
+        if (input >= argument || checked_ref_argument(nodes, argument)) return unsupported_value_family();
+        val caller <- enclosing_callable(nodes, names, names[at].scope);
+        if (is_function(nodes, caller)) return procedure_call_in_function();
+        if (facts[input].kind == never_result()) {
+            set_result(facts, at, never_result());
+            return 0u8
+        };
+        if (!prepared_formatting_method(views, caller)) return unproved_text_receiver()
+    };
     if (text_writer) {
         if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
             return procedure_call_in_function();
@@ -2779,7 +2793,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         }
     };
     if (links[definition].next_method != no_node()) {
-        if ((source_only && !text_writer) ||
+        if ((source_only && !text_writer && !formatting) ||
             transfer_name(source, nodes, definition_name(nodes, revision, used, definition)))
             return unsupported_transfer_signature();
         val issue <- select_value_method(nodes, links, facts, definition, argument, used, revision, definition);
@@ -7190,21 +7204,33 @@ func check_imported_source_text(nodes:const ExprNodes in N, names:const NameBind
     val module <- interfaces[family].defining_module;
     val kind <- 0u8;
     val matches <- false;
+    val row_ok <- false;
     for (row in family + 1u64 .. past) {
         kind <- interfaces[row].value_kind;
         if (interfaces[row].defining_module != module || interfaces[row].declaration == no_node() ||
             interfaces[row].entry_count != 0u64 || interfaces[row].result_kind != builtin_void() ||
-            interfaces[row].field_mode != ReferenceFormal || interfaces[row].owner_role != 0u64 ||
-            interfaces[row].owner_readonly != 1u8 || interfaces[row].target_readonly != 1u8 ||
-            (kind != builtin_string() && kind != lexical_builder_type())) return unsupported_imported_call();
+            (kind != builtin_string() && kind != lexical_builder_type() && kind != builtin_u64()))
+            return unsupported_imported_call();
+        row_ok <- if (kind == builtin_u64()) {
+            interfaces[row].field_mode == ValueFormal && interfaces[row].owner_role == no_node() &&
+            interfaces[row].owner_readonly == 0u8 && interfaces[row].target_readonly == 0u8
+        } else {
+            interfaces[row].field_mode == ReferenceFormal && interfaces[row].owner_role == 0u64 &&
+            interfaces[row].owner_readonly == 1u8 && interfaces[row].target_readonly == 1u8
+        };
+        if (!row_ok) return unsupported_imported_call();
         if (kind == lexical_builder_type() &&
             (interfaces[row].type_module == 0u64 || interfaces[row].type_module == no_node() ||
                 interfaces[row].type_identity == no_node())) return unsupported_imported_call();
         matches <- if (kind == builtin_string()) {
             immutable_text_kind(facts[input].kind)
         } else {
-            facts[input].kind == source_builder_loan() && facts[input].identity_module == interfaces[row].type_module &&
-                facts[input].identity == interfaces[row].type_identity
+            if (kind == builtin_u64()) {
+                facts[input].kind == scalar_u64() || supplies_enum_backing(facts, input, scalar_u64())
+            } else {
+                facts[input].kind == source_builder_loan() && facts[input].identity_module == interfaces[row].type_module &&
+                    facts[input].identity == interfaces[row].type_identity
+            }
         };
         if (matches) {
             if (method != no_node()) return ambiguous_value_call();
@@ -7212,9 +7238,14 @@ func check_imported_source_text(nodes:const ExprNodes in N, names:const NameBind
         }
     };
     if (method == no_node()) return wrong_operand_type();
-    if (facts[input].reception != borrowed_ref() || facts[input].target_presence != present_target())
-        return unproved_nonnull_borrow();
-    val diagnostic <- check_owner_access(nodes, facts[input].owner, false);
+    val diagnostic <- 0u8;
+    if (interfaces[method].value_kind == builtin_u64()) {
+        (diagnostic <- require_value_bits(nodes, facts, input, scalar_u64())):void;
+    } else {
+        if (facts[input].reception != borrowed_ref() || facts[input].target_presence != present_target())
+            return unproved_nonnull_borrow();
+        (diagnostic <- check_owner_access(nodes, facts[input].owner, false)):void
+    };
     if (diagnostic != 0u8) return diagnostic;
     case interfaces[method].payload of {
         CheckedTextReceiver -> {
@@ -7236,10 +7267,14 @@ export func collect_text_outcomes(interfaces:const ModuleInterfaces in I, facts:
     outcomes:ScopedTextOutcomes in O, used:UInt64) -> void where {const owner I, const owner F, owner O} {
     for (at in 0u64 .. used) {
         if (facts[at].scoped_text_method != no_node()) {
-            (outcomes[at] <- case interfaces[facts[at].scoped_text_method].payload of {
-                CheckedTextReceiver { val out_of_memory <-, } -> out_of_memory;
-                _ -> false
-            }):void
+            case interfaces[facts[at].scoped_text_method].payload of {
+                CheckedTextReceiver { val out_of_memory <-, val invalid_slice <-, val numeric_fault <-, } -> {
+                    outcomes[at].out_of_memory <- out_of_memory;
+                    outcomes[at].invalid_slice <- invalid_slice;
+                    (outcomes[at].numeric_fault <- numeric_fault):void
+                };
+                _ -> {}
+            }
         }
     };
     return
@@ -8381,7 +8416,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     for (at in 0u64 .. tree.used) {
         if (needs_signature_check(demand, at) && inspect_callable(nodes, tree.revision, tree.used,
             at, callable) == ModuleCallable && links[at].next_method != no_node()) {
-            text_writer <- source_only && prepared_text_writer(views, at);
+            text_writer <- source_only && (prepared_text_writer(views, at) || prepared_formatting_method(views, at));
             if ((source_only && !text_writer) ||
                 transfer_name(source, nodes, definition_name(nodes, tree.revision, tree.used, at))) {
                 (report.diagnostic <- check_transfer_signatures(nodes, links, facts, at, tree.used, tree.revision)):void

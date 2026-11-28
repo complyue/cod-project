@@ -821,8 +821,8 @@ func requires_byte_completion(views:const SuppliedViews in V, demand:const Decla
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
                  demand:const DeclarationDemands in D, constructions:const ExceptionConstructionFacts in E,
-                 sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64, text_oom:bool) -> UInt8
-    where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner D, const owner E, owner X} {
+                 sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64, text:const ScopedTextOutcomes in Q) -> UInt8
+    where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner D, const owner E, owner X, const owner Q} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
         return 0u8;
@@ -911,7 +911,10 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             return 0u8;
         };
         val slice <- facts[at].text_intrinsic == text_slice_export();
-        if ((text_oom || slice) && (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
+        val text_oom <- at < intrinsic (len)(text) && text[at].out_of_memory;
+        if (at < intrinsic (len)(text) && text[at].numeric_fault &&
+            !supports_immediate_numeric_exit(nodes, names, sites, at, used)) return unproved_numeric_fault_route();
+        if ((text_oom || slice || (at < intrinsic (len)(text) && text[at].invalid_slice)) && (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
         if (slice && sites[at].in_supplied_body) return unproved_deferred_error();
         if (facts[at].text_intrinsic == builder_append_export() || text_oom || slice)
@@ -1255,9 +1258,9 @@ func imported_array_escapes(views:const SuppliedViews in H, at:UInt64, category:
 
 func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                            facts:const OperandFacts in F, sites:const CompletionSites in X,
-                           views:const SuppliedViews in H, demand:const DeclarationDemands in D, reached:ReachedFailures in W,
+                           views:const SuppliedViews in H, demand:const DeclarationDemands in D, text:const ScopedTextOutcomes in Q, reached:ReachedFailures in W,
                            used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> UInt64
-    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner H, const owner D, owner W} {
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner H, const owner D, const owner Q, owner W} {
     # This non-array allocation pass follows only the checked builder
     # append origin and ordinary local calls.
     val builder_summary <- !array_summary && category == out_of_memory_identity();
@@ -1306,8 +1309,8 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 sites[at].replacing_try != no_node();
             # The completed slice also has an invalid-range/UTF-8 exit.
             # Its catch test is independent of the recorded allocation exit.
-            invalid_slice <- slice_summary && facts[at].text_intrinsic == text_slice_export() &&
-                invocation_reached(nodes, sites, at, used, revision);
+            invalid_slice <- slice_summary && (facts[at].text_intrinsic == text_slice_export() ||
+                (at < intrinsic (len)(text) && text[at].invalid_slice)) && invocation_reached(nodes, sites, at, used, revision);
             if (needs_body_check(demand, at) && (imported || allocation || broad_rethrow || replacement || invalid_slice) &&
                 (array_summary || sites[at].replacing_try == no_node()) &&
                 matching_handler(nodes, links, facts, sites, at, 0u64, category, 0u8, used,
@@ -1398,11 +1401,11 @@ func check_delayed_failures(edges:const EscapingFailureEdges in E, reached:const
 
 func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                                  facts:const OperandFacts in F, sites:CompletionSites in X,
-                                 views:const SuppliedViews in H, demand:const DeclarationDemands in D, report:CompletionCheckResult in R,
+                                 views:const SuppliedViews in H, demand:const DeclarationDemands in D, text:const ScopedTextOutcomes in Q, report:CompletionCheckResult in R,
                                  used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> bool
-    where {const owner N, const owner B, const owner L, const owner F, owner X, const owner H, const owner D, owner R} {
+    where {const owner N, const owner B, const owner L, const owner F, owner X, const owner H, const owner D, const owner Q, owner R} {
     ref reached = make ReachedFailures(used, make ReachedFailure { seen <- false; order <- no_node() });
-    val roots <- collect_failure_roots(nodes, names, links, facts, sites, views, demand, reached, used, revision, category, array_summary);
+    val roots <- collect_failure_roots(nodes, names, links, facts, sites, views, demand, text, reached, used, revision, category, array_summary);
     if (roots == 0u64) return true;
     ref edges = make EscapingFailureEdges(used, make EscapingFailureEdge {
         first_use <- no_node(); next_use <- no_node(); caller <- no_node(); delayed_use <- no_node()
@@ -1482,15 +1485,14 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
             report.diagnostic <- check_event(
-                nodes, names, links, facts, views, demand, constructions, sites, at, tree.used, tree.revision,
-                at < intrinsic (len)(text) && text[at]);
+                nodes, names, links, facts, views, demand, constructions, sites, at, tree.used, tree.revision, text);
             if (report.diagnostic == 0u8) {
                 report.diagnostic <- record_array_read_completion(nodes, names, links, facts, views,
                     demand, sites, at, tree.used, tree.revision)
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
             text_slice <- text_slice || (facts[at].text_intrinsic == text_slice_export() &&
-                sites[at].event == possible_failure());
+                sites[at].event == possible_failure()) || (at < intrinsic (len)(text) && text[at].invalid_slice);
             builder_append <- builder_append || ((facts[at].text_intrinsic == builder_append_export() ||
                 facts[at].scoped_text_method != no_node()) && sites[at].event == possible_failure());
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
@@ -1511,22 +1513,22 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
             }
         }
     };
-    return check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+    return check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
         tree.used, tree.revision, missing_return_identity(), false) &&
-        check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report, tree.used,
+        check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report, tree.used,
             tree.revision, unexpected_case_identity(), false) &&
-        (!(builder_append || text_slice) || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+        (!(builder_append || text_slice) || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
             tree.used, tree.revision, out_of_memory_identity(), false)) &&
-        (!text_slice || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+        (!text_slice || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
             tree.used, tree.revision, type_assertion_failed_identity(), false)) &&
         (!slot_bodies || (mark_slot_summary_dependencies(nodes, facts, demand, sites,
             tree.used, tree.revision, report) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
                 tree.used, tree.revision, index_out_of_bounds_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
                 tree.used, tree.revision, out_of_memory_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
                 tree.used, tree.revision, invalid_capacity_identity(), true) &&
-            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, text, report,
                 tree.used, tree.revision, region_capacity_identity(), true)))
 }

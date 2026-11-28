@@ -74,7 +74,7 @@ using "./ModuleExportStorage.cod" {
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { NoCaughtField } };
 using "./ExceptionConstructionFacts.cod" { ExceptionConstructionFacts, ExceptionConstructionFact { NoExceptionConstruction } };
 using "./OperandChecking.cod" {
-    OperandFacts, ScopedTextOutcomes, CallOwners, OperandCheckResult, check_module_operands,
+    OperandFacts, ScopedTextOutcomes, ScopedTextOutcome, CallOwners, OperandCheckResult, check_module_operands,
     unsupported_case_subject, unsupported_case_pattern, unsupported_product_layout, unsupported_text_operation,
     unsupported_transfer_signature, unproved_transfer_owner, unsupported_imported_call,
 };
@@ -727,7 +727,7 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructions = make ExceptionConstructionFacts(0u64, make NoExceptionConstruction {});
-    ref no_scoped_text = make ScopedTextOutcomes(0u64, false);
+    ref no_scoped_text = make ScopedTextOutcomes(0u64, make ScopedTextOutcome { out_of_memory <- false; invalid_slice <- false; numeric_fault <- false });
     return analyze_bound_declaration_completion(
         nodes, bindings, work, facts, no_native_loans, executable, no_scoped_text, no_constructions, sites, result)
 }

@@ -1561,6 +1561,11 @@ export data SuppliedView =
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
     ImportedSourceTextCall { family:UInt64, past:UInt64, } |
     PreparedTextInstallation { operation:UInt64, name:UInt64, input:UInt64, previous:UInt64, } |
+    PreparedFormattingMethod { marker:UInt64, operation:UInt64, receiver:UInt64, writer:UInt64, } |
+    CompletedFormattingMethod {
+        symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
+        out_of_memory:bool, invalid_slice:bool, numeric_fault:bool,
+    } |
     PreparedTextWriterMethod {} |
     CheckedTextWriterMethod { target_module:UInt64, target_identity:UInt64,
         piece_module:UInt64, piece_identity:UInt64, string_piece:bool, out_of_memory:bool, } |
@@ -5955,9 +5960,9 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     return past
 }
 
-data SourceTextMethodSites { formal:UInt64, body:UInt64, }
+export data SourceTextMethodSites { formal:UInt64, body:UInt64, signature:UInt64, }
 
-func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B,
+export func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, definition:UInt64, used:UInt64, revision:UInt64, sites:SourceTextMethodSites in S)
     -> UInt64 where {const owner N, const owner B, const owner W, owner S} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -5967,17 +5972,27 @@ func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
     val role <- callable.signature;
-    if (inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+    val shape <- inspect_signature(nodes, revision, used, role, clause);
+    val borrowed <- shape == OwnerSignatureClause;
+    if (borrowed && !clause.readonly) return no_node();
+    val result <- if (borrowed) { (clause.previous) } else { role };
+    if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
         clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead)
         return no_node();
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
         first >= used || work[first].next != no_node()) return no_node();
+    val marker <- if (borrowed) { readonly_formal_marker(nodes, names, first, role, used, revision) }
+        else { independent_formal_type(nodes, first, used, revision) };
+    if (marker >= used) return no_node();
+    if (!borrowed && names[marker].kind != builtin_u64()) return no_node();
+    if (borrowed && names[marker].kind != builtin_string() && !is_lexical_builder(nodes, names, marker, revision, used))
+        return no_node();
     sites.formal <- first;
     sites.body <- callable.body;
-    return readonly_formal_marker(nodes, names, first, role, used, revision)
+    sites.signature <- callable.signature;
+    return marker
 }
 
 data TextReceiverCandidate { definition:UInt64, module:UInt64, identity:UInt64, out_of_memory:bool, }
@@ -6013,59 +6028,87 @@ func select_text_receiver(work:const NameWork in W, views:const SuppliedViews in
     return false
 }
 
-func stage_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, views:const SuppliedViews in V, sites:const SourceTextMethodSites in S,
-    row:ModuleInterfaceRow in R, used:UInt64, revision:UInt64)
-    -> void where {const owner N, const owner B, const owner W, const owner V, const owner S, owner R} {
+export data TextReceiverSite { operation:UInt64, receiver:UInt64, writer:UInt64, }
+
+export func bind_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in V, sites:const SourceTextMethodSites in S, bound:TextReceiverSite in R,
+    used:UInt64, revision:UInt64) -> bool where {const owner N, const owner B, const owner V, const owner S, owner R} {
     ref operation = make UInt64 { no_node() };
-    if (!linear_void_body(nodes, revision, used, sites.body, operation) || operation == no_node()) return;
+    if (!linear_void_body(nodes, revision, used, sites.body, operation) || operation == no_node()) return false;
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
     if (direct_invocation(nodes, revision, used, operation, call) != DirectInvocationReady ||
-        names[call.callee].kind != callable_binding()) return;
+        names[call.callee].kind != callable_binding()) return false;
     val writer <- names[call.callee].declaration;
     if (!prepared_text_writer(views, writer) ||
         inspect_sequence_entry(nodes, revision, used, call.arguments, entry) != ArgumentSequence ||
         checked_ref_argument(nodes, call.arguments) || names[entry.item].kind != formal_binding() ||
-        names[entry.item].declaration != sites.formal) return;
+        names[entry.item].declaration != sites.formal) return false;
     val first <- entry.previous;
     if (inspect_sequence_entry(nodes, revision, used, first, entry) != ArgumentSequence ||
-        entry.previous != no_node() || checked_ref_argument(nodes, first)) return;
+        entry.previous != no_node() || checked_ref_argument(nodes, first)) return false;
     val receiver <- entry.item;
+    if (!(case views[receiver] of {
+        BoundReferenceSymbol { val symbol_module <-, val symbol_identity <-, val target_module <-,
+            val target_identity <-, val readonly <-, val nullable <-, } ->
+                symbol_module != no_node() && symbol_identity != no_node() &&
+                target_module != no_node() && target_identity != no_node() && !readonly && !nullable;
+        _ -> false
+    })) return false;
+    bound.operation <- operation;
+    bound.receiver <- receiver;
+    bound.writer <- writer;
+    return true
+}
+
+export func complete_text_receiver(work:const NameWork in W, views:const SuppliedViews in V,
+    operation:UInt64, receiver:UInt64, writer:UInt64, string_piece:bool, piece_module:UInt64,
+    piece_identity:UInt64, defining_module:UInt64, used:UInt64, result:InterfacePayload in P) -> void
+    where {const owner W, const owner V, owner P} {
     ref candidate = make TextReceiverCandidate {
         definition <- no_node(); module <- 0u64; identity <- no_node(); out_of_memory <- false
     };
-    val piece_module <- if (row.type_module == row.defining_module) { 0u64 } else { (row.type_module) };
-    val ready <- select_text_receiver(work, views, writer, row.value_kind == builtin_string(),
-        piece_module, row.type_identity, candidate, used);
+    val ready <- select_text_receiver(work, views, writer, string_piece, piece_module, piece_identity, candidate, used);
     val canonical_symbol <- 0u64;
     case views[receiver] of {
         BoundReferenceSymbol {
             val symbol_module <-, val symbol_identity <-, val target_module <-, val target_identity <-,
-            val readonly <-, val nullable <-,
         } -> {
-            if (symbol_identity != no_node() && symbol_module != no_node() &&
-                target_identity != no_node() && target_module != no_node() && !readonly && !nullable) {
-                canonical_symbol <- if (symbol_module == 0u64) { (row.defining_module) } else { symbol_module };
-                if (ready) {
-                    (row.payload <- make CheckedTextReceiver {
-                        operation <- operation; writer <- candidate.definition;
-                        symbol_module <- canonical_symbol; symbol_identity <- symbol_identity;
-                        receiver_module <- if (candidate.module == 0u64) { (row.defining_module) } else { (candidate.module) };
-                        receiver_identity <- candidate.identity; out_of_memory <- candidate.out_of_memory
-                    }):void
-                } else {
-                    (row.payload <- make DeferredTextReceiver {
-                        operation <- operation; receiver <- receiver; writer <- writer;
-                        symbol_module <- canonical_symbol; symbol_identity <- symbol_identity;
-                        target_module <- if (target_module == 0u64) { (row.defining_module) } else { target_module };
-                        target_identity <- target_identity
-                    }):void
-                }
-            }
+            canonical_symbol <- if (symbol_module == 0u64) { defining_module } else { symbol_module };
+            if (ready) {
+                (result <- make CheckedTextReceiver {
+                    symbol_module <- canonical_symbol; symbol_identity <- symbol_identity;
+                    receiver_module <- if (candidate.module == 0u64) { defining_module } else { (candidate.module) };
+                    receiver_identity <- candidate.identity; out_of_memory <- candidate.out_of_memory;
+                    invalid_slice <- false; numeric_fault <- false
+                }):void;
+                return
+            };
+            (result <- make DeferredTextReceiver {
+                operation <- operation; receiver <- receiver; writer <- writer;
+                symbol_module <- canonical_symbol; symbol_identity <- symbol_identity;
+                target_module <- if (target_module == 0u64) { defining_module } else { target_module };
+                target_identity <- target_identity
+            }):void
         };
-        _ -> {}
+        _ -> { (result <- make NoInterfacePayload {}):void }
     };
+    return
+}
+
+export func prepared_formatting_method(views:const SuppliedViews in V, method:UInt64) -> bool where {const owner V} {
+    return method < intrinsic (len)(views) && (case views[method] of { PreparedFormattingMethod -> true; _ -> false })
+}
+
+func stage_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:const SuppliedViews in V, sites:const SourceTextMethodSites in S,
+    row:ModuleInterfaceRow in R, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, const owner V, const owner S, owner R} {
+    ref bound = make TextReceiverSite { operation <- no_node(); receiver <- no_node(); writer <- no_node() };
+    if (!bind_text_receiver(nodes, names, views, sites, bound, used, revision)) return;
+    val piece_module <- if (row.type_module == row.defining_module) { 0u64 } else { (row.type_module) };
+    complete_text_receiver(work, views, bound.operation, bound.receiver, bound.writer,
+        row.value_kind == builtin_string(), piece_module, row.type_identity, row.defining_module, used, row.payload);
     return
 }
 
@@ -6080,9 +6123,13 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
     val method <- head;
     val marker <- no_node();
     val builder <- false;
-    ref sites = make SourceTextMethodSites { formal <- no_node(); body <- no_node() };
+    val numeric <- false;
+    val has_numeric <- false;
+    val complete <- true;
+    ref sites = make SourceTextMethodSites { formal <- no_node(); body <- no_node(); signature <- no_node() };
     for (unused in 0u64 .. used) {
         if (method == no_node()) {
+            if (has_numeric && !complete) return first;
             write_interface_header(contracts[first], defining_module, head,
                 source_text_family_interface(), 0u8, next - first - 1u64);
             contracts[first].membership <- FixedMethods;
@@ -6093,19 +6140,37 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
         marker <- unary_text_method(nodes, names, work, method, used, revision, sites);
         if (marker == no_node()) return first;
         builder <- is_lexical_builder(nodes, names, marker, revision, used);
-        if (!builder && names[marker].kind != builtin_string()) return first;
+        numeric <- names[marker].kind == builtin_u64();
+        has_numeric <- has_numeric || numeric;
+        complete <- complete && (case views[method] of { CompletedFormattingMethod -> true; _ -> false });
+        if (numeric && !complete) return first;
         if (next >= intrinsic (len)(contracts)) return no_node();
         write_interface_header(contracts[next], defining_module, method, 0u8, builtin_void(), 0u64);
-        contracts[next].value_kind <- if (builder) { lexical_builder_type() } else { builtin_string() };
+        contracts[next].value_kind <- if (numeric) { builtin_u64() }
+            else { if (builder) { lexical_builder_type() } else { builtin_string() } };
         if (builder) {
             contracts[next].type_module <- type_module(names, selected, marker, defining_module);
             (contracts[next].type_identity <- type_identity(names, selected, marker)):void
         };
-        contracts[next].field_mode <- ReferenceFormal;
-        contracts[next].owner_role <- 0u64;
-        contracts[next].target_readonly <- 1u8;
-        contracts[next].owner_readonly <- 1u8;
-        stage_text_receiver(nodes, names, work, views, sites, contracts[next], used, revision);
+        if (!numeric) {
+            contracts[next].field_mode <- ReferenceFormal;
+            contracts[next].owner_role <- 0u64;
+            contracts[next].target_readonly <- 1u8;
+            (contracts[next].owner_readonly <- 1u8):void
+        };
+        case views[method] of {
+            CompletedFormattingMethod {
+                val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-,
+                val out_of_memory <-, val invalid_slice <-, val numeric_fault <-,
+            } -> {
+                (contracts[next].payload <- make CheckedTextReceiver {
+                    symbol_module <- symbol_module; symbol_identity <- symbol_identity;
+                    receiver_module <- receiver_module; receiver_identity <- receiver_identity;
+                    out_of_memory <- out_of_memory; invalid_slice <- invalid_slice; numeric_fault <- numeric_fault
+                }):void
+            };
+            _ -> { stage_text_receiver(nodes, names, work, views, sites, contracts[next], used, revision) }
+        };
         method <- work[method].next_method;
         (next <- next + 1u64):void
     };

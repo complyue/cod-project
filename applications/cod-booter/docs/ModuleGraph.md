@@ -1139,11 +1139,11 @@ An empty builder constructed in the current lexical scope has an initialized des
 
 For a checked builder installation into a non-null reference symbol, compare the builder and the symbol's required type by defining identity. An exact type or a direct declared abstract parent can satisfy the requirement. The defining visit publishes the builder's parent with its checked interface so an importing visit can apply the same comparison. Installing a writable output requires both writable target access and allocation access to the actual owner. The installation evaluates its operand before supplying the new binding. The completion checker retains failure during that preparation.
 
-The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check still needs numeric formatting and publication of incoming binding requirements from its dependencies. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
+The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check still needs publication and application of incoming binding requirements from its dependencies. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
 
 ### Importing ordinary text procedures
 
-For the bundled `emit` family, the defining visit stages both fixed methods, including the unmarked definition after the exported head. Each method in this profile has one readonly text loan under a const owner and an explicit void result. Record its resolved formal type and method identity in the defining family's interface. The visit publishes the range only when it has a signature for every member. An unrepresented member keeps the family outside this profile.
+For the bundled `emit` family, the defining visit stages both fixed methods, including the unmarked definition after the exported head. Both receive a readonly text loan under a const owner. Formatting families such as `emitStr` can also have a method with a by-value UInt64 parameter. Each represented method declares a void result. Record its resolved formal type and method identity in the defining family's interface. The visit publishes the range only when it has a signature for every member. An unrepresented member keeps the family outside this profile.
 
 A direct source-preserving selection, including a rename, validates the published range and uses the prepared operand to identify a method. An immutable String or CString can supply the String loan. A builder loan requires the exact defining type. A failure during operand evaluation prevents entry. An entered call needs the selected method's completed behavior and the visible family's symbol requirements.
 
@@ -1169,7 +1169,9 @@ The source routes record each entered local call and its possible local supplies
 
 The catalog-selected `utf8_slice` prepares the immutable text and two `UInt64` offsets in order. Success gives a readonly snapshot owned by the current full lexical scope. It can fail on an invalid range or UTF-8 boundary, or on allocation, before a receiving call enters. The source completion checks preserve those two failure categories independently. The seed supplies runtime emission for this operation.
 
-The unchanged `ProviderNames` now reaches the numeric `emitStr` call in `emit_provider_enum_name`. Its numeric overload and publication of incoming requirements are still needed before the source checker can complete the renderer's dependency closure.
+The ordinary numeric and text overloads of `emitStr` publish together. Signature preparation binds the finite local formatter graph, including the recursive UInt64 call, the digit helper and the text overload. The ordinary operand checker selects the reached calls and their offsets. The later producer reads those calls and the separately completed terminal writer. It records the concrete receiver and possible allocation, invalid slice and numeric exits from selected methods. It independently collects availability across the visible called families. Recursion uses completed edges, and an incomplete family withholds publication. The current formatter profile represents a common canonical incoming symbol and one exact receiver per selected method.
+
+The unchanged `ProviderNames` now checks the numeric `emitStr` call. Its private writers carry the incoming requirement to the public provider interfaces. At that boundary the checker still needs to publish callable signatures, selected completion and family-wide requirements together so the consuming header and stub scopes can supply the binding.
 
 ### Target layout for provider rows
 

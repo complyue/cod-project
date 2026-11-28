@@ -19,7 +19,7 @@ using "./NameResolution.cod" {
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { ImportedSourceTextCall, PreparedGenericConstruction, BoundGenericCall, ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayCall, CheckedReadonlyCall, CheckedSumWriterCall, CheckedWorkspaceWriterCall, CheckedScalarFunctionCall }, read_acquisition_failure,
+    SuppliedViews, SuppliedView { PreparedFormattingMethod, ImportedSourceTextCall, PreparedGenericConstruction, BoundGenericCall, ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayCall, CheckedReadonlyCall, CheckedSumWriterCall, CheckedWorkspaceWriterCall, CheckedScalarFunctionCall }, read_acquisition_failure,
     native_loan_requires_body, source_handle_callable, prepared_array_procedure, prepared_text_writer,
     prepared_source_here_relay, SourceArrayFormals { NoSourceArrayFormal, ArrayReferenceSlotFormal },
     prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_workspace_writer, prepared_array_inspector
@@ -399,6 +399,16 @@ export func discover_declaration_demand(
                 return false
             };
             demand[site].declared_failure <- clause;
+            case views[site] of {
+                PreparedFormattingMethod { val operation <-, } -> {
+                    demand[site].signature <- true;
+                    if (operation == no_node() && !require_body(demand, site, count, used, true)) {
+                        problem <- site;
+                        return false
+                    }
+                };
+                _ -> {}
+            };
             array_formals <- prepared_array_signature(nodes, links, views, callable.signature, used, revision);
             if (array_formals != (NoSourceArrayFormal:SourceArrayFormals)) {
                 demand[site].slot_body <- array_formals == (ArrayReferenceSlotFormal:SourceArrayFormals);
