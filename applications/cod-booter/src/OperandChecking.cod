@@ -4390,7 +4390,10 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        if (output_only || contracts[header].entry_count == 3u64) {
+        val output_place <- ordinary_argument_value(nodes, used, revision, output);
+        val inline_output <- output_place < intrinsic (len)(cases) &&
+            (case cases[output_place] of { InlineProductField -> true; _ -> false });
+        if (output_only || contracts[header].entry_count == 3u64 || inline_output) {
             supplied[at] <- make ImportedProductWriter {};
             if (required == no_node()) { (required <- at):void }
         } else {
