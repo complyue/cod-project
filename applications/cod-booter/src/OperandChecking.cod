@@ -3311,6 +3311,10 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
             contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
     };
     val first <- header + 1u64;
+    if (!checked_readonly_byte_loan(contracts, published, first, 0u64) &&
+        !(source_aggregate_formal(contracts, first, array_type(), 0u64, 1u8) &&
+          published_sum_array(contracts, published, contracts[first].type_module,
+              contracts[first].type_identity))) return no_node();
     val past <- first + arity;
     val output <- past - 1u64;
     val output_role <- owner_count - 1u64;

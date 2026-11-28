@@ -2722,12 +2722,14 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
     val parameter_kind <- 0u8;
     val array_kind <- 0u8;
     val storage <- UnprovedAggregate;
+    val leading_array <- false;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return role == result;
         if (inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
         annotation <- independent_formal_type(nodes, formal, used, revision);
         parameter_kind <- if (annotation < used) { native_value_kind(names, selected, annotation) } else { 0u8 };
-        if (!source_call_scalar(parameter_kind) && parameter_kind != enum_type()) {
+        leading_array <- only_arrays && entry.previous == no_node();
+        if (leading_array || (!source_call_scalar(parameter_kind) && parameter_kind != enum_type())) {
             if (role == result ||
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly)
                 return false;
@@ -2735,7 +2737,10 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
             if (marker >= used) return false;
             array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 marker, used, revision, bytes);
-            if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
+            if (leading_array && array_kind != builtin_u8() &&
+                !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
+                    marker, used, revision)) return false;
+            if (!leading_array && array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
                 !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
                 storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
                     aggregate, marker, used, revision);
