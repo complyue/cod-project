@@ -2995,8 +2995,8 @@ func readonly_array_writer_input(nodes:const ExprNodes in N, names:const NameBin
         checked_bits_record(contracts, published, aggregate, type)
 }
 
-# An exported product writer with only one owner has a single initialized
-# writable output followed by independent scalar inputs.
+# A fixed product writer has one initialized writable report. Alongside
+# the ordinary report-first form, a scalar can precede a final report.
 func prepare_published_product_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -3018,11 +3018,17 @@ func prepare_published_product_writer(nodes:const ExprNodes in N, names:const Na
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used) return;
     val marker <- reference_formal_marker(nodes, names, first, role, false, used, revision);
+    if (marker < used) {
+        if (work[first].next == no_node() || !independent_scalar_tail(nodes, names, work, work[first].next, used, revision)) return
+    } else {
+        val output <- work[first].next;
+        if (output >= used || work[output].next != no_node() ||
+            !independent_scalar_formal(nodes, names, first, used, revision, builtin_u64())) return;
+        (marker <- reference_formal_marker(nodes, names, output, role, false, used, revision)):void
+    };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    if (marker >= used || work[first].next == no_node() ||
-        !describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
-        type.kind != record_type() ||
-        !independent_scalar_tail(nodes, names, work, work[first].next, used, revision)) return;
+    if (marker >= used || !describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
+        type.kind != record_type()) return;
     val storage <- if (type.defining_module == 0u64) {
         if (type.identity >= used) return;
         (aggregate[type.identity])
@@ -3234,9 +3240,19 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     if (inspect_sequence_entry(nodes, revision, used, output, entry) != FormalSequence ||
         !aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate, output, output_owner,
             array_type(), false, used, revision)) return;
-    if ((work[output].next == record &&
-         independent_scalar_formal(nodes, names, work[record].next, used, revision, builtin_u64()) &&
-         token_parser_inputs(nodes, names, selected, contracts, published, aggregate, work,
+    val next <- work[output].next;
+    val extents <- false;
+    if (next == record) {
+        (extents <- independent_scalar_formal(nodes, names, work[record].next, used, revision, builtin_u64())):void
+    } else {
+        if (next < record && work[record].next == no_node() &&
+            independent_scalar_formal(nodes, names, next, used, revision, builtin_u64())) {
+            val past <- work[next].next;
+            (extents <- past == record || (past < record && work[past].next == record &&
+                independent_scalar_formal(nodes, names, past, used, revision, builtin_u64()))):void
+        }
+    };
+    if ((extents && token_parser_inputs(nodes, names, selected, contracts, published, aggregate, work,
              tail, input_owner, result, output, used, revision)) ||
         check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
             entry.previous, input_owner, result, used, revision, false, true)) {
@@ -3298,6 +3314,10 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val readonly_arrays <- 0u64;
     val writable_records <- 0u64;
     val writable_enum_array <- false;
+    val writable_record_array <- false;
+    val writable_sum_array <- false;
+    val readonly_bytes <- false;
+    val value_parameters <- false;
     val publication_signature <- false;
     val element <- 0u8;
     val previous_writable <- no_node();
@@ -3310,7 +3330,10 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             publication_signature <- (reads_record && writable_arrays == 2u64 && adjacent_arrays && writable_records != 0u64) ||
                 (!reads_record && writable_records == 1u64 &&
                     ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||
-                     (writable_arrays == 4u64 && readonly_arrays >= 3u64)));
+                     (writable_arrays == 4u64 && readonly_arrays >= 3u64))) ||
+                (!value_parameters && !reads_record && readonly_arrays == 1u64 && readonly_bytes &&
+                    writable_records == 1u64 && writable_record_array &&
+                    (writable_arrays == 1u64 || (writable_arrays == 2u64 && writable_sum_array)));
             if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
                 (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
@@ -3332,7 +3355,12 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 element <- workspace_array_element(nodes, names, selected, contracts, published, aggregate,
                     marker, used, revision);
                 if (element == 0u8) return;
-                if (binding.readonly) { (readonly_arrays <- readonly_arrays + 1u64):void } else {
+                if (binding.readonly) {
+                    readonly_bytes <- readonly_bytes || element == builtin_u8();
+                    (readonly_arrays <- readonly_arrays + 1u64):void
+                } else {
+                    writable_record_array <- writable_record_array || element == record_type();
+                    writable_sum_array <- writable_sum_array || element == sum_type();
                     writable_enum_array <- writable_enum_array || element == enum_type();
                     adjacent_arrays <- previous_writable != no_node() && previous_writable == preceding;
                     previous_writable <- formal;
@@ -3344,7 +3372,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 if (binding.readonly) { (reads_record <- true):void }
                 else { (writable_records <- writable_records + 1u64):void }
             };
-        };
+        } else { (value_parameters <- true):void };
         preceding <- formal;
         (formal <- work[formal].next):void
     }

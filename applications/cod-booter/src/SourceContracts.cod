@@ -8,7 +8,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
-    ArrayLength, Conditional, ReturningCondition, BlockSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
+    ArrayLength, Conditional, ReturningCondition, BlockSyntax, ScopeSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
     CaseExpression, CaseArm, ConstructorCasePattern, CaseValueReceiver, CheckedTypeAssertion,
     HereInvocation, HereSupply, HereReceiver, ContinueValue, Formal
@@ -388,6 +388,9 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             Conditional -> true;
             ReturningCondition -> true;
             BlockSyntax -> true;
+            # The ordinary operand and completion passes already check this
+            # invoked scope. Its reached operations stay in the current body.
+            ScopeSyntax -> facts[at].kind == void_result();
             BlockItem -> true;
             ArgumentItem -> true;
             ReturnVoid -> true;
