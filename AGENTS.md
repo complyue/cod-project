@@ -107,7 +107,7 @@ Run test scripts only when asked. Confirm the component if unclear. Set `COD_TES
 
 ## Writing CoD source and diagnostics
 
-In CoD source and examples, omit a semicolon when the boundary is clear. Write one when it disambiguates the parse or materially helps the reader see the intended grouping. When designing syntax, minimize the cases that require a semicolon. Between tokens, a newline has exactly the effect of horizontal whitespace. Use token grammar to delimit constructs and allow them to span lines. Preserve the grammar of each supported form. [Semicolon omission and syntax UX](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+In CoD source and examples, use [commas in field, enum member and receiving lists](design/DomainLanguageDesign.md#comma-separated-fields-and-receivers). In executable blocks, including labeled make by init, omit a semicolon when the statement boundary is clear. Write one when it disambiguates the parse or materially helps the reader see the intended grouping. When designing syntax, minimize the cases that require a semicolon. Between tokens, a newline has exactly the effect of horizontal whitespace. Use token grammar to delimit constructs and allow them to span lines. Preserve the grammar of each supported form. [Semicolon omission and syntax UX](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
 
 Every project parser recovers from syntax errors through the end of its input. Represent damaged syntax with located error-report nodes in the expected roles, retain later independent errors and expose them all through normal diagnostics. A recovered file with errors fails compilation. [Whole-file recovery](applications/cod-booter/README.md#whole-file-parser-recovery)
 

@@ -227,8 +227,8 @@ values() (total <-) => { consume(total); };
 
 # inspect_one yields count:u64 and ref cell:u64 in O.
 # cursor is an existing writable ref slot with owner O.
-for { cursor = cell; val n <- count; } := inspect_one(storage) { cursor <- n; }
-inspect_one(storage) ({ cursor = cell; val n <- count; }) => { cursor <- n; };
+for { cursor = cell, val n <- count } := inspect_one(storage) { cursor <- n; }
+inspect_one(storage) ({ cursor = cell, val n <- count }) => { cursor <- n; };
 ```
 
 The explicit scalar header is the left side of the loop with the producer removed: `(val n <-)`, `(ref r =)`, `(r =)` and `(r <-)` retain their respective receiving operations. An ordinary parameter declaration always introduces a fresh name, including when an outer variable has the same spelling. Type annotations and contextual parameter-name shorthand follow the established callback signature. An ordinary ordered callback can bind its parameters by position. A structural protocol with multiple labels uses the named spec even when their types differ. A single labelled output can still use the single-control shorthand.
@@ -315,7 +315,7 @@ A void-feedback yield can be used as a statement, but not as a value for `val re
 
 ```cod
 proc inspect_one(x:u64 in O)
-    yields { count:u64; ref cell:u64 in O; } -> void
+    yields { count:u64, ref cell:u64 in O } -> void
     where {owner O}
 {
     yield(1u64 -> count, x -> cell);
@@ -323,19 +323,19 @@ proc inspect_one(x:u64 in O)
 }
 
 # storage is an existing readable/writable scalar target.
-for { val n <- count; ref selected = cell; } := inspect_one(storage) {
+for { val n <- count, ref selected = cell } := inspect_one(storage) {
     selected <- n;
 }
 ```
 
 Use expression-first named arguments inside `yield(...)`, matching the existing `expression -> name` vocabulary. Each required yielded label must be supplied exactly once; unknown, duplicate or missing fields reject. The bounded labelled form names every component, preserving declaration-order-independent schema identity without positional field-order meaning. The producer still evaluates written expressions once in source order. Reception may select a subset or rename fields, without suppressing unreceived expressions or required cleanup. Yield labels have no default-argument/omission semantics, and introduce no generator-local variables.
 
-The current proposal distinguishes one unnamed component (`yields u64`, `yield(x)`) from a labelled schema (`yields { value:u64; }`, `yield(x -> value)`). The single-value for header may receive that one labelled component as the unambiguous single-item shorthand below. This is a receiving mapping, not type equality between a schema and scalar; no implicit first-field selection exists for a larger schema.
+The current proposal distinguishes one unnamed component (`yields u64`, `yield(x)`) from a labelled schema (`yields { value:u64 }`, `yield(x -> value)`). The single-value for header may receive that one labelled component as the unambiguous single-item shorthand below. This is a receiving mapping, not type equality between a schema and scalar; no implicit first-field selection exists for a larger schema.
 
 ## For headers
 
 ```cod
-for { val count <-; ref selected = node; total <- count; } := inspect_all() {
+for { val count <-, ref selected = node, total <- count } := inspect_all() {
     consume(count, selected);
 }
 
@@ -678,8 +678,8 @@ Nested loops use the innermost lexical loop target; do not skip an inner loop me
 H-583 reuses structural result declarations and receiving specifications for the result of yield. YieldContract and FeedbackContract may independently be a single result contract or a labelled schema; neither requires a first-class product object. H-584 accepts the signature and explicit-feedback construction:
 
 ```cod
-proc two_steps() yields u64 -> { again:bool; step:u64; } {
-    { val again <-; val step <-; } := yield(1u64);
+proc two_steps() yields u64 -> { again:bool, step:u64 } {
+    { val again <-, val step <- } := yield(1u64);
     if (again) { yield(step); } else {};
     return;
 }

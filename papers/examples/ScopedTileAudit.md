@@ -40,7 +40,7 @@ binding from a lost audit entry. [Value and reference symbols](../../design/Symb
 ```cod
 using "std:exceptions" Exception;
 
-data TileFault <: Exception { destination:u64; }
+data TileFault <: Exception { destination:u64 }
 val symbol @destination:u64
 symbol @attempt:proc() -> void
 

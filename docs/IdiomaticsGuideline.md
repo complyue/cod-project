@@ -1,8 +1,10 @@
 # Idiomatics guideline
 
-Guideline revision: 5 · Updated: 2026-11-25
+Guideline revision: 6 · Updated: 2026-11-27
 
 ## Design authority
+
+At r6 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies to field schemas, enum members and receiving entries in source examples. The r5 formatting policy continues.
 
 [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics) covers this guideline at
 r5 under the [grouped method decision](../CHANGELOG.md#h-grouped-method-dispatch-20261125), including the [normal-completion formatting rule](../CHANGELOG.md#h-normal-completion-20261124) and applying the [single-directive procedure import](../CHANGELOG.md#h-proc-import-identity-20261124) to the contributor example. [D-10-FORMAT-POLICY](../design/DesignAuthorityRegistry.md#d-10-format-policy) covers its
@@ -159,6 +161,7 @@ command, configuration schema or CI provider.
 Preserve meaning while formatting. In particular, retain necessary separators and callback
 attachment, and preserve the distinction between grouping and a full scope. Follow the confirmed
 [semicolon and whitespace rules](../design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux).
+Use commas when wrapping [field, member and receiving lists](../design/DomainLanguageDesign.md#comma-separated-fields-and-receivers). Preserve statement boundaries in a labeled make by init block.
 Canonical layout cannot replace an author's semantic choices about ownership, callable kind,
 dynamic context or control flow.
 

@@ -246,7 +246,7 @@ The public prefix consists of defect ID `7` and its gain sample `8`.
 **CoD.** `tile` selects the order. Its eight ordinary operations use the current state and journals.
 
 ```cod
-enum StageScope:u8 { PerAcquisition; PerTile; }
+enum StageScope:u8 { PerAcquisition, PerTile }
 
 proc tile(scope:StageScope, reject_through:u64, prefix:bool) -> bool {
     if (prefix) {
@@ -303,8 +303,8 @@ these observations as the nested pairs produced by the real transformer or handl
 
 ```cod
 proc observe(here action() -> bool)
-    -> { accepted:bool; serial:u64; credits:u64; gain:u64;
-         acquired_log:u64; rejects_log:u64; passes_log:u64; defects_log:u64; samples_log:u64; }
+    -> { accepted:bool, serial:u64, credits:u64, gain:u64,
+         acquired_log:u64, rejects_log:u64, passes_log:u64, defects_log:u64, samples_log:u64, }
 {
     val serial <- 0u64
     val credits <- 8u64
@@ -329,7 +329,7 @@ proc observe(here action() -> bool)
 A caller can select just the fields it needs from that result.
 
 ```cod
-{ val ids <- defects_log; val gains <- samples_log; } := observe() {
+{ val ids <- defects_log, val gains <- samples_log } := observe() {
     tile(PerAcquisition:StageScope, 1u64, true -> prefix)
 }
 ```
@@ -720,7 +720,7 @@ func with_prefix(enabled:bool, first:u64, entries:u64) -> u64 {
     100u64 * first + entries
 }
 
-func reports() yields { scope:StageScope; limit:u64; ids:u64; gains:u64; } {
+func reports() yields { scope:StageScope, limit:u64, ids:u64, gains:u64 } {
     val per_acquisition <- PerAcquisition:StageScope
     val per_tile <- PerTile:StageScope
     yield(per_acquisition -> scope, 0u64 -> limit, trace(1u64) -> ids, trace(3u64) -> gains)
@@ -736,9 +736,9 @@ func prefixes() yields bool { yield(false); yield(true) }
 
 ```cod
 proc verify(here action() -> bool, limit:u64, want_ok:bool, want_ids:u64, want_gains:u64) {
-    { val accepted <-; val serial <-; val credits <-; val gain <-;
-      val acquired_log <-; val rejects_log <-; val passes_log <-;
-      val defects_log <-; val samples_log <-; } := observe() { action() }
+    { val accepted <-, val serial <-, val credits <-, val gain <-,
+      val acquired_log <-, val rejects_log <-, val passes_log <-,
+      val defects_log <-, val samples_log <-, } := observe() { action() }
 
     assert accepted == want_ok
     assert defects_log == want_ids
@@ -766,7 +766,7 @@ proc verify(here action() -> bool, limit:u64, want_ok:bool, want_ids:u64, want_g
 }
 
 proc check_all() {
-    for { val scope <-; val limit <-; val ids <-; val gains <-; } := reports() {
+    for { val scope <-, val limit <-, val ids <-, val gains <- } := reports() {
         for val prefix <- prefixes() {
             val want_ids <- with_prefix(prefix, 7u64, ids)
             val want_gains <- with_prefix(prefix, 8u64, gains)

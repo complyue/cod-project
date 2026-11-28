@@ -46,7 +46,7 @@ When text participates in `destination <- source`, retain the ordinary `(<-)` ov
 For example, a manifest library can intern filenames in its destination region. Here `FilenamePool` describes the library’s required region roots and `intern_filename` is its own procedure. It returns a reference to immutable text in the supplied region.
 
 ```cod
-data ManifestEntry { ref filename:const String; }
+data ManifestEntry { ref filename:const String }
 
 proc (<-)(dst:ManifestEntry in D, src:const String in S) -> void
     where {region D:FilenamePool, const owner S} {
@@ -62,8 +62,8 @@ The method may reuse an existing destination-owned string when the pool finds a 
 A nominal product may declare `name:String`, and a nominal sum may declare it in a constructor payload. Each active field is a required, non-null place for immutable text owned by the same actual owner as the containing instance. This rule applies when the ADT is allocated in a lexical scope or a region. Such a type is non-bits, including when a different alternative happens to be active. In a region, the published text and its backing must survive relocation with the region. A native address into a literal image, another region or a lexical invocation cannot serve as a stored regional edge. A lexical representation may differ while preserving owner and target identity.
 
 ```cod
-data Entry { name:String; }
-data Finding = Named { name:String; } | Missing {};
+data Entry { name:String }
+data Finding = Named { name:String } | Missing {};
 
 # An ordinary library method for installing text already owned by D.
 proc (<-)(init val var out:String in D, text:const String in D)

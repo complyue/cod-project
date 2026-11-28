@@ -13,6 +13,8 @@ dependencies are identified where needed. For a compact reference to the source 
 
 ## Design authority
 
+Guide revision 22 uses [commas in field and receiver lists](../design/DomainLanguageDesign.md#comma-separated-fields-and-receivers), including the ASCII vocabulary. The r21 distinction between make by ctor and make by init continues.
+
 Guide revision 21 applies the [construction terminology](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) to the shipment example. Its result and owner follow the existing guide r20 contract.
 
 Guide revision 20 adds [contextual numeric literals](#write-numeric-literals-in-context) under [D-11-LITERAL-DEFAULTS](../design/DesignAuthorityRegistry.md#d-11-literal-defaults). Guide revision 19 distinguishes [receiver-family lookup](../design/DomainLanguageDesign.md#how-receiver-dispatch-works) from [associated callable names](#make-module-boundaries-express-intent) under [D-DOC-IDIOMATICS](../design/DesignAuthorityRegistry.md#d-doc-idiomatics). Guide revision 18 links the [DBMR database service guide](BuildingADatabaseServiceInCoD.md) from the stock ownership example. Revision 17 links the [scoped effect composition guide](ScopedEffectComposition.md) at the integration-boundary example. Revision 16 links the [companion guide to reusable domain operations](BuildingReusableDomainOperations.md) from the pipeline example. Revision 15 illustrates the [default ASCII vocabulary](../CHANGELOG.md#k-ascii-vocabulary-20261125) and uppercase named constants. Revision 14 applies [enum backing coercion](../design/TypedEnums.md#using-an-enum-as-its-backing-value)
@@ -57,12 +59,12 @@ that relationship part of the type.
 ```cod
 export data Shipment =
     Queued {}
-  | Dispatched { cartons:u64; }
+  | Dispatched { cartons:u64 }
 
 """Returns the dispatched carton count for [Shipment](Shipment)."""
 export func cartons_sent(shipment:const Shipment in O) -> u64 where {const owner O} {
     case shipment of {
-        Dispatched { val count <- cartons; } -> count;
+        Dispatched { val count <- cartons } -> count;
         Queued -> 0u64
     }
 }
@@ -104,8 +106,8 @@ A service priority is a choice with no per-alternative payload:
 
 ```cod
 export enum Priority:u8 {
-    Standard;
-    Urgent;
+    Standard,
+    Urgent,
 }
 
 func handling_order(priority:Priority) -> u8 {
@@ -144,13 +146,13 @@ frequently used members. The module chooses the defaults. Every member belongs t
 
 ```cod
 export enum ASCII:UInt8 {
-    HT = 9;
-    LF = 10;
-    CR = 13;
-    ESC = 27;
-    SPACE = 32;
-    HASH = 35;
-    DEL = 127;
+    HT = 9,
+    LF = 10,
+    CR = 13,
+    ESC = 27,
+    SPACE = 32,
+    HASH = 35,
+    DEL = 127,
 }
 default { ASCII { HT, LF, CR, SPACE, HASH } }
 ```
@@ -534,7 +536,7 @@ A stock card exposes the number of units available and lets a caller reserve som
 The card starts with at most as many reserved units as it has on hand.
 
 ```cod
-data StockCard { on_hand:u64; reserved:u64 }
+data StockCard { on_hand:u64, reserved:u64 }
 
 func const StockCard.@available() -> u64 { self.on_hand - self.reserved }
 

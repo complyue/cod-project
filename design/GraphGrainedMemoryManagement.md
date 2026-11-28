@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 41 · 2026-11-27
+Design revision 42 · 2026-11-27
 
 ## Design authority
+
+At r42 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to intrinsic structural region root declarations and projections. The r41 distinction between structural roots and nominal regions continues.
 
 At r41 [D-13-NOMINAL-REGIONS](DesignAuthorityRegistry.md#d-13-nominal-regions) adopts the [confirmed provider build model](../CHANGELOG.md#h-native-package-toolchain-20261127) for constructors and methods. R40 exact nominal matching, absence of roots and actual-owner checks continue under P-786/P-787. Database service guarantees and compiler delivery remain open.
 
@@ -52,11 +54,11 @@ Region acquisition/release, capacity, typed placement and reference provenance r
 H-595 removes the CoD `root(r)` intrinsic. An intrinsic structural region is a product of named root fields, accessed either by `r.name` or by a receiving specification. Neither form exposes a separate unnamed whole-root object. A named region schema and an otherwise admitted structural field requirement use the same field semantics; this does not select new anonymous-annotation grammar.
 
 ```cod
-data Node { value:u64; }
-region State { count:u64; ptr next:Node; }
+data Node { value:u64 }
+region State { count:u64, ptr next:Node }
 
 # state is a live region matching State; other belongs to the same region.
-{ ref n = count; ptr p = next; val old <- count; } := state;
+{ ref n = count, ptr p = next, val old <- count } := state;
 n <- 10u64;           # Write the region's count field.
 p = other;            # Rebind only local p.
 state.next = other;   # Rebind the region's next slot.

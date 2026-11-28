@@ -151,10 +151,10 @@ H-311 distinguishes direct value storage from stored references. H-310 applies t
 
 ```text
 data Node {
-  count:i64;       # Direct bits; equivalent to val count:i64.
-  val flags:u32;   # Direct bits.
-  ref shared:i64;  # A stored reference, including for a scalar target.
-  ptr next:Node;   # A stored, potentially null reference.
+  count:i64,       # Direct bits; equivalent to val count:i64.
+  val flags:u32,   # Direct bits.
+  ref shared:i64,  # A stored reference, including for a scalar target.
+  ptr next:Node,   # A stored, potentially null reference.
 }
 ```
 
@@ -216,8 +216,8 @@ proc local_views() -> void {
 }
 
 proc external_view(x:u64 in O) -> void where {owner O} {
-  ptr p:u64 in O = null;  # Owner specified by the receiving declaration.
-  ptr q:u64 = null in O;  # The literal supplies that same owner.
+  ptr p:u64 in O = null,  # Owner specified by the receiving declaration.
+  ptr q:u64 = null in O,  # The literal supplies that same owner.
 }
 ```
 
@@ -425,7 +425,7 @@ A root requirement applies exclusively to an intrinsic structural region. A [nom
 
 ```cod
 type PoolPolicy;
-region NodeStore { ref pool:PoolPolicy; }
+region NodeStore { ref pool:PoolPolicy }
 func extend(node:Node in r) -> ref Node in r
     where {region r:NodeStore} {
     return allocate_neighbour(r, r.pool, node);
@@ -558,7 +558,7 @@ Under this contract, every path reaching a use must retain a valid owner. If one
 An ordinary writable `own region p:Packet` can receive a newly constructed, distinct owning result with `p <- rhs`. If the RHS only borrows the old region, that region stays live throughout RHS evaluation and required cleanup. Successful delivery replaces the holder's responsibility and releases the old region exactly once. A failure before delivery leaves the old region and its borrows live. Ordinary RHS side effects still apply. If an operation in the RHS explicitly consumes p, D-17's consuming-entry rule applies at that operation. Failure after that entry cannot restore the consumed owner. A successfully delivered owning result can reinitialize the holder.
 
 ```cod
-region Packet { sequence:u64; }
+region Packet { sequence:u64 }
 
 proc advance() -> u64 {
     own region p:Packet <- make region Packet(4096u64 -> capacity) {
@@ -628,7 +628,7 @@ H-431 retains D-17 E4: argument evaluation/conversion precedes entry; after entr
 The H-264 construction contract, expressed with the H-307 declaration surface, is `own region packet:Packet <- make region Packet(bytes -> capacity) { sequence <- initial };`: capacity may be a runtime expression, the root initializes directly inside the new region, and the result transfers ownership into the declaration. D-17 governs construction cleanup and unchecked allocation/capacity failures; current source support is limited as recorded in the source capability reference. The extended walkthrough below expresses the target qualifier/field-transfer surface; bits edits use field `<-`, and ref/ptr edge replacement uses `=`. Wider const/resource combinations remain separate from the validated make/call/result lifecycle.
 
 ```text
-region Packet { sequence:u64; }
+region Packet { sequence:u64 }
 region symbol state:Packet;
 
 function make_packet(bytes:const u64, initial:const u64)
@@ -969,7 +969,7 @@ The compiler already carries a `region_id` for the supported reference subset an
 H-264 selects the construction and initialization contract with allocation parameters separate from in-place root initialization and H-200's explicit ownership qualifier:
 
 ```text
-region Packet { sequence:u64; }
+region Packet { sequence:u64 }
 {
   own region packet:Packet <-
     make region Packet(65536u64 -> capacity) { sequence <- 7u64 };

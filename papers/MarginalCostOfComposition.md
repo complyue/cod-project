@@ -128,7 +128,7 @@ ref symbol @samples_sink:u64 in O where {owner O}
 proc charge() { @credit_cell <- @credit_cell - 2u64 }
 proc samples(n:u64) { @samples_sink <- appended(@samples_sink, n) }
 
-enum StageScope:u8 { PerAcquisition; PerTile; }
+enum StageScope:u8 { PerAcquisition, PerTile }
 
 proc tile(scope:StageScope, reject_through:u64, prefix:bool) -> bool {
     if (prefix) {

@@ -212,9 +212,9 @@ this source has finished its on-time contributions strictly earlier than `stamp`
 Each site has exactly the two sensors shown.
 
 ```cod
-enum Site:u8 { Live; Trial; }
-enum Sensor:u8 { A; B; }
-enum Kind:u8 { High; Advance; }
+enum Site:u8 { Live, Trial }
+enum Sensor:u8 { A, B }
+enum Kind:u8 { High, Advance }
 ```
 
 <a id="a-dynamically-scoped-event-sink"></a>
@@ -267,7 +267,7 @@ Suppose an operator sometimes ends a trial as soon as its reading has been recor
 unwind observable, both versions call the same helper after admitting the trial reading.
 
 ```cod
-data TrialEnded <: Exception { stamp:u64; }
+data TrialEnded <: Exception { stamp:u64 }
 
 proc finish_trial(stop:bool) -> void throws TrialEnded {
     if (stop) { throw TrialEnded { stamp <- 6u64 }; }
@@ -361,12 +361,12 @@ mutates storage supplied explicitly by its caller. A worker publishes an alarm o
 function returns `Alert` and can retire the closed window's partial match.
 
 ```cod
-enum Decision:u8 { NoOutput; Quiet; Alert; }
+enum Decision:u8 { NoOutput, Quiet, Alert }
 
 data FirstWindow {
-    a_high:bool; b_high:bool;
-    a_mark:u64; b_mark:u64;
-    closed:bool;
+    a_high:bool, b_high:bool,
+    a_mark:u64, b_mark:u64,
+    closed:bool,
 }
 
 func step(w:FirstWindow in O, s:Sensor, k:Kind, stamp:u64) -> Decision

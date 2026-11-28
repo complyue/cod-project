@@ -90,10 +90,10 @@ backorder in the result. A domain package could give that result its own sum typ
 
 ```cod
 data RouteNode =
-    TryWarehouse { warehouse:u64; ref on_decline:RouteNode; }
+    TryWarehouse { warehouse:u64, ref on_decline:RouteNode }
   | Backorder {}
 
-region Routing { ref retail:RouteNode; ref urgent:RouteNode; }
+region Routing { ref retail:RouteNode, ref urgent:RouteNode }
 
 symbol @reserve:proc(order:u64, warehouse:u64) -> bool
 

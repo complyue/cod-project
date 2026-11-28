@@ -232,8 +232,8 @@ For independent member regions A and B, the same observer can borrow A on its fi
 For a generator-compatible visiting overload on a regional array, suppose each handoff supplies the labels `index` and `item`, with a readonly u64 item in the array’s owner. Both call sites select these labels explicitly. Swapping their order in the declared schema leaves each receiving operation unchanged. The second spelling uses the same spec in its parenthesized header. [Shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms)
 
 ```cod
-for { val index <-; ref item:const u64 =; } := visit(xs) { report(index, item); }
-visit(xs) ({ val index <-; ref item:const u64 =; }) => { report(index, item); };
+for { val index <-, ref item:const u64 = } := visit(xs) { report(index, item); }
+visit(xs) ({ val index <-, ref item:const u64 = }) => { report(index, item); };
 ```
 
 A visit relies on three facts. The collection remains available for traversal, the selected entry retains its release responsibility, and the observer may read the selected target while its actual owner is live. Each callback entry binds the owner of that particular target, including when one compiled callback body visits several regions. An index selects the entry at that step. Compaction can change a surviving element’s index while preserving its owner.
