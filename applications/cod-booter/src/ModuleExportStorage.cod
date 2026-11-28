@@ -127,7 +127,7 @@ export data InterfacePayload =
     } |
     CheckedTextReceiver {
         symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
-        out_of_memory:bool, invalid_slice:bool, numeric_fault:bool,
+        out_of_memory:bool, invalid_slice:bool, numeric_fault:bool, bounds:bool,
     } |
     SumInterface {} |
     ConstructorReference { defining_module:UInt64, declaration:UInt64, } |
@@ -391,3 +391,10 @@ export func checked_aggregate_storage(interfaces:const ModuleInterfaces in I, pu
     };
     return storage;
 }
+
+export data ScopedRoutineExit {
+    available:bool, out_of_memory:bool, invalid_slice:bool, numeric_fault:bool, bounds:bool,
+}
+export array ScopedRoutineExits[UInt64]:ScopedRoutineExit;
+
+export array ScopedRoutineContracts[UInt64]:InterfacePayload;

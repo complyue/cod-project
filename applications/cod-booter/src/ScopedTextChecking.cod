@@ -1,17 +1,15 @@
 using "./ParserStorage.cod" {
     ExprNodes, no_node, published_syntax_id, CallableSites, inspect_callable,
-    SequenceEntry, inspect_sequence_entry, SequenceSyntax { ModuleSequence }, module_item_publication,
-    DeclarationSites, inspect_declaration, DeclarationSyntax { LocalPublication },
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable };
 using "./ParserStorage.cod" AstSlot { Occupied };
 using "./ParserStorage.cod" ExprPayload { BindSymbolEffect };
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding };
-using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
+using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, published_local_family };
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedSourceTextCall, BoundReferenceSymbol, PreparedTextInstallation },
 };
-using "./ModuleExportStorage.cod" { ModuleInterfaces, InterfacePayload { CheckedTextReceiver } };
+using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver } };
 using "./OperandChecking.cod" {
     OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver,
 };
@@ -75,7 +73,7 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
     seen:SeenInterfaces in W, first:UInt64, past:UInt64, selected:UInt64, count:UInt64 in C)
     -> bool where {const owner I, owner K, owner W, owner C} {
     if (!seen[first]) {
-        for (member in first + 1u64 .. past) {
+        for (member in first .. past) {
             case interfaces[member].payload of {
                 CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, } -> {
                     include_text_need(needs, count, symbol_module, symbol_identity, no_node(), no_node())
@@ -92,23 +90,6 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
         _ -> { return false }
     };
     return true
-}
-
-func published_local_family(nodes:const ExprNodes in N, names:const NameBindings in B, at:UInt64,
-    used:UInt64, revision:UInt64) -> UInt64 where {const owner N, const owner B} {
-    if (!module_item_publication(nodes, used, at)) return no_node();
-    ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
-    if (inspect_sequence_entry(nodes, revision, used, at, item) != ModuleSequence) return no_node();
-    val member <- item.item;
-    if (names[member].kind == callable_binding()) return names[member].declaration;
-    ref declared = make DeclarationSites {
-        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
-    };
-    if (inspect_declaration(nodes, revision, used, member, declared) == LocalPublication &&
-        declared.name < used && names[declared.name].kind == callable_binding())
-        return names[declared.name].declaration;
-    return no_node()
 }
 
 # Freeze the entered local call edges, complete imported interface ranges,
@@ -153,10 +134,10 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
             method <- facts[at].scoped_text_method;
             if (method != no_node() && invocation_reached(nodes, sites, at, used, revision)) {
                 case views[at] of {
-                    ImportedSourceTextCall { val family <-, val past <-, } -> {
-                        if (method <= family || method >= past || past > published ||
-                            !collect_imported_needs(interfaces, needs, seen, family, past, method, count)) return at;
-                        uses[at].imported_first <- family + 1u64;
+                    ImportedSourceTextCall { val first <-, val past <-, } -> {
+                        if (method < first || method >= past || past > published ||
+                            !collect_imported_needs(interfaces, needs, seen, first, past, method, count)) return at;
+                        uses[at].imported_first <- first;
                         uses[at].imported_past <- past;
                         uses[at].imported_selected <- method;
                         (uses[at].caller <- if (demand[at].scope < used) { (demand[at].scope) } else { root }):void
@@ -305,18 +286,47 @@ func close_text_need(uses:const TextUses in U, scopes:const TextScopes in S, sup
     return
 }
 
-func first_unsatisfied_text_need(scopes:const TextScopes in S, supplies:const TextUseSupplies in A,
-    rows:const TextReaches in R, used:UInt64, receiver:bool) -> UInt64
-    where {const owner S, const owner A, const owner R} {
+data RoutineNeed {
+    symbol_module:UInt64, symbol_identity:UInt64,
+    selected_symbol_module:UInt64, selected_symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
+    origin:UInt64, conflict:bool,
+}
+array RoutineNeeds[UInt64]:RoutineNeed;
+
+func collect_routine_need(routine:RoutineNeed in E, key:const TextNeed in K, origin:UInt64)
+    -> void where {owner E, const owner K} {
+    routine.origin <- earlier_site(routine.origin, origin);
+    if (key.receiver_identity == no_node()) {
+        routine.conflict <- routine.conflict || routine.symbol_identity != no_node();
+        routine.symbol_module <- key.symbol_module;
+        routine.symbol_identity <- key.symbol_identity;
+        return
+    };
+    routine.conflict <- routine.conflict || routine.receiver_identity != no_node();
+    routine.selected_symbol_module <- key.symbol_module;
+    routine.selected_symbol_identity <- key.symbol_identity;
+    routine.receiver_module <- key.receiver_module;
+    (routine.receiver_identity <- key.receiver_identity):void;
+}
+
+func collect_outstanding_text_need(scopes:const TextScopes in S, supplies:const TextUseSupplies in A,
+    rows:const TextReaches in R, exits:const ScopedRoutineExits in X, key:const TextNeed in K,
+    routines:RoutineNeeds in E, used:UInt64) -> UInt64
+    where {const owner S, const owner A, const owner R, const owner X, const owner K, owner E} {
+    val receiver <- key.receiver_identity != no_node();
+    val public_family <- false;
     val problem <- no_node();
     for (at in 0u64 .. used) {
         if (rows[at].reached && supplies[at].supply == (Unproved:TextSupply)) { (problem <- earlier_site(problem, at)):void };
         if (rows[at].origin != no_node()) {
-            if (!scopes[at].reusable || scopes[scopes[at].family].public_family ||
+            public_family <- scopes[at].reusable && scopes[scopes[at].family].public_family;
+            if (public_family && exits[at].available) {
+                collect_routine_need(routines[at], key, rows[at].origin)
+            } else { if (!scopes[at].reusable || public_family ||
                 (if (receiver) { scopes[at].selected_uses == no_node() }
                     else { scopes[scopes[at].family].family_uses == no_node() })) {
                 (problem <- earlier_site(problem, rows[at].origin)):void
-            }
+            } }
         }
     };
     return problem
@@ -332,9 +342,10 @@ func first_prepared_writer(facts:const OperandFacts in F, used:UInt64) -> UInt64
 export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, views:const SuppliedViews in V, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
     demand:const DeclarationDemands in D, sites:const CompletionSites in X,
+    exits:const ScopedRoutineExits in E, contracts:ScopedRoutineContracts in C,
     module:UInt64, root:UInt64, used:UInt64, revision:UInt64, published:UInt64, report:OperandCheckResult in R)
     -> bool where {const owner N, const owner B, const owner L, const owner V, const owner I, const owner F,
-        const owner D, const owner X, owner R} {
+        const owner D, const owner X, const owner E, owner C, owner R} {
     val first <- first_prepared_writer(facts, used);
     if (first == no_node()) return true;
     if (used > 9223372036854775807u64 || published > 9223372036854775807u64) {
@@ -363,6 +374,11 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
         ref rows = make TextReaches(used, make TextReach {
             origin <- no_node(); family_seen <- false; pending <- no_node(); reached <- false
         });
+        ref routines = make RoutineNeeds(used, make RoutineNeed {
+            symbol_module <- no_node(); symbol_identity <- no_node();
+            selected_symbol_module <- no_node(); selected_symbol_identity <- no_node();
+            receiver_module <- no_node(); receiver_identity <- no_node(); origin <- no_node(); conflict <- false
+        });
         for (key in 0u64 .. count) {
             for (at in 0u64 .. used) {
                 rows[at].origin <- no_node();
@@ -378,8 +394,24 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
                 }
             };
             close_text_need(uses, scopes, supplies, rows, used, needs[key].receiver_identity != no_node());
-            (problem <- earlier_site(problem, first_unsatisfied_text_need(scopes, supplies, rows, used,
-                needs[key].receiver_identity != no_node()))):void
+            (problem <- earlier_site(problem, collect_outstanding_text_need(scopes, supplies, rows,
+                exits, needs[key], routines, used))):void
+        };
+        for (at in 0u64 .. used) {
+            if (routines[at].origin != no_node()) {
+                if (routines[at].conflict || routines[at].symbol_identity == no_node() || routines[at].receiver_identity == no_node() ||
+                    routines[at].selected_symbol_module != routines[at].symbol_module ||
+                    routines[at].selected_symbol_identity != routines[at].symbol_identity) {
+                    (problem <- earlier_site(problem, routines[at].origin)):void
+                } else {
+                    (contracts[at] <- make CheckedTextReceiver {
+                        symbol_module <- routines[at].symbol_module; symbol_identity <- routines[at].symbol_identity;
+                        receiver_module <- routines[at].receiver_module; receiver_identity <- routines[at].receiver_identity;
+                        out_of_memory <- exits[at].out_of_memory; invalid_slice <- exits[at].invalid_slice;
+                        numeric_fault <- exits[at].numeric_fault; bounds <- exits[at].bounds
+                    }):void
+                }
+            }
         }
     };
     if (problem == no_node()) return true;

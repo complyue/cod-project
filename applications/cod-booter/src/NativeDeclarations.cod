@@ -97,7 +97,7 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
-    array_length_family_interface, source_text_family_interface,
+    array_length_family_interface, source_text_family_interface, ScopedRoutineContracts,
     InterfacePayload { NoInterfacePayload, DeferredTextReceiver, CheckedTextReceiver }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
@@ -1559,7 +1559,7 @@ export data SuppliedView =
     CheckedArrayReaderForward { completion:ArrayReadCompletion, } |
     PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
-    ImportedSourceTextCall { family:UInt64, past:UInt64, } |
+    ImportedSourceTextCall { family:UInt64, first:UInt64, past:UInt64, } |
     PreparedTextInstallation { operation:UInt64, name:UInt64, input:UInt64, previous:UInt64, } |
     PreparedFormattingMethod { marker:UInt64, operation:UInt64, receiver:UInt64, writer:UInt64, } |
     CompletedFormattingMethod {
@@ -5662,7 +5662,7 @@ func source_here_view(nodes:const ExprNodes in N, names:const NameBindings in B,
 func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
                      selected:const SelectedExports in E, work:const NameWork in W,
                      contracts:ModuleInterfaces in C, count:UInt64, defining_module:UInt64, declaration:UInt64,
-                     form:UInt64, kind:UInt8, source_callback:UInt64, array_read_completion:ArrayReadCompletion, source_writer:SourceWriter, scalar_source_body:bool,
+                     form:UInt64, kind:UInt8, source_callback:UInt64, array_read_completion:ArrayReadCompletion, source_writer:SourceWriter, scalar_source_body:bool, scoped_routine:bool,
                      used:UInt64, revision:UInt64) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, owner C} {
     val limit <- intrinsic (len)(contracts);
@@ -5703,13 +5703,13 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     if (kind == c_operation()) {
         (callback <- native_here_parameter(nodes, form, used, revision)):void
     };
-    val indexed_owners <- kind == c_entry() || source_handle || source_array_reader ||
+    val indexed_owners <- kind == c_entry() || source_handle || source_array_reader || scoped_routine ||
         (kind == c_operation() && callback == no_node());
     if (indexed_owners) {
         owner_count <- count_owner_clauses(nodes, callable.signature, used, revision);
         if (owner_count == no_node()) return no_node();
     } else {};
-    if (kind == c_constructor() || kind == c_entry() || source_handle || source_array_reader || scalar_source_body ||
+    if (kind == c_constructor() || kind == c_entry() || source_handle || source_array_reader || scoped_routine || scalar_source_body ||
         (kind == c_operation() && callback == no_node())) {
         if (!signature_formals(nodes, revision, used, callable.signature, head, parameter)) return no_node();
     } else {};
@@ -5733,6 +5733,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
     for (unused in 0u64 .. used) {
         if (parameter == no_node()) {
             write_interface_header(contracts[count], defining_module, declaration, kind, result_kind, next - count - 1u64);
+            contracts[count].payload <- make NoInterfacePayload {};
             if (kind == callable_binding()) {
                 if (shape == ModuleCallablePromise) {
                     (contracts[count].membership <- (PromiseOnly:FamilyMembership)):void;
@@ -5754,7 +5755,7 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
             contracts[count].array_read_completion <- array_read_completion;
             contracts[count].source_writer <- source_writer;
             contracts[count].scalar_source_body <- scalar_source_body;
-            if (source_array_reader || scalar_source_body) { (contracts[count].failure_identity <- no_node()):void };
+            if (source_array_reader || scalar_source_body || scoped_routine) { (contracts[count].failure_identity <- no_node()):void };
             if (result_kind == enum_type() || result_kind == sum_type()) {
                 contracts[count].type_module <- type_module(names, selected, result_marker, defining_module);
                 (contracts[count].type_identity <- type_identity(names, selected, result_marker)):void;
@@ -5850,7 +5851,7 @@ func stage_handle_interface(nodes:const ExprNodes in N, names:const NameBindings
     val next <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
         marker, constructor, if (constructor == no_node()) { c_handle_type() }
             else { c_constructor() },
-        no_node(), NoArrayRead, NoSourceWriter, false, used, revision);
+        no_node(), NoArrayRead, NoSourceWriter, false, false, used, revision);
     if (next == no_node()) return next;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
@@ -5958,6 +5959,50 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
         method <- work[method].next_method
     };
     return past
+}
+
+# The incoming contract is independently completed. This profile admits only a
+# singleton ordinary procedure with an explicit result and fixed scalar or
+# readonly array formals, with at most one readonly owner role.
+export func source_text_routine_signature(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, definition:UInt64,
+    used:UInt64, revision:UInt64) -> bool where {const owner N, const owner B, const owner E, const owner W} {
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    if (names[definition].declaration != definition || work[definition].next_method != no_node() ||
+        inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+        callable.function_form || callable.body >= used) return false;
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    val signature <- callable.signature;
+    val borrowed <- inspect_signature(nodes, revision, used, signature, clause) == OwnerSignatureClause;
+    if (borrowed && !clause.readonly) return false;
+    val result <- if (borrowed) { (clause.previous) } else { signature };
+    if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause || clause.annotation >= used ||
+        (names[clause.annotation].kind != builtin_bool() && names[clause.annotation].kind != builtin_void()) ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return false;
+    ref start = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, start)) return false;
+    val parameter <- start;
+    val scalar_type <- no_node();
+    val array_marker <- no_node();
+    val array_seen <- false;
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node()) return borrowed == array_seen;
+        scalar_type <- independent_formal_type(nodes, parameter, used, revision);
+        if (scalar_type < used) {
+            if (names[scalar_type].kind != builtin_u8() && names[scalar_type].kind != builtin_u64() &&
+                names[scalar_type].kind != builtin_bool()) return false;
+        } else {
+            if (!borrowed) return false;
+            array_marker <- readonly_formal_marker(nodes, names, parameter, signature, used, revision);
+            if (array_marker >= used || (names[array_marker].kind != array_type() &&
+                imported_kind(names, selected, array_marker) != array_export())) return false;
+            (array_seen <- true):void
+        };
+        (parameter <- work[parameter].next):void
+    };
+    return false
 }
 
 export data SourceTextMethodSites { formal:UInt64, body:UInt64, signature:UInt64, }
@@ -6080,7 +6125,7 @@ export func complete_text_receiver(work:const NameWork in W, views:const Supplie
                     symbol_module <- canonical_symbol; symbol_identity <- symbol_identity;
                     receiver_module <- if (candidate.module == 0u64) { defining_module } else { (candidate.module) };
                     receiver_identity <- candidate.identity; out_of_memory <- candidate.out_of_memory;
-                    invalid_slice <- false; numeric_fault <- false
+                    invalid_slice <- false; numeric_fault <- false; bounds <- false
                 }):void;
                 return
             };
@@ -6166,7 +6211,7 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
                 (contracts[next].payload <- make CheckedTextReceiver {
                     symbol_module <- symbol_module; symbol_identity <- symbol_identity;
                     receiver_module <- receiver_module; receiver_identity <- receiver_identity;
-                    out_of_memory <- out_of_memory; invalid_slice <- invalid_slice; numeric_fault <- numeric_fault
+                    out_of_memory <- out_of_memory; invalid_slice <- invalid_slice; numeric_fault <- numeric_fault; bounds <- false
                 }):void
             };
             _ -> { stage_text_receiver(nodes, names, work, views, sites, contracts[next], used, revision) }
@@ -6179,13 +6224,14 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
 
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
-                               views:const SuppliedViews in V, used:UInt64, revision:UInt64,
-                               defining_module:UInt64, start:UInt64, contracts:ModuleInterfaces in C,
+                               views:const SuppliedViews in V, routines:const ScopedRoutineContracts in H,
+                               used:UInt64, revision:UInt64, defining_module:UInt64, start:UInt64, contracts:ModuleInterfaces in C,
                                report:NativeDeclarationResult in R) -> UInt64
-    where {const owner N, const owner B, const owner E, const owner W, const owner V, owner C,
+    where {const owner N, const owner B, const owner E, const owner W, const owner V, const owner H, owner C,
         owner R} {
     val limit <- intrinsic (len)(contracts);
     val count <- start;
+    val scoped_routine <- false;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
@@ -6261,9 +6307,14 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             CheckedScalarFunction -> true;
                             _ -> false
                         };
+                        scoped_routine <- at < intrinsic (len)(routines) && (case routines[at] of {
+                            CheckedTextReceiver -> true; _ -> false
+                        });
                         (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
-                            at, at, kind, callback, array_read_completion, source_writer, scalar_source_body, used, revision)):void;
+                            at, at, kind, callback, array_read_completion, source_writer, scalar_source_body, scoped_routine,
+                            used, revision)):void;
                         if (count != no_node()) {
+                            if (scoped_routine) { (contracts[first].payload <- routines[at]):void };
                             case views[at] of {
                                 CheckedScalarFunction { val numeric_fault <-, } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void

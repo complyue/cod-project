@@ -1,9 +1,10 @@
 using "./Deque.cod" { deque, push_back, pop_back };
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause, omits_callable_result,
+    ExprNodes, no_node, CallableSites, module_item_publication,
+    DeclarationSites, inspect_declaration, DeclarationSyntax { LocalPublication }, inspect_callable, find_signature_clause, omits_callable_result,
     DirectCallSites, inspect_invocation, InvocationSyntax { InvalidCallSyntax, OrdinaryInvocation, EffectfulInvocation },
     ScopedProcedureSites, inspect_scoped_procedure, NamedThrowSites, inspect_named_throw,
-    first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
+    first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence, ModuleSequence },
     module_tail, AssignmentSites, inspect_assignment, predicate_operand, formal_binding_is_fixed,
     FormalSites, inspect_formal, FormalSyntax { OrdinaryFormal }, FormalMode { ExplicitValueFormal, ReferenceFormal },
     LocalBindingSites, inspect_local_binding, LocalMode { ValueLocal, ReferenceLocal },
@@ -20,7 +21,7 @@ using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField }
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { PreparedFormattingMethod, ImportedSourceTextCall, PreparedGenericConstruction, BoundGenericCall, ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayCall, CheckedReadonlyCall, CheckedSumWriterCall, CheckedWorkspaceWriterCall, CheckedScalarFunctionCall }, read_acquisition_failure,
-    native_loan_requires_body, source_handle_callable, prepared_array_procedure, prepared_text_writer,
+    source_text_routine_signature, native_loan_requires_body, source_handle_callable, prepared_array_procedure, prepared_text_writer,
     prepared_source_here_relay, SourceArrayFormals { NoSourceArrayFormal, ArrayReferenceSlotFormal },
     prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_workspace_writer, prepared_array_inspector
 };
@@ -43,6 +44,7 @@ export data DeclarationDemand {
     slot_body:bool,
     fixed_borrow:bool,
     text_call:bool,
+    public_text_routine:bool,
     requires_byte_completion:bool,
     signature:bool,
     body:bool,
@@ -303,12 +305,30 @@ func request_text_body(rows:TextBodyDemands in X, definition:UInt64, count:UInt6
     return
 }
 
+export func published_local_family(nodes:const ExprNodes in N, names:const NameBindings in B, at:UInt64,
+    used:UInt64, revision:UInt64) -> UInt64 where {const owner N, const owner B} {
+    if (!module_item_publication(nodes, used, at)) return no_node();
+    ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, at, item) != ModuleSequence) return no_node();
+    val member <- item.item;
+    if (names[member].kind == callable_binding()) return names[member].declaration;
+    ref declared = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    if (inspect_declaration(nodes, revision, used, member, declared) == LocalPublication &&
+        declared.name < used && names[declared.name].kind == callable_binding())
+        return names[declared.name].declaration;
+    return no_node()
+}
+
 # Demand the ordinary callers that can receive a pending incoming
 # requirement. Only already-bound direct family edges participate here.
 func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings in B,
-    views:const SuppliedViews in V, demand:DeclarationDemands in D, root:UInt64,
-    used:UInt64, revision:UInt64, body_count:UInt64 in Q) -> UInt64
-    where {const owner N, const owner B, const owner V, owner D, owner Q} {
+    selected:const SelectedExports in E, links:const NameWork in L, views:const SuppliedViews in V,
+    demand:DeclarationDemands in D, root:UInt64, used:UInt64, revision:UInt64,
+    body_count:UInt64 in Q, receipt_count:UInt64 in R) -> UInt64
+    where {const owner N, const owner B, const owner E, const owner L, const owner V, owner D, owner Q, owner R} {
     val first <- first_text_use(views, used);
     if (first == no_node()) return no_node();
     if (used > 9223372036854775807u64) return first;
@@ -319,6 +339,10 @@ func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings i
     val callee <- no_node();
     val scope <- no_node();
     for (at in 0u64 .. used) {
+        callee <- published_local_family(nodes, names, at, used, revision);
+        if (callee < used && source_text_routine_signature(nodes, names, selected, links, callee, used, revision)) {
+            (demand[callee].public_text_routine <- true):void
+        };
         scope <- demand[at].scope;
         callee <- demand[at].callee;
         if (scope < used && !uninstantiated_method(names[scope].kind)) {
@@ -340,7 +364,11 @@ func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings i
             body <- rows[item].pending;
             item <- item + 1u64;
             if (body != root && !local_body(nodes, revision, used, body, callable)) return body;
-            if (!require_body(demand, body, body_count, used, body != root)) return body;
+            if (demand[body].public_text_routine) {
+                if (!require_receipt_body(demand, body, body_count, receipt_count, used)) return body
+            } else {
+                if (!require_body(demand, body, body_count, used, body != root)) return body
+            };
             head <- names[body].declaration;
             if (head < used && !rows[head].family_seen) {
                 rows[head].family_seen <- true;
@@ -591,7 +619,7 @@ export func discover_declaration_demand(
             };
         };
     };
-    val text_problem <- require_text_callers(nodes, names, views, demand, root, used, revision, count);
+    val text_problem <- require_text_callers(nodes, names, selected, links, views, demand, root, used, revision, count, receipt_count);
     if (text_problem != no_node()) { problem <- text_problem; return false };
     # Reached bodies can forward a loan or determine allocation operands.
     # Check them before accepting the receiving body's contract.

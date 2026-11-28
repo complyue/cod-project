@@ -695,7 +695,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; fixed_borrow <- false; text_call <- false; requires_byte_completion <- false;
+        slot_body <- false; fixed_borrow <- false; text_call <- false; public_text_routine <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });
     ref products = make Products(0u64, make Product {
@@ -722,12 +722,12 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; fixed_borrow <- false; text_call <- false; requires_byte_completion <- false;
+        slot_body <- false; fixed_borrow <- false; text_call <- false; public_text_routine <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructions = make ExceptionConstructionFacts(0u64, make NoExceptionConstruction {});
-    ref no_scoped_text = make ScopedTextOutcomes(0u64, make ScopedTextOutcome { out_of_memory <- false; invalid_slice <- false; numeric_fault <- false });
+    ref no_scoped_text = make ScopedTextOutcomes(0u64, make ScopedTextOutcome { out_of_memory <- false; invalid_slice <- false; numeric_fault <- false; bounds <- false });
     return analyze_bound_declaration_completion(
         nodes, bindings, work, facts, no_native_loans, executable, no_scoped_text, no_constructions, sites, result)
 }

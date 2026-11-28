@@ -231,7 +231,7 @@ export data OperandFact {
     text_call:bool,
 }
 export array OperandFacts[UInt64]:OperandFact;
-export data ScopedTextOutcome { out_of_memory:bool, invalid_slice:bool, numeric_fault:bool, }
+export data ScopedTextOutcome { out_of_memory:bool, invalid_slice:bool, numeric_fault:bool, bounds:bool, }
 export array ScopedTextOutcomes[UInt64]:ScopedTextOutcome;
 
 export data OwnerEvidence {
@@ -4237,9 +4237,28 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             !direct_source_using(nodes, selected[site].selection_site, used, revision)) return true;
         val past <- source_text_family_past(contracts, interface_count, visits, visit_count, header, origin_module);
         if (past != no_node()) {
-            supplied[at] <- make ImportedSourceTextCall { family <- header; past <- past };
+            supplied[at] <- make ImportedSourceTextCall { family <- header; first <- header + 1u64; past <- past };
             if (required == no_node()) { (required <- at):void }
         };
+        return true
+    };
+    if (source_only && header != no_node() && contracts[header].interface_kind == callable_binding() &&
+        (case contracts[header].payload of { CheckedTextReceiver -> true; _ -> false })) {
+        val count <- contracts[header].entry_count;
+        if (obligation || selected[site].dependency_module != origin_module ||
+            !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
+            count >= interface_count - header || contracts[header].membership != FixedMethods ||
+            contracts[header].callable_kind != CheckedProcedure || contracts[header].has_here != 0u8 ||
+            contracts[header].failure_identity != no_node() || contracts[header].owner_count > 1u64 ||
+            (contracts[header].result_kind != builtin_bool() && contracts[header].result_kind != builtin_void()) ||
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, header + count, interface_count))
+            return operand_problem(report, at, unsupported_imported_call());
+        if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
+            return operand_problem(report, at, wrong_argument_count());
+        remember_imported_call(links, contracts, at, header, true);
+        supplied[at] <- make ImportedSourceTextCall { family <- header; first <- header; past <- header + 1u64 };
+        if (required == no_node()) { (required <- at):void };
         return true
     };
     val handles <- source_only && source_handle_call(contracts, interface_count, header);
@@ -7268,9 +7287,10 @@ export func collect_text_outcomes(interfaces:const ModuleInterfaces in I, facts:
     for (at in 0u64 .. used) {
         if (facts[at].scoped_text_method != no_node()) {
             case interfaces[facts[at].scoped_text_method].payload of {
-                CheckedTextReceiver { val out_of_memory <-, val invalid_slice <-, val numeric_fault <-, } -> {
+                CheckedTextReceiver { val out_of_memory <-, val invalid_slice <-, val numeric_fault <-, val bounds <-, } -> {
                     outcomes[at].out_of_memory <- out_of_memory;
                     outcomes[at].invalid_slice <- invalid_slice;
+                    outcomes[at].bounds <- bounds;
                     (outcomes[at].numeric_fault <- numeric_fault):void
                 };
                 _ -> {}
@@ -7307,6 +7327,21 @@ func check_builder_installation(nodes:const ExprNodes in N, names:const NameBind
     }
 }
 
+func check_imported_scoped_routine(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, links:const NameWork in L, facts:OperandFacts in F,
+    cases:const ConstructorCaseFacts in C, views:const SuppliedViews in H,
+    at:UInt64, used:UInt64, revision:UInt64, method:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner E, const owner L, owner F, const owner C, const owner H} {
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, at, call) != DirectInvocationReady) return invalid_operand_tree();
+    val diagnostic <- check_imported_call(nodes, names, selected, links, facts, cases, views,
+        at, call.arguments, used, revision, true, false);
+    if (diagnostic == 0u8 && facts[at].kind != never_result()) {
+        (facts[at].scoped_text_method <- method):void
+    };
+    return diagnostic
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H, products:const Products in M, arguments:const TypeKeys in M,
@@ -7331,7 +7366,9 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             ImportedArrayLengthCall { val first <-, val past <-, val argument <-, val input <-, } -> {
                 return check_imported_array_length(nodes, interfaces, facts, at, first, past, argument, input)
             };
-            ImportedSourceTextCall { val family <-, val past <-, } -> {
+            ImportedSourceTextCall { val family <-, val first <-, val past <-, } -> {
+                if (family == first)
+                    return check_imported_scoped_routine(nodes, names, selected, links, facts, cases, views, at, used, revision, family);
                 return check_imported_source_text(nodes, names, interfaces, facts, at, family, past, used, revision)
             };
             PreparedArrayConstruction {
