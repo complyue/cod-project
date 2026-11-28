@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 56 · Recorded: 2026-11-28 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 57 · Recorded: 2026-11-28 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r57 the [toolchain distribution plan](../../CHANGELOG.md#h-codup-target-sysroots-20261128) places the standalone seed build against a matching development SDK and gives `codup` separate host and target components. The r56 repository responsibilities and compiler workloads continue.
 
 At r56 the [Actor scope decision](../../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) assigns `go` and the Actor model to the production language. D-20-BOOTSTRAP/P-642 continues r55's booter-driven seed scope.
 
@@ -658,8 +660,10 @@ The compiler and toolchain repositories are planned in the [e-wrks GitHub organi
 | `cod-lang` | CoD language design and the authoritative language specification shared by both compilers. |
 | `cod-seed` | The C++ translator for trusted booter source, the CoD-written checking compiler and their C-native components, including the region core and LLVM bindings. The booter stays in this repository after the split. |
 | `cod` | The future production compiler written in CoD. The first release targets fast compile-and-run and introduces the experimental `cfe` optimizing CLI. Version 2.0 formally supports `cfe`. Its [output-directory contract](docs/CompilerPipeline.md#default-execution-and-optimized-builds) governs the generated executable. The compiler also provides full diagnostics, [independent check and emission controls for editors and builds](docs/CompilerPipeline.md#independently-selectable-compiler-operations), and a future CoD REPL. [REPL decision](../../CHANGELOG.md#h-retire-cpp-repl-20261125) |
-| `codup` | Installs matching CoD and LLVM tools, including `clang`, `clang++`, target assembly support and the link tools and target components used by host `cod` and cross-target `cfe`. [First native package toolset](docs/CompilerPipeline.md#codup-toolchain-for-native-packages) |
+| `codup` | Installs matching CoD and LLVM tools, including `clang`, `clang++`, target assembly support and the link tools and target components used by host `cod` and cross-target `cfe`. [Host tools and target sysroots](docs/CompilerPipeline.md#host-tools-and-target-sysroots) |
 | `codmate` | The Language Server Protocol server and IDE plugins, including [reference-site doclet tooltips and navigation](../../design/DomainLanguageDesign.md#definition-doclets). |
+
+The planned `e-wrks/cod-seed` build consumes a pinned external LLVM **and Clang** development SDK. LLVM supplies IR and bitcode support, while `clangBasic` supplies the native target layout. The standalone project can load the matching LLVM and Clang CMake package exports. At revision `0f09243f`, a Linux x86-64 probe built the seed directly against the installed 23.1.3 SDK and ran the original lexer digit predicate through a small C entry. It returned true for byte 55 and false for byte 255. That check used the locally built SDK. A full booter bootstrap from a redistributed SDK remains to be verified. The present repository still configures the seed as an LLVM external project. [Seed layout consumer](https://github.com/complyue/cod-project/blob/0f09243f0202bd89875577ab11732846da07b0fd/cod/lang_llvm.hh#L3617-L3625) · [Current build integration](../../CMakeLists.txt) · [Using LLVM’s CMake exports](https://llvm.org/docs/CMake.html#embedding-llvm-in-your-project)
 
 The `e-wrks/cod` toolchain will bundle `pcl.cod`, the parser combinator library that implements the parsing HLVM. The production CoD parser is one of its applications. Its DBMR grammar program ships as `cod.grammar` and runs on `pcl.cod` on the compiler’s normal source path. [Installed-toolchain workload](../../design/ParserCombinatorLibSupport.md#packaged-production-parser) · [CoD parser application case study](../../papers/AlgebraicEffectsIsAllYouNeed.md#the-cod-parser-as-an-application-of-the-parsing-hlvm)
 
