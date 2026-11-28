@@ -265,7 +265,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 状态：已启动预研；基础执行与消息语义已确定，具体接口和生命周期继续讨论。
 
-CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。生产语言用 `go` 启动 go process，每次在一个新的专属 OS 线程上执行。可以启动一个自由过程，也可以把 region、handle 的所有权显式移交给新正文。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
+CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。生产语言用 `go` 启动 go process，每次在一个新的专属 OS 线程上执行。两种入口都能移交所有权。`go entry_proc(...)` 按入口过程签名中的 `own region`、`own handle` 形参接收实参的所有权；双花括号正文则用显式列表接收。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
 
 基础发送采用 UDP 式语义，不保证接收、不提供回执。应用按需建立可靠流、重试和业务结算协议。
 当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
