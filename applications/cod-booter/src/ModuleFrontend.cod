@@ -51,7 +51,7 @@ using "./NameResolution.cod" {
     protected_symbol_name,
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, unsupported_generic_type, unsupported_pointer_result,
-    unsupported_generic_constructor, unsupported_generic_export, generic_product_binding, applied_product_binding,
+    unsupported_generic_constructor, unsupported_generic_export, generic_product_binding, product_application_binding,
     generic_method_binding, wrong_type_argument_count, invalid_module_tree, enclosing_callable, uninstantiated_method,
     resolve_module_names_recovering, ProductTypeRecovery, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
@@ -81,7 +81,7 @@ export data ModuleBindingResult {
     related_first:UInt64;
     symbol_binder:UInt64;
     requires_operand_checks:bool;
-    first_closed_application:UInt64;
+    has_closed_application:bool;
 }
 
 export func module_read_failed() -> UInt8 { return 1u8; }
@@ -386,7 +386,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
         owner H, owner R, owner P} {
     ref names = make NameResolutionResult {
-        diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); first_closed_application <- no_node()
+        diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); has_closed_application <- false
     };
     if (!resolve_module_names_recovering(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
@@ -416,7 +416,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     val generic_diagnostic <- 0u8;
     val scope <- no_node();
     for (at in 0u64 .. used) {
-        if (bindings[at].kind == applied_product_binding()) {
+        if (product_application_binding(bindings[at].kind)) {
             generic_diagnostic <- generic_application_diagnostic(nodes, bindings, selected, interfaces, interface_used,
                 revision, used, at);
             if (generic_diagnostic != 0u8) {
@@ -430,7 +430,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
                 (result.requires_operand_checks <- true):void
             }
         };
-        if (bindings[at].kind != applied_product_binding() && (case nodes[at] of {
+        if (!product_application_binding(bindings[at].kind) && (case nodes[at] of {
             Occupied { val syntax <- node; } -> case syntax.payload of {
                 AppliedType -> true; _ -> false
             };
@@ -451,7 +451,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             };
             marker <- target.target_type;
             text <- text_type(bindings[marker].kind);
-            product <- bindings[marker].kind == record_type() || bindings[marker].kind == applied_product_binding();
+            product <- bindings[marker].kind == record_type() || product_application_binding(bindings[marker].kind);
             if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
                  !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
                 (emit_object && bindings[at].declaration != no_node())) {
@@ -479,8 +479,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             };
         };
     };
-    result.first_closed_application <- names.first_closed_application;
-    if (result.first_closed_application != no_node()) return true;
+    result.has_closed_application <- names.has_closed_application;
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };

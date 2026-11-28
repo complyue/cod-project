@@ -204,7 +204,7 @@ export data NameResolutionResult {
     diagnostic:UInt8;
     node:UInt64;
     enclosing_defer:UInt64;
-    first_closed_application:UInt64;
+    has_closed_application:bool;
 }
 
 data NameState {
@@ -224,7 +224,8 @@ data NameState {
     native_installation:UInt64;
     scope_node:UInt64;
     generic_method:UInt64;
-    first_closed_application:UInt64;
+    inside_type_argument:bool;
+    has_closed_application:bool;
     delayed:UInt64;
     guard:UInt64;
     finalizer:UInt64;
@@ -279,6 +280,10 @@ export func generic_product_binding() -> UInt8 { return 41u8; }
 export func applied_product_binding() -> UInt8 { return 42u8; }
 export func generic_constructor_binding() -> UInt8 { return 43u8; }
 export func generic_method_binding() -> UInt8 { return 44u8; }
+export func closed_product_binding() -> UInt8 { return 45u8; }
+export func product_application_binding(kind:UInt8) -> bool {
+    return kind == applied_product_binding() || kind == closed_product_binding()
+}
 
 export func uninstantiated_method(kind:UInt8) -> bool {
     return kind == generic_method_binding() || kind == generic_constructor_binding()
@@ -835,9 +840,11 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
             remember(bindings, name, declaration, ordinary_selection())
         }
     };
-    if (state.generic_method == no_node() && bindings[state.scope_node].kind != generic_product_binding() &&
-        state.first_closed_application == no_node()) {
-        (state.first_closed_application <- at):void
+    val nested <- state.inside_type_argument;
+    val closed <- !nested && state.generic_method == no_node() &&
+        bindings[state.scope_node].kind != generic_product_binding();
+    if (closed) {
+        (state.has_closed_application <- true):void
     };
     val argument <- no_node();
     if (!first_sequence_entry(nodes, revision, at, tail, TypeSequence, argument)) {
@@ -850,7 +857,9 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
             reject_name(state, at, invalid_module_tree());
             return
         };
+        state.inside_type_argument <- true;
         resolve_type_name(source, nodes, bindings, work, state, entry.item);
+        state.inside_type_argument <- nested;
         if (state.diagnostic != 0u8) return;
         argument <- work[argument].next;
     };
@@ -860,7 +869,7 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
     };
     # Keep the defining template and the written arguments in this revision.
     # Concrete type identities belong to layout completion.
-    remember(bindings, at, declaration, applied_product_binding());
+    remember(bindings, at, declaration, if (closed) { closed_product_binding() } else { applied_product_binding() });
     if (state.generic_method != no_node()) {
         if (bindings[state.generic_method].kind == callable_binding()) {
             (bindings[state.generic_method].kind <- generic_method_binding()):void
@@ -1653,7 +1662,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         if (state.diagnostic != 0u8) return;
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
-        val applied <- kind == applied_product_binding();
+        val applied <- product_application_binding(kind);
         if (applied) {
             if (shape == StorageReservation ||
                 (shape == BracedConstruction && bindings[definition].kind == generic_product_binding() &&
@@ -3604,7 +3613,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
     ref body = make NameState {
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
-        generic_method <- no_node(); first_closed_application <- no_node();
+        generic_method <- no_node(); inside_type_argument <- false; has_closed_application <- false;
         module_candidates <- state.module_candidates;
         source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
@@ -3615,9 +3624,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     resolve_callable_body(source, nodes, bindings, work, body, definition);
-    if (state.first_closed_application == no_node()) {
-        (state.first_closed_application <- body.first_closed_application):void
-    };
+    state.has_closed_application <- state.has_closed_application || body.has_closed_application;
     if (body.diagnostic != 0u8) {
         reject_name(state, body.failed_node, body.diagnostic);
         (state.enclosing_defer <- body.enclosing_defer):void;
@@ -4093,7 +4100,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     recovery.first_site <- no_node();
     report.node <- no_node();
     report.enclosing_defer <- no_node();
-    report.first_closed_application <- no_node();
+    report.has_closed_application <- false;
     report.diagnostic <- invalid_module_tree();
     if (selected_used > intrinsic (len)(selections) || tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64) return false;
@@ -4156,7 +4163,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     ref state = make NameState {
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
-        generic_method <- no_node(); first_closed_application <- no_node();
+        generic_method <- no_node(); inside_type_argument <- false; has_closed_application <- false;
         module_candidates <- selected_used != 0u64;
         source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
@@ -4205,6 +4212,6 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     report.node <- state.failed_node;
     report.enclosing_defer <- state.enclosing_defer;
     report.diagnostic <- state.diagnostic;
-    report.first_closed_application <- state.first_closed_application;
+    report.has_closed_application <- state.has_closed_application;
     return state.diagnostic == 0u8;
 }

@@ -1485,6 +1485,7 @@ export enum ArraySlotElement:UInt8 {
 
 export data SuppliedView =
     NoSuppliedView {} |
+    PreparedGenericConstruction { owner_site:UInt64; member:UInt64; } |
     SuppliedArrayView { type_module:UInt64; type_identity:UInt64; owner_role:UInt64; body:UInt64; readonly:bool;
         } |
     HereFormalContract { first_parameter:UInt64; result_kind:UInt8; result_module:UInt64;
@@ -5784,12 +5785,12 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
                                views:const SuppliedViews in V, used:UInt64, revision:UInt64,
-                               defining_module:UInt64, contracts:ModuleInterfaces in C,
+                               defining_module:UInt64, start:UInt64, contracts:ModuleInterfaces in C,
                                report:NativeDeclarationResult in R) -> UInt64
     where {const owner N, const owner B, const owner E, const owner W, const owner V, owner C,
         owner R} {
     val limit <- intrinsic (len)(contracts);
-    val count <- 0u64;
+    val count <- start;
     ref declaration = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;

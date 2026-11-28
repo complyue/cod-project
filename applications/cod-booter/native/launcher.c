@@ -92,6 +92,8 @@ static const char *unsupported_source_form(uint32_t code) {
     case 158: return "generic interface recipe";
     case 159: return "concrete generic layout";
     case 161: return "checking a generic constructor body";
+    case 165: return "generic constructor placement";
+    case 166: return "generic constructor object emission";
     default: return NULL;
     }
 }
@@ -173,6 +175,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: this member type requires make by ctor\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 162)
         fputs(": error: wrong number of arguments for this member type's constructor\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 163)
+        fputs(": error: a constructor field initializer must bind under the destination owner\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 164)
+        fputs(": error: constructor must initialize every field with its declared mode and access\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 156)
         fputs(": error: generic product name requires type arguments\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 129)

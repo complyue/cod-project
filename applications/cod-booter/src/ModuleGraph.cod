@@ -96,8 +96,11 @@ using "./NativeDeclarations.cod" {
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
 using "./GenericInterfaces.cod" { stage_generic_interfaces, stage_closed_type };
-using "./GenericLayouts.cod" { complete_generic_layout, GenericLayoutStatus { LayoutReady, LayoutWorkspaceExhausted } };
-using "./NameResolution.cod" { unsupported_generic_type, unsupported_generic_constructor };
+using "./GenericLayouts.cod" {
+    complete_generic_constructions, GenericConstructionRequests, GenericConstructionRequest,
+    GenericConstructionForm { NoConstruction, ByInitializer, ByConstructor },
+};
+using "./NameResolution.cod" { closed_product_binding, lexical_owner };
 using "./ParserStorage.cod" { ConstructionSites, inspect_construction,
     ConstructionSyntax { PositionalConstruction, BracedConstruction } };
 using "./DeclarationTypes.cod" {
@@ -589,7 +592,6 @@ func bind_graph_names(source:const SourceBytes in S, nodes:const ExprNodes in W,
     if (!bind_selected_module_recovering(source, nodes, checked_selections, checked_used, selected, names,
         work, interfaces, interface_count, facts, views, native, allow_structural, result, recovery))
         return false;
-    if (result.first_closed_application != no_node()) return true;
     ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
     if (!prepare_enum_assertions(source, nodes, names, selected, work, spellings, interfaces, interface_count,
         used, result.frontend.tree.revision, expressions)) {
@@ -920,52 +922,57 @@ data ModuleBindingWorkspace {
     const ref commands:NativeCommands;
 }
 
-# Consume the closed member's layout before attempting construction. A
-# selected constructor still requires a checked body for this substitution.
-func closed_type_boundary(nodes:const ExprNodes in N, names:const NameBindings in B,
+# Collect the actual construction sites and their already bound lexical
+# owners before completing member types or checking the initializer.
+func prepare_generic_constructions(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, staged:ModuleInterfaces in I,
-    imported:const ModuleInterfaces in G, imported_count:UInt64, module:UInt64,
-    result:ModuleBindingResult in R) -> CompilerStatus
-    where {const owner N, const owner B, const owner E, const owner W, owner I, const owner G, owner R} {
-    val site <- result.first_closed_application;
-    val revision <- result.frontend.tree.revision;
-    val used <- result.frontend.tree.used;
-    ref recipe = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node() };
-    val prefix <- stage_generic_interfaces(nodes, names, selected, work, staged, recipe, used, revision, module, 0u64);
-    if (recipe.diagnostic != 0u8) {
-        binding_diagnostic(nodes, result, module_binding_failed(), recipe.diagnostic, recipe.node);
-        return Rejected
-    };
-    if (prefix == no_node()) return ScratchFailed;
-    val past <- stage_closed_type(nodes, names, selected, work, staged, revision, used, module, prefix, site);
-    if (past == no_node()) return ScratchFailed;
-    ref constructor = make UInt64 { no_node() };
-    val layout <- complete_generic_layout(staged, prefix, past, imported, imported_count, module, constructor);
-    if (layout == LayoutWorkspaceExhausted) return ScratchFailed;
-    if (layout != LayoutReady) {
-        binding_diagnostic(nodes, result, module_binding_failed(), 159u8, site);
-        return Rejected
-    };
+    imported:const ModuleInterfaces in G, imported_count:UInt64, module:UInt64, prefix:UInt64,
+    views:SuppliedViews in V, report:NativeDeclarationResult in R, used:UInt64, revision:UInt64, native:bool) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, owner I, const owner G, owner V, owner R} {
+    ref requests = make GenericConstructionRequests(used, make GenericConstructionRequest {
+        first <- no_node(); past <- no_node(); site <- no_node(); owner_site <- no_node();
+        form <- NoConstruction; has_arguments <- false
+    });
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
     val shape <- PositionalConstruction;
-    val code <- 0u8;
-    for (at in site + 1u64 .. used) {
+    val requested <- no_node();
+    val owner_site <- no_node();
+    for (at in 0u64 .. used) {
         shape <- inspect_construction(nodes, revision, used, at, construction);
-        if ((shape == PositionalConstruction || shape == BracedConstruction) && construction.requested == site) {
-            code <- if (shape == BracedConstruction && constructor != no_node()) { 160u8 } else {
-                if (shape == PositionalConstruction && constructor != no_node()) {
-                    if (construction.contents == no_node()) { 161u8 } else { 162u8 }
-                } else { unsupported_generic_constructor() }
-            };
-            binding_diagnostic(nodes, result, module_binding_failed(), code, at);
-            return Rejected
+        if (shape == PositionalConstruction || shape == BracedConstruction) {
+            requested <- construction.requested;
+            if (requested < at && names[requested].kind == closed_product_binding()) {
+                if (native) {
+                    report.diagnostic <- 166u8;
+                    (report.node <- at):void;
+                    return false
+                };
+                requests[requested].site <- at;
+                requests[requested].form <- if (shape == PositionalConstruction) { ByConstructor } else { ByInitializer };
+                requests[requested].has_arguments <- construction.contents != no_node();
+                owner_site <- names[at].scope;
+                if (owner_site < used && construction.queried_operand == no_node() &&
+                    (construction.placement == no_node() ||
+                     (names[construction.placement].kind == lexical_owner() &&
+                      names[construction.placement].declaration == owner_site))) {
+                    (requests[requested].owner_site <- owner_site):void
+                }
+            }
         }
     };
-    binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), site);
-    return Rejected
+    val next <- prefix;
+    for (at in 0u64 .. used) {
+        if (names[at].kind == closed_product_binding()) {
+            requests[at].first <- next;
+            next <- stage_closed_type(nodes, names, selected, work, staged, revision, used, module, next, at);
+            if (next == no_node()) return false;
+            (requests[at].past <- next):void
+        }
+    };
+    return complete_generic_constructions(staged, prefix, next, imported, imported_count, module, requests, views, report)
 }
 
 proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in S,
@@ -1006,7 +1013,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
         stage <- 0u8; diagnostic <- 0u8; related_first <- no_node(); symbol_binder <- no_node();
-        requires_operand_checks <- false; first_closed_application <- no_node();
+        requires_operand_checks <- false; has_closed_application <- false;
     };
     val used <- result.frontend.tree.used;
     val revision <- result.frontend.tree.revision;
@@ -1076,19 +1083,26 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         if (native && rejected_unsupported_declaration(result)) return FormUnsupported;
         return Rejected;
     } else {};
-    if (result.first_closed_application != no_node()) {
-        val closed <- closed_type_boundary(nodes, names, selected, work, staged_interfaces,
-            published_interfaces, interface_count, progress[0u64].identity, result);
-        if (closed == ScratchFailed) {
+    ref interface_report = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
+    val generic_prefix <- stage_generic_interfaces(nodes, names, selected, work, staged_interfaces, interface_report,
+        used, revision, progress[0u64].identity, 0u64);
+    if (generic_prefix == no_node() ||
+        (result.has_closed_application &&
+         !prepare_generic_constructions(nodes, names, selected, work, staged_interfaces,
+             published_interfaces, interface_count, progress[0u64].identity, generic_prefix,
+             views, interface_report, used, revision, native))) {
+        if (interface_report.diagnostic == 0u8) {
             report_scratch_error(diagnostic, 1u32);
             return ScratchFailed
         };
+        binding_diagnostic(nodes, result, module_binding_failed(), interface_report.diagnostic, interface_report.node);
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
             result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first,
             keys, key_first, key_past, run);
         if (delivered != Complete) return delivered;
-        return if (native) { FormUnsupported } else { closed }
+        return if (native) { FormUnsupported } else { Rejected }
     };
+    if (result.has_closed_application) { (result.requires_operand_checks <- true):void };
     val source_call_profile <- if (native) { no_node() } else { first_source_call_profile(views, used) };
     val case_capacity <- if (!native && (source_call_profile != no_node() ||
         needs_constructor_case_plan(nodes, names, selected, views, used, revision))) { used } else { 0u64 };
@@ -1204,10 +1218,9 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         report_scratch_error(diagnostic, 1u32);
         return ScratchFailed;
     } else {};
-    ref interface_report = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-    val interfaces <- if (native) { 0u64 } else {
+    val interfaces <- if (native) { generic_prefix } else {
         publish_interfaces(nodes, names, selected, work, views, used, revision,
-                           publication.module_identity, staged_interfaces, interface_report)
+                           publication.module_identity, generic_prefix, staged_interfaces, interface_report)
     };
     if (interface_report.diagnostic != 0u8) {
         delivered <- report_graph_rejection(source, lines, diagnostic, module_binding_failed(),
@@ -1246,18 +1259,6 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         (interfaces <- publish_type_interfaces(nodes, names, selected, work, aggregate_facts, used,
                                                result.frontend.tree.revision, publication.module_identity, interfaces, staged_interfaces)):void;
     } else {};
-    if (interfaces != no_node()) {
-        interfaces <- stage_generic_interfaces(nodes, names, selected, work, staged_interfaces, interface_report,
-            used, revision, publication.module_identity, interfaces);
-        if (interface_report.diagnostic != 0u8) {
-            binding_diagnostic(nodes, result, module_binding_failed(), interface_report.diagnostic, interface_report.node);
-            delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
-                result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first,
-                keys, key_first, key_past, run);
-            if (delivered != Complete) return delivered;
-            return Rejected
-        }
-    };
     if (native && interfaces != no_node()) {
         (interfaces <- publish_callable_views(staged, export_uses, callable_uses, count, export_count,
             publication.module_identity, revision, staged_interfaces, interfaces)):void

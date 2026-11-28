@@ -140,7 +140,7 @@ using "./NativeDeclarations.cod" prepared_workspace_loans;
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
-    ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
+    ReadonlyByteRead, PreparedArrayConstruction, PreparedGenericConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
     CheckedScalarFunctionCall, CheckedScalarPredicateCall,
     CheckedWriterCall, CheckedParserWriterCall, CheckedWorkspaceWriterCall, CheckedSumWriterCall, CheckedArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
@@ -248,6 +248,7 @@ func received_sum() -> UInt8 { return 17u8 }
 func source_product_loan() -> UInt8 { return 18u8 }
 export func independent_sum_bits() -> UInt8 { return 20u8 }
 func independent_product_bits() -> UInt8 { return 21u8 }
+func generic_member_loan() -> UInt8 { return 22u8 }
 
 func nominal_source_loan(kind:UInt8) -> bool {
     return kind == source_handle_loan() || kind == source_array_loan() || kind == source_product_loan()
@@ -960,6 +961,18 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     val pointer <- local.mode == PointerLocal;
     if (value_binding && binding.owner_name != no_node()) return unproved_operand();
     val required_owner <- if (binding.owner_name == no_node()) { no_node() } else { (names[binding.owner_name].declaration) };
+    if (facts[initializer].kind == generic_member_loan()) {
+        if (local.mode != ReferenceLocal || type_name != no_node() ||
+            facts[initializer].reception != borrowed_ref() || facts[initializer].target_presence != present_target())
+            return unproved_operand();
+        if (facts[initializer].owner != names[at].scope)
+            return unproved_owner();
+        if (required_owner != no_node() && facts[initializer].owner != required_owner)
+            return owner_conflict(nodes, facts[initializer].owner, required_owner);
+        copy_fact(facts, at, initializer);
+        if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
+        return 0u8
+    };
     if (has_slot_array(facts, initializer) || allocated_source_array(facts, initializer)) {
         if (local.mode != ReferenceLocal || facts[initializer].reception != borrowed_ref() ||
             facts[initializer].target_presence != present_target()) return unproved_nonnull_borrow();
@@ -6420,6 +6433,11 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     if (links[at].enum_assertion == FoldedEnumOperand) return 0u8;
     if (source_only && at < intrinsic (len)(views)) {
         case views[at] of {
+            PreparedGenericConstruction { val owner_site <-; val member <-; } -> {
+                if (owner_site >= used || names[at].scope != owner_site) return unproved_owner();
+                set_fact(facts, at, generic_member_loan(), borrowed_ref(), owner_site, member, 0u8);
+                return 0u8
+            };
             ImportedArrayLengthCall { val first <-; val past <-; val argument <-; val input <-; } -> {
                 return check_imported_array_length(nodes, interfaces, facts, at, first, past, argument, input)
             };
