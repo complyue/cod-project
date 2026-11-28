@@ -378,8 +378,8 @@ export func discover_declaration_demand(
                     consumer < used && inspect_assignment(nodes, revision, used, consumer, assignment) == PlaceTransfer &&
                     assignment.input == site;
                 IndexedAggregateDestination -> true;
-                InlineProductField { val receiver <-; val writable <-; } ->
-                    writable && receiver < site &&
+                InlineProductField { val receiver <-; val writable <-; val demand_on_use <-; } ->
+                    writable && demand_on_use && receiver < site &&
                     (case cases[receiver] of { InlineProductField -> true; _ -> false });
                 LexicalSumReference -> true;
                 ImportedFreshSumInvocation -> true;

@@ -58,11 +58,11 @@ export data ConstructorCaseFact =
         receiver:UInt64; record:DeclaredType; array_module:UInt64; array_identity:UInt64;
         fixed:bool; target_readonly:bool;
     } |
-    IndexedOutputFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
+    WritableLocalProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
     WritableFieldUse {} |
     InlineProductField {
         receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType;
-        readonly:bool; writable:bool;
+        readonly:bool; writable:bool; demand_on_use:bool;
     } |
     CaseConstructor { case_site:UInt64; defining_module:UInt64; declaration:UInt64; ordinal:UInt64; representative:UInt64; } |
     CaseFieldReceipt { case_site:UInt64; arm:UInt64; pattern:UInt64; field:UInt64; value_type:DeclaredType; } |
@@ -379,8 +379,8 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
                                 remember_inline_product_formal(facts, formal, definition, owner_site, false, false, type);
                                 if (storage == CLayoutBitsRecord && first == no_node()) { (first <- formal):void }
                             } else {
-                                # Keep a local record signature available for a reached indexed destination.
-                                facts[formal] <- make IndexedOutputFormal {
+                                # Retain the nominal schema for field checking and for indexed actuals.
+                                facts[formal] <- make WritableLocalProductFormal {
                                     definition <- definition; owner_site <- owner_site; value_type <- type
                                 }
                             }
@@ -912,7 +912,7 @@ func prepare_borrowed_field_sum_case(source:const SourceBytes in S, nodes:const 
         interfaces, published, aggregate, facts, at, subject, choice.items, sum, used, revision, count, report))
         return false;
     remember_indexed_aggregate_loan(nodes, facts, subject, index, record, false);
-    remember_inline_product_field(facts, subject, receiver, projection.field, ordinal, readonly, false, record, sum);
+    remember_inline_product_field(facts, subject, receiver, projection.field, ordinal, readonly, false, false, record, sum);
     facts[at] <- make FieldLoanCaseSubject { expression <- subject; receiver <- receiver; count <- count };
     work[at].case_schema_prepared <- true;
     return true
@@ -1029,6 +1029,12 @@ func describe_inline_product(facts:const ConstructorCaseFacts in F, site:UInt64,
             type.identity <- product.identity;
             return true
         };
+        WritableLocalProductFormal { val product <- value_type; } -> {
+            type.kind <- product.kind;
+            type.defining_module <- product.defining_module;
+            type.identity <- product.identity;
+            return true
+        };
         LexicalProductReference { val construction <-; } -> {
             return case facts[construction] of {
                 BitsConstruction { val product <- value_type; } -> {
@@ -1063,12 +1069,13 @@ func remember_case_projection(facts:ConstructorCaseFacts in F, site:UInt64, rece
 }
 
 func remember_inline_product_field(facts:ConstructorCaseFacts in F, site:UInt64, receiver:UInt64,
-    field:UInt64, ordinal:UInt64, readonly:bool, writable:bool,
+    field:UInt64, ordinal:UInt64, readonly:bool, writable:bool, demand_on_use:bool,
     record:const DeclaredType in T, type:const DeclaredType in T)
     -> void where {owner F, const owner T} {
     facts[site] <- make InlineProductField {
         receiver <- receiver; field <- field; ordinal <- ordinal;
-        record <- record; value_type <- type; readonly <- readonly; writable <- writable
+        record <- record; value_type <- type; readonly <- readonly; writable <- writable;
+        demand_on_use <- demand_on_use
     };
     return
 }
@@ -1155,6 +1162,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
     val access <- (NoLexicalArray:LexicalArrayAccess);
     val described <- false;
     val writable <- false;
+    val demands_body <- false;
     for (site in 0u64 .. used) {
         if (inspect_field_selection(nodes, revision, used, site, selection) &&
             (case facts[site] of { CaseSumProjection -> false; InlineProductField -> false; _ -> true })) {
@@ -1201,10 +1209,15 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
                     writable <- case facts[site] of { WritableFieldUse -> true; _ -> false };
+                    demands_body <- case facts[origin] of {
+                        WritableLocalProductFormal -> false;
+                        InlineProductField { val demand_on_use <-; } -> demand_on_use;
+                        _ -> true
+                    };
                     remember_indexed_aggregate_loan(nodes, facts, site, loan, record,
                         access == (WritableLexicalArray:LexicalArrayAccess) || writable);
                     remember_inline_product_field(facts, site, selection.receiver,
-                        selection.field, ordinal, readonly, writable, record, type);
+                        selection.field, ordinal, readonly, writable, demands_body, record, type);
                     if (loan.expression != no_node() && (type.kind == enum_type() || type.kind == builtin_bool())) {
                         remember_type(work, site, type)
                     };
@@ -1307,7 +1320,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
             };
         } else {
             case facts[formal] of {
-                IndexedOutputFormal { val bound <- definition; val owner_site <-; val expected <- value_type; } -> {
+                WritableLocalProductFormal { val bound <- definition; val owner_site <-; val expected <- value_type; } -> {
                     if (bound == definition &&
                         describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
                             entry.item, used, revision, loan, record) && loan.array_module == 0u64 &&
@@ -1496,6 +1509,7 @@ func borrowed_product_field_destination(nodes:const ExprNodes in N, names:const 
             binding <- names[receiver].declaration;
             return projection != destination && binding < receiver && (case facts[binding] of {
                 InlineProductFormal { val demand_on_use <-; } -> demand_on_use;
+                WritableLocalProductFormal -> true;
                 _ -> false
             })
         };

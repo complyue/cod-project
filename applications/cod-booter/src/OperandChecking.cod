@@ -117,7 +117,7 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFacts, prepare_imported_indexed_loan, published_array_field_record,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField, SumValueResult,
+        InlineProductFormal, WritableLocalProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField, SumValueResult,
         IndexedAggregateLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
@@ -628,6 +628,18 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
                     set_fact(facts, formal, source_product_loan(), borrowed_ref(), owner_site, type.identity, 0u8);
                     facts[formal].identity_module <- type.defining_module;
                     facts[formal].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
+                    return 0u8
+                }
+            };
+            WritableLocalProductFormal { val bound <- definition; val owner_site <-; val type <- value_type; } -> {
+                if (bound != definition || form != ReferenceFormal || binding.readonly ||
+                    binding.owner_name >= used || names[binding.owner_name].declaration != owner_site ||
+                    owner_constraint_syntax(nodes, owner_site) != WritableOwnerConstraint) return unproved_owner();
+                if (type.defining_module != 0u64 || type.identity >= used) return invalid_operand_tree();
+                # Preserve the flat word layout when available. A nested
+                # product carries its completed schema as a source loan.
+                if (!facts[type.identity].bits_product || facts[type.identity].product_words == 0u64) {
+                    set_fact(facts, formal, source_product_loan(), borrowed_ref(), owner_site, type.identity, 0u8);
                     return 0u8
                 }
             };
