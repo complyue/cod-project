@@ -1806,24 +1806,28 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
     val sum_initializer <- names[requested].kind == constructor_type();
     val imported_record <- names[requested].kind == ordinary_selection() && chosen < used &&
         selected[chosen].kind == record_export();
-    val local_bits_product <- names[requested].kind == record_type() &&
-        chosen < used && aggregate[chosen] == CoDBitsAggregate &&
-        names[transfer].kind == 0u8 && names[assignment.destination].kind == 0u8;
-    # A local product with only builtin scalars can use the ordinary path.
-    if (!work[assignment.input].repeated_indexed_initializer && !sum_initializer &&
-        !imported_record && !local_bits_product &&
-        !has_inline_aggregate_field(nodes, names, selected, work, chosen, used, revision)) return true;
+    val builtin_transfer <- names[transfer].kind == 0u8 && names[assignment.destination].kind == 0u8;
+    val local_product <- names[requested].kind == record_type() && chosen < used && builtin_transfer;
+    val local_bits_product <- local_product && aggregate[chosen] == CoDBitsAggregate;
+    val local_flat_product <- local_product && aggregate[chosen] == CLayoutBitsRecord;
+    val requires_plan <- work[assignment.input].repeated_indexed_initializer || sum_initializer ||
+        imported_record || local_bits_product ||
+        has_inline_aggregate_field(nodes, names, selected, work, chosen, used, revision);
+    if (!requires_plan && !local_flat_product) return true;
     ref loan = make IndexedCaseLoan {
         expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
         array_module <- 0u64; array_type <- no_node();
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val expected_kind <- if (sum_initializer) { sum_type() } else { record_type() };
-    if (names[transfer].kind != 0u8 || names[assignment.destination].kind != 0u8 ||
+    if (!builtin_transfer ||
         !describe_indexed_case_loan(nodes, names, selected, interfaces, published, assignment.destination,
             used, revision, expected_kind, ReferenceFormal, loan, type) ||
-        (!sum_initializer && !imported_record && loan.array_module != 0u64) ||
-        !case_bits_type(type, aggregate, interfaces, published))
+        (!sum_initializer && !imported_record && loan.array_module != 0u64)) {
+        if (requires_plan) return case_problem(report, assignment.destination, wrong_construction_type());
+        return true
+    };
+    if (!case_bits_type(type, aggregate, interfaces, published))
         return case_problem(report, assignment.destination, wrong_construction_type());
     if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
         assignment.input, transfer, type, used, revision, report)) return false;
