@@ -1722,7 +1722,7 @@ class BodyExtraction {
       const auto schema = resolve_annotation(*expr.annotation->target, expr.at);
       const auto &initializer = ungrouped_expression(*expr.children.front());
       expect(initializer.kind == Kind::make_region ||
-             (initializer.kind == Kind::call && !initializer.intrinsic && !initializer.has_here_body()),
+             (initializer.kind == Kind::call && !initializer.intrinsic),
              initializer.at, "seed needs a fresh region or a direct owning region factory");
       const auto &value = remember(initializer, initializer.kind == Kind::make_region
           ? fresh_region(initializer) : call(initializer, true).value());
@@ -2207,9 +2207,8 @@ class BodyExtraction {
       }
       supplied_ = incoming;
       if (finalizer) {
-        const auto &result = body_.instance.result;
-        expect(!result.owns_region() && !result.owns_exception(), finalizer->at,
-               "seed needs cleanup disposition for an owning return");
+        expect(!body_.instance.result.owns_exception(), finalizer->at,
+               "seed needs a supported owning exception result");
         // Cleanup has its own completion. Its normal value is discarded,
         // and a terminating finalizer leaves no local continuation.
         const auto &cleanup = extract(*finalizer);
@@ -2536,9 +2535,8 @@ class BodyExtraction {
         expect(method_ && body_.instance.result.type && !in_iteration_ && !in_deferred_block_ &&
                expr.children.size() == 1 && expr.children.front()->kind == Kind::block,
                expr.at, "seed needs a non-repeated plain deferred block in a declared callable");
-        const auto &result = body_.instance.result;
-        expect(!result.owns_region() && !result.owns_exception(), expr.at,
-               "seed needs cleanup disposition for an owning return");
+        expect(!body_.instance.result.owns_exception(), expr.at,
+               "seed needs a supported owning exception result");
         const auto &body = *expr.children.front();
         auto supplied = supplied_;
         in_deferred_block_ = true;
@@ -2644,18 +2642,18 @@ class BodyExtraction {
         return op;
       }
       case Kind::return_tail: {
-        expect(!form_.supplied_group && !body_.instance.result.owns_region(), expr.at,
-               "seed needs a local callable result at the tail");
-        if (!body_.outline && body_.instance.result.type && !body_.instance.result.borrowed() &&
+        expect(!form_.supplied_group, expr.at, "seed needs a local callable result at the tail");
+        const auto &result = body_.instance.result;
+        if (!body_.outline && result.type && result.mode == ResultMode::value &&
             implicit_scope_call(*expr.children.front())) {
-          prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
-          return value_return(*body_.instance.result.type);
+          prepare_scope_value(*expr.children.front(), *result.type);
+          return value_return(*result.type);
         }
         const auto &tail = operand(expr, 0);
         op.type = tail.type;
         if (tail.type != Type::never && tail.type != Type::void_type) {
-          expect(body_.instance.result.type.has_value(), expr.at,
-                 "seed needs a declared result for a value tail");
+          expect(result.type.has_value(), expr.at, "seed needs a declared result for a value tail");
+          expect(!result.owns_region(), expr.at, "seed needs a direct fresh region return");
           prepare_return(*expr.children.front(), tail, op);
           op.type = Type::never;
         }
@@ -2685,7 +2683,7 @@ class BodyExtraction {
           op.operand_type = Type::void_type;
           return op;
         }
-        if (!body_.outline && !body_.instance.result.borrowed() && expr.children.size() == 1 &&
+        if (!body_.outline && body_.instance.result.mode == ResultMode::value && expr.children.size() == 1 &&
             implicit_scope_call(*expr.children.front())) {
           prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
           return value_return(*body_.instance.result.type);

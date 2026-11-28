@@ -1802,7 +1802,7 @@ class ModuleBinder {
           prepared.result.mode = ResultMode::owned_exception;
           prepared.result.read_only = form->result_const;
         } else if (prepared.result.type->kind == Type::region && prepared.result.type->owned) {
-          if (form->c_linkage || form->symbolic || !operation.empty() || here ||
+          if (form->c_linkage || form->symbolic || !operation.empty() ||
               !form->result_owner.empty() || form->result_const || !form->result_kind.empty() ||
               !form->type_parameters.empty())
             implementation_gap(form->at, "an owning region result outside an ordinary named CoD factory");

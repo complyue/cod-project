@@ -130,7 +130,7 @@ class LLVMEmission {
   std::map<size_t, llvm::AllocaInst *> exception_holder_slots_;
   std::vector<llvm::AllocaInst *> exception_parameter_slots_;
   llvm::AllocaInst *exception_result_destination_ = nullptr;
-  llvm::AllocaInst *pending_exception_result_ = nullptr;
+  ResultMode result_mode_ = ResultMode::value;
   std::vector<llvm::Value *> here_arguments_;
   llvm::Value *here_destination_ = nullptr;
   llvm::Function *function_ = nullptr;
@@ -138,13 +138,16 @@ class LLVMEmission {
   // Live slots and suspended values share the complete pending state. Native
   // call outcomes carry a protected destination independently of local return and failure.
   template <typename T> struct CompletionState {
-    T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{}, transfer{}, failure_owner{};
-    auto fields() const { return std::array{value, category, site, fatal, requested, available, cause, kind, has_return, transfer, failure_owner}; }
-    auto failure_fields() const { return std::array{category, site, fatal, requested, available, cause, failure_owner}; }
+    T value{}, category{}, site{}, fatal{}, requested{}, available{}, cause{}, kind{}, has_return{}, transfer{};
+    T failure_owner{}, result_owner{};
+    auto fields() const {
+      return std::array{value, category, site, fatal, requested, available, cause, kind, has_return,
+                        transfer, failure_owner, result_owner};
+    }
     template <typename Transform> auto transform(const Transform &apply) const {
       return CompletionState<decltype(apply(value))>{apply(value), apply(category), apply(site), apply(fatal),
           apply(requested), apply(available), apply(cause), apply(kind), apply(has_return), transfer ? apply(transfer) : nullptr,
-          failure_owner ? apply(failure_owner) : nullptr};
+          failure_owner ? apply(failure_owner) : nullptr, result_owner ? apply(result_owner) : nullptr};
     }
   };
   CompletionState<llvm::AllocaInst *> completion_;
@@ -603,13 +606,19 @@ class LLVMEmission {
     sites_.push_back({at, nominal});
     return sites_.size();
   }
-  llvm::Value *take_failure_owner(llvm::IRBuilder<> &builder, llvm::Value *place) {
+  llvm::Value *take_pointer(llvm::IRBuilder<> &builder, llvm::Value *place) {
     auto *owner = builder.CreateLoad(builder.getPtrTy(), place);
     builder.CreateStore(null_pointer(), place);
     return owner;
   }
   void release_failure_owner(llvm::IRBuilder<> &builder, llvm::Value *owner) {
     if (owner) builder.CreateCall(runtime("cod_lang_release_exception_region", builder.getVoidTy(), {builder.getPtrTy()}), {owner});
+  }
+  void release_result_owner(llvm::Value *owner) {
+    if (!owner) return;
+    if (result_mode_ == ResultMode::owned_region)
+      b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
+    else release_failure_owner(b_, owner);
   }
   llvm::Value *exception_payload(llvm::Value *owner) {
     return b_.CreateCall(runtime("cod_lang_exception_payload", b_.getPtrTy(), {b_.getPtrTy()}), {owner});
@@ -618,7 +627,7 @@ class LLVMEmission {
     return llvm::StructType::get(context_, {b_.getPtrTy(), b_.getPtrTy()});
   }
   void clear_failure_owner() {
-    if (owned_failures_) release_failure_owner(b_, take_failure_owner(b_, completion_.failure_owner));
+    if (owned_failures_) release_failure_owner(b_, take_pointer(b_, completion_.failure_owner));
   }
   llvm::Value *here_payload_slot(llvm::IRBuilder<> &builder, llvm::Value *transfer) {
     return builder.CreateStructGEP(here_transfer_, transfer, 1);
@@ -631,7 +640,7 @@ class LLVMEmission {
     auto *release = block("here.release.failure"), *done = block("here.failure.released");
     b_.CreateCondBr(b_.CreateAnd(b_.CreateIsNotNull(transfer), b_.CreateICmpNE(transfer, retained)), release, done);
     b_.SetInsertPoint(release);
-    release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, transfer)));
+    release_failure_owner(b_, take_pointer(b_, transfer_failure_slot(b_, transfer)));
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
   }
@@ -674,6 +683,11 @@ class LLVMEmission {
     discard_transfer_failure(previous, pending);
     b_.CreateStore(pending, completion_.transfer);
     auto *leaves = b_.CreateAnd(b_.CreateIsNotNull(pending), b_.CreateICmpNE(kind, b_.getInt8(2)));
+    if (completion_.result_owner) {
+      auto *owner = load(completion_.result_owner);
+      b_.CreateStore(b_.CreateSelect(leaves, null_pointer(), owner), completion_.result_owner);
+      release_result_owner(b_.CreateSelect(leaves, owner, null_pointer()));
+    }
     b_.CreateStore(b_.CreateSelect(leaves, b_.getInt8(3), kind), completion_.kind);
   }
   void save_abrupt(llvm::Value *result) {
@@ -1207,7 +1221,7 @@ class LLVMEmission {
     auto *cancel = block("here.cleanup.failed"), *deliver = block("here.deliver");
     b_.CreateCondBr(failed(result), cancel, deliver);
     b_.SetInsertPoint(cancel);
-    if (owned_failures_) release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, target)));
+    if (owned_failures_) release_failure_owner(b_, take_pointer(b_, transfer_failure_slot(b_, target)));
     auto *cleanup_failure = b_.CreateInsertValue(result, null_pointer(), 7);
     b_.CreateBr(join);
     b_.SetInsertPoint(deliver);
@@ -1306,6 +1320,7 @@ class LLVMEmission {
     b_.CreateStore(integer(0), completion_.category);
     b_.CreateStore(null_pointer(), completion_.fatal);
     if (owned_failures_) b_.CreateStore(null_pointer(), completion_.failure_owner);
+    if (completion_.result_owner) b_.CreateStore(null_pointer(), completion_.result_owner);
     b_.CreateStore(b_.getFalse(), completion_.has_return);
     if (protected_outcomes_) b_.CreateStore(null_pointer(), completion_.transfer);
     Control action{control_, block("cleanup.completed")};
@@ -1333,12 +1348,16 @@ class LLVMEmission {
     }
     b_.CreateCondBr(resume, restore, replace);
     b_.SetInsertPoint(restore);
+    // A receiver-local cleanup return can itself be abandoned when the
+    // suspended supplier transfer resumes.
+    if (completion_.result_owner) release_result_owner(load(completion_.result_owner));
     const auto places = completion_.fields();
     const auto values = pending.fields();
     for (size_t i = 0; i < places.size(); ++i) if (places[i]) b_.CreateStore(values[i], places[i]);
     b_.CreateBr(done);
     b_.SetInsertPoint(replace);
     release_failure_owner(b_, pending.failure_owner);
+    release_result_owner(pending.result_owner);
     b_.CreateBr(done);
     b_.SetInsertPoint(done);
     auto *transfer = pending.transfer;
@@ -1364,7 +1383,7 @@ class LLVMEmission {
   }
   void clear_completion_transfer() {
     if (!protected_outcomes_) return;
-    discard_transfer_failure(take_failure_owner(b_, completion_.transfer), null_pointer());
+    discard_transfer_failure(take_pointer(b_, completion_.transfer), null_pointer());
   }
   struct DeferredBodyFailure {
     llvm::Value *value, *owner;
@@ -1432,7 +1451,7 @@ class LLVMEmission {
     auto *attach = block("defer.attach.body"), *deliver = block("defer.deliver.aggregate");
     b_.CreateCondBr(failed(body), attach, deliver);
     b_.SetInsertPoint(attach);
-    retain_deferred_failure(owner, false, body, take_failure_owner(b_, body_owner));
+    retain_deferred_failure(owner, false, body, take_pointer(b_, body_owner));
     b_.CreateBr(deliver);
     b_.SetInsertPoint(deliver);
     clear_completion_transfer();
@@ -1514,7 +1533,7 @@ class LLVMEmission {
         dispatch->addCase(integer(i), destroy);
         b_.SetInsertPoint(destroy);
         auto *holder = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
-        release_failure_owner(b_, take_failure_owner(b_, holder));
+        release_failure_owner(b_, take_pointer(b_, holder));
         b_.CreateBr(next);
         continue;
       }
@@ -1991,7 +2010,7 @@ class LLVMEmission {
       llvm::Value *value;
       if (source) {
         value = load(storage_.at(*source));
-        auto *owner = take_failure_owner(b_, exception_holder_slots_.at(*source));
+        auto *owner = take_pointer(b_, exception_holder_slots_.at(*source));
         b_.CreateStore(owner, destination->second);
       } else {
         b_.CreateStore(null_pointer(), destination->second);
@@ -2088,7 +2107,7 @@ class LLVMEmission {
       b_.SetInsertPoint(selected);
       b_.CreateStore(caught, storage_.at(*fact.place));
       auto *pending_transfer = protected_outcomes_ ? load(completion_.transfer) : nullptr;
-      auto *caught_owner = owned_failures_ ? take_failure_owner(b_, completion_.failure_owner) : nullptr;
+      auto *caught_owner = owned_failures_ ? take_pointer(b_, completion_.failure_owner) : nullptr;
       llvm::AllocaInst *holder = nullptr;
       if (owned_failures_) {
         holder = slot(b_.getPtrTy(), "catch.owner");
@@ -2105,7 +2124,7 @@ class LLVMEmission {
       if (reachable()) { b_.CreateStore(read && discard ? empty_scalar() : result, saved); b_.CreateBr(catching.exit); }
       if (protected_outcomes_ || owned_failures_) {
         b_.SetInsertPoint(catching.exit);
-        if (holder) release_failure_owner(b_, take_failure_owner(b_, holder));
+        if (holder) release_failure_owner(b_, take_pointer(b_, holder));
         preserve_transfer(pending_transfer);
         b_.CreateBr(handled);
       }
@@ -3048,19 +3067,17 @@ class LLVMEmission {
     case K::return_value: case K::break_value: case K::continue_value: {
       llvm::Value *value = empty_scalar();
       if (fact.exception_owner) {
-        if (!pending_exception_result_) throw std::logic_error("exception return without a pending owner slot");
-        const size_t holders = *checked_.at(&expr).exception_owner;
-        value = [&](size_t holder) -> llvm::Value * {
-          auto *owner = take_failure_owner(b_, exception_holder_slots_.at(holder));
-          b_.CreateStore(owner, pending_exception_result_);
-          return load(storage_.at(holder));
-        }(holders);
+        if (!completion_.result_owner) throw std::logic_error("exception return without a pending owner slot");
+        const auto holder = *fact.exception_owner;
+        auto *owner = take_pointer(b_, exception_holder_slots_.at(holder));
+        b_.CreateStore(owner, completion_.result_owner);
+        value = load(storage_.at(holder));
       } else if (fact.operand_type.kind == Type::region && fact.operand_type.owned) {
         const auto *make = expr.children.front().get();
         while (make->kind == K::grouped) make = make->children.front().get();
         auto *owner = construct_region(*make);
         if (!reachable()) return nullptr;
-        value = b_.CreateInsertValue(value, b_.CreatePtrToInt(owner, b_.getInt64Ty()), 0);
+        b_.CreateStore(owner, completion_.result_owner);
       } else if (!expr.children.empty() && inline_aggregate_type(fact.operand_type) && !fact.borrowed_result) {
         const auto &source = *expr.children.front();
         auto *input = emit_expression(source, checked_.at(&source).view ? Projection::target : Projection::value);
@@ -3090,7 +3107,7 @@ class LLVMEmission {
         clear_failure_owner();
         if (owned_failures_) {
           discard_transfer_failure(load(completion_.transfer), here_destination_);
-          release_failure_owner(b_, take_failure_owner(b_, transfer_failure_slot(b_, here_destination_)));
+          release_failure_owner(b_, take_pointer(b_, transfer_failure_slot(b_, here_destination_)));
         }
         auto *payload = outcome(value, integer(0), integer(0), null_pointer());
         b_.CreateStore(b_.getInt8(static_cast<unsigned>(*fact.here_exit)), b_.CreateStructGEP(here_transfer_, here_destination_, 0));
@@ -3300,7 +3317,7 @@ class LLVMEmission {
         value = b_.CreateInsertValue(value, handle, 4);
       }
       auto *owner = owned_failures_ && fact.exception_owner
-          ? take_failure_owner(b_, exception_holder_slots_.at(*fact.exception_owner)) : nullptr;
+          ? take_pointer(b_, exception_holder_slots_.at(*fact.exception_owner)) : nullptr;
       raise_exception(value, owner);
       return nullptr;
     }
@@ -3434,7 +3451,7 @@ class LLVMEmission {
     body.SetInsertPoint(completed);
     body.CreateRet(result);
     body.SetInsertPoint(forward);
-    if (owned_failures_) release_failure_owner(body, take_failure_owner(body, transfer_failure_slot(body, borrowed)));
+    if (owned_failures_) release_failure_owner(body, take_pointer(body, transfer_failure_slot(body, borrowed)));
     body.CreateStore(body.getInt8(static_cast<unsigned>(HereExit::failure)), body.CreateStructGEP(here_transfer_, borrowed, 0));
     auto *plain_failure = body.CreateInsertValue(result, null_pointer(), 7);
     body.CreateStore(plain_failure, body.CreateStructGEP(here_transfer_, borrowed, 1));
@@ -3449,7 +3466,8 @@ class LLVMEmission {
     region_controllers_ = frame.region_controllers.empty() ? nullptr : &frame.region_controllers;
     exception_holder_slots_.clear();
     exception_parameter_slots_.clear();
-    exception_result_destination_ = pending_exception_result_ = nullptr;
+    exception_result_destination_ = nullptr;
+    result_mode_ = ResultMode::value;
     allocation_capabilities_.clear();
     lexical_allocations_ = nullptr;
     size_t owner_index = frame.inputs.size();
@@ -3506,7 +3524,7 @@ class LLVMEmission {
         auto *source = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(layout, carrier, 0));
         auto *owner_slot = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(layout, carrier, 1));
         auto *holder = slot(b_.getPtrTy(), "exception.parameter");
-        b_.CreateStore(take_failure_owner(b_, owner_slot), holder);
+        b_.CreateStore(take_pointer(b_, owner_slot), holder);
         store_incoming(place, b_.CreateLoad(scalar_, source));
         exception_holder_slots_.emplace(place, holder);
         exception_parameter_slots_.push_back(holder);
@@ -3527,9 +3545,10 @@ class LLVMEmission {
     const auto &call = call_layouts_.at(layout.method);
     if (function->arg_size() != call.parameter_count()) throw std::logic_error("native body disagrees with its parameter roles");
     begin(function, layout.storage, layout.bindings, layout.frame);
-    if (call.exception_result) {
-      pending_exception_result_ = slot(b_.getPtrTy(), "exception.pending.result");
-      b_.CreateStore(null_pointer(), pending_exception_result_);
+    result_mode_ = layout.result.mode;
+    if (layout.result.owns_region() || call.exception_result) {
+      completion_.result_owner = slot(b_.getPtrTy(), "return.owner");
+      b_.CreateStore(null_pointer(), completion_.result_owner);
     }
     for (size_t i = 0; i < call.allocation_owners.size(); ++i)
       allocation_capabilities_[call.allocation_owners[i]] = function->getArg(call.allocation_owners_begin() + i);
@@ -3548,7 +3567,7 @@ class LLVMEmission {
     control_ = nullptr;
     b_.SetInsertPoint(finish_);
     for (auto i = exception_parameter_slots_.rbegin(); i != exception_parameter_slots_.rend(); ++i)
-      release_failure_owner(b_, take_failure_owner(b_, *i));
+      release_failure_owner(b_, take_pointer(b_, *i));
     auto *value = load(completion_.value);
     if (call.native_borrow_destination) {
       auto *native = b_.getTrue();
@@ -3578,11 +3597,13 @@ class LLVMEmission {
       b_.SetInsertPoint(done);
       value = empty_scalar();
     }
-    if (call.exception_result) {
-      auto *owner = take_failure_owner(b_, pending_exception_result_);
+    if (completion_.result_owner) {
+      auto *owner = take_pointer(b_, completion_.result_owner);
       auto *normal = b_.CreateICmpEQ(load(completion_.kind), b_.getInt8(1));
-      b_.CreateStore(b_.CreateSelect(normal, owner, null_pointer()), function->getArg(call.exception_result_index()));
-      release_failure_owner(b_, b_.CreateSelect(normal, null_pointer(), owner));
+      auto *selected = b_.CreateSelect(normal, owner, null_pointer());
+      if (call.exception_result) b_.CreateStore(selected, function->getArg(call.exception_result_index()));
+      else value = b_.CreateInsertValue(value, b_.CreatePtrToInt(selected, b_.getInt64Ty()), 0);
+      release_result_owner(b_.CreateSelect(normal, null_pointer(), owner));
     }
     b_.CreateRet(outcome(value, load(completion_.category), load(completion_.site), load(completion_.fatal),
         load(completion_.requested), load(completion_.available), load(completion_.cause),
