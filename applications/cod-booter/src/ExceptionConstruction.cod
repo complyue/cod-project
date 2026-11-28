@@ -1,6 +1,6 @@
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, syntax_first, syntax_past, NamedThrowSites, inspect_named_throw,
+    ExprNodes, no_node, syntax_first, syntax_past, NamedThrowSites, inspect_named_throw, binds_local_storage,
     SequenceEntry, first_sequence_entry, inspect_sequence_entry, SequenceSyntax { BlockSequence },
     AssignmentSites, inspect_assignment, AssignmentSyntax { FieldTransfer },
 };
@@ -9,22 +9,15 @@ using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" ModuleInterfaces;
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
+using "./ExceptionConstructionFacts.cod" {
+    ExceptionConstructionFacts, ExceptionConstructionFact { ConstructedException, ExceptionInitializerTargetRead },
+};
 using "./ExceptionPayload.cod" { PayloadField, PayloadFields, PayloadSchema, find_payload_schema,
     read_payload_schema,
                                select_payload_field, unknown_exception_field };
 using "./OperandChecking.cod" {
-    OperandFacts, declared_scalar, require_typed_bits, never_result, remember_constructed_throw
+    OperandFacts, declared_scalar, bits_operand_diagnostic, unproved_operand, nullable_ptr, never_result,
 };
-
-export data ExceptionConstructionFact =
-    NoExceptionConstruction {} |
-    ConstructedException {
-        type:ExceptionType, first:UInt64, past:UInt64, field_count:UInt64, last_initializer:UInt64,
-            reaches_throw:bool,
-    } |
-    ExceptionInitializer { field:UInt64, value_kind:UInt8, operand:UInt64, };
-
-export array ExceptionConstructionFacts[UInt64]:ExceptionConstructionFact;
 
 export data ExceptionConstructionResult { diagnostic:UInt8, node:UInt64, }
 
@@ -41,35 +34,15 @@ func reject(result:ExceptionConstructionResult in R, at:UInt64,
     return false;
 }
 
-func remember_exception(nodes:const ExprNodes in N, type:const ExceptionType in T,
-                        plans:ExceptionConstructionFacts in C, site:UInt64, count:UInt64, tail:UInt64,
-                            abrupt:bool) -> void
-    where {const owner N, const owner T, owner C} {
-    plans[site] <- make ConstructedException {
-        type <- type; first <- syntax_first(nodes, site + 1u64, site); past <- syntax_past(nodes,
-            site + 1u64, site);
-        field_count <- count; last_initializer <- tail; reaches_throw <- !abrupt;
-    };
-    return;
-}
-
-func remember_initializer(plans:ExceptionConstructionFacts in C, at:UInt64, field:UInt64, kind:UInt8,
-    operand:UInt64) -> void
-    where {owner C} {
-    plans[at] <- make ExceptionInitializer { field <- field; value_kind <- kind; operand <- operand;
-        };
-    return;
-}
-
 func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes in N,
     names:const NameBindings in B,
-                          work:const NameWork in W, arguments:OperandFacts in A,
+                          work:const NameWork in W, arguments:const OperandFacts in A,
                               field_names:const SourceBytes in P,
                           fields:const PayloadFields in F, field_count:UInt64,
                               plans:ExceptionConstructionFacts in C,
                           type:const ExceptionType in T, site:UInt64, tail:UInt64, revision:UInt64,
                               result:ExceptionConstructionResult in R)
-    -> bool where {const owner S, const owner N, const owner B, const owner W, owner A,
+    -> bool where {const owner S, const owner N, const owner B, const owner W, const owner A,
         const owner P,
                    const owner F, owner C, const owner T, owner R} {
     val item <- no_node();
@@ -87,8 +60,9 @@ func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes i
         if (item == no_node()) {
             if (!abrupt && ready != field_count)
                 return reject(result, site, incomplete_exception_initialization());
-            remember_exception(nodes, type, plans, site, field_count, tail, abrupt);
-            remember_constructed_throw(arguments, site, type, !abrupt);
+            plans[site] <- make ConstructedException {
+                nominal <- type; last_initializer <- tail; reaches_throw <- !abrupt;
+            };
             return true;
         };
         if (inspect_sequence_entry(nodes, revision, site, item, entry) != BlockSequence ||
@@ -107,16 +81,19 @@ func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes i
         if (arguments[assignment.input].kind == never_result()) {
             (abrupt <- true):void;
         } else {
-            diagnostic <- require_typed_bits(nodes, arguments, assignment.input,
+            if (binds_local_storage(nodes, assignment.input))
+                return reject(result, assignment.input, unproved_operand());
+            diagnostic <- bits_operand_diagnostic(arguments[assignment.input].kind,
                 declared_scalar(fields[field].kind));
             if (diagnostic != 0u8) return reject(result, assignment.input, diagnostic);
+            if (arguments[assignment.input].reception == nullable_ptr()) {
+                (plans[assignment.input] <- make ExceptionInitializerTargetRead {}):void
+            };
         };
         if (!initialized[field]) {
             initialized[field] <- true;
             (ready <- ready + 1u64):void;
         };
-        remember_initializer(plans, entry.item, field, declared_scalar(fields[field].kind),
-            assignment.input);
         if (item == tail) { (item <- no_node()):void; } else { (item <- work[item].next):void; };
     };
     return reject(result, site, unsupported_constructed_exception());
@@ -129,13 +106,13 @@ export proc check_exception_construction(source:const SourceBytes in S, nodes:co
                                                  aggregates:const AggregateFacts in G,
                                          spellings:const SourceBytes in P, spelling_used:UInt64,
                                          interfaces:const ModuleInterfaces in I, published:UInt64,
-                                         arguments:OperandFacts in A,
+                                         arguments:const OperandFacts in A,
                                              plans:ExceptionConstructionFacts in C, site:UInt64,
                                          module:UInt64, used:UInt64, revision:UInt64,
                                              result:ExceptionConstructionResult in R)
     -> bool where {const owner S, const owner N, const owner B, const owner W, const owner E,
         const owner G,
-                   const owner P, const owner I, owner A, owner C, owner R} {
+                   const owner P, const owner I, const owner A, owner C, owner R} {
     ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
         no_node(); };
     ref type = make ExceptionType { defining_module <- 0u64; declaration <- no_node(); checked <-

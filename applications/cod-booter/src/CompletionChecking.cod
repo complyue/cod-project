@@ -21,6 +21,9 @@ using "./ParserStorage.cod" NameSyntax { OrdinaryName };
 using "./ParserStorage.cod" CompletionSyntax { ReturnCompletion, BreakCompletion };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
 using "./ExceptionTypes.cod" ExceptionType;
+using "./ExceptionConstructionFacts.cod" {
+    ExceptionConstructionFacts, ExceptionConstructionFact { ConstructedException, ExceptionInitializerTargetRead },
+};
 using "./NativeDeclarations.cod" has_prepared_native_loans;
 using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, array_reader_result_kind, checked_literal_call };
 using "./ParserStorage.cod" {
@@ -806,8 +809,9 @@ func supports_immediate_numeric_exit(nodes:const ExprNodes in N, names:const Nam
 
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
+                 constructions:const ExceptionConstructionFacts in E,
                  sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
-    where {const owner N, const owner B, const owner L, const owner F, const owner H, owner X} {
+    where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner E, owner X} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
         return 0u8;
@@ -817,7 +821,11 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         sites[at].can_continue <- 0u8;
         return 0u8;
     } else {};
-    val target <- if (facts[at].needs_target != 0u8) { at } else { no_node() };
+    val initializer_read <- at < intrinsic (len)(constructions) && (case constructions[at] of {
+        ExceptionInitializerTargetRead -> true;
+        _ -> false
+    });
+    val target <- if (facts[at].needs_target != 0u8 || initializer_read) { at } else { no_node() };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     if (inspect_sequence_entry(nodes, revision, used, at, entry) == ArgumentSequence && facts[at].reception == borrowed_ref()) {
         val actual <- entry.item;
@@ -953,11 +961,16 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
                 };
                 (NamedThrow) -> {
                     sites[at].can_continue <- 0u8;
-                    if (facts[at].identity_module == 0u64) return unproved_throw_operand();
-                    if (!facts[at].reaches_constructed_throw) return 0u8;
-                    return route_exception(nodes, names, links, facts, sites, at, used, revision,
-                                           facts[at].identity_module, facts[at].identity,
-                                               facts[at].checked_exception, definite_failure());
+                    if (at >= intrinsic (len)(constructions)) return unproved_throw_operand();
+                    return case constructions[at] of {
+                        (ConstructedException { val failure <- nominal, val tail <- last_initializer, val reaches <- reaches_throw, }) -> {
+                            if (!reaches || !can_continue(sites, tail)) return 0u8;
+                            route_exception(nodes, names, links, facts, sites, at, used, revision,
+                                failure.defining_module, failure.declaration,
+                                if (failure.checked) { 1u8 } else { 0u8 }, definite_failure())
+                        };
+                        _ -> unproved_throw_operand()
+                    };
                 };
                 (_) -> {};
             };
@@ -1391,16 +1404,19 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
                                     names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
                                     views:const SuppliedViews in H,
                                     demand:const DeclarationDemands in D,
+                                    constructions:const ExceptionConstructionFacts in E,
                                         sites:CompletionSites in X,
                                     report:CompletionCheckResult in R) -> bool
     where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner H,
-           const owner D, owner X, owner R} {
+           const owner D, const owner E, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_completion_tree();
     ref tail = make UInt64 { no_node() };
     if (tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) || tree.root != tree.used - 1u64 ||
         !module_tail(nodes, tree.revision, tree.used, tree.root, tail)) return false;
-    if (intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
+    val construction_count <- intrinsic (len)(constructions);
+    if ((construction_count != 0u64 && construction_count < tree.used) ||
+        intrinsic (len)(names) < tree.used || intrinsic (len)(links) < tree.used ||
         intrinsic (len)(facts) < tree.used || intrinsic (len)(sites) < tree.used) {
         report.diagnostic <- completion_storage_exhausted();
         return false;
@@ -1437,7 +1453,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
             report.diagnostic <- check_event(
-                nodes, names, links, facts, views, sites, at, tree.used, tree.revision);
+                nodes, names, links, facts, views, constructions, sites, at, tree.used, tree.revision);
             if (report.diagnostic == 0u8) {
                 report.diagnostic <- record_array_read_completion(nodes, names, links, facts, views,
                     sites, at, tree.used, tree.revision)

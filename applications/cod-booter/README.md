@@ -229,6 +229,8 @@ The C++ seed and CoD booter must parse the [owning catch header and ordinary ref
 
 Acceptance checks each frontend at its own parse boundary. A valid form carries its binding mode, owner name when present, and construction operands into checking. Malformed syntax fails at parsing. When an execution path is unsupported, the compiler can reject the parsed form during checking or lowering. Supported paths must execute their required propagation, handling and cleanup. For example, parsing `catch (e:const E)` as a borrowed local loses the handler’s release obligation even when the handler only reads e.
 
+For admitted braced throws with scalar fields, the two booter source commands use the completed nominal exception identity and initializer target requirements. A null read fails at its initializer. If an initializer cannot complete, the named exception does not reach its handler. This checking covers local and imported checked and unchecked exception types. Braced throws remain outside booter object emission.
+
 ### Fixed references
 
 An initialized `const ref` local selects a supported scalar target once. The fixed slot cannot be rebound. A writable target can still receive a bits transfer or an ordinary mutable loan through that reference. An omitted target annotation inherits access from the initializer. In `const ref saved:const UInt64 = source`, both the slot and the access through it are restricted.
@@ -421,7 +423,7 @@ For the deque's push and pop methods, the defining visit records the bound make 
 
 The source checker accepts a workspace record with fixed reference fields for named arrays of finite-bits records. Each projection keeps its own array and element identity and uses the actual owner of the workspace borrow. The enclosing loan and the declared field target independently constrain write access. Indexed access checks the selected backing and index before lending the element. A fixed local reference keeps that selected element, and a whole-record transfer into a writable formal copies the prepared value after the source index succeeds. Both source commands accept `GenericLayouts.cod`.
 
-`ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`. The first remaining source-checking limit in the `ModuleGraph.cod` closure is the imported `remember_constructed_throw` call in `ExceptionConstruction.cod`.
+`ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`. The first remaining source-checking limit in the `ModuleGraph.cod` closure is the imported `find_payload_schema` call in `ExceptionConstruction.cod`.
 
 ### Readonly queries
 

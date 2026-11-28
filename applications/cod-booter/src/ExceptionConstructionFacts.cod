@@ -1,0 +1,8 @@
+using "./ExceptionTypes.cod" ExceptionType;
+
+export data ExceptionConstructionFact =
+    NoExceptionConstruction {} |
+    ConstructedException { nominal:ExceptionType, last_initializer:UInt64, reaches_throw:bool, } |
+    ExceptionInitializerTargetRead {};
+
+export array ExceptionConstructionFacts[UInt64]:ExceptionConstructionFact;

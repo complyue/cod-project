@@ -165,7 +165,6 @@ export data OperandFact {
     reception:UInt8,
     checked_exception:UInt8,
     identity_module:UInt64,
-    reaches_constructed_throw:bool,
     loans_owning_handle:bool,
     loans_scoped_aggregate:bool,
     case_receipt:UInt64,
@@ -356,7 +355,6 @@ func set_fact(facts:OperandFacts in F, at:UInt64, kind:UInt8, reception:UInt8,
     facts[at].checked_exception <- checked_exception;
     facts[at].identity_module <- 0u64;
     facts[at].enum_backing <- 0u8;
-    facts[at].reaches_constructed_throw <- false;
     facts[at].loans_owning_handle <- false;
     facts[at].loans_scoped_aggregate <- false;
     facts[at].case_receipt <- no_node();
@@ -373,16 +371,6 @@ func set_fact(facts:OperandFacts in F, at:UInt64, kind:UInt8, reception:UInt8,
     facts[at].target_presence <- if (kind == null_literal()) { absent_target() } else {
         if (reception == nullable_ptr()) { unknown_target() } else { present_target() }
     };
-    return;
-}
-
-export func remember_constructed_throw(facts:OperandFacts in F, at:UInt64,
-    type:const ExceptionType in T, reaches_throw:bool)
-    -> void where {owner F, const owner T} {
-    set_fact(facts, at, never_result(), 0u8, no_node(), type.declaration,
-        if (type.checked) { 1u8 } else { 0u8 });
-    facts[at].identity_module <- type.defining_module;
-    facts[at].reaches_constructed_throw <- reaches_throw;
     return;
 }
 
@@ -410,7 +398,7 @@ func only_void(facts:OperandFacts in F, at:UInt64) -> void where {owner F} {
     set_fact(facts, at, void_result(), 0u8, no_node(), 0u64, 0u8);
 }
 
-export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64,
+func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in F, operand:UInt64,
     kind:UInt8) -> UInt8
     where {const owner N, owner F} {
     if (binds_local_storage(nodes, operand))
@@ -418,9 +406,15 @@ export func require_typed_bits(nodes:const ExprNodes in N, facts:OperandFacts in
     return require_prepared_typed_bits(facts, operand, kind)
 }
 
+export func bits_operand_diagnostic(actual:UInt8, expected:UInt8) -> UInt8 {
+    if (actual == 0u8) return unproved_operand();
+    if (!scalar_kind(expected) || actual != expected) return wrong_operand_type();
+    return 0u8
+}
+
 func require_prepared_typed_bits(facts:OperandFacts in F, operand:UInt64, kind:UInt8) -> UInt8 where {owner F} {
-    if (facts[operand].kind == 0u8) return unproved_operand();
-    if (!scalar_kind(kind) || facts[operand].kind != kind) return wrong_operand_type();
+    val diagnostic <- bits_operand_diagnostic(facts[operand].kind, kind);
+    if (diagnostic != 0u8) return diagnostic;
     if (facts[operand].reception == nullable_ptr()) {
         facts[operand].needs_target <- 1u8;
         return 0u8;

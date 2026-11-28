@@ -120,11 +120,8 @@ using "./CompletionChecking.cod" { CompletionSite, CompletionSites };
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { NoCaughtField }, first_caught_field, prepare_caught_fields
 };
-using "./ExceptionConstruction.cod" {
-    ExceptionConstructionFact { NoExceptionConstruction }, ExceptionConstructionFacts,
-        ExceptionConstructionResult,
-    check_exception_construction,
-};
+using "./ExceptionConstructionFacts.cod" { ExceptionConstructionFacts, ExceptionConstructionFact { NoExceptionConstruction } };
+using "./ExceptionConstruction.cod" { ExceptionConstructionResult, check_exception_construction };
 using "./ModuleCompiler.cod" compile_bound_commands;
 using "./NativeCommands.cod" {
     NativeCommand, NativeCommands, NativePlan, NativeUnitRow, NativeUnitRows,
@@ -773,7 +770,8 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
             operands.node);
         return false
     };
-    ref plans = make ExceptionConstructionFacts(used, make NoExceptionConstruction {});
+    val construction_count <- if (first == no_node()) { 0u64 } else { used };
+    ref plans = make ExceptionConstructionFacts(construction_count, make NoExceptionConstruction {});
     ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
         no_node(); };
     ref construction = make ExceptionConstructionResult { diagnostic <- 0u8; node <- no_node(); };
@@ -788,7 +786,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
             return false;
         };
     };
-    if (!analyze_bound_declaration_completion(nodes, names, work, facts, views, demand, sites, result))
+    if (!analyze_bound_declaration_completion(nodes, names, work, facts, views, demand, plans, sites, result))
         return false;
     if (!executable) {
         finish_text_predicates(nodes, names, work, views, facts, sites, used, revision);
@@ -1568,7 +1566,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
         ref facts = make OperandFacts(capacity, make OperandFact {
             kind <- 0u8; reception <- 0u8; checked_exception <- 0u8; identity_module <- 0u64;
                 target_readonly <- 0u8; needs_target <- 0u8;
-            reaches_constructed_throw <- false; loans_owning_handle <- false; checks_array_bounds <- false;
+            loans_owning_handle <- false; checks_array_bounds <- false;
             array_scalar <- 0u8; array_element_module <- 0u64; array_element_identity <- no_node();
             loans_array_slot <- false; array_slot <- no_node();
             loans_scoped_aggregate <- false; case_receipt <- no_node();
