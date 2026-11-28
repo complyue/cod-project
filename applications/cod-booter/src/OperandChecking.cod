@@ -3752,9 +3752,10 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val count <- contracts[header].entry_count;
     val owners <- contracts[header].owner_count;
     val result <- contracts[header].result_kind;
+    val diagnostic_writer <- result == builtin_u8();
     if (count < 2u64 || count >= published - header || owners == 0u64 ||
         contracts[header].source_writer != WorkspaceWriter ||
-        (result != builtin_bool() && result != builtin_void() && result != builtin_u64()) ||
+        (result != builtin_bool() && result != builtin_void() && result != builtin_u64() && !diagnostic_writer) ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
@@ -3772,6 +3773,7 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val readonly_array <- false;
     val writable_record <- false;
     val scalar_loan <- false;
+    val writable_sum_array <- false;
     val report_writer <- result == builtin_void() && count > 2u64 && owners == 2u64 &&
         !contracts[header].array_slot_failures.out_of_memory;
     for (row in header + 1u64 .. input_past) {
@@ -3782,22 +3784,29 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
             if (role >= owners || access > 1u8) return no_node();
             if (sum_output != no_node() && (kind != array_type() || access != 1u8)) return no_node();
             if (kind == builtin_u64() && checked_inspector_scalar_place(contracts[row], role)) {
-                if (result != builtin_bool() || scalar_loan) return no_node();
+                if ((result != builtin_bool() && !diagnostic_writer) || scalar_loan) return no_node();
                 (scalar_loan <- true):void
             } else {
                 if (!source_aggregate_formal(contracts, row, kind, role, access)) return no_node();
                 if (kind == array_type()) {
                     if (!published_workspace_array(contracts, published, row)) return no_node();
+                    if (diagnostic_writer && access == 0u8) {
+                        if (writable_sum_array || !published_sum_array(contracts, published,
+                            contracts[row].type_module, contracts[row].type_identity)) return no_node();
+                        (writable_sum_array <- true):void
+                    };
                     report_writer <- report_writer && access == 1u8 && !readonly_array;
-                    (readonly_array <- true):void
+                    (readonly_array <- readonly_array || access == 1u8):void
                 } else {
-                    if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
+                    if (diagnostic_writer || kind != record_type() ||
+                        !published_bits_record(contracts, published, row)) return no_node();
                     report_writer <- report_writer && access == 0u8 && !writable_record;
                     (writable_record <- true):void
                 }
             }
         }
     };
+    if (diagnostic_writer && !(writable_sum_array && readonly_array)) return no_node();
     if (sum_output != no_node()) {
         requires_body <- true;
         return if (readonly_array) { past } else { no_node() }
