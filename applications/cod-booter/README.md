@@ -405,7 +405,11 @@ Both source commands check the `Frontend.read_module` and `read_expression` call
 
 The same workspace interface covers `prepare_module_dependencies`, with one initialized writable nominal array and an independent `UInt64` extent. The defining visit completes the body before publication. The caller supplies the exact array type and a writable actual owner, including on a renamed import. A linked probe verifies that the routine clears just the requested dependency prefix and returns false for an oversized extent before changing any row.
 
-Both source commands can check the imported `prepare_enum_assertions` call with its writable binding and work arrays, readonly syntax and schema inputs, and writable diagnostic report. The graph binder completes enum selections before the operand checker uses them. Source checks rooted at `ModuleFrontend.cod` and `ModuleGraph.cod` reach the imported `check_module_operands` call on the object compilation path.
+Both source commands can check the imported `prepare_enum_assertions` call with its writable binding and work arrays, readonly syntax and schema inputs, and writable diagnostic report. The graph binder completes enum selections before the operand checker uses them.
+
+The source commands check `check_module_operands` with the parsed revision and readonly tables. Its writable operand facts and call owner tables keep their written positions even with a readonly interface table between them. `check_module_completion` borrows the checked operands and writes its own sites and report. Its completed workspace contract includes possible scratch allocation. Readonly output tables reject at the call. Linked object checks cover ordinary returns and the located runtime failure when a value result falls through. Both source commands accept `ModuleFrontend.cod`.
+
+The source closure rooted at `ModuleGraph.cod` reaches the typed reference case arm on the deque pop in `SourceContracts.cod`. The booter reader reports that pattern as unsupported.
 
 ### Readonly queries
 

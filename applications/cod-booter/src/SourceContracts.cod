@@ -615,7 +615,10 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
                 numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
             }):void
         };
-        if (prepared_workspace_writer(views, at) && outcomes[at].available) {
+        # A checked writer that allocates needs the workspace interface's
+        # allocation outcome as well as its ordered loans.
+        if (outcomes[at].available && (prepared_workspace_writer(views, at) ||
+            (outcomes[at].allocates && prepared_parser_writer(views, at)))) {
             (views[at] <- make CheckedWorkspaceWriter {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
                 numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
