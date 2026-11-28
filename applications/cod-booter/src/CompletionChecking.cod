@@ -70,7 +70,7 @@ using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, exception_binding,
 };
 using "./OperandChecking.cod" {
-    OperandFacts, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, scalar_u8, declared_scalar, has_value_tail, allocated_source_array,
+    OperandFacts, ScopedTextOutcomes, nullable_ptr, borrowed_ref, never_result, void_result, scalar_u64, scalar_u8, declared_scalar, has_value_tail, allocated_source_array,
     unreachable_case_item, misses_case_arm, has_terminal_defer_before, present_target, absent_target, selected_target_presence,
 };
 using "./ModuleExports.cod" {
@@ -821,7 +821,7 @@ func requires_byte_completion(views:const SuppliedViews in V, demand:const Decla
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
                  demand:const DeclarationDemands in D, constructions:const ExceptionConstructionFacts in E,
-                 sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
+                 sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64, text_oom:bool) -> UInt8
     where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner D, const owner E, owner X} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
@@ -910,7 +910,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
                     index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8;
         };
-        if (facts[at].text_intrinsic == builder_append_export())
+        if (text_oom && (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
+            return unproved_deferred_error();
+        if (facts[at].text_intrinsic == builder_append_export() || text_oom)
             return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, revision, index_out_of_bounds_identity(), 0u8, possible_failure());
@@ -1276,7 +1278,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 (count <- enqueue_failure(reached, at, count)):void;
             } else {};
             event <- sites[at].event;
-            routed <- (array_summary || (builder_summary && facts[at].text_intrinsic == builder_append_export())) &&
+            routed <- (array_summary || (builder_summary && (facts[at].text_intrinsic == builder_append_export() || facts[at].scoped_text_method != no_node()))) &&
                 (event == possible_failure() || event == definite_failure());
             if ((routed || (!builder_summary && is_failure_statement(nodes, at))) &&
                 sites[at].category_module == 0u64 && sites[at].category == category) {
@@ -1420,11 +1422,11 @@ func check_escaping_failure_paths(nodes:const ExprNodes in N, names:const NameBi
 export func check_module_completion(nodes:const ExprNodes in N, tree:const ParseResult in T,
                                     names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
                                     views:const SuppliedViews in H,
-                                    demand:const DeclarationDemands in D,
+                                    demand:const DeclarationDemands in D, text:const ScopedTextOutcomes in Q,
                                     constructions:const ExceptionConstructionFacts in E,
                                         sites:CompletionSites in X,
                                     report:CompletionCheckResult in R) -> bool
-    where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner H,
+    where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner H, const owner Q,
            const owner D, const owner E, owner X, owner R} {
     report.node <- no_node();
     report.diagnostic <- invalid_completion_tree();
@@ -1471,14 +1473,15 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
             report.diagnostic <- check_event(
-                nodes, names, links, facts, views, demand, constructions, sites, at, tree.used, tree.revision);
+                nodes, names, links, facts, views, demand, constructions, sites, at, tree.used, tree.revision,
+                at < intrinsic (len)(text) && text[at]);
             if (report.diagnostic == 0u8) {
                 report.diagnostic <- record_array_read_completion(nodes, names, links, facts, views,
                     demand, sites, at, tree.used, tree.revision)
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
-            builder_append <- builder_append || (facts[at].text_intrinsic == builder_append_export() &&
-                sites[at].event == possible_failure());
+            builder_append <- builder_append || ((facts[at].text_intrinsic == builder_append_export() ||
+                facts[at].scoped_text_method != no_node()) && sites[at].event == possible_failure());
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
             if (definition < tree.used && definition != at &&
                 sites[definition].array_read_completion != NoArrayRead) {

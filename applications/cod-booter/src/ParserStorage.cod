@@ -617,6 +617,29 @@ export func block_tail(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     };
 }
 
+# A linear void body is empty, returns without a value, or performs one
+# operation before falling through or returning without a value.
+export func linear_void_body(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    body:UInt64, operation:UInt64 in R) -> bool where {const owner N, owner R} {
+    ref tail = make UInt64 { no_node() };
+    if (is_scope_block(nodes, body) || !block_tail(nodes, revision, used, body, tail)) return false;
+    operation <- no_node();
+    if (tail == no_node()) return true;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, tail, entry) != (BlockSequence:SequenceSyntax)) return false;
+    val returns_void <- case nodes[entry.item] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { ReturnVoid -> true; _ -> false };
+        _ -> false
+    };
+    if (returns_void) {
+        if (entry.previous == no_node()) return true;
+        if (inspect_sequence_entry(nodes, revision, used, entry.previous, entry) != (BlockSequence:SequenceSyntax)) return false
+    };
+    if (entry.previous != no_node()) return false;
+    operation <- entry.item;
+    return true
+}
+
 export func braced_reference_group(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64) -> bool
     where {const owner N} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;

@@ -1139,13 +1139,13 @@ An empty builder constructed in the current lexical scope has an initialized des
 
 For a checked builder installation into a non-null reference symbol, compare the builder and the symbol's required type by defining identity. An exact type or a direct declared abstract parent can satisfy the requirement. The defining visit publishes the builder's parent with its checked interface so an importing visit can apply the same comparison. Installing a writable output requires both writable target access and allocation access to the actual owner. The installation evaluates its operand before supplying the new binding. The completion checker retains failure during that preparation.
 
-The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs completed dispatch and family-wide binding evidence for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
+The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs to carry the installed bindings through intermediate procedures to `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
 
 ### Importing ordinary text procedures
 
 For the bundled `emit` family, the defining visit stages both fixed methods, including the unmarked definition after the exported head. Each method in this profile has one readonly text loan under a const owner and an explicit void result. Record its resolved formal type and method identity in the defining family's interface. The visit publishes the range only when it has a signature for every member. An unrepresented member keeps the family outside this profile.
 
-A direct source-preserving selection, including a rename, validates the published range and uses the prepared operand to identify a method. An immutable String or CString can supply the String loan. A builder loan requires the exact defining type. A failure during operand evaluation prevents entry. Signature selection leaves entered calls pending the selected method's completed behavior and the visible family's completed symbol requirements.
+A direct source-preserving selection, including a rename, validates the published range and uses the prepared operand to identify a method. An immutable String or CString can supply the String loan. A builder loan requires the exact defining type. A failure during operand evaluation prevents entry. An entered call needs the selected method's completed behavior and the visible family's symbol requirements.
 
 The source commands check the catalog-selected `append_utf8` operation used by `string.cod`. It borrows the writable builder under its allocation-capable owner, followed by the immutable text or builder piece. The operation has a normal void result and can raise the standard allocation failure after operand preparation.
 
@@ -1163,7 +1163,11 @@ The defining visit records the canonical reference symbol, declared target, null
 
 A unary text procedure in the published family can record a pending dispatch when its body directly forwards its formal to a fixed local writer family through a writable non-null reference symbol, with an optional bare return. That record belongs to the method's defining visit and retains the writer family, operation and receiver sites and declared symbol and type identities. The actual `emit` overloads in `string.cod` use this shape. A body outside this profile still has the existing signature-only interface.
 
-Both source commands preserve failure before entry. After successful preparation, a selected method with a pending dispatch reports a located unsupported receiver until completion can prove the possible current target and actual owner. A published pending dispatch grants neither writer completion nor the family's required symbol availability. Those facts are still needed for the full `ProviderViews` route.
+The defining visit completes writer behavior from checked operations. A linear writer can finish without work, make the selected catalog append, or forward its two loans to a selected writer method. Collect the operations and entered call edges first. Completion propagates normal and allocation exits from represented leaves over the frozen edges. A cycle or open edge leaves its behavior unavailable. Publish a concrete receiver candidate only where the complete fixed writer view yields one applicable nominal receiver for the relay's piece type.
+
+The source routes can apply that candidate to a direct statement following one or more adjacent, checked installations in the same scope. Preparation records the ordered installation sites and the direct operand; neither a branch-local installation nor a complex operand is assumed to preserve the binding at this use. Application reads those records and the completed loans. Every member of the visible imported family must have a supplied canonical symbol, including a symbol used only by an unselected overload. The selected member alone must have the matching concrete receiver and actual writable owner. Its possible allocation failure flows into the existing completion and cleanup checks. Failure during preparation still prevents entry.
+
+An unrepresented writer or context retains a located limit. The current application covers the direct supplied call. Carrying incoming requirements through reusable procedures and discharging them at the outer header and stub installations in `ProviderViews` remains open.
 
 ### Target layout for provider rows
 

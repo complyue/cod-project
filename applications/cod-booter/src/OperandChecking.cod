@@ -41,7 +41,7 @@ using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
     CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion, ReturningCondition,
-    ScopedProcedureDefinition, BindSymbolEffect,
+    ScopedProcedureDefinition, BindSymbolEffect, BlockItem,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -113,7 +113,7 @@ using "./ModuleExports.cod" {
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
     CallableUseProofs, matches_object_call, checked_aggregate_storage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord, UnprovedAggregate },
-    FamilyMembership { FixedMethods }, InterfacePayload { DeferredTextReceiver },
+    FamilyMembership { FixedMethods }, InterfacePayload { DeferredTextReceiver, CheckedTextReceiver },
     InterfaceCallableKind { NoCallableKind, CheckedFunction, CheckedProcedure },
     ExceptionSchema { CheckedExceptionSchema, UncheckedExceptionSchema },
 };
@@ -153,7 +153,7 @@ using "./NativeDeclarations.cod" {
 using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" prepared_workspace_loans;
 using "./NativeDeclarations.cod" SuppliedView {
-    ImportedArrayLengthCall, ImportedSourceTextCall, BoundReferenceSymbol,
+    ImportedArrayLengthCall, ImportedSourceTextCall, BoundReferenceSymbol, PreparedTextInstallation,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, PreparedGenericConstruction, BoundGenericCall, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
@@ -227,8 +227,10 @@ export data OperandFact {
     text_intrinsic:UInt8,
     omitted_result:bool,
     statement_operand:bool,
+    scoped_text_method:UInt64,
 }
 export array OperandFacts[UInt64]:OperandFact;
+export array ScopedTextOutcomes[UInt64]:bool;
 
 export data OwnerEvidence {
     call_site:UInt64,
@@ -4084,6 +4086,21 @@ func source_text_family_past(contracts:const ModuleInterfaces in I, published:UI
     return header + 1u64 + count
 }
 
+# Admit a direct statement with a syntactically adjacent installation for
+# later application. The next postorder item must link to this exact call.
+func preceding_text_installation(nodes:const ExprNodes in N, used:UInt64, revision:UInt64, at:UInt64) -> UInt64
+    where {const owner N} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, at + 1u64, entry) != BlockSequence ||
+        entry.item != at || entry.previous == no_node()) return no_node();
+    val preceding <- entry.previous;
+    if (inspect_sequence_entry(nodes, revision, used, preceding, entry) != BlockSequence) return no_node();
+    return case nodes[entry.item] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { BindSymbolEffect -> preceding; _ -> no_node() };
+        _ -> no_node()
+    }
+}
+
 func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings in B,
                             selected:const SelectedExports in E, links:NameWork in L,
                             contracts:const ModuleInterfaces in I, interface_count:UInt64,
@@ -4175,7 +4192,9 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             !direct_source_using(nodes, selected[site].selection_site, used, revision)) return true;
         val past <- source_text_family_past(contracts, interface_count, visits, visit_count, header, origin_module);
         if (past != no_node()) {
-            (supplied[at] <- make ImportedSourceTextCall { family <- header; past <- past }):void
+            val preceding <- preceding_text_installation(nodes, used, revision, at);
+            supplied[at] <- make ImportedSourceTextCall { family <- header; past <- past; preceding <- preceding };
+            if (preceding != no_node() && required == no_node()) { (required <- at):void }
         };
         return true
     };
@@ -4504,6 +4523,36 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     return true
 }
 
+# Record the ordered installation sites, before operands can supply a
+# target. A non-installation predecessor terminates this direct profile.
+func prepare_text_installation(nodes:const ExprNodes in N, views:SuppliedViews in V,
+    at:UInt64, used:UInt64, revision:UInt64) -> void where {const owner N, owner V} {
+    if (!(case nodes[at] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { BlockItem -> true; _ -> false };
+        _ -> false
+    })) return;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, at, entry) != BlockSequence) return;
+    val operation <- entry.item;
+    case nodes[operation] of {
+        Occupied { val syntax <- node, } -> {
+            case syntax.payload of {
+                BindSymbolEffect { val name <-, val input <-, } -> {
+                    if (published_syntax_id(nodes, revision, operation, name) &&
+                        published_syntax_id(nodes, revision, operation, input) && plain_text_operand(nodes, input.index)) {
+                        (views[at] <- make PreparedTextInstallation {
+                            operation <- operation; name <- name.index; input <- input.index; previous <- entry.previous
+                        }):void
+                    }
+                };
+                _ -> {}
+            }
+        };
+        _ -> {}
+    };
+    return
+}
+
 export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
                                   selected:const SelectedExports in E, links:NameWork in L,
                                   contracts:const ModuleInterfaces in I, interface_count:UInt64,
@@ -4517,6 +4566,7 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
     required <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     for (at in 0u64 .. used) {
+        if (source_only) { prepare_text_installation(nodes, supplied, at, used, revision) };
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady &&
             !prepare_imported_call(nodes, names, selected, links, contracts, interface_count,
                 catalog, views, supplied, aggregate, cases, visits, visit_count, used, revision, source_only, required, at, call, report)) return false
@@ -7033,9 +7083,16 @@ func checked_stored_reference(facts:const OperandFacts in F, receiver:UInt64, ow
         facts[receiver].identity_module == record.defining_module
 }
 
+func plain_text_operand(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { NameReference -> true; TextLiteral -> true; _ -> false };
+        _ -> false
+    }
+}
+
 func check_imported_source_text(nodes:const ExprNodes in N, names:const NameBindings in B,
     interfaces:const ModuleInterfaces in I, facts:OperandFacts in F, at:UInt64,
-    family:UInt64, past:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    family:UInt64, past:UInt64, preceding:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner I, owner F} {
     if (is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
         return procedure_call_in_function();
@@ -7081,11 +7138,101 @@ func check_imported_source_text(nodes:const ExprNodes in N, names:const NameBind
         return unproved_nonnull_borrow();
     val diagnostic <- check_owner_access(nodes, facts[input].owner, false);
     if (diagnostic != 0u8) return diagnostic;
-    if (case interfaces[method].payload of { DeferredTextReceiver -> true; _ -> false })
-        return unproved_text_receiver();
+    case interfaces[method].payload of {
+        CheckedTextReceiver -> {
+            if (preceding == no_node() || !plain_text_operand(nodes, input)) return unproved_text_receiver();
+            only_void(facts, at);
+            facts[at].scoped_text_method <- method;
+            return 0u8
+        };
+        DeferredTextReceiver -> { return unproved_text_receiver() };
+        _ -> {}
+    };
     # A selected signature supplies neither ordinary completion nor the
     # outstanding scoped bindings. Both are needed before an entered call.
     return unsupported_imported_call()
+}
+
+# Walk recorded predecessors only. A proved installation makes the
+# selected target available for subsequent pure operand preparation.
+func text_symbol_supplier(names:const NameBindings in B, views:const SuppliedViews in H,
+    facts:const OperandFacts in F, module:UInt64, at:UInt64, preceding:UInt64,
+    symbol_module:UInt64, symbol_identity:UInt64, used:UInt64) -> UInt64
+    where {const owner B, const owner H, const owner F} {
+    val previous <- preceding;
+    for (unused in 0u64 .. used) {
+        if (previous >= used) return no_node();
+        case views[previous] of {
+            PreparedTextInstallation { val operation <-, val name <-, val input <-, val predecessor <- previous, } -> {
+                if (names[operation].scope != names[at].scope ||
+                    facts[operation].kind != void_result() || facts[input].kind != source_builder_loan())
+                    return no_node();
+                if (case views[name] of {
+                    BoundReferenceSymbol { val origin <- symbol_module, val identity <- symbol_identity, } ->
+                        identity == symbol_identity && (if (origin == 0u64) { module } else { origin }) == symbol_module;
+                    _ -> false
+                }) return input;
+                (previous <- predecessor):void
+            };
+            _ -> { return no_node() }
+        }
+    };
+    return no_node()
+}
+
+func apply_scoped_text_call(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in H, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
+    outcomes:ScopedTextOutcomes in O, at:UInt64, module:UInt64, family:UInt64, past:UInt64, preceding:UInt64,
+    used:UInt64) -> UInt8 where {const owner N, const owner B, const owner H, const owner I, const owner F, owner O} {
+    val selected <- facts[at].scoped_text_method;
+    if (selected <= family || selected >= past) return invalid_operand_tree();
+    val input <- no_node();
+    val actual_module <- 0u64;
+    val allocation <- false;
+    val access <- 0u8;
+    for (member in family + 1u64 .. past) {
+        case interfaces[member].payload of {
+            CheckedTextReceiver {
+                val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-,
+                val out_of_memory <-,
+            } -> {
+                input <- text_symbol_supplier(names, views, facts, module, at, preceding, symbol_module, symbol_identity, used);
+                if (input == no_node()) return unproved_text_receiver();
+                if (member == selected) {
+                    actual_module <- if (facts[input].identity_module == 0u64) { module } else { (facts[input].identity_module) };
+                    if (actual_module != receiver_module || facts[input].identity != receiver_identity)
+                        return unproved_text_receiver();
+                    if (facts[input].target_readonly != 0u8) return expected_writable_place();
+                    access <- check_owner_access(nodes, facts[input].owner, true);
+                    if (access != 0u8) return access;
+                    (allocation <- out_of_memory):void
+                }
+            };
+            _ -> { return unproved_text_receiver() }
+        }
+    };
+    outcomes[at] <- allocation;
+    return 0u8
+}
+
+# Consume the completed operands and published writer rows. This publishes
+# only a call-site completion for the later failure-routing phase.
+export func apply_scoped_text_calls(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in H, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
+    outcomes:ScopedTextOutcomes in O, module:UInt64, used:UInt64, report:OperandCheckResult in R)
+    -> bool where {const owner N, const owner B, const owner H, const owner I, const owner F, owner O, owner R} {
+    val diagnostic <- 0u8;
+    for (at in 0u64 .. used) {
+        if (facts[at].scoped_text_method != no_node()) {
+            diagnostic <- case views[at] of {
+                ImportedSourceTextCall { val family <-, val past <-, val preceding <-, } ->
+                    apply_scoped_text_call(nodes, names, views, interfaces, facts, outcomes, at, module, family, past, preceding, used);
+                _ -> invalid_operand_tree()
+            };
+            if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
+        }
+    };
+    return true
 }
 
 # A checked installation supplies an existing lexical target to the
@@ -7139,8 +7286,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             ImportedArrayLengthCall { val first <-, val past <-, val argument <-, val input <-, } -> {
                 return check_imported_array_length(nodes, interfaces, facts, at, first, past, argument, input)
             };
-            ImportedSourceTextCall { val family <-, val past <-, } -> {
-                return check_imported_source_text(nodes, names, interfaces, facts, at, family, past, used, revision)
+            ImportedSourceTextCall { val family <-, val past <-, val preceding <-, } -> {
+                return check_imported_source_text(nodes, names, interfaces, facts, at, family, past, preceding, used, revision)
             };
             PreparedArrayConstruction {
                 val requested <-, val placement <-, val length <-, val fill <-, val owner_site <-,
@@ -8152,6 +8299,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].text_intrinsic <- 0u8;
         facts[at].omitted_result <- false;
         facts[at].statement_operand <- false;
+        facts[at].scoped_text_method <- no_node();
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
         owners[at].uses <- no_node();

@@ -2,7 +2,10 @@ using "./Deque.cod" { deque, push_back, pop_back };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction, LexicalProductReference, LexicalSumReference, LexicalSumRebind } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
-    InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal, ReferenceLocal }
+    InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal, ReferenceLocal },
+    SignatureSites, inspect_signature, find_signature_clause, SignatureSyntax { SignatureHead },
+    first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence, FormalSequence },
+    linear_void_body
 };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
@@ -15,14 +18,14 @@ using "./ParserStorage.cod" ExprPayload {
     HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
-using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity };
+using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity, builder_append_export };
 using "./NativeDeclarations.cod" {
     prepared_product_writer, prepared_aggregate_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_readonly_query,
-    prepared_array_procedure, prepared_native_function,
+    prepared_array_procedure, prepared_native_function, prepared_text_writer,
     prepared_parser_writer, prepared_workspace_writer, source_call_allocates, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, checked_scalar_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand };
-using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits };
+using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits, immutable_text_kind };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -30,11 +33,11 @@ using "./ParserStorage.cod" {
     LogicalSyntax { LogicalAnd, LogicalOr, LogicalNot },
     RhsEvaluation { ConditionalRhs }
 };
-using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin_u8 };
+using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, formal_binding, builtin_u8 };
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedWorkspaceWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, PreparedArrayConstruction, EmptySumArrayFill, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedWorkspaceWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, PreparedArrayConstruction, EmptySumArrayFill, PreparedSynchronousHere, CheckedTextWriterMethod }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -314,6 +317,143 @@ export func finish_text_predicates(nodes:const ExprNodes in N, names:const NameB
             }):void
         }
     };
+}
+
+enum TextWriterExit:UInt8 { UnknownTextExit, TextReturns, TextMayRaiseOutOfMemory, }
+data TextWriterOperation {
+    target:UInt64, piece:UInt64, leaf:TextWriterExit, first_caller:UInt64, next_caller:UInt64,
+}
+array TextWriterOperations[UInt64]:TextWriterOperation;
+array TextWriterExits[UInt64]:TextWriterExit;
+
+func text_writer_formals(nodes:const ExprNodes in N, work:const NameWork in W, used:UInt64, revision:UInt64,
+    signature:UInt64, operation:TextWriterOperation in R) -> bool
+    where {const owner N, const owner W, owner R} {
+    ref head = make UInt64 { no_node() };
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    ref first = make UInt64 { no_node() };
+    if (!find_signature_clause(nodes, revision, used, signature, SignatureHead, head) ||
+        inspect_signature(nodes, revision, used, head, clause) != SignatureHead ||
+        !first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
+        return false;
+    val second <- work[first].next;
+    if (second >= used || work[second].next != no_node()) return false;
+    operation.target <- first;
+    operation.piece <- second;
+    return true
+}
+
+func forwards_text_writer_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
+    arguments:UInt64, operation:const TextWriterOperation in R, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner R} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, arguments, entry) != ArgumentSequence ||
+        names[entry.item].kind != formal_binding() || names[entry.item].declaration != operation.piece) return false;
+    return inspect_sequence_entry(nodes, revision, used, entry.previous, entry) == ArgumentSequence &&
+        entry.previous == no_node() && names[entry.item].kind == formal_binding() &&
+        names[entry.item].declaration == operation.target
+}
+
+# Only checked preparations of the two unchanged loans enter this graph.
+# A vertex without a known leaf or entered dependency has no exit receipt.
+func collect_text_writer_operations(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:const SuppliedViews in V, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, operations:TextWriterOperations in P, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, const owner V, const owner F, const owner X, owner P} {
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    ref operation = make UInt64 { no_node() };
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    val callee <- no_node();
+    for (method in 0u64 .. used) {
+        if (prepared_text_writer(views, method) && facts[method].kind == void_result() &&
+            inspect_callable(nodes, revision, used, method, callable) == ModuleCallable &&
+            text_writer_formals(nodes, work, used, revision, callable.signature, operations[method]) &&
+            linear_void_body(nodes, revision, used, callable.body, operation)) {
+            if (operation == no_node()) {
+                (operations[method].leaf <- (TextReturns:TextWriterExit)):void
+            } else {
+                if (facts[operation].kind == void_result() && can_continue(sites, operation) &&
+                    inspect_invocation(nodes, revision, used, operation, call) == OrdinaryInvocation &&
+                    forwards_text_writer_formals(nodes, names, call.arguments, operations[method], used, revision)) {
+                    if (facts[operation].text_intrinsic == builder_append_export() &&
+                        sites[operation].event == possible_failure() && sites[operation].category_module == 0u64 &&
+                        sites[operation].category == out_of_memory_identity() && sites[operation].destination == method) {
+                        (operations[method].leaf <- (TextMayRaiseOutOfMemory:TextWriterExit)):void
+                    } else {
+                        callee <- facts[operation].call_definition;
+                        if (callee < used && prepared_text_writer(views, callee)) {
+                            operations[method].next_caller <- operations[callee].first_caller;
+                            (operations[callee].first_caller <- method):void
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+# These edges have at most one callee per writer. Each known exit reaches
+# its reverse callers once; a cycle or an open dependency has no leaf.
+func complete_text_writer_exits(operations:const TextWriterOperations in P, exits:TextWriterExits in E, used:UInt64)
+    -> void where {const owner P, owner E} {
+    ref pending = make deque[UInt64]();
+    for (method in 0u64 .. used) {
+        if (operations[method].leaf != (UnknownTextExit:TextWriterExit)) {
+            exits[method] <- operations[method].leaf;
+            push_back(pending, method)
+        }
+    };
+    val source <- no_node();
+    val caller <- no_node();
+    for (step in 0u64 .. used + used) {
+        if (caller == no_node()) {
+            case pop_back(pending) of {
+                (null) -> { return };
+                (ref method:UInt64 in here) -> { (source <- method):void }
+            };
+            (caller <- operations[source].first_caller):void
+        } else {
+            exits[caller] <- exits[source];
+            push_back(pending, caller);
+            (caller <- operations[caller].next_caller):void
+        }
+    }
+}
+
+func has_text_writer(views:const SuppliedViews in V, used:UInt64) -> bool where {const owner V} {
+    for (method in 0u64 .. used) {
+        if (prepared_text_writer(views, method)) return true
+    };
+    return false
+}
+
+export func finish_text_writer_contracts(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner W, owner V, const owner F, const owner X} {
+    if (used > 9223372036854775807u64 || !has_text_writer(views, used)) return;
+    ref operations = make TextWriterOperations(used, make TextWriterOperation {
+        target <- no_node(); piece <- no_node(); leaf <- (UnknownTextExit:TextWriterExit); first_caller <- no_node(); next_caller <- no_node()
+    });
+    collect_text_writer_operations(nodes, names, work, views, facts, sites, operations, used, revision);
+    ref exits = make TextWriterExits(used, UnknownTextExit:TextWriterExit);
+    complete_text_writer_exits(operations, exits, used);
+    val target <- no_node();
+    val piece <- no_node();
+    for (method in 0u64 .. used) {
+        if (exits[method] != (UnknownTextExit:TextWriterExit)) {
+            target <- operations[method].target;
+            piece <- operations[method].piece;
+            (views[method] <- make CheckedTextWriterMethod {
+                target_module <- facts[target].identity_module; target_identity <- facts[target].identity;
+                piece_module <- facts[piece].identity_module; piece_identity <- facts[piece].identity;
+                string_piece <- immutable_text_kind(facts[piece].kind);
+                out_of_memory <- exits[method] == (TextMayRaiseOutOfMemory:TextWriterExit)
+            }):void
+        }
+    }
 }
 
 data FunctionEffects { available:bool, bounds:bool, numeric:bool, allocates:bool, }
