@@ -46,6 +46,8 @@ Verify the real path, including ownership, failure and cleanup. Report actual co
 
 **Separate collection from use for each fact kind.** A producer records facts and dependencies for a revision. Any required propagation works on those records. A later decision reads the completed facts through a read-only interface. Across source edits, refresh affected results from their recorded dependencies and reuse valid results. If a real workload appears to require violating this boundary, bring the input, affected result, alternatives and costs to the project user and obtain an explicit decision before making an exception. [Completed callee behavior](design/ImplementationArchitecture.md#consuming-completed-callee-behavior)
 
+**Give each independent check its own traversal.** Checks may share a walk only when their start sites, visit order, branch and stopping conditions are identical by construction. Share graph storage across phases. Each phase reads completed inputs and writes its own fields or relations in place. Keep the traversed edges stable during the walk and navigation state private to the walker. [Check traversal and combination](design/ImplementationArchitecture.md#when-checks-can-share-a-traversal)
+
 Use a workqueue or other rescheduling mechanism only for a concrete user outcome that a direct traversal or ordered passes cannot deliver within the required constraints. Identify that outcome and the limitation. Restrict work items to the justified operation. [Workqueue example](design/ImplementationArchitecture.md#when-a-workqueue-is-justified)
 
 ## Order work by the decision it serves

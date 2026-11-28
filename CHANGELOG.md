@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-28 — Remove the seed’s single ordinary callback ceiling
+
+<a id="h-seed-ordinary-here-arity-20261128"></a>
+**H-SEED-ORDINARY-HERE-ARITY-20261128.** The project user directed “只能一个 here-callback 参数这个限制我觉得不合理，在 seed 层面解决掉” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). The seed should translate ordinary direct calls with any finite number of leading `here` formals. The [existing call binding rule](https://github.com/complyue/cod-project/blob/ced0775fde61b0071da175932cff285a8c367fa3/design/SymbolicDynamicScope.md#trailing-callback-arguments) and the supplied callback’s lexical authority, lifetime and control destinations continue when it is forwarded. The formal signature checks compatibility. Each activation invokes the callback value bound to its selected parameter slot. The [four-callback booter procedure](https://github.com/complyue/cod-project/blob/ced0775fde61b0071da175932cff285a8c367fa3/applications/cod-booter/src/Compiler.cod#L58-L79) and scalar node visitor define the first implementation workload. D-18-HERE-PARAM continues. The [seed implementation and linked booter workload](https://github.com/complyue/cod-project/blob/e4aa3c0e649e208896afae7c6b9d91ac70df82c4/applications/cod-booter/README.md#L219-L221) cover fixed direct CoD calls, including the four-formal procedure. On confirming the slot model, the user assigned development mainline to apply it at an actual booter call site.
+
+## 2026-11-28 — Specify when compiler checks may share a traversal
+
+<a id="h-check-traversal-ownership-20261128"></a>
+**H-CHECK-TRAVERSAL-OWNERSHIP-20261128.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed “只有遍历顺序、分支条件、停止条件都严格相同的check，才允许合并在一个phase里完成” and asked whether CoD can enforce the split through its interfaces. The user confirmed the rule and authorized [PR #76](https://github.com/complyue/cod-project/pull/76) in the same discussion, “按这个定，PR #76 可以合入”. The [r230 rule](design/ImplementationArchitecture.md#when-checks-can-share-a-traversal) carries forward [r229’s producer and consumer boundaries](https://github.com/complyue/cod-project/blob/2f95134941350d1ea404b0fae2a969a40eaf87dd/design/ImplementationArchitecture.md#restarting-a-pass-from-entry) and independent stage selection. P-682 continues. P-683 now requires identical navigation before combining checks. The user further proposed “遍历一个共享的 mutable graph，按需使用和增补信息” and requested verification of the seed’s callback support. Phases can add their own fields or relations in place while consumers read stable completed inputs. The PR records runnable direct-call and callback examples. The rule governs the seed, booter and production compiler. W7 stays with development mainline. Registry r1398→1399.
+
 ## 2026-11-28 — Check entry effects against completed family requirements
 
 <a id="k-family-effect-entry-check-20261128"></a>
