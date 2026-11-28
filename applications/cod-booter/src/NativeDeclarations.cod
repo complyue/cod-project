@@ -3391,13 +3391,14 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             # Member and schema validation give a Boolean with a report.
             # Member selection also writes product rows using source bytes.
             # Case preparation and expression checking also update an initialized first-site slot.
+            # Completion checking writes both its site table and its report.
             publication_signature <- (scalar_loans == 1u64 && result_kind == builtin_bool() && !reads_record &&
                 readonly_bytes && writable_arrays == 2u64 && writable_record_array && writable_records == 1u64 &&
                 (readonly_arrays == 5u64 || (readonly_arrays == 8u64 && writable_sum_array))) ||
                 (scalar_loans == 0u64 && (indexed_product_outputs || (published_result &&
                 ((reads_record && readonly_arrays != 0u64 &&
                     ((writable_arrays == 0u64 && writable_records == 1u64) ||
-                     (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
+                     (writable_arrays == 1u64 && writable_record_array && writable_records <= 1u64))) ||
                 (!reads_record && result_kind == builtin_bool() && readonly_arrays > 1u64 && writable_records == 1u64 &&
                     (writable_arrays == 0u64 || (readonly_bytes && writable_arrays == 1u64 && writable_record_array))) ||
                 (!reads_record && result_kind == builtin_bool() && readonly_bytes && readonly_arrays == 4u64 &&
