@@ -99,7 +99,7 @@ using "./DeclarationTypes.cod" {
         check_declared_expressions, prepare_enum_assertions
 };
 using "./Compiler.cod" ExpressionScratchPlan;
-using "./ModuleDriver.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
+using "./ModuleWorkspace.cod" { plan_module_source, plan_module_workspace, ModuleWorkspacePlan };
 using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult,
         prepare_imported_calls, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
@@ -958,7 +958,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
     val formal <- first_module_variadic_formal(nodes, revision, used);
     val structural <- formal != no_node() || progress[0u64].structural_dependency;
     val native <- !structural && progress[0u64].purpose == (NativeObject:GraphPurpose);
-    if (!check_parsed_module_profile(nodes, native, true, result)) {
+    if (!check_parsed_module_profile(nodes, native, result)) {
         delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
             result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first, keys, key_first, key_past, run);
         if (delivered != Complete) return delivered;

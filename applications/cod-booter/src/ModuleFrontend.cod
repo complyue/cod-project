@@ -1,8 +1,5 @@
-using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter };
 using "./ParserStorage.cod" NodeLink { NoLink };
 using "./NameResolution.cod" { unsupported_reference_slot_formal, unsupported_fixed_formal };
-using "./ModuleExportStorage.cod" ByteArrayFailures;
-using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     NameReference, IntegerLiteral, BooleanLiteral, NamedThrow, LocalBinding, Formal, ExceptionResult, TypeConstraint, SumDefinition,
@@ -10,7 +7,7 @@ using "./ParserStorage.cod" ExprPayload {
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
     ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
-    BulkModuleSelection, DefaultPublicSet, ModuleItem, ModuleSelection, Publication,
+    Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
     ReturningCondition,
 };
@@ -19,38 +16,33 @@ using "./ParserStorage.cod" ConstructionSyntax {
 };
 using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, LocalPublication, EnumTypeDeclaration, TypeSynonymDeclaration, OtherDeclaration };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
-using "./ModuleExportStorage.cod" FamilyMembership { UnprovedMembership };
-using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./ParserStorage.cod" SignatureSyntax { BorrowedResultClause };
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
 using "./ParserStorage.cod" ModuleSelectionMode {
-    UseResource, ReexportResource, MixinResource, IdentityResource
+    UseResource, ReexportResource
 };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal, ValueLocal };
 using "./ParserStorage.cod" FormalMode {
-    ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, ExceptionFormal,
+    ExplicitValueFormal, ReferenceFormal, PointerFormal, ExceptionFormal,
     HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase } }
 using "./ParserStorage.cod" {
-    ExprNodes, Tokens, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
+    ExprNodes, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
     SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
-    first_named_throw, NamedThrowSites, inspect_named_throw,
+    NamedThrowSites, inspect_named_throw,
 };
 using "./SourceStorage.cod" SourceBytes;
-using "./DeclarationTypes.cod" { DeclaredExpressionResult, prepare_enum_assertions };
 using "./DeclarationDemand.cod" { DeclarationDemand, DeclarationDemands };
-using "./Frontend.cod" { FrontendResult, read_module };
+using "./Frontend.cod" FrontendResult;
 using "./ParserInput.cod" ParseResult;
 using "./ModuleExports.cod" {
-    ModuleExports, SelectedExports, ExportResolutionResult, resolve_module_exports,
-    prepare_module_dependencies, export_storage_exhausted, exception_type_export, error_root_identity,
-    CheckedSelections, CheckedSelection { UnpublishedSelection },
+    SelectedExports, exception_type_export, error_root_identity, CheckedSelections,
 };
 using "./NameResolution.cod" {
     protected_symbol_name,
@@ -63,11 +55,9 @@ using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { NoSuppliedView },
 };
 using "./AggregateSchemas.cod" AggregateFacts;
-using "./ModuleExportStorage.cod" ExceptionSchema { OrdinarySchema };
 using "./ModuleExportStorage.cod" {
-    CallableObjectView { NoCallableObjectView },
     ReceiverImportCheck { ReceiverCallablesReady },
-    ModuleInterfaceRow, ModuleInterfaces, AggregateStorage { UnprovedAggregate }, SumInterfacePayload { NoSumInterface },
+    ModuleInterfaces,
 };
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { NoCaughtField } };
 using "./OperandChecking.cod" {
@@ -238,7 +228,7 @@ func fixed_reference_field(nodes:const ExprNodes in N, revision:UInt64, used:UIn
 
 # Declaration checking can resolve projection operands without emitting an address.
 func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
-    emit_object:bool, publish_defaults:bool, requires_operand_checks:bool in P) -> UInt8
+    emit_object:bool, requires_operand_checks:bool in P) -> UInt8
     where {const owner N, owner P} {
     ref construction = make ConstructionSites {
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
@@ -259,22 +249,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
         (Vacant) -> { unsupported_module_declaration() };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
-                (BulkModuleSelection) -> {
-                    if (publish_defaults) { 0u8 } else { unsupported_module_declaration() }
-                };
-                (DefaultPublicSet) -> { if (publish_defaults) { 0u8 } else { unsupported_module_declaration() } };
-                (ModuleSelection { val mode <- mode; val nature <- nature; }) -> {
-                    if (!publish_defaults && (mode == MixinResource || mode == IdentityResource ||
-                        nature != OrdinaryResource)) {
-                        unsupported_module_declaration()
-                    } else { 0u8 }
-                };
                 (Publication { val nature <- nature; }) -> {
                     if (nature != OrdinaryResource) { unsupported_module_declaration() }
                         else { 0u8 }
-                };
-                (ModuleItem { val defaulted <- defaulted; }) -> {
-                    if (defaulted && !publish_defaults) { unsupported_module_declaration() } else { 0u8 }
                 };
                 (LocalBinding { val mode <- mode; val declaration_const <- declaration_const; }) -> {
                     if (declaration_const) {
@@ -309,7 +286,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 ReturningCondition -> unsupported_returning_condition();
                 (Formal { val mode <- mode; val fixed <- binding_const; val binding <-; }) -> {
                     # The graph's source route validates this reception against a bound callable.
-                    if (mode == ReferenceSlotFormal && (emit_object || !publish_defaults))
+                    if (mode == ReferenceSlotFormal && emit_object)
                         return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
                     if (fixed) {
@@ -345,7 +322,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
 # Find the first unsupported source form by byte position, including headers
 # and enclosing constructs whose syntax is stored after their operands.
 func check_source_profile(nodes:const ExprNodes in N, used:UInt64, emit_object:bool,
-    publish_defaults:bool, result:ModuleBindingResult in R) -> bool
+    result:ModuleBindingResult in R) -> bool
     where {const owner N, owner R} {
     if (used > intrinsic (len)(nodes)) return true;
     val first <- no_node();
@@ -353,7 +330,7 @@ func check_source_profile(nodes:const ExprNodes in N, used:UInt64, emit_object:b
     val next <- 0u8;
     for (at in 0u64 .. used) {
         next <- unsupported_source_form(nodes, result.frontend.tree.revision, used, at, emit_object,
-            publish_defaults, result.requires_operand_checks);
+            result.requires_operand_checks);
         if (next != 0u8 && (first == no_node() || syntax_first(nodes, used, at) < syntax_first(nodes, used, first))) {
             cause <- next;
             (first <- at):void;
@@ -366,45 +343,13 @@ func check_source_profile(nodes:const ExprNodes in N, used:UInt64, emit_object:b
     return true;
 }
 
-export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:bool, publish_defaults:bool,
+export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:bool,
     result:ModuleBindingResult in R) -> bool where {const owner N, owner R} {
     result.stage <- 0u8;
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
     result.requires_operand_checks <- false;
-    return check_source_profile(nodes, result.frontend.tree.used, emit_object, publish_defaults, result)
-}
-
-# Resolve resource selections in the retained syntax against its discovered dependencies.
-export func select_parsed_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                builtin_spellings:const SourceBytes in B, builtins:const ModuleExports in E,
-                                graph_spellings:const SourceBytes in G, graph_exports:const ModuleExports in H,
-                                spelling_size:UInt64, export_count:UInt64,
-                                selected:SelectedExports in X, emit_object:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner B, const owner E, const owner G, const owner H, owner X, owner R} {
-    if (!check_parsed_module_profile(nodes, emit_object, false, result)) return false;
-    ref publication = make ExportResolutionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!resolve_module_exports(source, nodes, result.frontend.tree, builtin_spellings, builtins,
-                                graph_spellings, graph_exports, spelling_size, export_count, selected, !emit_object, publication)) {
-        binding_diagnostic(nodes, result, module_selection_failed(), publication.diagnostic, publication.node);
-        return false;
-    } else {};
-    return true;
-}
-
-export func bind_selected_module(source:const SourceBytes in S, nodes:const ExprNodes in N,
-                                 selections:const CheckedSelections in C, selected_used:UInt64,
-                                 selected:SelectedExports in X, bindings:NameBindings in Y,
-                                 work:NameWork in W, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
-                                 facts:AggregateFacts in F, views:SuppliedViews in H,
-                                     emit_object:bool, allow_structural:bool, result:ModuleBindingResult in R) -> bool
-    where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
-        owner H, owner R} {
-    ref recovery = make ProductTypeRecovery {
-        maximum <- 0u64; count <- 0u64; incomplete <- false; first_diagnostic <- 0u8; first_site <- no_node()
-    };
-    return bind_selected_module_recovering(source, nodes, selections, selected_used, selected, bindings,
-        work, interfaces, interface_used, facts, views, emit_object, allow_structural, result, recovery)
+    return check_source_profile(nodes, result.frontend.tree.used, emit_object, result)
 }
 
 export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
@@ -491,90 +436,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     return true;
 }
 
-# Read a standalone module with the builtin catalog.
-export func bind_module(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
-                        spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                        selected:SelectedExports in X, bindings:NameBindings in Y,
-                        work:NameWork in W, result:ModuleBindingResult in R) -> bool
-    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W, owner R} {
-    result.diagnostic <- 0u8;
-    result.related_first <- no_node();
-    if (!read_module(source, tokens, nodes, result.frontend)) {
-        result.stage <- module_read_failed();
-        return false;
-    } else {};
-    if (!prepare_module_dependencies(selected, result.frontend.tree.used)) {
-        binding_diagnostic(nodes, result, module_selection_failed(), export_storage_exhausted(), no_node());
-        return false;
-    } else {};
-    if (!select_parsed_module(source, nodes, spellings, exports, spellings, exports, 0u64, 0u64, selected, true, result)) return false;
-    val constructed <- first_named_throw(nodes, result.frontend.tree.revision,
-        result.frontend.tree.used);
-    if (constructed != no_node()) {
-        binding_diagnostic(nodes, result, module_binding_failed(), 43u8, constructed);
-        return false;
-    };
-    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
-        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
-        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
-        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
-        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
-        enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
-        native_reception <- 0u8;
-        membership <- UnprovedMembership;
-        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
-        aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-        array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
-        array_slot_failures <- make ByteArrayFailures {
-            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
-        }
-    });
-    ref facts = make AggregateFacts(result.frontend.tree.used, UnprovedAggregate);
-    ref no_selections = make CheckedSelections(0u64, make UnpublishedSelection {});
-    ref views = make SuppliedViews(result.frontend.tree.used, make NoSuppliedView {});
-    if (!bind_selected_module(source, nodes, no_selections, 0u64, selected, bindings, work,
-        interfaces, 0u64, facts, views, true, false, result)) return false;
-    ref expressions = make DeclaredExpressionResult { diagnostic <- 0u8; node <- no_node(); };
-    if (!prepare_enum_assertions(source, nodes, bindings, selected, work, spellings, interfaces, 0u64,
-        result.frontend.tree.used, result.frontend.tree.revision, expressions)) {
-        binding_diagnostic(nodes, result, module_binding_failed(), expressions.diagnostic, expressions.node);
-        return false
-    };
-    return true
-}
-
-# A successful operand analysis supplies the facts for checking completion.
-export func analyze_module_operands(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
-                                    spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                                    selected:SelectedExports in X, bindings:NameBindings in Y,
-                                    work:NameWork in W, facts:OperandFacts in F,
-                                    owners:CallOwners in O, result:ModuleBindingResult in R) -> bool
-    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
-           owner F, owner O, owner R} {
-    if (!bind_module(source, tokens, nodes, spellings, exports, selected, bindings, work, result))
-        return false;
-    ref interfaces = make ModuleInterfaces(0u64, make ModuleInterfaceRow {
-        defining_module <- 0u64; declaration <- 0u64; entry_count <- 0u64; owner_count <- 0u64;
-        interface_kind <- 0u8; result_kind <- 0u8; element_kind <- 0u8; array_index_kind <- 0u8; value_kind <- 0u8;
-        type_module <- 0u64; type_identity <- 0u64; owner_role <- no_node();
-        target_readonly <- 0u8; owner_readonly <- 0u8; has_here <- 0u8; failure_checked <- 0u8;
-        failure_module <- 0u64; failure_identity <- 0u64; name_first <- 0u64; name_past <- 0u64;
-        enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
-        native_reception <- 0u8;
-        membership <- UnprovedMembership;
-        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
-        aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
-        scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
-        array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
-        array_slot_failures <- make ByteArrayFailures {
-            bounds <- false; out_of_memory <- false; region_capacity <- false; invalid_capacity <- false
-        }
-    });
-    return analyze_bound_operands(source, nodes, selected, bindings, work, interfaces, 0u64, facts, owners, result);
-}
-
+# Check a bound module before lowering its commands.
 export func analyze_bound_operands(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                    selected:const SelectedExports in X, bindings:const NameBindings in Y,
                                    work:const NameWork in W, interfaces:const ModuleInterfaces in I, interface_count:UInt64, facts:OperandFacts in F,
@@ -608,18 +470,6 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         return false;
     } else {};
     return true;
-}
-
-export func analyze_module_completion(source:const SourceBytes in S, tokens:Tokens in T, nodes:ExprNodes in N,
-                                      spellings:const SourceBytes in B, exports:const ModuleExports in E,
-                                      selected:SelectedExports in X, bindings:NameBindings in Y,
-                                      work:NameWork in W, facts:OperandFacts in F, owners:CallOwners in O,
-                                      sites:CompletionSites in C, result:ModuleBindingResult in R) -> bool
-    where {const owner S, owner T, owner N, const owner B, const owner E, owner X, owner Y, owner W,
-           owner F, owner O, owner C, owner R} {
-    if (!analyze_module_operands(source, tokens, nodes, spellings, exports, selected, bindings, work, facts, owners, result))
-        return false;
-    return analyze_bound_completion(nodes, bindings, work, facts, sites, result);
 }
 
 export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const NameBindings in Y,

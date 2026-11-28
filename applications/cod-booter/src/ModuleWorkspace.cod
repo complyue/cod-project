@@ -1,0 +1,36 @@
+using "./SourceStorage.cod" SourceBytes;
+using "./ParserStorage.cod" no_node;
+using "./Compiler.cod" { ExpressionScratchPlan, plan_expression_scratch };
+using "./CompilerStatus.cod" CompilerStatus { Complete, ScratchFailed };
+
+export data ModuleWorkspacePlan {
+    source:ExpressionScratchPlan;
+    commands:UInt64;
+}
+
+# A normalized grouped selection may need one extra node per item. Each
+# such item accounts for a name and a delimiter, so half the token count
+# bounds the additional nodes, including a group with no trailing comma.
+export func plan_module_source(source:const SourceBytes in S, plan:ExpressionScratchPlan in P) -> bool
+    where {const owner S, owner P} {
+    if (!plan_expression_scratch(source, plan)) return false;
+    val extra <- plan.token_count / 2u64;
+    if (plan.token_count > no_node() - extra) return false;
+    if (plan.syntax_capacity > no_node() - 1u64 - extra) return false;
+    plan.node_capacity <- plan.token_count + extra;
+    plan.syntax_capacity <- plan.syntax_capacity + 1u64 + extra;
+    return true;
+}
+
+# Lowering emits each guard dispatch and callable prologue once and each
+# deferred call's preparation and invocation once.
+export func plan_module_workspace(source:const SourceBytes in S, workspace:ModuleWorkspacePlan in W) -> CompilerStatus
+    where {const owner S, owner W} {
+    workspace.commands <- 0u64;
+    if (!plan_module_source(source, workspace.source)) return ScratchFailed;
+    val commands_per_node <- 32u64;
+    if (workspace.source.node_capacity > 18446744073709551615u64 / commands_per_node)
+        return ScratchFailed;
+    workspace.commands <- workspace.source.node_capacity * commands_per_node;
+    return Complete;
+}
