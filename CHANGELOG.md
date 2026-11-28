@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Pass owners as go process entry procedure arguments
+
+<a id="h-go-owning-parameters-20261128"></a>
+**H-GO-OWNING-PARAMETERS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirms that a named procedure launched by `go` can declare owning parameters, including `own region` and `own handle`, and prefers `entry_proc` as the name for its role. [D-10 r282→283](design/SymbolicDynamicScope.md#go-process-launch) records ordinary argument spelling and transfer to the child. D-32 r3→4 and D-12 r38→39 apply this to both entries under P-702/P-788. The [r282 launch boundary](https://github.com/complyue/cod-project/blob/4de525ec0da43ac14a0b80f6a102522490d61f77/design/SymbolicDynamicScope.md#go-process-launch) continues for fresh TLS, cross-thread provider obligations, failed thread creation and production-only delivery. Registry r1386→1387.
+
 ## 2026-11-28 — Target heavy tasks and launch go processes with fresh TLS
 
 <a id="h-heavy-tasks-and-go-process-20261128"></a>

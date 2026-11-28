@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 38 · 2026-11-28
+Design revision 39 · 2026-11-28
 
 ## Design authority
+
+At r39 the [entry procedure decision](../CHANGELOG.md#h-go-owning-parameters-20261128) applies the same fresh-TLS boundary as r38 when owning arguments enter the child. P-702/P-788 continue.
 
 At r38 the [go process decision](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) makes `go` the effects boundary for both Actor entry forms. D-12/P-702 continues r37 symbol identity, owner lifetime and the typed chan scope.
 
@@ -146,7 +148,7 @@ The execution mapping is settled: one Actor runs on one dedicated OS thread with
 | AKCP over UDP for remote regions | Admit a complete validated region to the receiver. Account for incomplete regions and apply backpressure as assembly or ready queues consume capacity. |
 | Fire-and-forget sending except for qualifying systemic faults | Ordinary loss needs runtime disposal, not a delivery receipt. Fault classification and its owner postcondition remain explicit design questions. |
 | Existing region and reference contracts | The handoff must preserve graph identity/sharing, actual owners, source consumption and valid access through every outcome. |
-| Scoped here and non-storable proc definitions | The named launch enters a free procedure. The block launch has its own body and transferred owners. Ordinary synchronous here calls still use their defining activation. |
+| Scoped here and non-storable proc definitions | Both forms supply explicit inputs to the child. The entry procedure receives owners through its parameters. The block receives them through its owner list. Ordinary synchronous here calls still use their defining activation. |
 | Ordinary cleanup and exception contracts | Actor termination, waiting operations and native faults need defined integration; existing synchronous cleanup is not an asynchronous cancellation protocol. |
 
 ### Proposed first executable milestone

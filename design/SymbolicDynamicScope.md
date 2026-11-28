@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 282 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 283 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r283 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) admits owning region and handle parameters on the named entry procedure in a `go` launch. D-10-ACTOR-CHAN/P-788 continues the r282 effects boundary and applies the existing consuming-call rules to successful child entry.
 
 At r282 the [heavy-task and go process decision](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) establishes the two launch forms and the effects boundary at child entry. D-10-ACTOR-CHAN/P-702 continues the dedicated thread and typed chan contract. P-788 links the production launch to charter §1.
 
@@ -2180,7 +2182,7 @@ Acceptance covers each spelling in a binding and as an operand, ordinary shadowi
 
 ### Contextual ownership qualifier
 
-`own` qualifies an ownership form only where the grammar accepts it. A declaration can say `own region` or `own handle`, a consuming region parameter or an owning region result can say `own region`, and a native handle constructor uses `make own handle`. The same spelling applies to the existing explicit `own exception` form. Bare `exception` already carries ownership. Ordinary region construction uses `make region`.
+`own` qualifies an ownership form only where the grammar accepts it. A declaration can say `own region` or `own handle`. A consuming region parameter or an owning region result uses `own region`. A go process entry procedure can declare both `own region` and `own handle` parameters, and a native handle constructor uses `make own handle`. The same spelling applies to the existing explicit `own exception` form. Bare `exception` already carries ownership. Ordinary region construction uses `make region`.
 
 ```cod
 proc deliver(own region owned:Packet) -> own region :Packet {
@@ -2410,23 +2412,35 @@ A candidate regional message carries a user-defined root, inputs and a typed des
 
 `go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. CoD specifies one new OS thread per successful launch. [Go language specification](https://go.dev/ref/spec#Go_statements)
 
-The `go free_proc(...)` form starts a named free procedure. The block form explicitly hands owners to the new body. Both run independently of the launching scope.
+Both launch forms can transfer ownership to the child. In `go entry_proc(...)`, *entry procedure* names the role of the ordinary named procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
 
 ```cod
-go index_partition(partition_id)
+proc build_index(own region part:Partition, own handle sink:IndexOutput, id:UInt64) -> void {
+    index_partition(part, sink, id)
+}
 
+go build_index(r, h, partition_id)
+```
+
+On successful launch, the child receives the actual region as `part`, the actual handle as `sink`, and the scalar value as `id`. The launcher can no longer use `r` or `h`. The call uses ordinary argument spelling. A borrow alone cannot supply an owning parameter.
+
+The block form names its incoming owners directly. The same handoff can be written as follows.
+
+```cod
 go { own region r <-, own handle h <- } {{
     index_region(r, h)
 }}
 ```
 
-In the block form, `r` and `h` are existing owners in the launcher. On successful handoff the child owns those resources and the launcher's consumed names are unavailable. Each resource carries its existing release responsibility. The double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback. Cross-thread use of a native handle still follows its provider contract.
+In either form the child takes over the existing release responsibility for each transferred resource. On normal or exceptional exit it releases each resource it still owns exactly once. Each native handle retains its provider’s cross-thread use and release contract. In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
 
 **The effects boundary is at `go`.** The new thread starts with its initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
 
-For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go index_partition(n)`. The entry receives the ordinary value 7. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the owner-handoff form.
+For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go build_index(r, h, n)`. The entry receives 7 as its third argument. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the block form.
 
-Thread creation can fail. The launch failure channel and the exact point at which each owner is consumed on that path remain open. Any eventual rule must account for each owner's release responsibility. Joining, cancellation, and module startup and shutdown have separate contracts to settle. The selected launch belongs to `e-wrks/cod`. Booter source does not use the Actor model and the seed does not implement it. [Bootstrap scope](../applications/cod-booter/README.md#trusted-source-and-the-seed)
+If preparing a later actual argument fails, the procedure body is never entered and the call has not consumed its earlier owning arguments. Transfers already performed by argument expressions retain their effects. [Consuming calls](ExceptionControl.md#e4--consuming-calls-and-results)
+
+OS thread creation can also fail. Its failure channel and the exact point at which each owner is consumed on that path remain open for both forms. Any eventual rule must account for each owner's release responsibility. Joining, cancellation, and module startup and shutdown have separate contracts to settle. The selected launch belongs to `e-wrks/cod`. Booter source does not use the Actor model and the seed does not implement it. [Bootstrap scope](../applications/cod-booter/README.md#trusted-source-and-the-seed)
 
 ### Region holding and transfer
 

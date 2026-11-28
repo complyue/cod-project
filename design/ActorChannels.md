@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 3 · 2026-11-28
+Design and research revision: 4 · 2026-11-28
 
 ## Design authority
+
+At r4 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) extends the r3 ownership example to the named entry procedure and its consuming parameters. Both forms use the same dedicated thread and fresh-TLS boundary under D-10-ACTOR-CHAN/P-788.
 
 At r3 the [heavy-task and go process decision](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) defines local Actor launch and fresh initial TLS in the production language. The r2 endpoint and whole-region transport scopes continue. P-702/P-788 distinguish launching local work from delivering work to another machine.
 
@@ -35,7 +37,8 @@ the older execution and send-result candidates replaced by the new decisions.
 ## Confirmed basis
 
 A **go process** starts an Actor's execution on a dedicated OS thread. CoD provides
-`go free_proc(...)` and an explicit owner handoff to a double-braced body. Each launch begins with
+`go entry_proc(...)`, with ownership specified by the entry procedure’s parameters, and a
+double-braced body with an explicit owner list. Each launch begins with
 fresh initial TLS. The launcher keeps its own active bindings. Several such executions can run in
 one OS process. **Chan** is the typed messaging facility. For example, a cluster coordinator can
 send work to an existing Actor on another machine, where local code can launch a go process to
@@ -437,7 +440,7 @@ same workloads rather than reopening those decisions.
 | How does pressure reach the sender? | Budget queued regions, assembly, completed output and transport windows separately. | Decide when admission waits, expires or declines, how capacity resumes, and who owns each payload during a wait. |
 | Who can close a chan, and what does close do? | A distinct owner/close capability; account for queued data and blocked receivers. | Specify late sends, drain/discard, shared collectors and the relationship to Actor termination. |
 | How does an Actor stop? | Examine cooperative stopping and defined interruption points, with explicit cleanup and application cancellation messages. | Arbitrary native-thread termination, native faults and uninterruptible foreign calls need their own boundaries; sedh's subprocess SIGKILL is not that contract. |
-| What happens if local thread creation fails? | Follow the region and handle named in the launch list when the child cannot enter. | Decide where failure is observed and which scope releases each resource. |
+| What happens if local thread creation fails? | Follow the owners passed to the entry procedure or named in the block's owner list when the child cannot enter. | Decide where failure is observed and which scope releases each resource. |
 | How do Actor startup and shared modules interact? | Start with fresh TLS while preserving module semantic identity and established module lifetimes. | Decide module initialization, shared resources and final OS-process shutdown. |
 | How are region boundaries recovered after a stream hole? | Compare region-aware framing over AKCP with a region envelope spanning existing records. | Decide how to identify transfers, detect a missing header/tail, validate complete coverage and root compatibility, and reclaim incomplete storage on expiry or epoch change. |
 
@@ -452,7 +455,7 @@ These are design acceptance workloads, not a test suite or a claim of implemente
 
 | Scenario | Observation required before the associated scope can be accepted |
 | --- | --- |
-| Both launch forms in one OS process | For each form, observe a dedicated child OS thread, fresh initial TLS and independent installations of the same symbol. An explicitly passed scalar retains its value. The owner-list body can use its transferred region and handle after the launcher leaves its scope. |
+| Both launch forms in one OS process | For each form, observe a dedicated child OS thread, fresh initial TLS and independent installations of the same symbol. The named entry procedure and the owner-list body can each use their transferred region and handle after the launcher leaves its scope. Check a mixed scalar argument, reject reuse of a consumed owner, and observe one release per resource still owned on normal or exceptional child exit. |
 | Static payload mismatch | An incompatible message is rejected by the source type contract; an invalid external representation never becomes an admitted typed value. |
 | A deliberately lost message | Ordinary send remains fire-and-forget; all retained payload storage is accounted for, without a synthesized receipt or sender-view revival. |
 | A continuing communication fault | The selected fault policy reports the system condition to the sender; the ownership outcome is derivable and a later recovery has defined behavior. |
