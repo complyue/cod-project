@@ -3181,7 +3181,7 @@ func checked_parameterized_scalar_past(contracts:const ModuleInterfaces in I, pu
     if (arity == 0u64 || arity >= published - header || !contracts[header].scalar_source_body ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
-        (!predicate && result != builtin_u64()) ||
+        (!predicate && result != builtin_u64() && result != builtin_u8()) ||
         (predicate && (arity != 1u64 || contracts[header].source_numeric_fault)) ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||
         contracts[header].target_readonly != 0u8 || contracts[header].owner_count != 0u64 ||
@@ -3189,12 +3189,11 @@ func checked_parameterized_scalar_past(contracts:const ModuleInterfaces in I, pu
         contracts[header].failure_identity != no_node() || contracts[header].failure_module != 0u64 ||
         contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion != NoArrayRead ||
         contracts[header].source_writer != NoSourceWriter) return no_node();
-    val input <- if (predicate) { builtin_u8() } else { builtin_u64() };
     val first <- header + 1u64;
     val past <- first + arity;
     for (row in first .. past) {
-        if (!source_scalar_value_row(contracts[row], input) || contracts[row].source_allocates ||
-            contracts[row].type_module != 0u64 || contracts[row].type_identity != 0u64) return no_node();
+        if (!checked_source_scalar_parameter(contracts, published, row) ||
+            (predicate && contracts[row].value_kind != builtin_u8())) return no_node();
     };
     return past
 }
@@ -3800,7 +3799,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         remember_imported_call(links, contracts, at, header, true);
-        if (contracts[header].result_kind == builtin_u64()) {
+        if (contracts[header].result_kind != builtin_bool()) {
             links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
             supplied[at] <- make CheckedScalarFunctionCall {};
             if (required == no_node()) { (required <- at):void }
