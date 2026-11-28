@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Apply vocabulary identity to static mixins
+
+<a id="k-mixin-vocabulary-type-identity-20261127"></a>
+**K-MIXIN-VOCABULARY-TYPE-IDENTITY-20261127.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) pointed to the existing receiving-context mixin and shared vocabulary principles. [D-15 r91→92](design/ModuleWorlds.md#static-module-parameters-for-mixin) closes the [cross-module result identity question](https://github.com/complyue/cod-project/blob/0259d7410d153385bc27c3c770de99a3e03e95cb/design/ModuleWorlds.md#static-module-parameters-for-mixin) by applying [body template semantics](#h-mixin-template-deferral-20261124) and [H-242](#h-242). Independently mixed-in declarations define distinct nominal types. Selecting a type defined once in a vocabulary preserves its identity across clients. Static parameter syntax and evaluation stay deferred. P-102/P-208 continued, registry r1380→1381.
+
 ## 2026-11-27 — Name the type family identity and locate future type-level programming in mixin
 
 <a id="h-type-families-and-static-mixin-params-20261127"></a>

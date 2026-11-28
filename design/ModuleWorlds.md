@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 91 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 92 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r92 the [identity clarification](../CHANGELOG.md#k-mixin-vocabulary-type-identity-20261127) applies the receiving-declaration and vocabulary rules (P-102/P-208) to the r91 static mixin proposal. Syntax and evaluation remain deferred.
 
 At r91 the [type family and mixin decision](../CHANGELOG.md#h-type-families-and-static-mixin-params-20261127) continues the r90 D-15/P-208 identity and re-export rules for [member types](DomainLanguageDesign.md#type-families-and-member-types). [Static module parameters](#static-module-parameters-for-mixin) record the preferred direction for extending the receiving-context template in D-10-MIXIN/P-102. Its detailed design and implementation remain deferred.
 
@@ -615,7 +617,14 @@ The preferred direction for type-level functions and broader type-level programm
 
 For example, consider static inputs `F : Type → Type` and `A : Type` and a result defined as `F[A]`. Supplying `F = deque` and `A = UInt64` denotes the existing member type `deque[UInt64]`. A different template could take a kind `K` itself and a parameter `X : K`. Supplying `K = Type → Type` would allow `X = deque`. These are examples in mathematical notation. They distinguish supplying a type constructor of known kind from supplying the kind itself.
 
-Returning an existing type and declaring a fresh nominal type inside a template have different identity consequences. An open design question is what happens when two sites supply identical arguments to a template that declares a new type and then exchange values of its result. Parameter syntax, result publication, the operations admitted in type-level computations and their evaluation rules also need a concrete workload and design review. The existing seed and booter delivery scope continues. [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
+The author chooses type identity by choosing where the nominal declaration is made. Consider a template that declares a type named `Ticket`:
+
+- **Independent types.** If `orders.cod` and `billing.cod` each mix in that declaration with the same static arguments, each module defines its own `Ticket`. Passing an orders ticket to a parameter requiring the exact billing ticket type fails the nominal type check.
+- **Shared type.** Define `Ticket` once in `protocol.cod`, directly or by mixing in the declaration there once, and export it. Both clients select that published type and can exchange tickets. A local rename or a source-preserving re-export keeps the same identity. [Vocabulary modules](#vocabulary-modules-establish-shared-identities)
+
+A mixin that merely refers to a supplied type, or applies the supplied `deque` family to `UInt64`, preserves the identity of that type or member in each receiver. The same template can therefore use a shared protocol type and declare a private local type. Ordinary name and declaration rules apply as if the declarations were written at the mixin site.
+
+Static parameter syntax, the form for publishing computed results and the permitted type-level computations remain open. [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
 
 ## Vocabulary modules establish shared identities
 
