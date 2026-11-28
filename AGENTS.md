@@ -115,7 +115,7 @@ When a diagnostic refers to a resolved name/identity alias, show the name used a
 
 ## Terminology and component conventions
 
-Use **nominal type family** (short **type family**) for a generic ADT such as `deque`, **member type** for `deque[UInt64]`, and **instance** for an object of that member type. [Type family terminology](design/DomainLanguageDesign.md#nominal-type-families-and-member-types)
+Use **generic ADT** for `deque`, **member type** for `deque[UInt64]`, and **instance** for an object of that member type. Reserve **type family** for discussion of type-indexed definitions in the Haskell sense. [Generic ADT terminology](design/DomainLanguageDesign.md#generic-adts-and-member-types)
 
 Use **function value** for `func …` and **functor value** for receiver-bound `func … in O`. Apply the terms consistently in designs, code comments, diagnostics and examples. The two types cannot be assigned to each other. [Callable terminology](design/CallableStorageAndHereAccess.md#function-value-and-functor-value)
 

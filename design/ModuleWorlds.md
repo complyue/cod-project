@@ -1,10 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 89 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 90 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
-At r89 the [type family decision](../CHANGELOG.md#h-nominal-type-family-terms-20261127) applies D-15/P-208 identity selection and re-export to [member types](DomainLanguageDesign.md#nominal-type-families-and-member-types). The r88 lookup and extension rules continue.
+At r90 the [generic ADT terminology revision](../CHANGELOG.md#h-type-family-term-reservation-20261127) continues the r89 D-15/P-208 identity and re-export rules for [member types](DomainLanguageDesign.md#generic-adts-and-member-types).
 
 At r88 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) refines when lookup reaches the visible free family. The r87 identities, publication and extension grants continue under [D-15](DesignAuthorityRegistry.md#d-15).
 
@@ -144,7 +144,7 @@ Each receiver integrates exported information for identical identities in its ow
 
 ## Identity records, aliases and publication
 
-For a [nominal type family](DomainLanguageDesign.md#nominal-type-families-and-member-types), resolve the family and each ordered type argument through their bindings. Two modules that declare their own `deque[T]` supply distinct family identities. A module that re-exports an existing family under a new name preserves that family and its member types. A receiving world's selection of methods can change which operations are available on a member type while preserving its identity.
+For a [generic ADT](DomainLanguageDesign.md#generic-adts-and-member-types), resolve the nominal type constructor and its ordered type arguments through their bindings. Two modules that declare their own `deque[T]` define distinct type constructors. A module that re-exports either declaration under a new name preserves its identity and the identities of its member types. A receiving world's selection of methods can change which operations are available on a member type while preserving its identity.
 
 Identity is the key of semantic information. A module can have several local aliases and several public aliases for that identity. Aliases provide access; they neither own separate copies of the method set nor redefine the object. Selecting more information for the same identity merges into the receiving world's record, so every alias of that identity sees the locally combined information (H-234/H-248).
 
