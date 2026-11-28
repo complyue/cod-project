@@ -1983,7 +1983,9 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
                     InlineProductField { val writable <-; } -> writable && mixed_aggregate_loan;
                     _ -> false
                 });
-            if ((kind != source_product_loan() && !mixed_aggregate_loan) || facts[operand].target_readonly != 0u8 ||
+            # The signature has checked either the inline schema or the
+            # exact flat bits layout. Both describe the same borrowed place.
+            if (facts[operand].target_readonly != 0u8 ||
                 (names[operand].kind != formal_binding() && !lexical && !projected_output) ||
                 owner_constraint_syntax(nodes, facts[formal].owner) != WritableOwnerConstraint)
                 return expected_writable_place()
@@ -3440,7 +3442,7 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
     val owners <- contracts[header].owner_count;
-    if (count < 3u64 || count >= published - header || owners == 0u64 ||
+    if (count < 2u64 || count >= published - header || owners == 0u64 ||
         contracts[header].source_writer != WorkspaceWriter ||
         (contracts[header].result_kind != builtin_bool() && contracts[header].result_kind != builtin_void()) ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
@@ -3455,11 +3457,6 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val role <- no_node();
     val kind <- 0u8;
     val access <- 0u8;
-    val writes <- 0u64;
-    val writable_arrays <- 0u64;
-    val reads_record <- false;
-    val previous_writable <- no_node();
-    val adjacent_arrays <- false;
     for (row in header + 1u64 .. past) {
         if (!checked_source_scalar_parameter(contracts, published, row)) {
             role <- contracts[row].owner_role;
@@ -3469,19 +3466,12 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
                 return no_node();
             if (kind == array_type()) {
                 if (!published_workspace_array(contracts, published, row)) return no_node();
-                if (access == 0u8) {
-                    adjacent_arrays <- previous_writable == row - 1u64;
-                    previous_writable <- row;
-                    (writable_arrays <- writable_arrays + 1u64):void
-                }
             } else {
-                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
-                (reads_record <- reads_record || access != 0u8):void
-            };
-            if (access == 0u8) { (writes <- writes + 1u64):void }
+                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node()
+            }
         }
     };
-    return if (writes >= 3u64 && writable_arrays == 2u64 && adjacent_arrays && reads_record) { past } else { no_node() }
+    return past
 }
 
 func checked_parser_writer_past(contracts:const ModuleInterfaces in I, published:UInt64,
@@ -3566,7 +3556,9 @@ func checked_readonly_query_past(contracts:const ModuleInterfaces in I, publishe
     val parameters <- contracts[header].entry_count;
     val result <- contracts[header].result_kind;
     val owner_count <- contracts[header].owner_count;
-    val record_key <- result == builtin_bool() && parameters == 4u64 && owner_count == 2u64;
+    val syntax_site_query <- result == builtin_u64() && parameters == 3u64;
+    val range_predicate <- result == builtin_bool() && parameters == 4u64;
+    val record_key <- (syntax_site_query || range_predicate) && owner_count == 2u64;
     if (parameters >= published - header || owner_count == 0u64 ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
@@ -3605,6 +3597,7 @@ func checked_readonly_query_past(contracts:const ModuleInterfaces in I, publishe
     val storage <- checked_aggregate_storage(contracts, published, contracts[scalar_past].type_module,
         contracts[scalar_past].type_identity, record_type());
     if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) return no_node();
+    aggregate_loan <- syntax_site_query;
     return past
 }
 

@@ -2812,7 +2812,7 @@ func prepare_readonly_query(nodes:const ExprNodes in N, names:const NameBindings
     val result_site <- clause.previous;
     if (inspect_signature(nodes, revision, used, result_site, clause) != ValueResultClause || clause.annotation >= used) return;
     val result <- names[clause.annotation].kind;
-    if (result != builtin_bool()) return;
+    if (result != builtin_bool() && result != builtin_u64()) return;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
@@ -2822,7 +2822,9 @@ func prepare_readonly_query(nodes:const ExprNodes in N, names:const NameBindings
     val input <- work[first].next;
     if (variadic_method_formal(nodes, revision, used, at) != no_node() ||
         !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) return;
-    for (position in 0u64 .. 2u64) {
+    # A syntax-site query has one extent; a range predicate has two.
+    val extents <- if (result == builtin_u64()) { 1u64 } else { 2u64 };
+    for (position in 0u64 .. extents) {
         if (!independent_scalar_formal(nodes, names, input, used, revision, builtin_u64())) return;
         (input <- work[input].next):void
     };
@@ -3242,20 +3244,21 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-func checked_bits_array_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+func workspace_array_element(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
-    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> bool
+    aggregate:const AggregateFacts in A, marker:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner N, const owner B, const owner E, const owner C, const owner A} {
     ref array = make ArraySlotType {
         owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
-    if (describe_slot_array(nodes, names, selected, contracts, published, aggregate,
-        marker, used, revision, array) != 0u8) return true;
+    val element <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+        marker, used, revision, array);
+    if (element != 0u8) return element;
     if (checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
-        marker, used, revision)) return true;
+        marker, used, revision)) return sum_type();
     val storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
         aggregate, marker, used, revision);
-    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate
+    return if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) { record_type() } else { 0u8 }
 }
 
 # Mutating several compiler workspaces requires their complete initialized
@@ -3290,15 +3293,26 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val kind <- 0u8;
     val role <- no_node();
     val preceding <- no_node();
-    val writes <- 0u64;
     val writable_arrays <- 0u64;
     val reads_record <- false;
+    val readonly_arrays <- 0u64;
+    val writable_records <- 0u64;
+    val writable_enum_array <- false;
+    val publication_signature <- false;
+    val element <- 0u8;
     val previous_writable <- no_node();
     val adjacent_arrays <- false;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) {
-            if (writes >= 3u64 && writable_arrays != 0u64) {
-                (views[at] <- make PreparedWorkspaceLoans { publication_signature <- reads_record && writable_arrays == 2u64 && adjacent_arrays }):void
+            # Name binding receives a parse record and paired writable tables.
+            # Schema completion writes an enum table; native declaration
+            # checking also writes the binding, work and supplied-view tables.
+            publication_signature <- (reads_record && writable_arrays == 2u64 && adjacent_arrays && writable_records != 0u64) ||
+                (!reads_record && writable_records == 1u64 &&
+                    ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||
+                     (writable_arrays == 4u64 && readonly_arrays >= 3u64)));
+            if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
+                (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
             return
         };
@@ -3315,9 +3329,11 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 clause.readonly != binding.readonly) return;
             marker <- binding.target_type;
             if (names[marker].kind == array_type() || imported_kind(names, selected, marker) == array_export()) {
-                if (!checked_bits_array_formal(nodes, names, selected, contracts, published, aggregate,
-                    marker, used, revision)) return;
-                if (!binding.readonly) {
+                element <- workspace_array_element(nodes, names, selected, contracts, published, aggregate,
+                    marker, used, revision);
+                if (element == 0u8) return;
+                if (binding.readonly) { (readonly_arrays <- readonly_arrays + 1u64):void } else {
+                    writable_enum_array <- writable_enum_array || element == enum_type();
                     adjacent_arrays <- previous_writable != no_node() && previous_writable == preceding;
                     previous_writable <- formal;
                     (writable_arrays <- writable_arrays + 1u64):void
@@ -3325,9 +3341,9 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             } else {
                 if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
                     !checked_bits_record(contracts, published, aggregate, type)) return;
-                (reads_record <- reads_record || binding.readonly):void
+                if (binding.readonly) { (reads_record <- true):void }
+                else { (writable_records <- writable_records + 1u64):void }
             };
-            if (!binding.readonly) { (writes <- writes + 1u64):void };
         };
         preceding <- formal;
         (formal <- work[formal].next):void
@@ -5009,9 +5025,8 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             inspect_sequence_entry(nodes, revision, used, at, public_item) == ModuleSequence) {
             prepare_published_product_writer(nodes, names, selected, contracts, interface_count,
                 aggregate, work, views, public_item.item, used, revision);
-            # Publish the read-record profile with two adjacent writable arrays
-            # and initialized output records. Local loan plans alone
-            # do not demand another body.
+            # The export marks the prepared signature as a body demand.
+            # Local loan preparation alone does not demand another body.
             if (case views[public_item.item] of {
                 PreparedWorkspaceLoans { val publication_signature <-; } -> publication_signature;
                 _ -> false
