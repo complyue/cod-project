@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Check entry effects against completed family requirements
+
+<a id="k-family-effect-entry-check-20261128"></a>
+**K-FAMILY-EFFECT-ENTRY-CHECK-20261128.** In the [W7 design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user distinguished recording a use of `@sout` from checking a program’s entries. [D-10 r288→289](design/SymbolicDynamicScope.md#call-path-binding-checks) continues the [family-wide incoming symbol contract](https://github.com/complyue/cod-project/blob/8247cd1f6bdecedf4cb147289236f702388ff8f1/design/SymbolicDynamicScope.md#family-wide-effect-requirements-before-20). P-738/P-739 are **continued** because a satisfied family contract discharges the same availability obligation at the call boundary. Branch-local supply, invocation mode, capture, selected receiver checks and trusted seed scope carry forward. W7 implementation is tracked by development mainline. Registry r1397→1398.
+
 ## 2026-11-28 — Plan external seed SDK and versioned target sysroots
 
 <a id="h-codup-target-sysroots-20261128"></a>

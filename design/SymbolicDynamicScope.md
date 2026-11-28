@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 288 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 289 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r289 the [entry-check clarification](../CHANGELOG.md#k-family-effect-entry-check-20261128) separates collection of each visible family’s incoming requirements from their use at an entry. P-738/P-739 continue family-wide admission, local supply and handler capture.
 
 At r288 the [swarm-bound handle decision](../CHANGELOG.md#h-swarm-bound-handle-types-20261128) qualifies cleanup after an owning launch. Both entry forms continue the r287 handoff and fresh TLS rules.
 
@@ -2042,7 +2044,12 @@ For a two-method `@quote` handler over `Shipment`, suppose its general method re
 
 ### Call-path binding checks
 
-H-102 locates checking at compilation of the demanded call paths. The compiler follows module initialization, callers, scoped bindings, callable selection and invocation mode; declaration text in an isolated module is not the compilation unit.
+H-102 locates availability checking at the entries being compiled, including module initialization. The booter and production compiler separate two operations.
+
+1. **Complete the family’s incoming requirements.** A resolved read or `touch` records a canonical symbol use. An entered call records the visible family it can invoke and the bindings definitely supplied at that site. Subtract those supplies at each use or call, then union the outstanding needs across the family. Resolve transitive and recursive dependencies on the recorded edges. A reusable interface can publish the completed set for its callers. Only a completed set can establish that a family requires zero incoming symbols.
+2. **Check the entry against the completed requirements.** At a call whose requirements the effective environment covers, the availability check for that edge is finished. The checker reads the contract once at that boundary. A closed entry with a missing requirement reports it using the recorded source locations.
+
+Encountering `@sout` in a text writer is an instance of the first operation. The second consumes the same kind of completed set for every symbol. A symbol’s availability answers whether a binding exists. Where a writer requires a particular receiver, its selected type, access and actual owner must also satisfy the call’s contract.
 
 - For `behave @p`, required effects must be available in the current effective dynamic scope along each reachable path to their use, accounting for bindings established inside the body.
 - For `perform @p`, the values it must install must have been obtainable at the applicable definition event. Missing required capture values are compilation errors, with no fallback to the caller's values.
