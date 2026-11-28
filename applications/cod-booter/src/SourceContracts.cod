@@ -33,7 +33,7 @@ using "./NameResolution.cod" { NameBindings, NameWork, callable_binding, builtin
 using "./NativeDeclarations.cod" {
     SuppliedViews, forwarded_predicate_call,
     SuppliedView { ReadonlyTextPredicate, ReadonlyTextPredicateBody, CheckedReadonlyReader, CheckedProductWriter,
-        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayProcedureCall, PreparedArrayConstruction, PreparedSynchronousHere }
+        CheckedAggregateWriter, CheckedScalarPredicate, CheckedScalarFunction, CheckedParserWriter, CheckedArrayInspector, CheckedArrayProcedure, PreparedArrayProcedure, CheckedArrayCall, PreparedArrayConstruction, EmptySumArrayFill, PreparedSynchronousHere }
 };
 using "./OperandChecking.cod" { OperandFacts, scalar_bool };
 using "./CompletionChecking.cod" { CompletionSites, can_continue };
@@ -374,6 +374,8 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
             NamedConstruction -> lexical_array_allocation(names, facts, views, at) ||
+                (facts[at].kind == independent_sum_bits() &&
+                 (case views[at] of { EmptySumArrayFill -> true; _ -> false })) ||
                 (facts[at].allocation_owner == no_node() &&
                 ((at < intrinsic (len)(cases) && (case cases[at] of { BitsConstruction -> true; _ -> false })) ||
                  completed_lexical_bits_target(facts, at, names[at].scope)));
@@ -484,7 +486,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                     }
                 };
                 if (checked_call && !stops_before_entry &&
-                    (case views[at] of { CheckedArrayProcedureCall { val allocates <-; } -> allocates; _ -> false })) {
+                    (case views[at] of { CheckedArrayCall { val allocates <-; } -> allocates; _ -> false })) {
                     (local[definition].allocates <- true):void
                 };
                 if (can_continue(sites, at)) {
@@ -606,10 +608,10 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
                 numeric_fault <- outcomes[at].numeric
             }):void
         };
-        if (prepared_array_inspector(views, at) && nonallocating) {
+        if (prepared_array_inspector(views, at) && outcomes[at].available) {
             (views[at] <- make CheckedArrayInspector {
                 completion <- if (outcomes[at].bounds) { ArrayReadMayFailBounds } else { CheckedArrayRead };
-                numeric_fault <- outcomes[at].numeric
+                numeric_fault <- outcomes[at].numeric; allocates <- outcomes[at].allocates
             }):void
         };
         if (prepared_parser_writer(views, at) && nonallocating) {

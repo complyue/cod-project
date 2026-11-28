@@ -140,7 +140,7 @@ using "./NativeDeclarations.cod" SuppliedView {
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
     CheckedScalarFunctionCall, CheckedScalarPredicateCall,
-    CheckedWriterCall, CheckedSumWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
+    CheckedWriterCall, CheckedSumWriterCall, CheckedArrayCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
 using "./ParserStorage.cod" FormalSyntax { HereFormalSyntax };
@@ -3250,6 +3250,28 @@ func checked_product_writer_header(contracts:const ModuleInterfaces in I, publis
         (target_storage == CoDBitsAggregate || (arity == 4u64 && target_storage == CLayoutBitsRecord))
 }
 
+func checked_array_inspector_inputs(contracts:const ModuleInterfaces in I, published:UInt64,
+    first:UInt64, output:UInt64, owners:UInt64) -> bool where {const owner I} {
+    ref sum_loan = make bool { false };
+    if (checked_readonly_query_inputs(contracts, published, first, output, owners, sum_loan))
+        return !sum_loan;
+    if (owners < 2u64) return false;
+
+    val array_role <- owners - 1u64;
+    val past <- output;
+    for (unused in first + 1u64 .. output) {
+        past <- past - 1u64;
+        if (!checked_source_scalar_parameter(contracts, published, past)) {
+            return source_aggregate_formal(contracts, past, array_type(), array_role, 0u8) &&
+                published_enum_array_header(contracts, published, contracts[past].type_module,
+                    contracts[past].type_identity) != no_node() &&
+                checked_readonly_query_inputs(contracts, published, first, past, array_role, sum_loan) &&
+                !sum_loan
+        }
+    };
+    return false
+}
+
 func checked_array_inspector_past(contracts:const ModuleInterfaces in I, published:UInt64,
     header:UInt64) -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
@@ -3276,9 +3298,7 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
         !published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity))
         return no_node();
     val output_role <- owner_count - 1u64;
-    ref sum_loan = make bool { false };
-    if (!checked_readonly_query_inputs(contracts, published, array, output, output_role, sum_loan) ||
-        sum_loan) return no_node();
+    if (!checked_array_inspector_inputs(contracts, published, array, output, output_role)) return no_node();
     if (contracts[output].value_kind == builtin_u64()) {
         if (contracts[output].interface_kind == 0u8 && contracts[output].entry_count == 0u64 &&
             contracts[output].field_mode == ReferenceFormal && contracts[output].owner_role == output_role &&
@@ -3883,7 +3903,12 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         links[at].imported_type_identity <- contracts[header].type_identity;
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        (supplied[at] <- make CheckedWriterCall {}):void;
+        if (contracts[header].array_slot_failures.out_of_memory) {
+            supplied[at] <- make CheckedArrayCall { allocates <- true };
+            if (required == no_node()) { (required <- at):void }
+        } else {
+            (supplied[at] <- make CheckedWriterCall {}):void
+        };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {
@@ -3916,7 +3941,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             links[at].imported_type_identity <- contracts[header].type_identity;
             links[at].imported_array_read_completion <- contracts[header].array_read_completion;
             links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-            (supplied[at] <- make CheckedArrayProcedureCall {
+            (supplied[at] <- make CheckedArrayCall {
                 allocates <- contracts[header].array_slot_failures.out_of_memory
             }):void;
             if (required == no_node()) { (required <- at):void };

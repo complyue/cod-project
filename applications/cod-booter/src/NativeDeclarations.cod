@@ -1527,7 +1527,7 @@ export data SuppliedView =
     PreparedAggregateWriter {} |
     CheckedAggregateWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedArrayInspector { inline_product:bool; } |
-    CheckedArrayInspector { completion:ArrayReadCompletion; numeric_fault:bool; } |
+    CheckedArrayInspector { completion:ArrayReadCompletion; numeric_fault:bool; allocates:bool; } |
     PreparedParserWriter {} |
     CheckedParserWriter { completion:ArrayReadCompletion; numeric_fault:bool; } |
     PreparedProductWriterHelper {} |
@@ -1539,7 +1539,7 @@ export data SuppliedView =
     CheckedReadonlyCall { sum_loan:bool; } |
     CheckedWriterCall {} |
     CheckedSumWriterCall {} |
-    CheckedArrayProcedureCall { allocates:bool; } |
+    CheckedArrayCall { allocates:bool; } |
     CheckedArrayReaderCall {} |
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
@@ -2804,7 +2804,7 @@ export func checked_source_array_call(views:const SuppliedViews in V, site:UInt6
         CheckedReadonlyCall -> true;
         CheckedWriterCall -> true;
         CheckedSumWriterCall -> true;
-        CheckedArrayProcedureCall -> true;
+        CheckedArrayCall -> true;
         CheckedArrayReaderCall -> true;
         ImportedProductWriter -> true;
         _ -> false
@@ -3126,8 +3126,50 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-# A checked inspector receives an AST array and any additional readonly
-# arrays before its final initialized writable output.
+# Before the final output, an inspector can also receive one writable enum
+# array. Its owner clause follows the readonly inputs' owner clauses.
+func array_inspector_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, tail:UInt64, last_owner:UInt64, result:UInt64,
+    used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    if (inspect_signature(nodes, revision, used, last_owner, clause) != OwnerSignatureClause) return false;
+    if (clause.readonly)
+        return check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
+            tail, last_owner, result, used, revision, true);
+
+    val input_owner <- clause.previous;
+    if (input_owner == result) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref output = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
+    };
+    val formal <- tail;
+    val annotation <- no_node();
+    val kind <- 0u8;
+    val marker <- no_node();
+    for (unused in 0u64 .. used) {
+        if (formal == no_node() ||
+            inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
+        annotation <- independent_formal_type(nodes, formal, used, revision);
+        kind <- if (annotation < used) { native_value_kind(names, selected, annotation) } else { 0u8 };
+        if (!source_call_scalar(kind) && kind != enum_type()) {
+            marker <- reference_formal_marker(nodes, names, formal, last_owner, false, used, revision);
+            return marker < used &&
+                describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+                    marker, used, revision, output) == enum_type() &&
+                check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
+                    entry.previous, input_owner, result, used, revision, true)
+        };
+        (formal <- entry.previous):void
+    };
+    return false
+}
+
+# An inspector receives an AST array and initialized output places.
 func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -3157,8 +3199,8 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
         entry.previous == no_node() || last_input_owner == result) return;
     val output <- reference_formal_marker(nodes, names, tail, output_owner, false, used, revision);
     if (output >= used ||
-        !check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
-            entry.previous, last_input_owner, result, used, revision, true)) return;
+        !array_inspector_inputs(nodes, names, selected, contracts, published, aggregate,
+            entry.previous, last_input_owner, result, used, revision)) return;
     if (names[output].kind == builtin_u64()) {
         views[at] <- make PreparedArrayInspector { inline_product <- false };
         return
@@ -5509,8 +5551,11 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                                 CheckedAggregateWriter { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
                                 };
-                                CheckedArrayInspector { val numeric_fault <-; } -> {
-                                    (contracts[first].source_numeric_fault <- numeric_fault):void
+                                CheckedArrayInspector { val numeric_fault <-; val allocates <-; } -> {
+                                    contracts[first].source_numeric_fault <- numeric_fault;
+                                    contracts[first].array_slot_failures.out_of_memory <- allocates;
+                                    contracts[first].array_slot_failures.region_capacity <- allocates;
+                                    (contracts[first].array_slot_failures.invalid_capacity <- allocates):void
                                 };
                                 CheckedParserWriter { val numeric_fault <-; } -> {
                                     (contracts[first].source_numeric_fault <- numeric_fault):void
