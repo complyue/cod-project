@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Allow inline literals in every here argument slot
+
+<a id="h-inline-here-actuals-20261128"></a>
+**H-INLINE-HERE-ACTUALS-20261128.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user asked for single-brace outward return and double-brace callback-local return in the second and later arguments, then confirmed the any-slot proposal, “好，设计文档如果还没照顾到这个语法就更新，然后落实实现。” [D-10 r289→290](design/SymbolicDynamicScope.md#inline-here-arguments) extends [the earlier explicit-argument rule](https://github.com/complyue/cod-project/blob/63722980196aefad1b16435a1118c829e20f3128/design/SymbolicDynamicScope.md#trailing-callback-arguments) to inline literals under ordinary positional and named binding. P-569 is revised. P-567/P-568 and D-18 r19→20/P-617–P-618 are **continued** for written evaluation order, per-slot contracts, lexical capture, brace semantics and forwarding. The second argument in the worked example distinguishes 7 from 107. Parser combinator WIP r4→5/P-742–P-743 continues its existing four-callback use case. The native C provider convention has its own scope. Registry r1399→1400.
+
 ## 2026-11-28 — Remove the seed’s single ordinary callback ceiling
 
 <a id="h-seed-ordinary-here-arity-20261128"></a>
