@@ -59,7 +59,7 @@ export data ConstructorCaseFact =
         fixed:bool; target_readonly:bool;
     } |
     IndexedOutputFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
-    WritableFieldDestination {} |
+    WritableFieldUse {} |
     InlineProductField {
         receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType;
         readonly:bool; writable:bool;
@@ -1200,7 +1200,7 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                     interfaces, published, selection.field, used, revision, true, type, ordinal, readonly) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
                         (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
-                    writable <- case facts[site] of { WritableFieldDestination -> true; _ -> false };
+                    writable <- case facts[site] of { WritableFieldUse -> true; _ -> false };
                     remember_indexed_aggregate_loan(nodes, facts, site, loan, record,
                         access == (WritableLexicalArray:LexicalArrayAccess) || writable);
                     remember_inline_product_field(facts, site, selection.receiver,
@@ -1290,6 +1290,8 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
         array_module <- 0u64; array_type <- no_node();
     };
     ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref index = make IndexSites { target <- no_node(); index <- no_node() };
     val argument <- first_argument;
     val formal <- first_formal;
     val actual <- no_node();
@@ -1317,13 +1319,18 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                     }
                 };
                 InlineProductFormal { val readonly <-; } -> {
-                    # The selected array schema identifies the element. The
-                    # operand check still validates its actual view and index.
-                    if (describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
-                            entry.item, used, revision, loan, record) &&
-                        case_bits_type(record, aggregate, interfaces, published)) {
-                        remember_indexed_aggregate_loan(nodes, facts, argument, loan, record, !readonly);
+                    if (!readonly && indexed_field_projection(nodes, call, revision, entry.item, field, index)) {
+                        # The field pass binds the member and carries this access
+                        # request through the enclosing projections.
+                        facts[entry.item] <- make WritableFieldUse {};
                         if (first == no_node()) { (first <- call):void }
+                    } else {
+                        if (describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
+                            entry.item, used, revision, loan, record) &&
+                            case_bits_type(record, aggregate, interfaces, published)) {
+                            remember_indexed_aggregate_loan(nodes, facts, argument, loan, record, !readonly);
+                            if (first == no_node()) { (first <- call):void }
+                        }
                     }
                 };
                 _ -> {}
@@ -1462,7 +1469,7 @@ func prepare_aggregate_loan_arguments(nodes:const ExprNodes in N, names:const Na
     return true
 }
 
-func indexed_field_destination(nodes:const ExprNodes in N, at:UInt64, revision:UInt64,
+func indexed_field_projection(nodes:const ExprNodes in N, at:UInt64, revision:UInt64,
     destination:UInt64, field:FieldSelectionSites in F, index:IndexSites in I) -> bool
     where {const owner N, owner F, owner I} {
     val projection <- destination;
@@ -2079,7 +2086,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
              fixed_indexed_field_initializer(nodes, local, at, used, revision))) return true;
         if ((inspect_assignment(nodes, revision, used, at, assignment) == PlaceTransfer &&
             ((names[at].kind == 0u8 &&
-              indexed_field_destination(nodes, at, revision, assignment.destination, projection, indexed)) ||
+              indexed_field_projection(nodes, at, revision, assignment.destination, projection, indexed)) ||
              ((case views[assignment.destination] of {
                    IndexedArrayDestination { val transfer <- assignment; } -> transfer == at;
                    _ -> false
@@ -2211,9 +2218,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         };
         transfer <- inspect_assignment(nodes, revision, used, at, assignment);
         if (transfer == PlaceTransfer && names[at].kind == 0u8 &&
-            (indexed_field_destination(nodes, at, revision, assignment.destination, field, indexed) ||
+            (indexed_field_projection(nodes, at, revision, assignment.destination, field, indexed) ||
              borrowed_product_field_destination(nodes, names, facts, at, revision, assignment.destination, field))) {
-            facts[assignment.destination] <- make WritableFieldDestination {};
+            facts[assignment.destination] <- make WritableFieldUse {};
             if (first == no_node()) { (first <- at):void }
         };
         if (transfer == PlaceTransfer &&
@@ -2251,12 +2258,12 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
     val receiver <- no_node();
     for (offset in 0u64 .. used) {
         site <- used - 1u64 - offset;
-        # Carry a builtin field write through its enclosing inline projections.
-        if ((case facts[site] of { WritableFieldDestination -> true; _ -> false }) &&
+        # Carry the access request through every enclosing inline projection.
+        if ((case facts[site] of { WritableFieldUse -> true; _ -> false }) &&
             inspect_field_selection(nodes, revision, used, site, field)) {
             receiver <- field.receiver;
             if (receiver < site && inspect_field_selection(nodes, revision, used, receiver, field)) {
-                (facts[receiver] <- make WritableFieldDestination {}):void
+                (facts[receiver] <- make WritableFieldUse {}):void
             }
         };
         if (inspect_assignment(nodes, revision, used, site, assignment) == PlaceRebind &&

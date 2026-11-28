@@ -1962,14 +1962,15 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
                         !readonly && owner_site == facts[operand].owner;
                     _ -> false
                 });
-            val indexed_output <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
+            val projected_output <- operand < intrinsic (len)(cases) && facts[operand].selection == operand &&
                 (case cases[operand] of {
                     IndexedAggregateLoan { val consumer <-; val writable <-; } ->
                         consumer == argument && writable;
+                    InlineProductField { val writable <-; } -> writable && mixed_aggregate_loan;
                     _ -> false
                 });
             if (kind != source_product_loan() || facts[operand].target_readonly != 0u8 ||
-                (names[operand].kind != formal_binding() && !lexical && !indexed_output) ||
+                (names[operand].kind != formal_binding() && !lexical && !projected_output) ||
                 owner_constraint_syntax(nodes, facts[formal].owner) != WritableOwnerConstraint)
                 return expected_writable_place()
         } else {

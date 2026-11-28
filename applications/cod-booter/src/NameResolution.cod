@@ -1584,14 +1584,14 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             # phase compares its selected parent to the array element.
             if (bindings[requested].kind == array_type()) {
                 (state.local_sum_input <- fill.item):void
-            } else {
+            };
+            if (construction.placement == no_node() && state.lexical_reference_initializer == at) {
                 ref literal = make ConstructionSites {
                     requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
                     initializer <- no_node(); contents <- no_node()
                 };
-                if (construction.placement == no_node() && state.lexical_reference_initializer == at &&
-                    inspect_construction(nodes, state.syntax_revision, at, fill.item, literal) == BracedConstruction &&
-                    literal.requested < fill.item && work[literal.requested].selected_constructor) {
+                if (inspect_construction(nodes, state.syntax_revision, at, fill.item, literal) == BracedConstruction &&
+                    literal.placement == no_node() && literal.queried_operand == no_node()) {
                     (state.inline_field_input <- fill.item):void
                 }
             }
