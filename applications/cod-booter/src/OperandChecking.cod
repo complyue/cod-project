@@ -102,6 +102,7 @@ using "./NameResolution.cod" {
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
     generic_method_binding, uninstantiated_method, unsupported_generic_type,
+    is_lexical_builder,
 };
 using "./ModuleExports.cod" {
     SelectedExports, symbol_export, print_export_identity,
@@ -259,6 +260,7 @@ func source_sum_target() -> UInt8 { return 15u8 }
 func received_product() -> UInt8 { return 16u8 }
 func received_sum() -> UInt8 { return 17u8 }
 func source_product_loan() -> UInt8 { return 18u8 }
+func source_builder_loan() -> UInt8 { return 19u8 }
 export func independent_sum_bits() -> UInt8 { return 20u8 }
 func independent_product_bits() -> UInt8 { return 21u8 }
 func generic_member_loan() -> UInt8 { return 22u8 }
@@ -429,7 +431,7 @@ func require_prepared_typed_bits(facts:OperandFacts in F, operand:UInt64, kind:U
 func compatible_operand_nominal(facts:const OperandFacts in F, operand:UInt64, kind:UInt8, identity:UInt64,
     module:UInt64) -> bool
     where {const owner F} {
-    return facts[operand].kind != kind || (kind != scalar_enum() && kind != product_kind()) ||
+    return facts[operand].kind != kind || (kind != scalar_enum() && kind != product_kind() && kind != source_builder_loan()) ||
         (facts[operand].identity == identity && facts[operand].identity_module == module);
 }
 
@@ -683,17 +685,18 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         if (form != ReferenceFormal && form != PointerFormal && !place && !slot)
             return unproved_operand();
         val target <- binding.target_type;
+        val builder <- source_only && is_lexical_builder(nodes, names, target, revision, used);
+        if (builder && form != ReferenceFormal) return unproved_operand();
         val imported_enum <- if (source_only && form == ReferenceFormal) {
             imported_enum_selection(names, selected, target)
         } else { no_node() };
-        val borrowed_kind <- if (imported_enum != no_node()) {
-            scalar_enum()
-        } else {
-            if (source_only && (names[target].kind == array_type() ||
-                (names[target].kind == ordinary_selection() &&
-                    selected[names[target].declaration].kind == array_export()))) {
-                source_array_loan()
-            } else { declared_borrow(names, facts, target) }
+        val array <- source_only && (names[target].kind == array_type() ||
+            (names[target].kind == ordinary_selection() &&
+                selected[names[target].declaration].kind == array_export()));
+        val borrowed_kind <- if (imported_enum != no_node()) { scalar_enum() } else {
+            if (builder) { source_builder_loan() } else {
+                if (array) { source_array_loan() } else { declared_borrow(names, facts, target) }
+            }
         };
         if (names[target].kind == record_type() && (borrowed_kind == 0u8 || form == PointerFormal))
             return unsupported_product_layout();
@@ -732,10 +735,12 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         } else {
             if (slot) return unproved_operand();
             val identity <- if (imported_enum != no_node()) { (selected[imported_enum].identity) }
-                else { nominal_identity(names, target) };
+                else { if (builder) { type_identity(names, selected, target) } else { nominal_identity(names, target) } };
             set_fact(facts, formal, borrowed_kind, reception, owner_site, identity, 0u8);
             if (imported_enum != no_node()) {
                 (facts[formal].identity_module <- selected[imported_enum].origin_module):void
+            } else {
+                if (builder) { (facts[formal].identity_module <- type_module(names, selected, target, 0u64)):void }
             }
         };
         if (reception == nullable_ptr()) { (facts[formal].selection <- formal):void; } else {};
@@ -1013,6 +1018,23 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
     val pointer <- local.mode == PointerLocal;
     if (value_binding && binding.owner_name != no_node()) return unproved_operand();
     val required_owner <- if (binding.owner_name == no_node()) { no_node() } else { (names[binding.owner_name].declaration) };
+    if (source_only && facts[initializer].kind == source_builder_loan()) {
+        if (local.mode != ReferenceLocal) return unsupported_text_operation();
+        val actual <- facts[initializer].owner;
+        if (required_owner != no_node() && actual != required_owner)
+            return owner_conflict(nodes, actual, required_owner);
+        if (type_name != no_node()) {
+            if (!is_lexical_builder(nodes, names, type_name, revision, used) ||
+                facts[initializer].identity != type_identity(names, selected, type_name) ||
+                facts[initializer].identity_module != type_module(names, selected, type_name, 0u64))
+                return wrong_operand_type();
+            if (readonly == 0u8 && facts[initializer].target_readonly != 0u8)
+                return expected_writable_place()
+        };
+        copy_fact(facts, at, initializer);
+        if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
+        return 0u8
+    };
     if (facts[initializer].kind == generic_member_loan()) {
         if (local.mode != ReferenceLocal || type_name != no_node() ||
             facts[initializer].reception != borrowed_ref() || facts[initializer].target_presence != present_target())
@@ -1241,7 +1263,8 @@ func check_text_construction(nodes:const ExprNodes in N, names:const NameBinding
     facts[at].allocation_owner <- owner_site;
     (facts[owner_site].owner_chain <- 0u64):void;
     if (facts[source].kind == never_result()) { set_result(facts, at, never_result()); return 0u8; };
-    if (!immutable_text_kind(facts[source].kind)) return string_operand_required();
+    if (!immutable_text_kind(facts[source].kind) && facts[source].kind != source_builder_loan())
+        return string_operand_required();
     set_fact(facts, at, string_kind(), borrowed_ref(), owner_site, 0u64, 0u8);
     facts[at].target_readonly <- 1u8;
     facts[at].text_nul <- facts[source].text_nul;
@@ -1258,6 +1281,25 @@ func check_text_assertion(facts:OperandFacts in F, at:UInt64, operand:UInt64) ->
     facts[at].text_nul <- nul_absent();
     (facts[at].text_assertion <- if (facts[operand].text_nul == nul_absent()) { 0u8 } else { 1u8 }):void;
     return 0u8;
+}
+
+# An empty builder still acquires its descriptor and registers lexical cleanup.
+func check_empty_builder(names:const NameBindings in B,
+    selected:const SelectedExports in E, facts:OperandFacts in F, at:UInt64,
+    construction:const ConstructionSites in C) -> UInt8
+    where {const owner B, const owner E, owner F, const owner C} {
+    if (construction.contents != no_node()) return unsupported_text_operation();
+    val placement <- construction.placement;
+    val owner_site <- names[at].scope;
+    if (placement != no_node() && names[placement].declaration != owner_site)
+        return unproved_owner();
+    val type <- construction.requested;
+    set_fact(facts, at, source_builder_loan(), borrowed_ref(), owner_site,
+        type_identity(names, selected, type), 0u8);
+    facts[at].identity_module <- type_module(names, selected, type, 0u64);
+    facts[at].allocation_owner <- owner_site;
+    (facts[owner_site].owner_chain <- 0u64):void;
+    return 0u8
 }
 
 func check_construction(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -1821,6 +1863,8 @@ func check_argument_operand(nodes:const ExprNodes in N, facts:OperandFacts in F,
         facts[argument].identity_module <- module;
         return 0u8;
     } else {};
+    if (kind == source_builder_loan() && facts[actual].reception != borrowed_ref())
+        return unproved_nonnull_borrow();
     if (binds_local_storage(nodes, actual) ||
         facts[actual].kind == 0u8 || facts[actual].kind == null_literal()) return unproved_operand();
     if (immutable_text_kind(kind)) {
@@ -7346,6 +7390,11 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         if (kind == builtin_string()) {
             if (shape != PositionalConstruction) return unsupported_text_operation();
             return check_text_construction(nodes, names, facts, at, used, revision, construction);
+        };
+        if (source_only && construction.requested < used &&
+            is_lexical_builder(nodes, names, construction.requested, revision, used)) {
+            if (shape != PositionalConstruction) return unsupported_text_operation();
+            return check_empty_builder(names, selected, facts, at, construction);
         };
         if (kind == record_type()) {
             if (shape != BracedConstruction) return unsupported_product_layout();

@@ -1131,6 +1131,14 @@ CoD validates the field’s nonempty ASCII identifier and its byte range against
 
 Verify the migration against the previous predicate over every exact spelling and prefix, including longer names, case distinctions, and close permitted spellings. Exercise the CoD matcher with a name sliced from a larger buffer and a range that extends beyond the published prefix. Test a reserved record field and a reserved failure field through the real provider route, preserving an existing output pair. A valid neighboring spelling must still render and compile. Keep the existing production pair parity and Clang layout checks. The read-only regeneration check must detect a stale projection.
 
+### Checking lexical builder loans
+
+The source operand checker uses the resolved lexical-builder type for a borrowed `StringBuilder` formal. The loan carries the defining module and declaration, target access and actual owner. A source-preserving rename keeps that identity. A distinct builder with the same storage shape cannot supply the formal. Pass current targets through local calls using the ordinary owner checks, including repeated uses of the same formal owner. A readonly view can supply a readonly formal.
+
+An empty builder constructed in the current lexical scope has an initialized descriptor after its fallible allocation. Reference bindings keep the selected owner and can weaken access. `make String(builder)` snapshots the builder as an immutable string under the ordinary text result owner. A builder loan supplies neither a value transfer nor a native parameter layout.
+
+The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs a completed imported callable contract for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
+
 ### Target layout for provider rows
 
 Acquire one owning native layout handle for a provider render that needs row layout. Readonly loans select that handle’s immutable target data. Use the current native target selection and ensure target registration is available on the provider command path. Declaration checking alone needs no layout acquisition. The service can create a target machine to obtain its data layout, then release the machine. Keep the layout and any LLVM context used for queries live until their last use. Dispose of diagnostics and partial acquisitions before reporting a checked acquisition failure. Release a successfully acquired handle once through ordinary CoD cleanup. This operation needs no IR module, builder, assembly printer or output file.
