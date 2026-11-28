@@ -2176,10 +2176,16 @@ class BodyExtraction {
         return result.type == Type::never;
       };
       const auto incoming = supplied_;
+      auto clauses = std::span(expr.children).subspan(1);
+      const Expression *finalizer = nullptr;
+      if (!clauses.empty() && clauses.back()->kind == Kind::block) {
+        finalizer = clauses.back().get();
+        clauses = clauses.first(clauses.size() - 1);
+      }
       ++protected_depth_;
       bool terminates = check_body(*expr.children.front());
       --protected_depth_;
-      for (const auto &handler : std::span(expr.children).subspan(1)) {
+      for (const auto &handler : clauses) {
         supplied_ = incoming;
         expect(handler->kind == Kind::handler && handler->annotation && handler->annotation->kind == Type::named,
                handler->at, "seed needs a named exception catch");
@@ -2199,6 +2205,16 @@ class BodyExtraction {
         scopes_.pop_back();
       }
       supplied_ = incoming;
+      if (finalizer) {
+        const auto &result = body_.instance.result;
+        expect(!result.owns_region() && !result.owns_exception(), finalizer->at,
+               "seed needs cleanup disposition for an owning return");
+        // Cleanup has its own completion. Its normal value is discarded,
+        // and a terminating finalizer leaves no local continuation.
+        const auto &cleanup = extract(*finalizer);
+        terminates = cleanup.type == Type::never || terminates;
+        supplied_ = incoming;
+      }
       CheckedOperation op;
       if (terminates) op.type = Type::never;
       return op;
