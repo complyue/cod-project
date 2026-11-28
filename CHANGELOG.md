@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Name nominal type families and their member types
+
+<a id="h-nominal-type-family-terms-20261127"></a>
+**H-NOMINAL-TYPE-FAMILY-TERMS-20261127.** In the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50), the project user proposed “`deque` 叫作 "type family"，`deque[UInt64]` 看作它的一个 member type”, specified independent family identities for declarations in different modules and delegated the terminology choice. [D-07 r235→236](design/DomainLanguageDesign.md#nominal-type-families-and-member-types) adopts *nominal type family* and *member type*. [D-15 r88→89](design/ModuleWorlds.md#identity-records-aliases-and-publication) applies that identity through aliases and re-exports. The [prior generic bracket and ctor contract](https://github.com/complyue/cod-project/blob/0a41b7df7ae9351098ca4f0da0eef7b666e88719/design/DomainLanguageDesign.md#brackets-in-generic-type-heads), ordered canonical arguments, value-only container items and world-local method selection continue. P-18/P-208/P-229, registry r1377→1378.
+
 ## 2026-11-27 — Distinguish make by ctor from make by init
 
 <a id="h-make-by-ctor-and-init-20261127"></a>
