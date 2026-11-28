@@ -337,8 +337,9 @@ struct CheckedInput {
 };
 struct CheckedFrame {
   std::vector<CheckedInput> inputs;
-  // One incoming identity per input-bound owner, independent of target carriers.
-  std::map<size_t, size_t> owners;
+  // Ordinary methods name a representative operand. Outlined scopes can
+  // instead supply the identity from their prepared owner mapping.
+  std::map<size_t, std::optional<size_t>> owners;
   // Lexical owning region declarations store the live controller in this place.
   std::map<size_t, size_t> region_controllers;
   bool operator==(const CheckedFrame &) const = default;

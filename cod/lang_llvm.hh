@@ -1072,10 +1072,10 @@ class LLVMEmission {
     for (const auto &[owner, input] : instance.frame.owners) {
       if (definition.scope_inputs) {
         prepared.push_back(owner_identity(invocation.scope_owners.at(null_target - 1 - owner), expr.at));
-      } else if (!current_owners.empty() && current_owners[input]) {
-        prepared.push_back(current_owners[input]);
       } else {
-        prepared.push_back(selected_owner(invocation.argument(expr, input)));
+        const auto operand = input.value();
+        prepared.push_back(!current_owners.empty() && current_owners[operand]
+            ? current_owners[operand] : selected_owner(invocation.argument(expr, operand)));
       }
     }
     for (const auto role : layout.allocation_owners) {

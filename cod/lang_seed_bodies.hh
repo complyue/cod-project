@@ -130,6 +130,9 @@ class BodyExtraction {
     std::vector<Parameter> parameters;
     std::optional<HereSupply> here;
     std::optional<size_t> handler;
+    std::map<size_t, Allocator> allocators = {};
+
+    bool direct_scope() const { return source->implicit_scope && !source->case_scan_scope && !here && !handler; }
   };
   struct LocalDefinition {
     Outline outline;
@@ -558,13 +561,28 @@ class BodyExtraction {
       return static_cast<size_t>(found - parameters.begin());
     }
 
-    size_t named_owner(const std::string &name, const Location &at) const {
+    size_t named_owner(const std::string &name, const Location &at) {
       if (name.empty() || name == "here") return 0;
       if (const auto *binding = find(name)) {
         const auto *local = std::get_if<Local>(binding);
         expect(local && local->place && region_controller(local->owner) == local->place,
                at, "seed needs an owning region or an input owner");
         return local->owner;
+      }
+      if (body_.outline && body_.outline->direct_scope()) {
+        const auto &outline = *body_.outline;
+        const auto &supplier = extraction_.bodies_.at(outline.supplier).instance;
+        if (const auto visible = outline.visible.find(name); visible != outline.visible.end()) {
+          const auto *local = std::get_if<Local>(&visible->second);
+          expect(local && local->place && supplier.frame.region_controllers.contains(local->owner) &&
+                 supplier.frame.region_controllers.at(local->owner) == local->place,
+                 at, "seed needs an owning region or an input owner");
+          return capture_owner(local->owner, at);
+        }
+        const auto &parameters = extraction_.method(supplier.method).input_owners();
+        const auto found = std::ranges::find(parameters, name, &OwnerParameter::name);
+        if (found != parameters.end() && !found->root && !found->explicit_parameter)
+          return capture_owner(input_owner(found - parameters.begin()), at);
       }
       return input_owner(owner_role(name, at));
     }
@@ -751,6 +769,31 @@ class BodyExtraction {
       frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
     }
 
+    size_t capture_owner(size_t actual, const Location &at) {
+      auto &outline = *body_.outline;
+      const auto known = std::ranges::find(outline.owners, actual);
+      const auto role = static_cast<size_t>(known - outline.owners.begin());
+      const auto owner = input_owner(role);
+      if (known != outline.owners.end()) return owner;
+
+      const auto &supplier = extraction_.bodies_.at(outline.supplier).instance;
+      const auto controller = supplier.frame.region_controllers.find(actual);
+      const bool regional = outline.direct_scope() && controller != supplier.frame.region_controllers.end();
+      const bool read_only = regional ? supplier.storage.at(controller->second).read_only : actual &&
+          extraction_.method(supplier.method).input_owners().at(null_target - 1 - actual).read_only;
+      outline.owners.push_back(actual);
+      outline.owner_parameters.push_back({"$scope.owner." + std::to_string(role), {}, at, false, read_only});
+      if (outline.direct_scope()) {
+        body_.instance.frame.owners.try_emplace(owner, std::nullopt);
+        if (!read_only) {
+          const auto allocator = regional ? Allocator{Allocator::region, controller->second} : actual
+              ? Allocator{Allocator::input, null_target - 1 - actual} : Allocator{Allocator::lexical};
+          outline.allocators.emplace(role, allocator);
+        }
+      }
+      return owner;
+    }
+
     void bind_capture(const Expression &expr, Local original) {
       auto &outlined = *body_.outline;
       const auto &supplier_body = extraction_.bodies_.at(outlined.supplier);
@@ -759,11 +802,17 @@ class BodyExtraction {
       const bool live_view = source.type.kind == Type::array ||
           ((supplied_body() || form_.implicit_scope) && source.type.kind == Type::product &&
            declarations().bits_payload(source.type));
-      const auto placement = supplier_body.input_products.find(original.owner);
-      const bool regional_product = outlined.handler && placement != supplier_body.input_products.end() &&
-          placement->second == ProductPlacement::region;
-      const bool fixed_product = source.fixed && extraction_.reference_product(source.type) &&
-          ((supplied_body() && !original.owner) || regional_product);
+      const bool direct = outlined.direct_scope();
+      const bool local_region = direct && supplier.frame.region_controllers.contains(original.owner);
+      std::optional<ProductPlacement> captured_product;
+      if (source.fixed && extraction_.reference_product(source.type)) {
+        const auto placement = supplier_body.input_products.find(original.owner);
+        if (local_region) captured_product = ProductPlacement::region;
+        else if ((supplied_body() || direct) && !original.owner) captured_product = ProductPlacement::lexical;
+        else if (placement != supplier_body.input_products.end() &&
+                 (direct || (outlined.handler && placement->second == ProductPlacement::region)))
+          captured_product = placement->second;
+      }
       const bool handle = source.type.kind == Type::native_handle && !source.type.owned;
       const bool text = source.type == Type::string && source.read_only;
       const bool builder = form_.implicit_scope && declarations().builder_type(source.type);
@@ -775,35 +824,29 @@ class BodyExtraction {
                    input.mode == (handle ? ArgumentMode::borrowed_handle : ArgumentMode::borrowed_ref);
           });
       expect(!source.nullable &&
-             (live_view || fixed_product || builder || lexical_text || incoming_loan ||
+             (live_view || captured_product || builder || lexical_text || incoming_loan ||
               (scalar_type(source.type) && (source.value_binding || source.fixed))),
              expr.at, "seed needs an admitted lexical capture");
       if (outlined.handler && scalar_type(source.type))
         expect(source.read_only || (source.fixed && source.requires_initialized), expr.at,
                "seed needs a readonly scalar or fixed scalar reference capture in a live handler");
-      expect(!original.owner || original.owner > first_symbol_owner, expr.at,
+      expect(!original.owner || original.owner > first_symbol_owner ||
+             (local_region && (source.type.kind == Type::array || captured_product)), expr.at,
              "seed has no capture of a locally owned region view");
-      const auto known = std::ranges::find(outlined.owners, original.owner);
-      const auto role = static_cast<size_t>(known - outlined.owners.begin());
-      if (known == outlined.owners.end()) {
-        const bool read_only = original.owner && extraction_.method(supplier.method)
-            .input_owners().at(null_target - 1 - original.owner).read_only;
-        outlined.owners.push_back(original.owner);
-        outlined.owner_parameters.push_back({"$scope.owner." + std::to_string(role), {}, expr.at, false, read_only});
-      }
+      const auto role = null_target - 1 - capture_owner(original.owner, expr.at);
       Parameter parameter{expr.text, source.type, expr.at, false, {}};
       parameter.declaration_kind = handle ? "handle" : "ref";
       parameter.owner = outlined.owner_parameters.at(role).name;
       parameter.read_only = source.read_only;
       parameter.fixed_binding = true;
-      // A borrowed array or product can live in a mutable supplier slot. Read that slot
-      // at execution, while keeping the outlined body's own access target-only.
+      // Read a captured view from its live slot at execution. Direct scopes
+      // retain the slot's declared binding access for arrays.
       if (live_view && !source.value_binding) {
         parameter.caller_place = Parameter::CallerPlace::reference_slot;
-        if (outlined.handler) parameter.fixed_binding = source.fixed;
+        if (outlined.handler || (direct && source.type.kind == Type::array))
+          parameter.fixed_binding = source.fixed;
       }
-      if (fixed_product && regional_product)
-        body_.input_products.emplace(input_owner(role), ProductPlacement::region);
+      if (captured_product) body_.input_products.emplace(input_owner(role), *captured_product);
       bind_input(parameter, parameter.type, true);
       outlined.captures.push_back({&expr, original, std::move(parameter)});
     }
@@ -2589,8 +2632,10 @@ class BodyExtraction {
 
   std::optional<Allocator> call_allocator(const BoundCall &call, size_t role) const {
     if (!call.installs_handler) {
-      const auto found = call.owners.find(role);
-      return found == call.owners.end() ? std::nullopt : std::optional{found->second};
+      const auto &outline = bodies_[call.callee].outline;
+      const auto &allocators = outline && outline->direct_scope() ? outline->allocators : call.owners;
+      const auto found = allocators.find(role);
+      return found == allocators.end() ? std::nullopt : std::optional{found->second};
     }
     // The outlined handler's operands are established at its installation.
     // A required input role has already passed the capture's access check.
@@ -2811,7 +2856,7 @@ class BodyExtraction {
     for (size_t i = 0; i < executable; ++i) {
       const auto &body = bodies_[i];
       if (const auto &outline = body.outline) {
-        expect(outline->handler || completed[i].allocations.empty(), outline->source->at,
+        expect(outline->handler || outline->direct_scope() || completed[i].allocations.empty(), outline->source->at,
                "seed needs an ordinary outlined body without imported allocators");
         seal_outline(program, i, results);
       } else if (const auto found = specializations_.find(body.instance.method); found != specializations_.end()) {
