@@ -128,7 +128,8 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFacts, prepare_imported_indexed_loan, published_array_field_record,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
-        InlineProductFormal, WritableLocalProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField, SumValueResult,
+        InlineProductFormal, WritableLocalProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField,
+        StoredArrayElementReference, StoredArrayElementTransfer, SumValueResult,
         IndexedAggregateLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
 }
@@ -1981,7 +1982,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
             return unproved_owner();
         return check_receipt_argument(nodes, names, facts, owners, argument, operand, formal, invocation)
     };
-    if (slot_call && formal < intrinsic (len)(cases) &&
+    if (source_only && (slot_call || mixed_aggregate_loan) && formal < intrinsic (len)(cases) &&
         (case cases[formal] of { ArrayFieldRecordFormal -> true; _ -> false })) {
         if (operand >= used || checked_ref_argument(nodes, argument) || names[operand].kind != formal_binding() ||
             facts[operand].kind != source_product_loan() || facts[operand].reception != borrowed_ref() ||
@@ -6419,6 +6420,26 @@ func check_indexed_bits_transfer(names:const NameBindings in B, facts:OperandFac
     return 0u8
 }
 
+func check_stored_element_transfer(facts:OperandFacts in F, at:UInt64, destination:UInt64,
+    input:UInt64, type:const DeclaredType in T) -> UInt8 where {owner F, const owner T} {
+    if (facts[at].discarded_result == 0u8 || input >= at || destination >= at)
+        return unsupported_transfer_signature();
+    if (facts[destination].kind == never_result() || facts[input].kind == never_result()) {
+        set_result(facts, at, never_result());
+        return 0u8
+    };
+    if ((facts[destination].kind != source_product_loan() && facts[destination].kind != product_kind()) ||
+        facts[destination].reception != borrowed_ref() || facts[destination].target_readonly != 0u8 ||
+        facts[destination].target_presence != present_target() || facts[destination].owner == no_node())
+        return expected_writable_place();
+    if (facts[destination].identity_module != type.defining_module || facts[destination].identity != type.identity)
+        return wrong_operand_type();
+    val diagnostic <- check_bits_field_value(facts, input, type, false);
+    if (diagnostic != 0u8) return diagnostic;
+    only_void(facts, at);
+    return 0u8
+}
+
 func check_imported_array_length(nodes:const ExprNodes in N, interfaces:const ModuleInterfaces in I,
     facts:OperandFacts in F, at:UInt64, first:UInt64, past:UInt64, argument:UInt64, input:UInt64)
     -> UInt8 where {const owner N, const owner I, owner F} {
@@ -6825,18 +6846,34 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 return check_case_projection(nodes, names, facts, at, used, revision,
                     receiver, field, receipt, arm, record, sum)
             };
+            StoredArrayElementReference { val input <-; val readonly <-; } -> {
+                if (!source_only || input >= at) return unsupported_product_layout();
+                if (facts[input].kind == never_result()) { copy_fact(facts, at, input); return 0u8 };
+                if (facts[input].kind != source_product_loan() || !facts[input].checks_array_bounds ||
+                    facts[input].selection != input || facts[input].target_presence != present_target() ||
+                    (!readonly && facts[input].target_readonly != 0u8)) return unproved_nonnull_borrow();
+                copy_fact(facts, at, input);
+                facts[at].selection <- input;
+                (facts[at].checks_array_bounds <- false):void;
+                return 0u8
+            };
+            StoredArrayElementTransfer { val destination <-; val input <-; val type <- value_type; } -> {
+                if (!source_only) return unsupported_product_layout();
+                return check_stored_element_transfer(facts, at, destination, input, type)
+            };
             StoredArrayField {
-                val receiver <-; val record <-; val array_module <-; val array_identity <-; val target_readonly <-;
+                val receiver <-; val owner_site <-; val record <-; val array_module <-; val array_identity <-;
+                val element <-; val target_readonly <-;
             } -> {
                 if (!source_only || receiver >= at) return unsupported_product_layout();
                 if (facts[receiver].kind == never_result()) { copy_fact(facts, at, receiver); return 0u8 };
                 if (facts[receiver].kind != source_product_loan() || facts[receiver].reception != borrowed_ref() ||
-                    facts[receiver].target_presence != present_target() || facts[receiver].owner == no_node() ||
+                    facts[receiver].target_presence != present_target() || facts[receiver].owner != owner_site || owner_site == no_node() ||
                     facts[receiver].identity != record.identity ||
                     facts[receiver].identity_module != record.defining_module) return unproved_owner();
                 set_fact(facts, at, source_array_loan(), borrowed_ref(), facts[receiver].owner, array_identity, 0u8);
                 facts[at].identity_module <- array_module;
-                facts[at].array_scalar <- scalar_u8();
+                facts[at].array_scalar <- if (element.kind == builtin_u8()) { scalar_u8() } else { 0u8 };
                 facts[at].target_readonly <- if (target_readonly) { 1u8 } else { (facts[receiver].target_readonly) };
                 return 0u8
             };

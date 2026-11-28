@@ -27,7 +27,7 @@ using "./ParserStorage.cod" {
     CompletionSyntax { ReturnCompletion }
 };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, builtin_bool, builtin_u8, builtin_u64, record_type, find_named_field, locate_named_field, array_type, formal_binding, ordinary_selection,
+    NameBindings, NameWork, builtin_bool, builtin_u8, builtin_u64, record_type, find_named_field, locate_named_field, locate_record_field, array_type, formal_binding, ordinary_selection,
     owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable, local_sum_value_type
 };
 using "./ModuleExports.cod" { SelectedExports, array_export, record_export, callable_export, ordinary_callable_shape };
@@ -50,13 +50,10 @@ export data ConstructorCaseFact =
     ReceiptCaseSubject { expression:UInt64; receipt:UInt64; arm:UInt64; count:UInt64; } |
     CaseSumFormal { definition:UInt64; owner_site:UInt64; readonly:bool; value_type:DeclaredType; } |
     InlineProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; demand_on_use:bool; } |
-    ArrayFieldRecordFormal {
-        definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool;
-        field:UInt64; array_module:UInt64; array_identity:UInt64; fixed:bool; target_readonly:bool;
-    } |
+    ArrayFieldRecordFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; readonly:bool; } |
     StoredArrayField {
-        receiver:UInt64; record:DeclaredType; array_module:UInt64; array_identity:UInt64;
-        fixed:bool; target_readonly:bool;
+        receiver:UInt64; owner_site:UInt64; record:DeclaredType; array_module:UInt64; array_identity:UInt64;
+        element:DeclaredType; fixed:bool; target_readonly:bool; readonly_receiver:bool;
     } |
     WritableLocalProductFormal { definition:UInt64; owner_site:UInt64; value_type:DeclaredType; } |
     WritableFieldUse {} |
@@ -80,6 +77,8 @@ export data ConstructorCaseFact =
     } |
     LexicalSumReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
     LexicalProductReference { construction:UInt64; owner_site:UInt64; readonly:bool; } |
+    StoredArrayElementReference { input:UInt64; value_type:DeclaredType; readonly:bool; } |
+    StoredArrayElementTransfer { destination:UInt64; input:UInt64; value_type:DeclaredType; } |
     LexicalBitsArray {
         owner_site:UInt64; array_module:UInt64; array_type:UInt64; element:DeclaredType; readonly:bool;
     } |
@@ -234,7 +233,7 @@ export func prepare_imported_indexed_loan(nodes:const ExprNodes in N, names:cons
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if ((describe_indexed_case_loan(nodes, names, selected, interfaces, published, entry.item, used, revision,
          kind, ReferenceFormal, loan, element) ||
-         describe_lexical_bits_element(nodes, names, facts, entry.item, used, revision, kind, loan, element) !=
+         describe_prepared_bits_element(nodes, names, facts, entry.item, used, revision, kind, loan, element) !=
          (NoLexicalArray:LexicalArrayAccess)) && case_bits_type(element, aggregate, interfaces, published)) {
         remember_indexed_aggregate_loan(nodes, facts, argument, loan, element, writable)
     };
@@ -260,63 +259,142 @@ func remember_inline_product_formal(facts:ConstructorCaseFacts in F, formal:UInt
     return
 }
 
-# This profile admits a product whose only field is a non-null named byte-array reference.
-# The record owns the field slot; the array loan uses the record's substituted owner.
+data StoredArrayType {
+    array_module:UInt64;
+    array_identity:UInt64;
+    element_kind:UInt8;
+    element_module:UInt64;
+    element_identity:UInt64;
+    fixed:bool;
+    readonly:bool;
+}
+
+func published_array_field_header(interfaces:const ModuleInterfaces in I, published:UInt64,
+    field:UInt64) -> UInt64 where {const owner I} {
+    if (field >= published || interfaces[field].field_mode != ReferenceFormal ||
+        interfaces[field].value_kind != array_type() || interfaces[field].target_readonly > 1u8) return no_node();
+    val module <- interfaces[field].type_module;
+    val identity <- interfaces[field].type_identity;
+    val header <- find_interface(interfaces, published, module, identity);
+    if (header == no_node() || interfaces[header].interface_kind != array_type() ||
+        interfaces[header].entry_count != 0u64 || interfaces[header].array_index_kind != builtin_u64()) return no_node();
+    val kind <- interfaces[header].element_kind;
+    if (kind != builtin_u8()) {
+        if (kind != record_type()) return no_node();
+        val storage <- checked_aggregate_storage(interfaces, published,
+            interfaces[header].type_module, interfaces[header].type_identity, kind);
+        if (storage != CoDBitsAggregate && storage != CLayoutBitsRecord) return no_node()
+    };
+    return header
+}
+
+func read_published_array_field(interfaces:const ModuleInterfaces in I, published:UInt64,
+    field:UInt64, array:StoredArrayType in R) -> bool where {const owner I, owner R} {
+    val header <- published_array_field_header(interfaces, published, field);
+    if (header == no_node()) return false;
+    array.array_module <- interfaces[field].type_module;
+    array.array_identity <- interfaces[field].type_identity;
+    array.element_kind <- interfaces[header].element_kind;
+    array.element_module <- interfaces[header].type_module;
+    array.element_identity <- interfaces[header].type_identity;
+    # Published rows expose a ready target. Slot writes need a separate
+    # writable-slot contract, which this view does not supply.
+    array.fixed <- true;
+    (array.readonly <- interfaces[field].target_readonly != 0u8):void;
+    return true
+}
+
+# A borrowed record supplies the owner for each initialized reference field.
 export func published_array_field_record(interfaces:const ModuleInterfaces in I, published:UInt64,
     module:UInt64, declaration:UInt64) -> bool where {const owner I} {
     val record <- find_interface(interfaces, published, module, declaration);
     if (record == no_node() || interfaces[record].interface_kind != record_type() ||
-        interfaces[record].aggregate_storage != NonBitsAggregate || interfaces[record].entry_count != 1u64)
+        interfaces[record].aggregate_storage != NonBitsAggregate || interfaces[record].entry_count == 0u64)
         return false;
-    val field <- record + 1u64;
-    if (interfaces[field].field_mode != ReferenceFormal || interfaces[field].value_kind != array_type() ||
-        interfaces[field].target_readonly > 1u8) return false;
-    val array <- find_interface(interfaces, published, interfaces[field].type_module, interfaces[field].type_identity);
-    return array != no_node() && interfaces[array].interface_kind == array_type() &&
-        interfaces[array].entry_count == 0u64 && interfaces[array].array_index_kind == builtin_u64() &&
-        interfaces[array].element_kind == builtin_u8()
+    for (field in record + 1u64 .. record + 1u64 + interfaces[record].entry_count) {
+        if (published_array_field_header(interfaces, published, field) == no_node()) return false
+    };
+    return true
 }
 
-func remember_array_field_record_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+func read_local_array_field(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
-    aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F, formal:UInt64, definition:UInt64,
-    owner_site:UInt64, readonly:bool, type:const DeclaredType in T, used:UInt64, revision:UInt64) -> bool
-    where {const owner N, const owner B, const owner E, const owner I, const owner A, owner F, const owner T} {
-    if (type.kind != record_type() || owner_constraint_syntax(nodes, owner_site) == NotOwnerConstraint) return false;
-    if (type.defining_module != 0u64) {
-        if (!published_array_field_record(interfaces, published, type.defining_module, type.identity)) return false;
-        facts[formal] <- make ArrayFieldRecordFormal {
-            definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly;
-            field <- no_node(); array_module <- 0u64; array_identity <- no_node();
-            fixed <- true; target_readonly <- true
-        };
-        return true
+    aggregate:const AggregateFacts in A, field:UInt64, array:StoredArrayType in R, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner I, const owner A, owner R} {
+    ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
     };
-    if (type.identity >= used || aggregate[type.identity] != NonBitsAggregate) return false;
+    if (inspect_formal(nodes, revision, used, field, syntax) != OrdinaryFormal || syntax.mode != ReferenceFormal ||
+        inspect_binding(nodes, revision, used, syntax.binding, binding) != TypedBinding ||
+        binding.owner_name != no_node() || binding.target_type >= used) return false;
+    val marker <- binding.target_type;
+    val fixed <- formal_binding_is_fixed(nodes, revision, used, field);
+    ref bytes = make ArraySlotType {
+        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
+    };
+    ref element = make DeclaredType { kind <- builtin_u8(); defining_module <- 0u64; identity <- no_node() };
+    if (!describe_byte_array(nodes, names, selected, interfaces, published, marker, used, revision, bytes)) {
+        if (!fixed) return false;
+        val product <- if (names[marker].kind == array_type()) {
+            describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision,
+                record_type(), element)
+        } else {
+            describe_published_array_element(names, selected, interfaces, published, marker, record_type(), element)
+        };
+        if (!product || !case_bits_type(element, aggregate, interfaces, published)) return false
+    };
+    array.array_module <- type_module(names, selected, marker, 0u64);
+    array.array_identity <- type_identity(names, selected, marker);
+    array.element_kind <- element.kind;
+    array.element_module <- element.defining_module;
+    array.element_identity <- element.identity;
+    array.fixed <- fixed;
+    (array.readonly <- binding.readonly):void;
+    return true
+}
+
+func local_array_field_record(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W, declaration:UInt64, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner I, const owner A, const owner W} {
+    if (declaration >= used || aggregate[declaration] != NonBitsAggregate) return false;
     ref record = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
     };
-    ref field = make UInt64 { no_node() };
-    ref syntax = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
-    ref binding = make BindingSites {
-        name <- no_node(); annotation <- no_node(); target_type <- no_node();
-        owner_name <- no_node(); readonly <- false
-    };
-    ref array = make ArraySlotType {
-        owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
-    };
-    if (inspect_declaration(nodes, revision, used, type.identity, record) != NominalRecord ||
-        !first_sequence_entry(nodes, revision, used, record.entries, FormalSequence, field) ||
-        field != record.entries || inspect_formal(nodes, revision, used, field, syntax) != OrdinaryFormal ||
-        syntax.mode != ReferenceFormal || inspect_binding(nodes, revision, used, syntax.binding, binding) != TypedBinding ||
-        binding.owner_name != no_node() ||
-        !describe_byte_array(nodes, names, selected, interfaces, published, binding.target_type, used, revision, array))
+    ref first = make UInt64 { no_node() };
+    if (inspect_declaration(nodes, revision, used, declaration, record) != NominalRecord ||
+        !first_sequence_entry(nodes, revision, used, record.entries, FormalSequence, first) || first == no_node())
         return false;
+    ref array = make StoredArrayType {
+        array_module <- 0u64; array_identity <- no_node();
+        element_kind <- 0u8; element_module <- 0u64; element_identity <- no_node();
+        fixed <- false; readonly <- false
+    };
+    val field <- first;
+    for (step in 0u64 .. used) {
+        if (!read_local_array_field(nodes, names, selected, interfaces, published, aggregate,
+            field, array, used, revision) || (first != record.entries && !array.fixed)) return false;
+        if (field == record.entries) return true;
+        if (work[field].next <= field) return false;
+        (field <- work[field].next):void
+    };
+    return false
+}
+
+func remember_array_field_record_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    aggregate:const AggregateFacts in A, work:const NameWork in W, facts:ConstructorCaseFacts in F, formal:UInt64, definition:UInt64,
+    owner_site:UInt64, readonly:bool, type:const DeclaredType in T, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner I, const owner A, const owner W, owner F, const owner T} {
+    if (type.kind != record_type() || owner_constraint_syntax(nodes, owner_site) == NotOwnerConstraint) return false;
+    val checked <- if (type.defining_module == 0u64) {
+        local_array_field_record(nodes, names, selected, interfaces, published, aggregate, work, type.identity, used, revision)
+    } else { published_array_field_record(interfaces, published, type.defining_module, type.identity) };
+    if (!checked) return false;
     facts[formal] <- make ArrayFieldRecordFormal {
-        definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly;
-        field <- field; array_module <- array.type_module; array_identity <- array.type_identity;
-        fixed <- formal_binding_is_fixed(nodes, revision, used, field); target_readonly <- binding.readonly
+        definition <- definition; owner_site <- owner_site; value_type <- type; readonly <- readonly
     };
     return true
 }
@@ -357,7 +435,7 @@ func prepare_case_loan_formals(nodes:const ExprNodes in N, names:const NameBindi
             describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type)) {
             owner_site <- names[binding.owner_name].declaration;
             if (owner_site < used && remember_array_field_record_formal(nodes, names, selected, interfaces,
-                published, aggregate, facts, formal, definition, owner_site, binding.readonly, type, used, revision)) {
+                published, aggregate, work, facts, formal, definition, owner_site, binding.readonly, type, used, revision)) {
                 if (first == no_node()) { (first <- formal):void }
             } else {};
             if (owner_site < used && case_bits_type(type, aggregate, interfaces, published)) {
@@ -983,7 +1061,7 @@ func prepare_sum_case(source:const SourceBytes in S, nodes:const ExprNodes in N,
         array_module <- 0u64; array_type <- no_node()
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- 0u64 };
-    val described <- describe_lexical_bits_element(nodes, names, facts, choice.subject, used, revision,
+    val described <- describe_prepared_bits_element(nodes, names, facts, choice.subject, used, revision,
         sum_type(), loan, type) != (NoLexicalArray:LexicalArrayAccess) ||
         describe_indexed_case_loan(nodes, names, selected, interfaces, published, choice.subject,
             used, revision, sum_type(), ReferenceFormal, loan, type);
@@ -1030,6 +1108,12 @@ func describe_inline_product(facts:const ConstructorCaseFacts in F, site:UInt64,
             return true
         };
         WritableLocalProductFormal { val product <- value_type; } -> {
+            type.kind <- product.kind;
+            type.defining_module <- product.defining_module;
+            type.identity <- product.identity;
+            return true
+        };
+        StoredArrayElementReference { val product <- value_type; } -> {
             type.kind <- product.kind;
             type.defining_module <- product.defining_module;
             type.identity <- product.identity;
@@ -1115,13 +1199,32 @@ func prepare_lexical_bits_array(nodes:const ExprNodes in N, names:const NameBind
     }
 }
 
-func describe_lexical_bits_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+func describe_prepared_bits_element(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const ConstructorCaseFacts in F, expression:UInt64, used:UInt64, revision:UInt64,
     expected_kind:UInt8, loan:IndexedCaseLoan in L, element:DeclaredType in L)
     -> LexicalArrayAccess where {const owner N, const owner B, const owner F, owner L} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
-    if (!inspect_index_selection(nodes, revision, used, expression, indexed) ||
-        names[indexed.target].kind != local_binding()) return (NoLexicalArray:LexicalArrayAccess);
+    if (!inspect_index_selection(nodes, revision, used, expression, indexed))
+        return (NoLexicalArray:LexicalArrayAccess);
+    case facts[indexed.target] of {
+        StoredArrayField { val owner_site <-; val array_module <-; val array_identity <-;
+                           val schema <- element; val target_readonly <-; val readonly_receiver <-; } -> {
+            if (schema.kind != expected_kind || names[expression].kind != 0u8)
+                return (NoLexicalArray:LexicalArrayAccess);
+            loan.expression <- expression;
+            loan.array <- indexed.target;
+            loan.index <- indexed.index;
+            loan.owner_site <- owner_site;
+            loan.array_module <- array_module;
+            loan.array_type <- array_identity;
+            element.kind <- schema.kind;
+            element.defining_module <- schema.defining_module;
+            element.identity <- schema.identity;
+            return if (target_readonly || readonly_receiver) { (ReadonlyLexicalArray:LexicalArrayAccess) } else { (WritableLexicalArray:LexicalArrayAccess) }
+        };
+        _ -> {}
+    };
+    if (names[indexed.target].kind != local_binding()) return (NoLexicalArray:LexicalArrayAccess);
     val origin <- names[indexed.target].declaration;
     if (origin >= indexed.target) return (NoLexicalArray:LexicalArrayAccess);
     return case facts[origin] of {
@@ -1139,6 +1242,136 @@ func describe_lexical_bits_element(nodes:const ExprNodes in N, names:const NameB
             if (readonly) { (ReadonlyLexicalArray:LexicalArrayAccess) } else { (WritableLexicalArray:LexicalArrayAccess) }
         };
         _ -> (NoLexicalArray:LexicalArrayAccess)
+    }
+}
+
+func describe_stored_product_element(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:const ConstructorCaseFacts in F, expression:UInt64, used:UInt64, revision:UInt64,
+    loan:IndexedCaseLoan in L, element:DeclaredType in L) -> LexicalArrayAccess
+    where {const owner N, const owner B, const owner F, owner L} {
+    ref index = make IndexSites { target <- no_node(); index <- no_node() };
+    if (names[expression].kind != 0u8 || !inspect_index_selection(nodes, revision, used, expression, index) ||
+        !(case facts[index.target] of { StoredArrayField -> true; _ -> false }))
+        return (NoLexicalArray:LexicalArrayAccess);
+    return describe_prepared_bits_element(nodes, names, facts, expression, used, revision, record_type(), loan, element)
+}
+
+func prepare_stored_element_reference(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, facts:ConstructorCaseFacts in F, local:const LocalBindingSites in K,
+    at:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner E, owner F, const owner K} {
+    if (!local.declaration_const) return;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node()
+    };
+    ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    val input <- local.initializer;
+    val access <- describe_stored_product_element(nodes, names, facts, input, used, revision, loan, element);
+    if (access == (NoLexicalArray:LexicalArrayAccess)) return;
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    val shape <- inspect_binding(nodes, revision, used, local.binding, binding);
+    if (shape == InvalidBindingSyntax || binding.owner_name != no_node()) return;
+    if (shape == TypedBinding) {
+        ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+        if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
+            type.kind != element.kind || type.defining_module != element.defining_module ||
+            type.identity != element.identity ||
+            (!binding.readonly && access == (ReadonlyLexicalArray:LexicalArrayAccess))) return
+    };
+    val writable <- access == (WritableLexicalArray:LexicalArrayAccess) && !binding.readonly;
+    remember_indexed_aggregate_loan(nodes, facts, at, loan, element, writable);
+    (facts[at] <- make StoredArrayElementReference {
+        input <- input; value_type <- element; readonly <- !writable
+    }):void
+}
+
+func prepare_stored_element_transfer(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:ConstructorCaseFacts in F, assignment:const AssignmentSites in K, at:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, owner F, const owner K} {
+    val target <- assignment.destination;
+    if (names[target].kind != formal_binding()) return;
+    val formal <- names[target].declaration;
+    if (formal >= target || !(case facts[formal] of {
+        InlineProductFormal -> true; WritableLocalProductFormal -> true; _ -> false
+    })) return;
+    ref loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node()
+    };
+    ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (describe_stored_product_element(nodes, names, facts, assignment.input, used, revision, loan, element) == (NoLexicalArray:LexicalArrayAccess))
+        return;
+    remember_indexed_aggregate_loan(nodes, facts, at, loan, element, false);
+    (facts[at] <- make StoredArrayElementTransfer {
+        destination <- target; input <- assignment.input; value_type <- element
+    }):void
+}
+
+func read_stored_array_member(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, record:const DeclaredType in T,
+    name:UInt64, used:UInt64, revision:UInt64, array:StoredArrayType in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner G,
+        const owner A, const owner T, owner R} {
+    ref ordinal = make UInt64 { no_node() };
+    if (record.defining_module == 0u64) {
+        val field <- locate_record_field(source, nodes, work, record.identity, name, revision, used, ordinal);
+        return field != no_node() && read_local_array_field(nodes, names, selected, interfaces, published,
+            aggregate, field, array, used, revision)
+    };
+    val head <- find_interface(interfaces, published, record.defining_module, record.identity);
+    val published_field <- published_named_field(source, nodes, spellings, spelling_used,
+        interfaces, published, head, name, used);
+    return published_field != no_node() && read_published_array_field(interfaces, published, published_field, array)
+}
+
+func remember_stored_array_field(facts:ConstructorCaseFacts in F, site:UInt64, receiver:UInt64,
+    owner_site:UInt64, record:const DeclaredType in T, array:const StoredArrayType in A, readonly:bool) -> void
+    where {owner F, const owner T, const owner A} {
+    (facts[site] <- make StoredArrayField {
+        receiver <- receiver; owner_site <- owner_site; record <- record;
+        array_module <- array.array_module; array_identity <- array.array_identity;
+        element <- make DeclaredType {
+            kind <- array.element_kind; defining_module <- array.element_module; identity <- array.element_identity
+        };
+        fixed <- array.fixed; target_readonly <- array.readonly;
+        readonly_receiver <- readonly
+    }):void
+}
+
+func prepare_stored_array_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    used:UInt64, revision:UInt64) -> void
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner G, const owner A, owner F} {
+    ref selection = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref array = make StoredArrayType {
+        array_module <- 0u64; array_identity <- no_node();
+        element_kind <- 0u8; element_module <- 0u64; element_identity <- no_node();
+        fixed <- false; readonly <- false
+    };
+    val origin <- no_node();
+    for (site in 0u64 .. used) {
+        if (inspect_field_selection(nodes, revision, used, site, selection) &&
+            names[selection.receiver].kind == formal_binding()) {
+            origin <- names[selection.receiver].declaration;
+            if (origin < site) {
+                case facts[origin] of {
+                    ArrayFieldRecordFormal { val record <- value_type; val owner_site <-; val readonly <-; } -> {
+                        if (read_stored_array_member(source, nodes, names, selected, work, spellings, spelling_used,
+                            interfaces, published, aggregate, record, selection.field, used, revision, array)) {
+                            remember_stored_array_field(facts, site, selection.receiver, owner_site, record, array, readonly)
+                        }
+                    };
+                    _ -> {}
+                }
+            };
+        }
     }
 }
 
@@ -1170,30 +1403,11 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                           names[selection.receiver].kind == formal_binding()) {
                 (names[selection.receiver].declaration)
             } else { (selection.receiver) };
-            if (origin < site) {
-                case facts[origin] of {
-                    ArrayFieldRecordFormal {
-                        val field <-; val record <- value_type; val array_module <-; val array_identity <-;
-                        val fixed <-; val target_readonly <-;
-                    } -> {
-                        ordinal <- no_node();
-                        if (field != no_node() &&
-                            locate_named_field(source, nodes, work, field, selection.field, revision, used, ordinal) == field &&
-                            ordinal == 0u64) {
-                            (facts[site] <- make StoredArrayField {
-                                receiver <- selection.receiver; record <- record; array_module <- array_module;
-                                array_identity <- array_identity; fixed <- fixed; target_readonly <- target_readonly
-                            }):void
-                        }
-                    };
-                    _ -> {}
-                }
-            };
             loan.expression <- no_node();
             access <- (NoLexicalArray:LexicalArrayAccess);
             described <- origin < site && describe_inline_product(facts, origin, type);
             if (origin < site && !described) {
-                access <- describe_lexical_bits_element(nodes, names, facts, selection.receiver,
+                access <- describe_prepared_bits_element(nodes, names, facts, selection.receiver,
                     used, revision, record_type(), loan, type);
                 (described <- (access != (NoLexicalArray:LexicalArrayAccess) ||
                     describe_indexed_case_loan(nodes, names, selected, interfaces, published, selection.receiver, used,
@@ -1286,7 +1500,7 @@ func describe_indexed_product_argument(nodes:const ExprNodes in N, names:const N
     where {const owner N, const owner B, const owner E, const owner G, const owner F, owner L} {
     return describe_indexed_case_loan(nodes, names, selected, interfaces, published, input,
         used, revision, record_type(), ReferenceFormal, loan, record) ||
-        describe_lexical_bits_element(nodes, names, facts, input, used, revision, record_type(),
+        describe_prepared_bits_element(nodes, names, facts, input, used, revision, record_type(),
             loan, record) != (NoLexicalArray:LexicalArrayAccess)
 }
 
@@ -1896,7 +2110,7 @@ func prepare_indexed_product_copy(nodes:const ExprNodes in N, names:const NameBi
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     ref supplied = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    if (describe_lexical_bits_element(nodes, names, facts, destination, used, revision,
+    if (describe_prepared_bits_element(nodes, names, facts, destination, used, revision,
         record_type(), target, type) == (NoLexicalArray:LexicalArrayAccess) ||
         !describe_indexed_case_loan(nodes, names, selected, interfaces, published, input, used,
             revision, record_type(), ReferenceSlotFormal, source, supplied)) return false;
@@ -2163,6 +2377,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             if (work[at].sum_loan_formals && first == no_node()) { (first <- at):void }
         }
     };
+    prepare_stored_array_fields(source, nodes, names, selected, work, spellings, spelling_used,
+        interfaces, published, aggregate, facts, used, revision);
     ref local = make LocalBindingSites {
         binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
     };
@@ -2214,6 +2430,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
         if (work[at].case_schema_prepared && first == no_node()) { (first <- at):void };
         if (inspect_local_binding(nodes, revision, used, at, local) && local.initializer < at) {
             if (local.mode == ReferenceLocal) {
+                prepare_stored_element_reference(nodes, names, selected, facts, local, at, used, revision);
                 if (work[local.initializer].inline_sum_initializer) {
                     if (!prepare_lexical_sum_reference(nodes, names, selected, work, interfaces, published,
                         aggregate, facts, at, local, used, revision, report)) return false;
@@ -2231,6 +2448,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             }
         };
         transfer <- inspect_assignment(nodes, revision, used, at, assignment);
+        if (transfer == PlaceTransfer && names[at].kind == 0u8) {
+            prepare_stored_element_transfer(nodes, names, facts, assignment, at, used, revision)
+        };
         if (transfer == PlaceTransfer && names[at].kind == 0u8 &&
             (indexed_field_projection(nodes, at, revision, assignment.destination, field, indexed) ||
              borrowed_product_field_destination(nodes, names, facts, at, revision, assignment.destination, field))) {

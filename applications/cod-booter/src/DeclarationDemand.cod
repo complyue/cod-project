@@ -25,7 +25,7 @@ using "./NativeDeclarations.cod" {
 using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { sum_type, enum_type };
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, InlineProductField, BitsConstruction, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, ArrayFieldRecordFormal, InlineProductField, BitsConstruction, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64;
@@ -142,12 +142,18 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
         };
         if (names[entry.item].kind == formal_binding()) {
             receipt <- names[entry.item].declaration;
-            if (receipt < intrinsic (len)(cases) &&
-                (case cases[receipt] of {
-                    InlineProductFormal { val readonly <-; val demand_on_use <-; } -> !readonly && demand_on_use;
-                    _ -> false
-                }))
-                { (needs_receipt <- true):void }
+            if (receipt < intrinsic (len)(cases)) {
+                case cases[receipt] of {
+                    InlineProductFormal { val readonly <-; val demand_on_use <-; } -> {
+                        if (!readonly && demand_on_use) { (needs_receipt <- true):void }
+                    };
+                    ArrayFieldRecordFormal -> {
+                        mixed_aggregate <- true;
+                        (needs_receipt <- true):void
+                    };
+                    _ -> {}
+                }
+            }
         };
         if (names[entry.item].kind == local_binding()) {
             receipt <- names[entry.item].declaration;
