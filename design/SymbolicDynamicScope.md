@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 290 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 291 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r291 D-10-TRAILING-CALLBACK and P-567–P-569 are **continued**. The [executable example and failure clarification](../CHANGELOG.md#k-inline-here-example-20261128) illustrate the existing D-18 control rules.
 
 At r290 the [inline here argument decision](../CHANGELOG.md#h-inline-here-actuals-20261128) extends D-10-TRAILING-CALLBACK to explicit positional and named arguments. P-567–P-569 retain first-slot trailing binding, independent signature selection and written preparation order. [Brace and forwarding semantics](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) continue under D-18.
 
@@ -1645,15 +1647,15 @@ There is no search for a callback parameter later in the signature. A candidate 
 Write `(parameters) => { ... }` or `(parameters) => {{ ... }}` directly as a call argument. An inline niladic literal uses `() =>`. Ordinary positional or named binding selects its slot. Write the label after the entire literal, as in `() => {{ return 7 }} -> second`. Several slots in one call may each receive their own literal. A trailing body still binds slot one before the written operands are mapped. Supplying that slot twice is a binding error.
 
 ```cod
-proc use_second(here first() -> UInt64, here second() -> UInt64) -> UInt64 {
+proc use_second(here first() -> Int64, here second() -> Int64) -> Int64 {
     return second()
 }
 
-proc outward(here f() -> UInt64) -> UInt64 {
+proc outward(here f() -> Int64) -> Int64 {
     return 100 + use_second(f, () => { return 7 })
 }
 
-proc local(here f() -> UInt64) -> UInt64 {
+proc local(here f() -> Int64) -> Int64 {
     return 100 + use_second(f, () => {{ return 7 }})
 }
 ```
@@ -1664,7 +1666,7 @@ Recognize the parenthesized header and `=>` at the start of an argument. Resolve
 
 **Header and expected type.** `(x, index) => { ... }` binds fresh positional parameters of an ordered signature. `(x, index) => {{ ... }}` uses the same header with local callback return. Ordinary annotations can be written in either header. A trailing niladic body may omit the parameter list and arrow. Header parsing uses the closing parenthesis and arrow. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header. For a generator-compatible single-brace here call, the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) accepts the same fresh controls, existing destinations and labelled projections as the corresponding for loop.
 
-The selected callable **parameter type** supplies the callback's `throws` contract. Every checked obligation that escapes the callback body must be covered by it. The body may handle additional failures locally or use fewer than the signature permits. An outer catch around the call, or the receiving procedure's own `throws`, cannot grant the callback a larger interface. The procedure that invokes the callback handles or declares the callback signature's checked obligations as for any ordinary call.
+For a double-brace body, the selected callable **parameter type** supplies the callback's `throws` contract. Every checked obligation that escapes that body must be covered by it. The body may handle additional failures locally or use fewer than the signature permits. An outer catch around the call, or the receiving procedure's own `throws`, cannot grant the callback a larger interface. The procedure that invokes the callback handles or declares the callback signature's checked obligations as for any ordinary call. For a single-brace group, the supplying call accounts for failures escaping the group after receiver cleanup. [Single-brace failure propagation](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable)
 
 ```cod
 using "std:exceptions" NullPointerException;

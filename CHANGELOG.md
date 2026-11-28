@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Verify the inline callback example
+
+<a id="k-inline-here-example-20261128"></a>
+**K-INLINE-HERE-EXAMPLE-20261128.** D-10 r290→291 and P-567–P-569 are **continued** from the [confirmed argument and return rules](https://github.com/complyue/cod-project/blob/604337ca4b61e517f51a7812d2fa8193873938fb/design/SymbolicDynamicScope.md#inline-here-arguments). The example uses `Int64` throughout so the bootstrap seed can execute the written literals directly. Its two calls return 7 and 107. The accompanying text identifies which brace form checks escaping failures against the callback signature, following D-18. Registry r1400→1401.
+
 ## 2026-11-28 — Allow inline literals in every here argument slot
 
 <a id="h-inline-here-actuals-20261128"></a>
