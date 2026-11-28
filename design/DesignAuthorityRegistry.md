@@ -4,7 +4,7 @@ Registry revision: 1399 · Audit date: 2026-11-28 (America/Los_Angeles)
 
 ## Design authority
 
-At r1399 [D-ARCH-REVIEW r230](#d-arch-review) proposes a structural limit on combining checks in a traversal and clarifies in-place updates to shared graph storage. The r229 baseline continues. [Scope awaiting confirmation](../CHANGELOG.md#h-check-traversal-ownership-20261128)
+At r1399 [D-ARCH-REVIEW r230](#d-arch-review) proposes a structural limit on combining checks in a traversal and clarifies in-place updates to shared graph storage. The r229 baseline continues. Ordinary multiple-callback seed delivery is [separately confirmed](../CHANGELOG.md#h-seed-ordinary-here-arity-20261128) under [D-18-HERE-PARAM](#d-18-here-param). [Scope awaiting confirmation](../CHANGELOG.md#h-check-traversal-ownership-20261128)
 
 At r1367 [D-ARCH-REVIEW r229](#d-arch-review) carries the seed switch and verifier retirements into the bootstrap recovery acceptance text. [Continuity record](../CHANGELOG.md#k-bootstrap-recovery-acceptance-20261127)
 

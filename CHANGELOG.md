@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Remove the seed’s single ordinary callback ceiling
+
+<a id="h-seed-ordinary-here-arity-20261128"></a>
+**H-SEED-ORDINARY-HERE-ARITY-20261128.** The project user directed “只能一个 here-callback 参数这个限制我觉得不合理，在 seed 层面解决掉” in the [design discussion](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50). The seed should translate ordinary direct calls with any finite number of leading `here` formals. The [existing call binding rule](https://github.com/complyue/cod-project/blob/ced0775fde61b0071da175932cff285a8c367fa3/design/SymbolicDynamicScope.md#trailing-callback-arguments) and each slot’s lexical authority, lifetime and control destinations continue. The [four-callback booter procedure](https://github.com/complyue/cod-project/blob/ced0775fde61b0071da175932cff285a8c367fa3/applications/cod-booter/src/Compiler.cod#L58-L79) and scalar node visitor define the first implementation workload. D-18-HERE-PARAM continues. This seed delivery direction is confirmed independently of the proposed traversal rule.
+
 ## 2026-11-28 — Specify when compiler checks may share a traversal
 
 <a id="h-check-traversal-ownership-20261128"></a>
