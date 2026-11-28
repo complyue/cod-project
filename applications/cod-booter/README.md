@@ -453,7 +453,9 @@ Both source commands check the direct import of `ModuleExports.file_dependency_p
 
 Both source commands check `resolve_enum_selections`, `resolve_sum_selections` and `verify_aggregate_selections` in `ModuleExports` and through direct renamed imports. The completed interfaces retain each table's nominal type, access and owner, the writable selection rows and diagnostic report where applicable, and the independent Boolean result. Enum selection's lexical workspace contributes its allocation failure set. A writable scalar counter used by a local helper stays within its defining visit and uses ordinary local argument preparation.
 
-In the complete `ModuleGraph.cod` source check, both commands pass the three selection calls and their `binding_diagnostic` failure arms in `bind_graph_names`. They stop at the imported `ModuleFrontend.bind_selected_module_recovering` signature. Both commands accept standalone `ModuleCompiler.cod`. Completion of the actual `@followDependency` body remains open.
+Both source commands check `ModuleFrontend.bind_selected_module_recovering` and its direct source-preserving imports. Its completed workspace contract covers the readonly source, syntax, checked selections and published interfaces, the five initialized writable tables, and the independent binding report and recovery records. Each loan carries its own exact nominal type and access even when several roles map to one actual owner. The defining body and its reached dependencies establish the Boolean result and completion facts before publication.
+
+In the complete `ModuleGraph.cod` source check, both commands pass `bind_selected_module_recovering` and `prepare_enum_assertions` in `bind_graph_names`. They stop at the imported `NativeDeclarations.prepare_module_calls` signature. Both commands accept standalone `ModuleCompiler.cod`. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 
