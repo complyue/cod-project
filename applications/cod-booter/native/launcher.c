@@ -86,6 +86,8 @@ static const char *unsupported_source_form(uint32_t code) {
     case 74: return "array length query";
     case 76: return "ordinary here parameter lowering";
     case 108: return "lexical callable definition lowering";
+    case 152: return "generic type instantiation";
+    case 153: return "nullable pointer result checking";
     default: return NULL;
     }
 }
@@ -125,6 +127,10 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: a val parameter has independent storage and cannot declare 'in'\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 53)
         fputs(": error: a val result has independent storage and cannot declare 'in'\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 54)
+        fputs(": error: expected ',' or ']' in the type list\n", stderr);
+    else if (diagnostic->stage == 1 && diagnostic->code == 56)
+        fputs(": error: type application nesting exceeds the parser limit\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 42)
         fputs(": error: expected ']' after the subscript expression\n", stderr);
     else if (diagnostic->stage == 1 && diagnostic->code == 43)

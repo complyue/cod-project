@@ -39,6 +39,8 @@ export data BinaryOperands { left_operand:NodeId; right_operand:NodeId; operator
 export data ExprPayload =
       IntegerLiteral { magnitude:UInt64; width:UInt64; }
     | NameReference {}
+    | AppliedType { name:NodeId; arguments:NodeId; }
+    | TypeListItem { previous:NodeLink; item:NodeId; }
     | ParseReport { diagnostic:UInt8; }
     | ErrorReport { role:SyntaxRole; report:NodeId; }
     | BooleanLiteral { truth:bool; }
@@ -59,6 +61,7 @@ export data ExprPayload =
     | HandleType { name:NodeId; parent_type:NodeLink; parent_at:UInt64; }
     | NominalParent { name:NodeId; parent_type:NodeId; anchor:UInt64; }
     | RecordDefinition { heading:NodeId; fields:NodeLink; native:bool; }
+    | GenericRecordDefinition { name:NodeId; parameters:NodeId; fields:NodeLink; }
     | SumDefinition { heading:NodeId; last_arm:NodeId; }
     | SumArm { name:NodeId; previous:NodeLink; fields:NodeLink; }
     | RegionDefinition { name:NodeId; fields:NodeLink; }
@@ -157,6 +160,7 @@ export data ExprPayload =
     | TypeConstraint { previous:NodeId; type_name:NodeId; }
     | ValueResult { previous:NodeId; type_name:NodeId; readonly:bool; explicit_value:bool; }
     | BorrowedResult { previous:NodeId; owner_qualified_type:NodeId; readonly:bool; }
+    | PointerResult { previous:NodeId; owner_qualified_type:NodeId; readonly:bool; }
     | ExceptionResult { previous:NodeId; type_name:NodeId; readonly:bool; }
     | OwningRegionResult { previous:NodeId; schema:NodeLink; readonly:bool; }
     | ThrowsClause { previous:NodeId; exception_type:NodeId; }
@@ -338,6 +342,7 @@ export enum SequenceSyntax:UInt8 {
     ProcedureTypeSequence;
     ReferenceGroupSequence;
     CaseReceiverSequence;
+    TypeSequence;
 }
 
 export data SequenceEntry { previous:UInt64; item:UInt64; }
@@ -365,6 +370,11 @@ export func inspect_sequence_entry(nodes:const ExprNodes in N, revision:UInt64, 
         (Vacant) -> { (InvalidSequence:SequenceSyntax) };
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
+                (TypeListItem { val previous <- previous; val item <- item; }) -> {
+                    if (read_sequence_links(nodes, revision, at, previous, item, entry)) {
+                        TypeSequence:SequenceSyntax
+                    } else { InvalidSequence:SequenceSyntax }
+                };
                 (CaseValueReceiver { val previous <- previous; val destination <- destination; }) -> {
                     return if (read_sequence_links(nodes, revision, at, previous, destination, entry)) {
                         CaseReceiverSequence:SequenceSyntax
@@ -723,6 +733,7 @@ export func remainder_node() -> UInt8 { return 50u8; }
 
 export func exception_result_node() -> UInt8 { return 63u8; }
 export func ref_result_node() -> UInt8 { return 65u8; }
+export func pointer_result_node() -> UInt8 { return 66u8; }
 
 export func continue_node() -> UInt8 { return 91u8; }
 export func break_node() -> UInt8 { return 92u8; }
@@ -1236,6 +1247,19 @@ func recovered_type(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at
     }
 }
 
+func is_named_type(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
+    return case nodes[at] of {
+        (Occupied { val syntax <- node; }) -> {
+            case syntax.payload of {
+                NameReference -> true;
+                AppliedType -> true;
+                _ -> false
+            }
+        };
+        Vacant -> false
+    }
+}
+
 export func inspect_type_annotation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:BindingSites in S) -> bool where {const owner N, owner S} {
     if (at >= used || at >= intrinsic (len)(nodes)) return false;
@@ -1246,10 +1270,11 @@ export func inspect_type_annotation(nodes:const ExprNodes in N, revision:UInt64,
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
                 (NameReference) -> { sites.target_type <- at; true };
+                (AppliedType) -> { sites.target_type <- at; true };
                 (OwnerQualifiedType { val target <- target; val owner_name <- declared_owner; }) -> {
                     if (!published_syntax_id(nodes, revision, at, target) ||
                         !published_syntax_id(nodes, revision, at, owner_name)) return false;
-                    if (name_syntax(nodes, at, target.index) != (OrdinaryName:NameSyntax) ||
+                    if (!is_named_type(nodes, target.index) ||
                         name_syntax(nodes, at, owner_name.index) != (OrdinaryName:NameSyntax)) return false;
                     sites.target_type <- target.index;
                     sites.owner_name <- owner_name.index;
@@ -1452,6 +1477,7 @@ export enum SignatureSyntax:UInt8 {
     TypeSignatureClause;
     OwningRegionResultClause;
     ScopedProcedureHead;
+    PointerResultClause;
 }
 
 export data SignatureSites {
@@ -1512,6 +1538,9 @@ export func inspect_signature(nodes:const ExprNodes in N, revision:UInt64, used:
                 (BorrowedResult { val previous <- previous; val target <- owner_qualified_type; val readonly <- readonly; }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, BorrowedResultClause:SignatureSyntax)
                 };
+                (PointerResult { val previous <- previous; val target <- owner_qualified_type; val readonly <- readonly; }) -> {
+                    signature_step(nodes, revision, at, previous, target, readonly, sites, PointerResultClause:SignatureSyntax)
+                };
                 (ExceptionResult { val previous <- previous; val target <- type_name; val readonly <- readonly; }) -> {
                     signature_step(nodes, revision, at, previous, target, readonly, sites, ExceptionResultClause:SignatureSyntax)
                 };
@@ -1556,7 +1585,7 @@ export func find_signature_clause(nodes:const ExprNodes in N, revision:UInt64, u
         shape <- inspect_signature(nodes, revision, used, at, sites);
         if (shape == (InvalidSignature:SignatureSyntax) || shape == (OtherSignatureSyntax:SignatureSyntax)) return false;
         if (shape == desired) { found <- at; return true; };
-        if (shape == (OwningRegionResultClause:SignatureSyntax) &&
+        if ((shape == (OwningRegionResultClause:SignatureSyntax) || shape == (PointerResultClause:SignatureSyntax)) &&
             (desired == (ValueResultClause:SignatureSyntax) || desired == (BorrowedResultClause:SignatureSyntax) ||
              desired == (ExceptionResultClause:SignatureSyntax))) return false;
         if (shape == (SignatureHead:SignatureSyntax) || shape == (ScopedProcedureHead:SignatureSyntax)) {
@@ -2799,6 +2828,7 @@ func read_construction_type(nodes:const ExprNodes in N, revision:UInt64, at:UInt
         (Occupied { val syntax <- node; }) -> {
             case syntax.payload of {
                 (NameReference) -> { true };
+                (AppliedType) -> { true };
                 (ConstructionTypeQuery { val operand <- operand; }) -> {
                     if (!published_syntax_id(nodes, revision, requested.index, operand)) return false;
                     sites.queried_operand <- operand.index;

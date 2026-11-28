@@ -1,5 +1,5 @@
 using "ASCII.cod" ASCII {
-    LEFT_PAREN, RIGHT_PAREN, PLUS, COMMA, MINUS, COLON, SEMICOLON, LESS_THAN, EQUAL, RIGHT_BRACKET,
+    LEFT_PAREN, RIGHT_PAREN, PLUS, COMMA, MINUS, COLON, SEMICOLON, LESS_THAN, EQUAL, LEFT_BRACKET, RIGHT_BRACKET,
     RIGHT_BRACE
 };
 using "./Lexer.cod" {
@@ -12,7 +12,7 @@ using "./ParserStorage.cod" {
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" ExprPayload {
     NameReference, ModuleSyntax, ModuleItem, BlockSyntax, ScopeSyntax, BlockItem, AnnotatedBinding,
-        OwnerQualifiedType
+        OwnerQualifiedType, AppliedType, TypeListItem
 };
 using "./ParserStorage.cod" AstSlot { Occupied };
 using "./ParserStorage.cod" {
@@ -163,6 +163,85 @@ export func parse_identifier(source:const SourceBytes in S, tokens:const Tokens 
     return true;
 }
 
+func parse_named_type_at(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                          result:ParseResult in R, past:UInt64, depth:UInt64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
+    if (punct_at(source, tokens, result.next, past) != LEFT_BRACKET) return true;
+    if (depth == 1024u64) {
+        result.diagnostic <- 56u8;
+        return false
+    };
+    val name <- result.root;
+    if (!parse_type_list(source, tokens, nodes, result, past, false, depth + 1u64)) return false;
+    val arguments <- result.root;
+    append_syntax_node(nodes, result, syntax_first(nodes, result.used, name), tokens[result.next - 1u64].past,
+        make AppliedType {
+            name <- make NodeId { revision <- result.revision; index <- name };
+            arguments <- make NodeId { revision <- result.revision; index <- arguments };
+        });
+    return result.diagnostic == 0u8
+}
+
+func append_type_item(nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64) -> void
+    where {owner A, owner R} {
+    val item <- result.root;
+    ref link = make NoLink {};
+    if (previous != no_node()) {
+        link = make LinkTo { node <- make NodeId { revision <- result.revision; index <- previous } };
+        {}
+    };
+    append_syntax_node(nodes, result, syntax_first(nodes, result.used, item), syntax_past(nodes, result.used, item),
+        make TypeListItem {
+            previous <- link;
+            item <- make NodeId { revision <- result.revision; index <- item };
+        })
+}
+
+# The tail links items back in source order. Its enclosing node owns the
+# full bracket extent.
+func parse_type_list(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                     result:ParseResult in R, past:UInt64, parameters:bool, depth:UInt64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    result.next <- result.next + 1u64;
+    val previous <- no_node();
+    val delimiter <- 0u8;
+    for (unused in result.next .. past) {
+        if (parameters) {
+            if (!parse_module_name(source, tokens, nodes, result, past)) return false
+        } else {
+            if (!parse_named_type_at(source, tokens, nodes, result, past, depth)) return false
+        };
+        append_type_item(nodes, result, previous);
+        if (result.diagnostic != 0u8) return false;
+        delimiter <- punct_at(source, tokens, result.next, past);
+        if (delimiter == RIGHT_BRACKET) {
+            result.next <- result.next + 1u64;
+            return true
+        };
+        if (delimiter != COMMA) {
+            result.diagnostic <- 54u8;
+            return false
+        };
+        previous <- result.root;
+        result.next <- result.next + 1u64;
+    };
+    result.diagnostic <- expected_type();
+    return false
+}
+
+export func parse_named_type(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                             result:ParseResult in R, past:UInt64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    return parse_named_type_at(source, tokens, nodes, result, past, 1u64)
+}
+
+export func parse_type_parameters(source:const SourceBytes in S, tokens:const Tokens in T, nodes:ExprNodes in A,
+                                  result:ParseResult in R, past:UInt64) -> bool
+    where {const owner S, const owner T, owner A, owner R} {
+    return parse_type_list(source, tokens, nodes, result, past, true, 0u64)
+}
+
 export func exception_binder_width(source:const SourceBytes in S, tokens:const Tokens in T, at:UInt64, past:UInt64) -> UInt64
     where {const owner S, const owner T} {
     if (at + 1u64 >= past) return 0u64;
@@ -196,7 +275,7 @@ func parse_binding(source:const SourceBytes in S, tokens:const Tokens in T, node
     val readonly <- qualified && result.next < past && const_word(source, tokens[result.next]);
     if (readonly) { (result.next <- result.next + 1u64):void; } else {};
     val type_start <- result.next;
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_type()) &&
+    if (!parse_named_type(source, tokens, nodes, result, past) &&
         (!recover_local || !recover_syntax(source, tokens, nodes, result, type_start, past,
             TypeAnnotationRole))) return false;
     val annotation <- result.root;

@@ -9,7 +9,7 @@ using "./ParserStorage.cod" ExprPayload {
     ConstructorCasePattern, ReferenceCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
     Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
-    ReturningCondition,
+    ReturningCondition, AppliedType, GenericRecordDefinition, PointerResult,
 };
 using "./ParserStorage.cod" ConstructionSyntax {
     OtherConstruction, InvalidConstruction, ExceptionConstructionSyntax, PositionalConstruction,
@@ -99,6 +99,8 @@ func unsupported_reserved_initializer() -> UInt8 { return 136u8; }
 func unsupported_assertion_message() -> UInt8 { return 137u8; }
 func unsupported_reference_identity() -> UInt8 { return 138u8; }
 func unsupported_returning_condition() -> UInt8 { return 143u8 }
+func unsupported_generic_type() -> UInt8 { return 152u8 }
+func unsupported_pointer_result() -> UInt8 { return 153u8 }
 
 func constructing_throw_profile(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     at:UInt64) -> UInt8 where {const owner N} {
@@ -126,6 +128,7 @@ export func rejected_unsupported_declaration(result:const ModuleBindingResult in
          result.diagnostic == unsupported_reference_group() || result.diagnostic == unsupported_identity_reference() ||
          result.diagnostic == unsupported_reserved_initializer() || result.diagnostic == unsupported_assertion_message() ||
          result.diagnostic == unsupported_reference_identity() || result.diagnostic == unsupported_returning_condition() ||
+         result.diagnostic == unsupported_generic_type() || result.diagnostic == unsupported_pointer_result() ||
          (result.diagnostic >= 28u8 && result.diagnostic <= 40u8));
 }
 
@@ -262,6 +265,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                     0u8
                 };
                 (SumDefinition) -> { if (emit_object) { unsupported_nominal_sum() } else { 0u8 } };
+                GenericRecordDefinition -> unsupported_generic_type();
+                AppliedType -> unsupported_generic_type();
+                PointerResult -> unsupported_pointer_result();
                 (ConstructorCasePattern) -> {
                     if (emit_object) { unsupported_constructor_case() } else { 0u8 }
                 };

@@ -15,7 +15,7 @@ using "./ExpressionParser.cod" {
 using "./ParserInput.cod" {
     ParseResult, punct_at, punct_pair_at, append_syntax_node, append_module_item, append_module, parse_identifier,
     parse_module_name, parse_resource_name, reset_parse_result, expected_name, expected_type, expected_c_linkage,
-    closing_token, recover_syntax, recover_syntax_until, seed_lexical_reports,
+    closing_token, recover_syntax, recover_syntax_until, seed_lexical_reports, parse_type_parameters,
 };
 using "./CallableSyntax.cod" {
     expected_owner_clause, parse_constraints, parse_parameter, parse_procedure_symbol_type
@@ -28,7 +28,8 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" SyntaxRole { ModuleItemRole, ModuleSelectionItemRole };
 using "./ParserStorage.cod" ExprPayload {
     CallableDefinition, CEntryDefinition, ModulePathSyntax, ModuleSelection, AllMembers, ChosenMembers, ChosenMember,
-    HandleType, NominalParent, RecordDefinition, AbstractType, TypeSynonym, HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
+    HandleType, NominalParent, RecordDefinition, GenericRecordDefinition, AbstractType, TypeSynonym,
+    HandleSymbol, ValueSymbol, ReferenceSymbol, Publication,
     ArrayDefinition, EnumMember, EnumDefinition, SumDefinition, SumArm, RegionDefinition,
     BulkModuleSelection, DefaultPublicSet, DefaultMark,
 };
@@ -474,6 +475,9 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
     } else {};
     if (!parse_module_name(source, tokens, nodes, result, past)) return;
     val name <- result.root;
+    val generic <- !abstract && !native && punct_at(source, tokens, result.next, past) == LEFT_BRACKET;
+    if (generic && !parse_type_parameters(source, tokens, nodes, result, past)) return;
+    val parameters <- result.root;
     if (abstract && punct_at(source, tokens, result.next, past) == EQUAL) {
         result.next <- result.next + 1u64;
         val at <- result.next;
@@ -492,7 +496,7 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
         return
     };
     val descriptor <- name;
-    if (punct_pair_at(source, tokens, result.next, past, LESS_THAN, COLON)) { # '<:'
+    if (!generic && punct_pair_at(source, tokens, result.next, past, LESS_THAN, COLON)) { # '<:'
         val parent_at <- tokens[result.next].first;
         result.next <- result.next + 1u64;
         if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return;
@@ -512,7 +516,7 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
         });
         return;
     };
-    if (!native && punct_at(source, tokens, result.next, past) == EQUAL) {
+    if (!generic && !native && punct_at(source, tokens, result.next, past) == EQUAL) {
         parse_sum_declaration(source, tokens, nodes, result, first, past, descriptor);
         return;
     };
@@ -523,7 +527,16 @@ func parse_nominal_type(source:const SourceBytes in S, tokens:const Tokens in T,
         entries = make LinkTo { node <- make NodeId { revision <- result.revision; index <- fields; }; };
         {};
     };
-    append_syntax_node(nodes, result, first, tokens[result.next - 1u64].past, make RecordDefinition {
+    val end <- tokens[result.next - 1u64].past;
+    if (generic) {
+        append_syntax_node(nodes, result, first, end, make GenericRecordDefinition {
+            name <- make NodeId { revision <- result.revision; index <- name };
+            parameters <- make NodeId { revision <- result.revision; index <- parameters };
+            fields <- entries;
+        });
+        return
+    };
+    append_syntax_node(nodes, result, first, end, make RecordDefinition {
         heading <- make NodeId { revision <- result.revision; index <- descriptor; };
         fields <- entries;
         native <- native;

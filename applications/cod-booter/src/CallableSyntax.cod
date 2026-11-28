@@ -10,16 +10,16 @@ using "./Lexer.cod" {
 using "./ParserInput.cod" {
     ParseResult, append_syntax_node, append_qualified_type, exception_binder_width,
     expected_name, expected_type, parse_binding_name,
-    parse_identifier, parse_module_name, parse_resource_name, punct_at, punct_pair_at,
+    parse_identifier, parse_named_type, parse_module_name, parse_resource_name, punct_at, punct_pair_at,
 };
 using "./ParserStorage.cod" {
     ExprNodes, Tokens, NodeId, syntax_first, syntax_past, exception_result_node, no_node, ref_result_node,
-    result_clause_node, throws_clause_node, BindingSites, inspect_binding,
+    result_clause_node, throws_clause_node, BindingSites, inspect_binding, pointer_result_node,
     formal_variadic_at,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" ExprPayload {
-    CallableHeader, ValueResult, BorrowedResult, ExceptionResult, OwningRegionResult, ThrowsClause, Formal, HereFormal,
+    CallableHeader, ValueResult, BorrowedResult, PointerResult, ExceptionResult, OwningRegionResult, ThrowsClause, Formal, HereFormal,
     OwnerConstraint, TypeConstraint, ProcedureSymbol, ProcedureTypeInput, ProcedureTypeAnnotation, ScopedProcedureHeader,
 };
 using "./ParserStorage.cod" FormalMode {
@@ -318,13 +318,22 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
                 if (ref_word(source, tokens[at])) {
                     result.next <- at + 1u64;
                     (clause_kind <- ref_result_node()):void;
-                } else {};
+                } else {
+                    if (ptr_word(source, tokens[at])) {
+                        result.next <- at + 1u64;
+                        (clause_kind <- pointer_result_node()):void
+                    }
+                };
             };
         };
     } else {};
     val readonly <- kind == result_clause_node() && result.next < past && const_word(source, tokens[result.next]);
     if (readonly) { (result.next <- result.next + 1u64):void; } else {};
-    if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false;
+    if (clause_kind == throws_clause_node() || clause_kind == exception_result_node()) {
+        if (!parse_identifier(source, tokens, nodes, result, past, expected_type())) return false
+    } else {
+        if (!parse_named_type(source, tokens, nodes, result, past)) return false
+    };
     val annotation <- result.root;
     if (clause_kind == result_clause_node() && result.next < past && in_word(source, tokens[result.next])) {
         if (explicit_value) {
@@ -333,7 +342,7 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
         };
         (clause_kind <- ref_result_node()):void;
     } else {};
-    if (clause_kind == ref_result_node()) {
+    if (clause_kind == ref_result_node() || clause_kind == pointer_result_node()) {
         if (result.next >= past || !in_word(source, tokens[result.next])) {
             result.diagnostic <- expected_owner_clause();
             return false;
@@ -349,6 +358,12 @@ func parse_type_clause(source:const SourceBytes in S, tokens:const Tokens in T, 
     val end <- syntax_past(nodes, result.used, annotation);
     ref previous_item = make NodeId { revision <- result.revision; index <- previous; };
     ref selected_type = make NodeId { revision <- result.revision; index <- annotation; };
+    if (clause_kind == pointer_result_node()) {
+        append_syntax_node(nodes, result, first, end, make PointerResult {
+            previous <- previous_item; owner_qualified_type <- selected_type; readonly <- readonly;
+        });
+        return result.diagnostic == 0u8
+    };
     if (clause_kind == throws_clause_node()) {
         append_syntax_node(nodes, result, first, end, make ThrowsClause {
             previous <- previous_item; exception_type <- selected_type;
