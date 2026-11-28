@@ -9,7 +9,7 @@ using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, ScopeSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
-    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
+    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, ReserveStorage, InitializerTransfer,
     ProtectedBlock, CatchClause, CatchHandler, CatchBinding,
     CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
     HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal
@@ -390,6 +390,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
                  completed_lexical_bits_target(facts, at, names[at].scope)));
             CheckedTypeAssertion -> facts[at].kind == declared_scalar(enum_type());
             BracedInitializer -> true;
+            ReserveStorage -> true;
             InitializerTransfer -> names[at].kind == 0u8;
             CaseExpression -> true;
             CaseArm -> true;

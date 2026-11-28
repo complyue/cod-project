@@ -16,7 +16,7 @@ using "./ParserStorage.cod" {
     LogicalSyntax { LogicalOr }, RhsEvaluation { ConditionalRhs },
     is_function, ConstructionSites, inspect_construction, AssignmentSites, inspect_assignment,
     AssignmentSyntax { PlaceTransfer },
-    ConstructionSyntax { PositionalConstruction, BracedConstruction }, local_resource_name, IndexSites, inspect_index_selection,
+    ConstructionSyntax { PositionalConstruction, BracedConstruction, StorageReservation }, local_resource_name, IndexSites, inspect_index_selection,
     SumArmSites, inspect_sum_arm, block_tail,
 };
 using "./ParserStorage.cod" HereSyntax { HereReady, InvalidHere };
@@ -1973,10 +1973,12 @@ func prepare_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBi
         initializer <- no_node(); contents <- no_node()
     };
     ref fields = make UInt64 { no_node() };
-    if (inspect_construction(nodes, revision, at, fill, syntax) != BracedConstruction ||
+    val shape <- inspect_construction(nodes, revision, at, fill, syntax);
+    if ((shape != BracedConstruction && shape != StorageReservation) ||
         syntax.requested >= fill || syntax.queried_operand != no_node() || syntax.placement != no_node() ||
         names[syntax.requested].kind != constructor_type() ||
-        !block_tail(nodes, revision, fill, syntax.contents, fields) || fields != no_node()) return false;
+        (shape == BracedConstruction &&
+         (!block_tail(nodes, revision, fill, syntax.contents, fields) || fields != no_node()))) return false;
     # In this source profile name registration has already rejected
     # initializer overloads, regardless of the argument count at this use.
     val arm <- names[syntax.requested].declaration;

@@ -57,5 +57,5 @@ export proc probe_package_roots(
     if (selected < row_count) {
         return make PackageModule { root <- selected }
     };
-    return make MissingModule {}
+    return make MissingModule
 }

@@ -6367,11 +6367,13 @@ func check_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBind
     };
     ref alternative = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node() };
     ref tail = make UInt64 { no_node() };
-    if (inspect_construction(nodes, revision, used, at, syntax) != BracedConstruction ||
+    val shape <- inspect_construction(nodes, revision, used, at, syntax);
+    if ((shape != BracedConstruction && shape != StorageReservation) ||
         syntax.requested >= at || syntax.placement != no_node() || syntax.queried_operand != no_node() ||
         names[syntax.requested].kind != constructor_type() || names[syntax.requested].declaration != arm ||
         !inspect_sum_arm(nodes, revision, used, arm, alternative) || alternative.fields != no_node() ||
-        !block_tail(nodes, revision, at, syntax.contents, tail) || tail != no_node()) return invalid_operand_tree();
+        (shape == BracedConstruction &&
+         (!block_tail(nodes, revision, at, syntax.contents, tail) || tail != no_node()))) return invalid_operand_tree();
     set_fact(facts, at, independent_sum_bits(), independent_value(), no_node(), sum, 0u8);
     return 0u8
 }

@@ -98,7 +98,7 @@ export func growth_capacity(current:UInt64, required:UInt64) -> UInt64 {
 export proc reserve_visits(ref var visits:Visits in G, used:UInt64, required:UInt64) -> void where {owner G} {
     val current <- intrinsic (len)(visits);
     if (required <= current) return;
-    ref replacement = make Visits(growth_capacity(current, required), make Vacant {}) in G;
+    ref replacement = make Visits(growth_capacity(current, required), make Vacant) in G;
     for (id in 0u64 .. used) { replacement[id] <- visits[id]; };
     visits = replacement;
     return;

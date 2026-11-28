@@ -1101,7 +1101,8 @@ func selected_inline_sum(source:const SourceBytes in S, nodes:const ExprNodes in
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
-    if (inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, syntax) != BracedConstruction ||
+    val shape <- inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, syntax);
+    if ((shape != BracedConstruction && shape != StorageReservation) ||
         syntax.placement != no_node() || syntax.queried_operand != no_node()) return false;
     if (!lexical) return (work[syntax.requested].selected_constructor);
     val found <- lookup(source, nodes, work, syntax.requested, 0u64, state.used);
@@ -1627,7 +1628,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     };
     val shape <- inspect_construction(nodes, state.syntax_revision, state.syntax_used, at, construction);
     if (state.repeated && (!state.source_only || state.here_group || state.local_sum_input != at ||
-        shape != BracedConstruction || construction.placement != no_node() ||
+        (shape != BracedConstruction && shape != StorageReservation) || construction.placement != no_node() ||
         construction.queried_operand != no_node())) {
         reject_name(state, at, unsupported_repeated_construction());
         return
@@ -1640,7 +1641,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
     val requested <- construction.requested;
     val inline_sum <- state.source_only && state.inline_field_input == at && state.local_sum_input != at;
     if (state.source_only && (state.local_sum_input == at || inline_sum) &&
-        shape == BracedConstruction && construction.placement == no_node() &&
+        (shape == BracedConstruction || shape == StorageReservation) && construction.placement == no_node() &&
         construction.queried_operand == no_node()) {
         val found <- lookup(source, nodes, work, requested, 0u64, state.used);
         if (found != no_node() && bindings[found].kind == constructor_type()) {
@@ -1750,7 +1751,8 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
                 requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
                 initializer <- no_node(); contents <- no_node()
             };
-            if (inspect_construction(nodes, state.syntax_revision, at, fill.item, literal) == BracedConstruction &&
+            val fill_shape <- inspect_construction(nodes, state.syntax_revision, at, fill.item, literal);
+            if ((fill_shape == BracedConstruction || fill_shape == StorageReservation) &&
                 literal.placement == no_node() && literal.queried_operand == no_node()) {
                 (state.inline_field_input <- fill.item):void
             }

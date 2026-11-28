@@ -1888,8 +1888,10 @@ class BodyExtraction {
         const auto selected = found->second;
         const auto &sum = declarations().sums.at(selected.sum);
         const auto &arm = sum.alternatives.at(selected.alternative);
-        expect(expr.initializer_block && !sum.regional_only && arm.initializers.empty() && !family(spelling),
-               expr.at, "seed needs a complete braced bits sum initializer");
+        expect(!expr.constructor_arguments && !sum.regional_only && arm.initializers.empty() && !family(spelling),
+               expr.at, "seed needs an initializer-free bits sum alternative");
+        expect(expr.initializer_block || arm.fields.empty(), expr.at,
+               "seed needs a complete initializer for a sum alternative with fields");
         const auto owner = named_owner(expr.owner_name, expr.at);
         op = aggregate_construction(Type{Type::sum, sum.source->name, selected.sum}, owner, target, expr.at);
         op.sum_constructor = selected;
@@ -1944,8 +1946,7 @@ class BodyExtraction {
     }
 
     const CheckedOperation &bits_copy_operand(const Expression &input) {
-      if (input.kind != Kind::make_object || !input.initializer_block ||
-          input.constructor_arguments || !input.owner_name.empty())
+      if (input.kind != Kind::make_object || input.constructor_arguments || !input.owner_name.empty())
         return extract(input);
       // Only the completed payload leaves this operand. It cannot publish the scratch address.
       require_executable_expression(input);

@@ -14,7 +14,7 @@ using "./ParserStorage.cod" {
     IndexSites, inspect_index_selection, owner_constraint_syntax,
     DirectCallSites, direct_invocation, DirectInvocationSyntax { DirectInvocationReady },
     AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind },
-    ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
+    ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction, StorageReservation },
     OwnerConstraintSyntax { ReadonlyOwnerConstraint, WritableOwnerConstraint, NotOwnerConstraint },
     CaseSites, inspect_case, CaseArmSites, inspect_case_arm, case_pattern,
     CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, AnyCaseTarget },
@@ -1791,13 +1791,21 @@ func borrowed_product_field_destination(nodes:const ExprNodes in N, names:const 
     return false
 }
 
-func indexed_braced_transfer(nodes:const ExprNodes in N, at:UInt64, revision:UInt64,
-    assignment:const AssignmentSites in A, construction:ConstructionSites in C) -> bool
-    where {const owner N, const owner A, owner C} {
+func aggregate_initializer_syntax(nodes:const ExprNodes in N, names:const NameBindings in B,
+    input:UInt64, used:UInt64, revision:UInt64, construction:ConstructionSites in C) -> bool
+    where {const owner N, const owner B, owner C} {
+    val shape <- inspect_construction(nodes, revision, used, input, construction);
+    return (shape == BracedConstruction || (shape == StorageReservation &&
+        names[construction.requested].kind == constructor_type())) &&
+        construction.placement == no_node() && construction.queried_operand == no_node()
+}
+
+func indexed_aggregate_transfer(nodes:const ExprNodes in N, names:const NameBindings in B,
+    at:UInt64, revision:UInt64, assignment:const AssignmentSites in A, construction:ConstructionSites in C) -> bool
+    where {const owner N, const owner B, const owner A, owner C} {
     ref index = make IndexSites { target <- no_node(); index <- no_node() };
     return inspect_index_selection(nodes, revision, at, assignment.destination, index) &&
-        inspect_construction(nodes, revision, at, assignment.input, construction) == BracedConstruction &&
-        construction.placement == no_node() && construction.queried_operand == no_node()
+        aggregate_initializer_syntax(nodes, names, assignment.input, at, revision, construction)
 }
 
 func unsupported_bits_construction() -> UInt8 { return 149u8 }
@@ -1914,7 +1922,8 @@ func prepare_bits_construction(nodes:const ExprNodes in N, names:const NameBindi
         requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
         initializer <- no_node(); contents <- no_node()
     };
-    if (at >= transfer || inspect_construction(nodes, revision, used, at, syntax) != BracedConstruction ||
+    val shape <- inspect_construction(nodes, revision, used, at, syntax);
+    if (at >= transfer || (shape != BracedConstruction && shape != StorageReservation) ||
         syntax.requested >= at || syntax.placement != no_node() || syntax.queried_operand != no_node())
         return case_problem(report, at, unsupported_bits_construction());
     ref schema = make UInt64 { no_node() };
@@ -1929,9 +1938,14 @@ func prepare_bits_construction(nodes:const ExprNodes in N, names:const NameBindi
     };
     ref first = make UInt64 { no_node() };
     ref last = make UInt64 { no_node() };
-    if (count == no_node() || !block_tail(nodes, revision, at, syntax.contents, last) ||
-        !first_sequence_entry(nodes, revision, at, last, BlockSequence, first))
-        return case_problem(report, at, unsupported_bits_construction());
+    if (shape == StorageReservation) {
+        if (expected.kind != sum_type() || count != 0u64)
+            return case_problem(report, at, unsupported_bits_construction());
+    } else {
+        if (count == no_node() || !block_tail(nodes, revision, at, syntax.contents, last) ||
+            !first_sequence_entry(nodes, revision, at, last, BlockSequence, first))
+            return case_problem(report, at, unsupported_bits_construction());
+    };
     facts[at] <- make BitsConstruction {
         transfer <- transfer; value_type <- expected; schema <- schema; field_count <- count;
         first_initializer <- first; last_initializer <- last;
@@ -1952,7 +1966,7 @@ func prepare_lexical_sum_reference(nodes:const ExprNodes in N, names:const NameB
         initializer <- no_node(); contents <- no_node()
     };
     if (input >= at || lexical_owner >= used || names[input].scope != lexical_owner ||
-        inspect_construction(nodes, revision, at, input, syntax) != BracedConstruction)
+        !aggregate_initializer_syntax(nodes, names, input, at, revision, syntax))
         return case_problem(report, input, unsupported_bits_construction());
     if (names[syntax.requested].kind != constructor_type())
         return case_problem(report, syntax.requested, unselected_case_constructor());
@@ -2387,7 +2401,7 @@ func prepare_bits_initializers(source:const SourceBytes in S, nodes:const ExprNo
         if (type.kind == record_type() || type.kind == sum_type()) {
             if (!case_bits_type(type, aggregate, interfaces, published))
                 return case_problem(report, name, unsupported_bits_construction());
-            if (inspect_construction(nodes, revision, at, assignment.input, syntax) == BracedConstruction &&
+            if (aggregate_initializer_syntax(nodes, names, assignment.input, at, revision, syntax) &&
                 !prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
                     assignment.input, entry.item, type, used, revision, report)) return false
         };
@@ -2455,8 +2469,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
                  selected[names[binding.target_type].declaration].kind == record_export()))) return true;
         if (inspect_local_binding(nodes, revision, used, at, local) &&
             ((local.mode == ReferenceLocal &&
-              inspect_construction(nodes, revision, used, local.initializer, construction) == BracedConstruction &&
-              construction.placement == no_node() && construction.queried_operand == no_node()) ||
+              aggregate_initializer_syntax(nodes, names, local.initializer, used, revision, construction)) ||
              fixed_indexed_field_initializer(nodes, local, at, used, revision))) return true;
         if ((inspect_assignment(nodes, revision, used, at, assignment) == PlaceTransfer &&
             ((names[at].kind == 0u8 &&
@@ -2467,7 +2480,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
                }) &&
               inspect_field_selection(nodes, revision, used, assignment.input, projection) &&
               inspect_index_selection(nodes, revision, used, projection.receiver, indexed)) ||
-             indexed_braced_transfer(nodes, at, revision, assignment, construction))) ||
+             indexed_aggregate_transfer(nodes, names, at, revision, assignment, construction))) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
              (name_syntax(nodes, used, choice.subject) == OrdinaryName ||
@@ -2476,8 +2489,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
         if (inspect_sequence_entry(nodes, revision, used, at, argument) == ArgumentSequence &&
             (inspect_index_selection(nodes, revision, used, argument.item, indexed) ||
              inspect_field_selection(nodes, revision, used, argument.item, projection) ||
-             (inspect_construction(nodes, revision, used, argument.item, construction) == BracedConstruction &&
-              construction.placement == no_node() && construction.queried_operand == no_node()))) return true
+             aggregate_initializer_syntax(nodes, names, argument.item, used, revision, construction))) return true
     };
     return false
 }
@@ -2547,7 +2559,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             if (scope < used) {
                 case facts[scope] of {
                     SumValueResult { val type <- value_type, } -> {
-                        if (inspect_construction(nodes, revision, at, returned, construction) == BracedConstruction &&
+                        if (aggregate_initializer_syntax(nodes, names, returned, at, revision, construction) &&
                             !prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
                                 returned, at, type, used, revision, report)) return false
                     };
@@ -2610,7 +2622,7 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
                 views, facts, at, assignment, used, revision))) {
             if (first == no_node()) { (first <- at):void }
         };
-        if (transfer == PlaceTransfer && indexed_braced_transfer(nodes, at, revision, assignment, construction)) {
+        if (transfer == PlaceTransfer && indexed_aggregate_transfer(nodes, names, at, revision, assignment, construction)) {
             if (names[construction.requested].kind == constructor_type() &&
                 names[construction.requested].declaration != no_node() &&
                 !work[assignment.input].repeated_indexed_initializer) {

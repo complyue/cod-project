@@ -918,7 +918,8 @@ class ModuleBinder {
     if (selected == module_names().constructors.end()) return {};
     const auto constructor = selected->second;
     const auto &sum = program_.sums.at(constructor.sum);
-    if (!sum.regional_only) return {};
+    if (!sum.regional_only)
+      implementation_gap(form.at, "initializer overload on a finite-bits sum");
     if (sum.module != module_ || form.c_linkage || form.exporting || !form.body ||
         !form.type_parameters.empty() || form.owner_parameters.size() != 1 ||
         form.owner_parameters.front().read_only ||
