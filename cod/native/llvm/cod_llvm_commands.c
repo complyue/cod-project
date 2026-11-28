@@ -15,11 +15,13 @@ typedef struct cod_llvm_function {
   LLVMValueRef value;
   size_t unit;
   bool begun;
+  bool here_entry;
 } cod_llvm_function;
 
 typedef struct cod_llvm_construction {
   cod_llvm_session *session;
   LLVMTypeRef word, result, text, pointer;
+  LLVMTypeRef *word_parameters;
   cod_llvm_function *functions;
   LLVMValueRef *slots, *arguments;
   LLVMBasicBlockRef *blocks;
@@ -260,21 +262,38 @@ static inline bool cod_llvm_checked_arithmetic(cod_llvm_construction *state, cod
   return true;
 }
 
-static inline bool cod_llvm_invoke_words(cod_llvm_construction *state, cod_llvm_command command) {
+static bool cod_llvm_invoke_words(cod_llvm_construction *state, cod_llvm_command command) {
   const size_t slots = state->units[state->unit_index].slots;
-  if (command.a >= state->function_count || !state->functions[command.a].value ||
-      command.b >= slots || command.c >= slots || command.d >= slots)
-    return false;
-  LLVMValueRef function = state->functions[command.a].value;
-  LLVMTypeRef type = LLVMGlobalGetValueType(function);
-  if (LLVMGetReturnType(type) != state->result || state->argument_count != LLVMCountParams(function))
+  if (command.b >= slots || command.c >= slots || slots - command.c < 3 ||
+      command.d != command.c + 1 || (command.b >= command.c && command.b - command.c < 3))
     return false;
   LLVMBuilderRef builder = state->session->builder;
-  LLVMValueRef result = LLVMBuildCall2(builder, type, function, state->arguments, state->argument_count, "");
+  LLVMValueRef function;
+  LLVMTypeRef type;
+  unsigned count = state->argument_count;
+  if (command.opcode == COD_LLVM_INVOKE_HERE) {
+    if (command.a >= slots || count == state->argument_capacity) return false;
+    LLVMValueRef descriptor = cod_llvm_read_word(state, command.a);
+    LLVMValueRef address = LLVMBuildIntToPtr(builder, descriptor, state->pointer, "");
+    LLVMValueRef entry = LLVMBuildLoad2(builder, state->word, address, "");
+    function = LLVMBuildIntToPtr(builder, entry, state->pointer, "");
+    memmove(state->arguments + 1, state->arguments, count * sizeof(*state->arguments));
+    state->arguments[0] = descriptor;
+    ++count;
+    type = LLVMFunctionType(state->result, state->word_parameters, count, false);
+  } else {
+    if (command.a >= state->function_count) return false;
+    const cod_llvm_function *selected = &state->functions[command.a];
+    if (!selected->value || selected->here_entry) return false;
+    function = selected->value;
+    type = LLVMGlobalGetValueType(function);
+    if (LLVMGetReturnType(type) != state->result || count != LLVMCountParams(function)) return false;
+  }
+  LLVMValueRef result = LLVMBuildCall2(builder, type, function, state->arguments, count, "");
   state->argument_count = 0;
   cod_llvm_write_word(state, command.b, LLVMBuildExtractValue(builder, result, 0, ""));
-  cod_llvm_write_word(state, command.c, LLVMBuildExtractValue(builder, result, 1, ""));
-  cod_llvm_write_word(state, command.d, LLVMBuildExtractValue(builder, result, 2, ""));
+  for (unsigned field = 0; field < 3; ++field)
+    cod_llvm_write_word(state, command.c + field, LLVMBuildExtractValue(builder, result, field + 1, ""));
   return true;
 }
 
@@ -283,7 +302,8 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
   const uint64_t a = command.a, b = command.b, c = command.c, d = command.d;
   const cod_llvm_command_unit *unit = &state->units[state->unit_index];
   const size_t slots = unit->slots;
-  if (state->argument_count && command.opcode != COD_LLVM_ARGUMENT && command.opcode != COD_LLVM_INVOKE)
+  if (state->argument_count && command.opcode != COD_LLVM_ARGUMENT &&
+      command.opcode != COD_LLVM_INVOKE && command.opcode != COD_LLVM_INVOKE_HERE)
     return false;
   if (command.opcode == COD_LLVM_DECLARE) return true;
   if (command.opcode == COD_LLVM_BEGIN) {
@@ -433,19 +453,28 @@ static inline bool cod_llvm_construct_command(cod_llvm_construction *state, cod_
       if (a >= slots || state->argument_count == state->argument_capacity) return false;
       state->arguments[state->argument_count++] = cod_llvm_read_word(state, a);
       return true;
+    case COD_LLVM_HERE_ENTRY: {
+      if (a >= slots || b >= state->function_count || c || d) return false;
+      const cod_llvm_function *function = &state->functions[b];
+      if (!function->here_entry || function->unit != state->unit_index) return false;
+      cod_llvm_write_word(state, a, LLVMBuildPtrToInt(builder, function->value, state->word, ""));
+      return true;
+    }
     case COD_LLVM_INVOKE:
+    case COD_LLVM_INVOKE_HERE:
       return cod_llvm_invoke_words(state, command);
     case COD_LLVM_PRINT:
       if (a >= slots) return false;
       cod_llvm_print_word(state, a);
       return true;
     case COD_LLVM_RETURN: {
-      if (a >= slots || b >= slots || c >= slots ||
+      if (a >= slots || b >= slots || c >= slots || d >= slots ||
           LLVMGetReturnType(LLVMGlobalGetValueType(state->current)) != state->result) return false;
       LLVMValueRef value = LLVMGetUndef(state->result);
       value = LLVMBuildInsertValue(builder, value, cod_llvm_read_word(state, a), 0, "");
       value = LLVMBuildInsertValue(builder, value, cod_llvm_read_word(state, b), 1, "");
       value = LLVMBuildInsertValue(builder, value, cod_llvm_read_word(state, c), 2, "");
+      value = LLVMBuildInsertValue(builder, value, d ? cod_llvm_read_word(state, d) : cod_llvm_word(state, 0), 3, "");
       LLVMBuildRet(builder, value);
       return true;
     }
@@ -496,7 +525,7 @@ static bool cod_llvm_measure_units(const cod_llvm_command_unit *units, size_t co
   return true;
 }
 
-static bool cod_llvm_declare_functions(cod_llvm_construction *state, LLVMTypeRef *parameters) {
+static bool cod_llvm_declare_functions(cod_llvm_construction *state) {
   cod_llvm_session *session = state->session;
   bool entry_declared = false;
   for (size_t u = 0; u < state->unit_count; ++u) {
@@ -504,17 +533,19 @@ static bool cod_llvm_declare_functions(cod_llvm_construction *state, LLVMTypeRef
     for (size_t i = 0; i < unit->count; ++i) {
       const cod_llvm_command command = cod_llvm_word_record(unit->records, i);
       if (command.opcode != COD_LLVM_DECLARE) continue;
-      if (command.a >= state->function_count || state->functions[command.a].value || command.c > 1)
+      if (command.a >= state->function_count || state->functions[command.a].value || command.c > 1 || command.d > 1)
         return false;
       const bool entry = command.c != 0;
-      if (entry && (entry_declared || command.b != 0)) return false;
+      const bool here_entry = command.d != 0;
+      if (entry && (entry_declared || command.b != 0 || here_entry)) return false;
+      if (here_entry && command.b == 0) return false;
       LLVMTypeRef result = entry ? LLVMInt32TypeInContext(session->context) : state->result;
-      LLVMTypeRef signature = LLVMFunctionType(result, parameters, (unsigned)command.b, 0);
+      LLVMTypeRef signature = LLVMFunctionType(result, state->word_parameters, (unsigned)command.b, 0);
       char name[32];
       snprintf(name, sizeof(name), "cod.proc.%" PRIu64, command.a);
       LLVMValueRef function = LLVMAddFunction(session->module, entry ? "main" : name, signature);
       if (!entry) LLVMSetLinkage(function, LLVMInternalLinkage);
-      state->functions[command.a] = (cod_llvm_function){.value = function, .unit = u};
+      state->functions[command.a] = (cod_llvm_function){.value = function, .unit = u, .here_entry = here_entry};
       ++state->functions_to_begin;
       entry_declared = entry_declared || entry;
     }
@@ -557,19 +588,19 @@ bool cod_llvm_construct_units(cod_llvm_session *session, const cod_llvm_command_
     .units = units, .unit_count = unit_count, .function_count = function_count,
     .site_base = unit_count > 1 ? 1 : 0, .site_limit = limits.site_limit
   };
-  LLVMTypeRef fields[] = {state.word, state.word, state.word};
-  state.result = LLVMStructTypeInContext(session->context, fields, 3, 0);
-  fields[0] = state.pointer;
-  state.text = LLVMStructTypeInContext(session->context, fields, 3, 0);
+  LLVMTypeRef outcome_fields[] = {state.word, state.word, state.word, state.word};
+  state.result = LLVMStructTypeInContext(session->context, outcome_fields, 4, 0);
+  LLVMTypeRef text_fields[] = {state.pointer, state.word, state.word};
+  state.text = LLVMStructTypeInContext(session->context, text_fields, 3, 0);
   state.functions = calloc(function_count, sizeof(*state.functions));
   state.blocks = calloc(limits.labels, sizeof(*state.blocks));
   state.slots = calloc(limits.slots, sizeof(*state.slots));
   state.arguments = calloc(limits.arity, sizeof(*state.arguments));
-  LLVMTypeRef *parameters = calloc(limits.arity, sizeof(*parameters));
+  state.word_parameters = calloc(limits.arity, sizeof(*state.word_parameters));
   bool success = false;
-  if (!state.functions || !state.blocks || !state.slots || !state.arguments || !parameters) goto done;
-  for (unsigned i = 0; i < limits.arity; ++i) parameters[i] = state.word;
-  if (!cod_llvm_declare_functions(&state, parameters)) goto done;
+  if (!state.functions || !state.blocks || !state.slots || !state.arguments || !state.word_parameters) goto done;
+  for (unsigned i = 0; i < limits.arity; ++i) state.word_parameters[i] = state.word;
+  if (!cod_llvm_declare_functions(&state)) goto done;
   for (state.unit_index = 0; state.unit_index < unit_count; ++state.unit_index) {
     if (!cod_llvm_build_unit(&state)) goto done;
     if (unit_count > 1) state.site_base += units[state.unit_index].source_size + UINT64_C(1);
@@ -577,7 +608,7 @@ bool cod_llvm_construct_units(cod_llvm_session *session, const cod_llvm_command_
   success = state.functions_to_begin == 0;
 
 done:
-  free(parameters);
+  free(state.word_parameters);
   free(state.arguments);
   free(state.slots);
   free(state.blocks);

@@ -17,8 +17,22 @@ typedef enum cod_llvm_command_kind {
   COD_LLVM_ALLOCATE_WORDS = 29, COD_LLVM_OFFSET_ADDRESS, COD_LLVM_TEXT_LITERAL,
   COD_LLVM_TEXT_SIZE, COD_LLVM_TEXT_BYTE, COD_LLVM_TEXT_CONTAINS_NUL,
   COD_LLVM_TEXT_ALLOCATE, COD_LLVM_TEXT_RELEASE,
-  COD_LLVM_SOURCE_SITE = 39
+  COD_LLVM_SOURCE_SITE = 39, COD_LLVM_HERE_ENTRY, COD_LLVM_INVOKE_HERE
 } cod_llvm_command_kind;
+
+/* DECLARE.d distinguishes an outlined here entry, whose first parameter is
+   the address of a borrowed descriptor. HERE_ENTRY writes that outline's
+   address to a slot. The command producer stores it in descriptor word 0
+   and owns the layout of the remaining capture and destination words.
+
+   INVOKE and INVOKE_HERE write the result payload at b and the category
+   and site at c and d. The site and target immediately follow the category.
+   INVOKE_HERE.a names the slot containing the descriptor address. Its
+   preceding ARGUMENT records supply only the offers, in offer order.
+   RETURN reads payload, category, site, and target from a through d.
+   RETURN.d of zero supplies the constant zero as the target.
+   Target zero denotes ordinary success or failure. A nonzero target is
+   the address identifying a live lexical destination, even during unwind. */
 
 /* Arithmetic faults occupy the top of the outcome category range. */
 typedef enum cod_llvm_arithmetic_fault {
@@ -38,7 +52,7 @@ typedef struct cod_llvm_literal_spelling {
 
 /* A checked command unit borrows its records and one indexed source revision
    for construction. Block labels and slots are unit-local. Callable IDs
-   are artifact-wide. Only INVOKE may reference another unit's definition.
+   are artifact-wide. Only direct INVOKE may reference another unit's definition.
    Multi-unit artifacts supply each source's display name for runtime sites. */
 typedef struct cod_llvm_command_unit {
   const void *records;
