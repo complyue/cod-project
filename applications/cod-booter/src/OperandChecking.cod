@@ -3140,6 +3140,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     val array_loan <- false;
     val product_loan <- false;
     val sum_loan <- false;
+    val string_loan <- false;
     val slot_signature <- contracts[header].array_slot_checked;
     val role <- no_node();
     val kind <- 0u8;
@@ -3150,17 +3151,22 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
         array_loan <- source_declared_signature && kind == array_type();
         product_loan <- source_declared_signature && kind == record_type();
         sum_loan <- source_declared_signature && kind == sum_type();
+        string_loan <- source_declared_signature && kind == builtin_string() &&
+            contracts[row].field_mode == ReferenceFormal && contracts[row].target_readonly == 1u8 &&
+            contracts[row].owner_readonly == 1u8;
         links[argument].imported_kind <- if (array_loan) { source_array_loan() } else {
             if (product_loan) { source_product_loan() } else {
                 if (sum_loan) { source_sum_target() } else {
                     if (source_handles || source_declared_signature) {
-                        if (handles) { source_handle_loan() } else { source_scalar_kind(kind) }
+                        if (handles) { source_handle_loan() } else {
+                            if (string_loan) { string_kind() } else { source_scalar_kind(kind) }
+                        }
                     } else { kind }
                 }
             }
         };
         links[argument].imported_ref_slot <- slot_signature && contracts[row].slot_target_invariant;
-        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles ||
+        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles || string_loan ||
             (contracts[row].field_mode == ReferenceFormal &&
                 (slot_signature || (source_declared_signature && source_place_scalar(kind))))) {
             borrowed_ref()

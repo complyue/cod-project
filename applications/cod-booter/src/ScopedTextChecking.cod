@@ -1,5 +1,8 @@
+using "./Deque.cod" { deque, push_back, pop_back };
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, published_syntax_id, CallableSites, inspect_callable,
+    ExprNodes, no_node, published_syntax_id, CallableSites, inspect_callable, ungrouped,
+    LogicalSites, inspect_logical, LogicalSyntax { LogicalAnd, LogicalOr, LogicalNot, OtherLogicalSyntax },
+    RhsEvaluation { ConditionalRhs, SkipsRhs }, boolean_literal, BooleanSyntax { OtherBooleanSyntax },
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable };
 using "./ParserStorage.cod" AstSlot { Occupied };
@@ -92,6 +95,55 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
     return true
 }
 
+func record_text_call_prefix(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, uses:TextUses in U,
+    at:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner F, const owner X, owner U} {
+    if (sites[at].event == skipped_operand() || boolean_literal(nodes, used, at) != OtherBooleanSyntax) return true;
+    if ((facts[at].call_definition == no_node() && facts[at].text_method == no_node()) ||
+        !invocation_reached(nodes, sites, at, used, revision) ||
+        !preserves_text_installations(nodes, facts, used, revision, at)) return false;
+    uses[at].installation_prefix <- prefix;
+    return true
+}
+
+# Visit the nominated statement's Boolean operands from left to right.
+# An admitted call restores its local installations before a successor
+# runs. An unrepresented operand withholds the prefix from later siblings.
+func record_text_installation_uses(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, uses:TextUses in U,
+    expression:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner F, const owner X, owner U} {
+    val at <- ungrouped(nodes, revision, used, expression);
+    if (at >= used || sites[at].event == skipped_operand()) return;
+    ref logical = make LogicalSites {
+        left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs
+    };
+    val mode <- inspect_logical(nodes, revision, used, at, logical);
+    if (mode != LogicalAnd && mode != LogicalOr && mode != LogicalNot) {
+        record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision):void;
+        return
+    };
+    ref later = make deque[UInt64]();
+    for (unused in 0u64 .. used) {
+        if (at >= used) return;
+        if (mode == LogicalAnd || mode == LogicalOr || mode == LogicalNot) {
+            if (logical.right_evaluation != SkipsRhs) { push_back(later, logical.right_operand) };
+            (at <- logical.left_operand):void
+        } else {
+            if (!record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision)) return;
+            case pop_back(later) of {
+                (null) -> { return };
+                (ref next:UInt64 in here) -> { (at <- next):void };
+            }
+        };
+        at <- ungrouped(nodes, revision, used, at);
+        mode <- if (at < used && sites[at].event != skipped_operand()) {
+            inspect_logical(nodes, revision, used, at, logical)
+        } else { (OtherLogicalSyntax:LogicalSyntax) }
+    }
+}
+
 # Freeze the entered local call edges, complete imported interface ranges,
 # and every installation that could hide an incoming selection.
 func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -155,9 +207,9 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
                 uses[at].later_selected <- scopes[method].selected_uses;
                 (scopes[method].selected_uses <- at):void
             };
-            if (uses[at].caller != no_node() && links[at].text_installation_prefix < used &&
-                preserves_text_installations(nodes, facts, used, revision, at)) {
-                (uses[at].installation_prefix <- links[at].text_installation_prefix):void
+            if (links[at].text_installation_prefix < used) {
+                record_text_installation_uses(nodes, facts, sites, uses, at,
+                    links[at].text_installation_prefix, used, revision)
             }
         }
     };

@@ -6008,7 +6008,8 @@ export func source_text_routine_signature(nodes:const ExprNodes in N, names:cons
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause ||
                 !clause.readonly) return false;
             marker <- binding.target_type;
-            if (names[marker].kind != array_type() && imported_kind(names, selected, marker) != array_export() &&
+            if (names[marker].kind != builtin_string() && names[marker].kind != array_type() &&
+                imported_kind(names, selected, marker) != array_export() &&
                 (!describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
                  !checked_bits_record(interfaces, published, aggregate, type))) return false
         };
