@@ -3,13 +3,12 @@ using "./ParserStorage.cod" {
     ExprNodes, no_node, is_here_formal, direct_invocation, DirectCallSites,
     CallableSites, inspect_callable, first_sequence_entry,
     HereSites, inspect_here_invocation, inspect_here_actual,
-    name_syntax, completion_syntax,
+    name_syntax,
     DirectInvocationSyntax { DirectInvocationReady },
     CallableSyntax { ModuleCallable },
     HereSyntax { HereReady },
     SequenceSyntax { ArgumentSequence, HereReceiverSequence },
     NameSyntax { OrdinaryName },
-    CompletionSyntax { ReturnCompletion },
 };
 using "./NameResolution.cod" {
     NameBindings, NameWork, local_binding, formal_binding, loop_index, here_receiver_binding,
@@ -54,15 +53,23 @@ func chain_length(links:const NameWork in L, first:UInt64, used:UInt64) -> UInt6
     return used
 }
 
+func group_literal(here:const HereObjectSites in H, at:UInt64) -> bool where {const owner H} {
+    if (at >= intrinsic (len)(here)) return false;
+    return case here[at].operation of {
+        HereOutline { val full <- full_scope, } -> !full;
+        _ -> false
+    }
+}
+
 func bind_written_actuals(views:const SuppliedViews in V, links:const NameWork in L,
-    map:HereArgumentMap in M, here:HereObjectSites in H, first:UInt64, used:UInt64) -> bool
+    map:HereArgumentMap in M, here:HereObjectSites in H, first:UInt64, used:UInt64, deferred:bool) -> bool
     where {const owner V, const owner L, owner M, owner H} {
     val argument <- first;
     for (unused in 0u64 .. used) {
         if (argument == no_node()) return true;
         case views[argument] of {
             OrdinaryHereArgument { val formal <- formal, val input <- operand, } -> {
-                if (formal >= used) return false;
+                if (formal >= used || (deferred && group_literal(here, input))) return false;
                 map[formal] <- argument;
                 (here[argument].operation <- make HereOperand { value <- input; formal <- formal }):void;
             };
@@ -111,13 +118,16 @@ export func collect_here_objects(nodes:const ExprNodes in N, tree:const ParseRes
     val place <- no_node();
     val offset <- no_node();
     val trailing <- no_node();
+    val wrapper <- no_node();
+    val deferred <- false;
     ref trailing_sites = make HereArgumentMap(used, no_node());
 
     for (at in 0u64 .. used) {
         case views[at] of {
             OrdinaryHereWrapper -> {
                 if (inspect_here_invocation(nodes, revision, used, at, here_syntax) != HereReady) return at;
-                trailing_sites[here_syntax.call] <- here_syntax.supplied;
+                trailing_sites[here_syntax.call] <- at;
+                here[at].next <- here_syntax.supplied;
                 (here[at].operation <- make HereWrappedLaunch { call <- here_syntax.call }):void;
             };
             OrdinaryHereBody { val parameter <- formal, } -> {
@@ -148,10 +158,15 @@ export func collect_here_objects(nodes:const ExprNodes in N, tree:const ParseRes
                     !signature_formals(nodes, revision, used, callable.signature, head, parameters) ||
                     !first_sequence_entry(nodes, revision, used, direct.arguments, ArgumentSequence, first))
                     return at;
-                trailing <- trailing_sites[at];
+                wrapper <- trailing_sites[at];
+                trailing <- if (wrapper != no_node()) { (here[wrapper].next) } else { no_node() };
+                deferred <- completes[at].registration != no_node() ||
+                    (wrapper != no_node() && completes[wrapper].registration != no_node());
                 if (trailing != no_node()) { (parameters <- links[parameters].next):void };
-                if (completes[at].registration != no_node() ||
-                    !bind_written_actuals(views, links, mapping, here, first, used)) return at;
+                # A group supplied by the deferred expression can have a
+                # handler that has already exited when the action runs.
+                if ((deferred && group_literal(here, trailing)) ||
+                    !bind_written_actuals(views, links, mapping, here, first, used, deferred)) return at;
                 order <- formal_order(links, mapping, here, parameters, used);
                 if (parameters != no_node() && order == no_node()) return at;
                 (here[at].operation <- make HereLaunch {
@@ -159,18 +174,13 @@ export func collect_here_objects(nodes:const ExprNodes in N, tree:const ParseRes
                 }):void
             };
             OrdinaryHereInvocation { val parameter <- formal, } -> {
-                if (completes[at].registration != no_node() ||
-                    direct_invocation(nodes, revision, used, at, direct) != DirectInvocationReady ||
+                if (direct_invocation(nodes, revision, used, at, direct) != DirectInvocationReady ||
                     !first_sequence_entry(nodes, revision, used, direct.arguments, ArgumentSequence, first))
                     return at;
                 (here[at].operation <- make HereEnter { callee <- direct.callee; formal <- parameter; offers <- first }):void
             };
             _ -> {}
         };
-        # A local replacement return requires a dedicated resume edge when
-        # cleanup is carrying another activation's suspended completion.
-        if ((completes[at].in_delayed_body != 0u8 || completes[at].replacing_try != no_node()) &&
-            completion_syntax(nodes, at) == ReturnCompletion) return at;
         outline <- completes[at].supplied_body;
         if (outline != no_node()) {
             if (name_syntax(nodes, used, at) == OrdinaryName) {

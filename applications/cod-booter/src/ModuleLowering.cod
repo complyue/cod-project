@@ -244,6 +244,38 @@ func restore_failure(code:NativeCommands in C, plan:NativePlan in P, saved:UInt6
     if (plan.here_outcomes) { emit(code, plan, copy_word(), pending_target(), saved + 2u64); };
 }
 
+# Cleanup can prepare a replacement return in the same activation. Keep the
+# suspended transfer's payload in separate storage until that return exits.
+func suspend_cleanup(code:NativeCommands in C, plan:NativePlan in P) -> UInt64 where {owner C, owner P} {
+    val saved <- save_failure(code, plan);
+    if (plan.here_outcomes) {
+        val payload <- new_slot(plan);
+        emit(code, plan, copy_word(), payload, returned_word());
+    };
+    emit(code, plan, word_constant(), pending_category(), 0u64);
+    clear_pending_target(code, plan);
+    return saved
+}
+
+func resume_cleanup(code:NativeCommands in C, plan:NativePlan in P, saved:UInt64) -> void
+    where {owner C, owner P} {
+    restore_failure(code, plan, saved);
+    if (plan.here_outcomes) { emit(code, plan, copy_word(), returned_word(), saved + 3u64); };
+}
+
+# A targeted completion belongs to a live supplying site or activation.
+# A successful receiver-local return preserves it. A newly targeted return
+# belongs to its own lexical supplier and continues through its return edge.
+func dispatch_cleanup_return(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
+    saved:UInt64, resumed:UInt64, replacement:UInt64) -> void where {owner C, owner P, owner R} {
+    val targeted <- new_block(plan);
+    command(code, plan, branch_equal(), saved + 2u64, 0u64, replacement, targeted);
+    position(code, plan, state, targeted);
+    command(code, plan, branch_equal(), pending_target(), 0u64, resumed, replacement);
+    state.live <- false;
+    return
+}
+
 # One dispatch block per guard keeps the same source-order handler walk for
 # all its failure sites. Unmatched exceptions and fatal faults use the
 # enclosing exception continuation, which includes any finalizer.
@@ -516,24 +548,14 @@ func prepare_here_launch_arguments(nodes:const ExprNodes in N, names:const NameB
     return;
 }
 
-func lower_here_launch(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-    interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F, sites:const CompletionSites in S,
-    code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R, at:UInt64, definition:UInt64,
-    first:UInt64, order:UInt64, trailing:UInt64) -> void
-    where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S,
-           owner C, owner P, owner R} {
-    val call_identity <- new_destination(code, plan);
-    prepare_here_launch_arguments(nodes, names, links, interfaces, facts, sites, code, plan, state, first, call_identity);
-    if (!state.live || plan.diagnostic != 0u8) return;
+func emit_here_launch(facts:const OperandFacts in F, code:NativeCommands in C, plan:NativePlan in P,
+    state:const LoweringState in R, at:UInt64, definition:UInt64, order:UInt64, trailing:UInt64) -> void
+    where {const owner F, owner C, owner P, const owner R} {
     val argument <- order;
-    if (trailing != no_node()) {
-        supplied_descriptor(code, plan, state, trailing, call_identity);
-        emit(code, plan, pass_argument(), slot(trailing), 0u64);
-    };
+    if (trailing != no_node()) { emit(code, plan, pass_argument(), slot(trailing), 0u64); };
     for (unused in 0u64 .. state.syntax_used) {
         if (argument == no_node()) {
             command(code, plan, invoke_function(), plan.function_base + definition, slot(at), call_category(), call_site());
-            propagate_invocation_failure(code, plan, state, slot(at), call_identity);
             return
         };
         pass_prepared_operand(code, plan, slot(argument), facts[argument].owner_chain);
@@ -568,20 +590,12 @@ func prepare_here_offers(nodes:const ExprNodes in N, names:const NameBindings in
     return;
 }
 
-func lower_here_entry(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
-    interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F, sites:const CompletionSites in S,
-    code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R, at:UInt64,
-    callee:UInt64, formal:UInt64, offers:UInt64) -> void
-    where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S,
-           owner C, owner P, owner R} {
-    val descriptor <- here_formal_word(code, plan, state, callee, formal);
-    prepare_here_offers(nodes, names, links, interfaces, facts, sites, code, plan, state, offers);
-    if (!state.live || plan.diagnostic != 0u8) return;
+func emit_here_entry(links:const NameWork in L, code:NativeCommands in C, plan:NativePlan in P,
+    at:UInt64, offers:UInt64, used:UInt64) -> void where {const owner L, owner C, owner P} {
     val argument <- offers;
-    for (unused in 0u64 .. state.syntax_used) {
+    for (unused in 0u64 .. used) {
         if (argument == no_node()) {
-            command(code, plan, invoke_here(), descriptor, slot(at), call_category(), call_site());
-            propagate_invocation_failure(code, plan, state, slot(at), no_node());
+            command(code, plan, invoke_here(), slot(at), slot(at), call_category(), call_site());
             return
         };
         emit(code, plan, pass_argument(), slot(argument), 0u64);
@@ -589,6 +603,54 @@ func lower_here_entry(nodes:const ExprNodes in N, names:const NameBindings in B,
     };
     plan.diagnostic <- invalid_native_module();
     return;
+}
+
+func planned_here_call(state:const LoweringState in R, at:UInt64) -> UInt64 where {const owner R} {
+    if (at >= intrinsic (len)(state.here)) return no_node();
+    return case state.here[at].operation of {
+        HereLaunch -> at;
+        HereEnter -> at;
+        HereWrappedLaunch { val call <- call, } -> call;
+        _ -> no_node()
+    }
+}
+
+func prepare_here_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F, sites:const CompletionSites in S,
+    code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R, at:UInt64) -> UInt64
+    where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S,
+           owner C, owner P, owner R} {
+    val word <- no_node();
+    case state.here[at].operation of {
+        HereLaunch { val written <- written, val trailing <- trailing, } -> {
+            word <- new_destination(code, plan);
+            prepare_here_launch_arguments(nodes, names, links, interfaces, facts, sites, code, plan, state, written, word);
+            if (state.live && plan.diagnostic == 0u8 && trailing != no_node()) {
+                supplied_descriptor(code, plan, state, trailing, word)
+            };
+            return word
+        };
+        HereEnter { val callee <- callee, val formal <- formal, val offers <- offers, } -> {
+            word <- here_formal_word(code, plan, state, callee, formal);
+            emit(code, plan, copy_word(), slot(at), word);
+            prepare_here_offers(nodes, names, links, interfaces, facts, sites, code, plan, state, offers);
+            return no_node()
+        };
+        _ -> { plan.diagnostic <- invalid_native_module(); return no_node() }
+    };
+    return no_node()
+}
+
+func emit_here_call(links:const NameWork in L, facts:const OperandFacts in F, code:NativeCommands in C,
+    plan:NativePlan in P, state:const LoweringState in R, at:UInt64) -> void
+    where {const owner L, const owner F, owner C, owner P, const owner R} {
+    case state.here[at].operation of {
+        HereLaunch { val definition <- definition, val order <- formal_order, val trailing <- trailing, } -> {
+            emit_here_launch(facts, code, plan, state, at, definition, order, trailing)
+        };
+        HereEnter { val offers <- offers, } -> { emit_here_entry(links, code, plan, at, offers, state.syntax_used) };
+        _ -> { (plan.diagnostic <- invalid_native_module()):void }
+    };
 }
 
 func invoke(nodes:const ExprNodes in N, links:const NameWork in L,
@@ -654,18 +716,14 @@ func lower_call(nodes:const ExprNodes in N, names:const NameBindings in B, links
                 facts:const OperandFacts in F, sites:const CompletionSites in S, code:NativeCommands in C,
                 plan:NativePlan in P, state:LoweringState in R, at:UInt64, arguments:UInt64, first:UInt64, symbolic:bool) -> void
     where {const owner N, const owner B, const owner L, const owner EC, const owner F, const owner S, owner C, owner P, owner R} {
-    if (plan.here_outcomes) {
-        case state.here[at].operation of {
-            HereLaunch { val definition <- definition, val written <- written, val order <- formal_order, val trailing <- trailing, } -> {
-                lower_here_launch(nodes, names, links, interfaces, facts, sites, code, plan, state, at, definition, written, order, trailing);
-                return
-            };
-            HereEnter { val callee <- callee, val formal <- formal, val offers <- offers, } -> {
-                lower_here_entry(nodes, names, links, interfaces, facts, sites, code, plan, state, at, callee, formal, offers);
-                return
-            };
-            _ -> {}
+    val here <- planned_here_call(state, at);
+    if (here != no_node()) {
+        val destination <- prepare_here_call(nodes, names, links, interfaces, facts, sites, code, plan, state, here);
+        if (state.live && plan.diagnostic == 0u8) {
+            emit_here_call(links, facts, code, plan, state, here);
+            propagate_invocation_failure(code, plan, state, slot(here), destination);
         };
+        return
     };
     ref first_argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, arguments, ArgumentSequence, first_argument)) {
@@ -1441,6 +1499,7 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
     state.return_target <- outer_return;
     state.return_slot <- outer_slot;
     val normal <- body || handled;
+    val continues <- normal;
     if (has_finally) {
         val pending_return <- state.local_return;
         val pending_break <- state.pending_break;
@@ -1457,12 +1516,27 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
         if (pending_break) { enter_finalizer(code, plan, state, on_break, reason, 3u64, after_arm); } else {};
         if (pending_scan) { enter_finalizer(code, plan, state, on_scan, reason, 4u64, after_arm); } else {};
         position(code, plan, state, after_arm);
-        val saved <- save_failure(code, plan);
-        emit(code, plan, word_constant(), pending_category(), 0u64);
-        clear_pending_target(code, plan);
+        val saved <- suspend_cleanup(code, plan);
+        val cleanup_return <- if (plan.here_outcomes) { new_block(plan) } else { outer_return };
+        state.return_target <- cleanup_return;
+        state.local_return <- false;
         lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, closing.target);
-        if (!state.live || plan.diagnostic != 0u8) return;
-        restore_failure(code, plan, saved);
+        if (plan.diagnostic != 0u8) return;
+        state.return_target <- outer_return;
+        val cleanup_returned <- state.local_return;
+        val cleanup_continues <- state.live;
+        continues <- normal && cleanup_continues;
+        state.local_return <- returned_earlier || cleanup_returned;
+        if (plan.here_outcomes && cleanup_returned) {
+            val resumed <- new_block(plan);
+            if (cleanup_continues) { finish_block(code, plan, state, resumed); };
+            position(code, plan, state, cleanup_return);
+            dispatch_cleanup_return(code, plan, state, saved, resumed, outer_return);
+            position(code, plan, state, resumed);
+        } else {
+            if (!cleanup_continues) return;
+        };
+        resume_cleanup(code, plan, saved);
 
         val forward_to <- if (prepared != no_node()) { new_block(plan) } else { outer_return };
         val resume_break <- if (pending_break) { new_block(plan) } else { no_node() };
@@ -1471,7 +1545,7 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
         match_finalizer_exit(code, plan, state, reason, 2u64, forward_to);
         if (pending_break) { match_finalizer_exit(code, plan, state, reason, 3u64, resume_break); } else {};
         if (pending_scan) { match_finalizer_exit(code, plan, state, reason, 4u64, resume_scan); } else {};
-        finish_block(code, plan, state, if (normal) { join } else { outer_exception });
+        finish_block(code, plan, state, if (continues) { join } else { outer_exception });
         forward_return(code, plan, state, forward_to, outer_return, prepared, no_node());
         state.local_return <- state.local_return || pending_return;
         if (pending_break) {
@@ -1483,7 +1557,7 @@ func lower_try(nodes:const ExprNodes in N, names:const NameBindings in B, links:
             deliver_case_scan(nodes, names, code, plan, state);
         } else {};
     } else {};
-    if (normal) { position(code, plan, state, join); } else {};
+    if (continues) { position(code, plan, state, join); } else {};
 }
 
 func lower_binding(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC,
@@ -1799,6 +1873,7 @@ func lower_here_control(nodes:const ExprNodes in N, names:const NameBindings in 
     };
     emit(code, plan, word_constant(), pending_category(), 0u64);
     if (feedback) {
+        state.local_return <- true;
         clear_pending_target(code, plan);
         finish_block(code, plan, state, state.return_target);
     } else {
@@ -2024,6 +2099,12 @@ func lower_expression(nodes:const ExprNodes in N, names:const NameBindings in B,
         return
     };
     if (defer_shape == DeferCall) {
+        val here <- planned_here_call(state, action.invocation);
+        if (here != no_node()) {
+            (prepare_here_call(nodes, names, links, interfaces, facts, sites, code, plan, state, here)):void;
+            if (state.live && plan.diagnostic == 0u8) { emit(code, plan, write_flow_flag(), slot(at), 1u64); };
+            return
+        };
         val call_form <- inspect_invocation(nodes, state.syntax_revision, state.syntax_used, action.invocation, call);
         ref argument = make UInt64 { no_node() };
         if ((call_form != OrdinaryInvocation && call_form != EffectfulInvocation) ||
@@ -2143,30 +2224,62 @@ func lower_delayed_block(nodes:const ExprNodes in N, names:const NameBindings in
     val exception_target <- state.exception_target;
     val return_target <- state.return_target;
     val caught_failure <- state.caught_failure;
-    val saved <- save_failure(code, plan);
-    emit(code, plan, word_constant(), pending_category(), 0u64);
-    clear_pending_target(code, plan);
+    val saved <- suspend_cleanup(code, plan);
     state.exception_target <- next;
     val ready <- if (state.active_scope == state.active_function) { state.return_ready } else { no_node() };
     val scan_flag <- state.scope_scan_flag;
-    val returned <- if (ready != no_node() || scan_flag != no_node()) { new_block(plan) } else { next };
+    val completes_return <- if (ready != no_node() || scan_flag != no_node()) { new_block(plan) } else { next };
+    val returned <- if (plan.here_outcomes) { new_block(plan) } else { completes_return };
     state.return_target <- returned;
     state.caught_failure <- no_node();
     lower_node(nodes, names, links, interfaces, facts, sites, code, plan, state, body);
     state.exception_target <- exception_target;
     state.return_target <- return_target;
     state.caught_failure <- caught_failure;
-    if (state.live) {
-        restore_failure(code, plan, saved);
+    if (plan.here_outcomes) {
+        val resumed <- new_block(plan);
+        if (state.live) { finish_block(code, plan, state, resumed); };
+        position(code, plan, state, returned);
+        dispatch_cleanup_return(code, plan, state, saved, resumed, completes_return);
+        position(code, plan, state, resumed);
+        resume_cleanup(code, plan, saved);
         finish_block(code, plan, state, next);
-    } else {};
+    } else {
+        if (state.live) {
+            resume_cleanup(code, plan, saved);
+            finish_block(code, plan, state, next);
+        };
+    };
     if (scan_flag != no_node()) {
         # This edge is reached only once a replacement return has been
         # prepared and delivered by its enclosing guards and finalizers.
-        position(code, plan, state, returned);
+        position(code, plan, state, completes_return);
         emit(code, plan, write_flow_flag(), scan_flag, 0u64);
         finish_block(code, plan, state, next);
-    } else { forward_return(code, plan, state, returned, next, no_node(), ready); };
+    } else { forward_return(code, plan, state, completes_return, next, no_node(), ready); };
+}
+
+# A direct defer already prepared its operands at registration. A normal
+# invocation preserves the pending result. Its new failure or transfer
+# becomes the completion carried through the remaining drain.
+func finish_deferred_invocation(code:NativeCommands in C, plan:NativePlan in P, state:LoweringState in R,
+    here_result:UInt64, next:UInt64) -> void where {owner C, owner P, owner R} {
+    if (here_result != no_node()) {
+        val ordinary <- new_block(plan);
+        val transfer <- new_block(plan);
+        command(code, plan, branch_equal(), call_target(), 0u64, ordinary, transfer);
+        position(code, plan, state, transfer);
+        invocation_failure(code, plan);
+        emit(code, plan, copy_word(), pending_target(), call_target());
+        emit(code, plan, copy_word(), returned_word(), here_result);
+        finish_block(code, plan, state, next);
+        position(code, plan, state, ordinary);
+    };
+    val failed <- new_block(plan);
+    command(code, plan, branch_equal(), call_category(), 0u64, next, failed);
+    position(code, plan, state, failed);
+    invocation_failure(code, plan);
+    finish_block(code, plan, state, next);
 }
 
 func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L, interfaces:const ModuleInterfaces in EC, facts:const OperandFacts in F,
@@ -2176,7 +2289,7 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
     val action <- sites[scope].last_defer;
     val invoke_block <- no_node();
     val next <- no_node();
-    val failed <- no_node();
+    val here <- no_node();
     ref deferred = make DeferSites { operand <- no_node(); invocation <- no_node(); clauses <- no_node(); };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     ref argument = make UInt64 { no_node() };
@@ -2193,22 +2306,22 @@ func drain_scope(nodes:const ExprNodes in N, names:const NameBindings in B, link
         if (kind == DeferBody) {
             lower_delayed_block(nodes, names, links, interfaces, facts, sites, code, plan, state, deferred.operand, next);
         } else {
-            invocation_mode <- inspect_invocation(nodes, state.syntax_revision, state.syntax_used, deferred.invocation, call);
-            if (kind != DeferCall || (invocation_mode != OrdinaryInvocation && invocation_mode != EffectfulInvocation) ||
-                !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, call.arguments, ArgumentSequence, argument)) {
-                plan.diagnostic <- invalid_native_module();
-                return;
+            here <- planned_here_call(state, deferred.invocation);
+            if (here != no_node()) {
+                emit_here_call(links, facts, code, plan, state, here);
+                finish_deferred_invocation(code, plan, state, slot(here), next);
+            } else {
+                invocation_mode <- inspect_invocation(nodes, state.syntax_revision, state.syntax_used, deferred.invocation, call);
+                if (kind != DeferCall || (invocation_mode != OrdinaryInvocation && invocation_mode != EffectfulInvocation) ||
+                    !first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, call.arguments, ArgumentSequence, argument)) {
+                    plan.diagnostic <- invalid_native_module();
+                    return;
+                };
+                invoke(nodes, links, facts, code, plan, deferred.invocation, argument, invocation_mode == EffectfulInvocation);
+                if (invocation_mode == OrdinaryInvocation) {
+                    finish_deferred_invocation(code, plan, state, no_node(), next)
+                } else { finish_block(code, plan, state, next); };
             };
-            invoke(nodes, links, facts, code, plan, deferred.invocation, argument, invocation_mode == EffectfulInvocation);
-            if (invocation_mode == OrdinaryInvocation) {
-                # In this admitted subset only a fatal numeric fault can escape
-                # a deferred callee. Keep the pending outcome on normal return.
-                failed <- new_block(plan);
-                command(code, plan, branch_equal(), call_category(), 0u64, next, failed);
-                position(code, plan, state, failed);
-                invocation_failure(code, plan);
-            } else {};
-            finish_block(code, plan, state, next);
         };
         position(code, plan, state, next);
         action <- sites[action].previous_defer;
