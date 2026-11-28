@@ -439,7 +439,9 @@ The declaration and provider commands bind private fixed-arity symbolic procedur
 
 Both source commands bind an anonymous handler in a private lexical frame and compare its signature with the completed declaration of the selected local symbol. The operand checker checks the handler body in that frame, including explicit returns and calls that forward captured places. It checks the supplied arguments of a symbolic invocation in written order against the declared scalar inputs. An invocation's result type comes from the declaration. Availability of an installed handler, its required effects and its completion remain separate checks. The commands report a scoped procedure limit before publication while those checks are unavailable. Exporting a procedure symbol and emitting it through the object command retain their profile limits.
 
-In the complete `ModuleGraph.cod` source check, both commands pass preparation of the imported `Visits` slots. They stop at the borrowed `ModuleBindingWorkspace` parameter of `bind_graph_module`. Its fixed reference fields include the parsed nodes and the workspace arrays. The current product-loan profile does not cover the whole workspace. This stop precedes operand checking of the actual `@followDependency` body.
+Both source commands check local workspace products with fixed references to initialized named arrays and readonly finite-bits products. For make by init, they bind the written fields before checking their operands in written order. Every field must be initialized exactly once with the required nominal target, access and the workspace's actual owner. Reading a fixed field retains the selected target and its owner. A writable target can still receive an indexed store through the field.
+
+In the complete `ModuleGraph.cod` source check, both commands pass the `ModuleBindingWorkspace` formal of `bind_graph_module`. They reach the unsupported imported signature at the call to `ModuleExports.file_dependency_path` in dependency enumeration. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 

@@ -134,7 +134,8 @@ using "./CaseSchemas.cod" {
         InlineProductFormal, WritableLocalProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField,
         StoredArrayElementReference, StoredArrayElementTransfer, SumValueResult,
         IndexedAggregateLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
-        FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer }
+        FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer,
+        FixedReferenceRecordConstruction, ReferenceFieldInitializer, StoredProductReference, StoredProductAlias }
 }
 using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
@@ -1024,7 +1025,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
         if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
         return 0u8
     };
-    if (has_slot_array(facts, initializer) || allocated_source_array(facts, initializer)) {
+    if (source_only && facts[initializer].kind == source_array_loan()) {
         if (local.mode != ReferenceLocal || facts[initializer].reception != borrowed_ref() ||
             facts[initializer].target_presence != present_target()) return unproved_nonnull_borrow();
         val array_owner <- facts[initializer].owner;
@@ -1043,7 +1044,7 @@ func check_local(nodes:const ExprNodes in N, names:const NameBindings in B, sele
                 return expected_writable_place()
         };
         copy_fact(facts, at, initializer);
-        if (!local.declaration_const) { (facts[at].array_slot <- at):void };
+        facts[at].array_slot <- if (local.declaration_const) { no_node() } else { at };
         if (readonly != 0u8) { (facts[at].target_readonly <- readonly):void };
         return 0u8
     };
@@ -2024,7 +2025,7 @@ func check_argument(nodes:const ExprNodes in N, names:const NameBindings in B,
     };
     if (source_only && (slot_call || mixed_aggregate_loan) && formal < intrinsic (len)(cases) &&
         (case cases[formal] of { ArrayFieldRecordFormal -> true; _ -> false })) {
-        if (operand >= used || checked_ref_argument(nodes, argument) || names[operand].kind != formal_binding() ||
+        if (operand >= used || checked_ref_argument(nodes, argument) ||
             facts[operand].kind != source_product_loan() || facts[operand].reception != borrowed_ref() ||
             facts[operand].target_presence != present_target() || facts[operand].identity != facts[formal].identity ||
             facts[operand].identity_module != facts[formal].identity_module) return wrong_operand_type();
@@ -6438,6 +6439,54 @@ func check_lexical_sum_rebind(facts:OperandFacts in F, at:UInt64, destination:UI
     return 0u8
 }
 
+func check_fixed_reference_record(nodes:const ExprNodes in N, facts:OperandFacts in F, links:const NameWork in L,
+    cases:const ConstructorCaseFacts in C, at:UInt64, record:UInt64, owner_site:UInt64,
+    count:UInt64, begin:UInt64, last:UInt64, used:UInt64) -> UInt8
+    where {const owner N, owner F, const owner L, const owner C} {
+    if (record >= used || owner_site >= used) return invalid_operand_tree();
+    val item <- begin;
+    val ready <- 0u64;
+    for (unused in 0u64 .. used) {
+        if (item == no_node()) {
+            if (ready != count) return missing_product_initializer();
+            set_fact(facts, at, source_product_loan(), borrowed_ref(), owner_site, record, 0u8);
+            return 0u8
+        };
+        if (item >= at) return invalid_operand_tree();
+        case cases[item] of {
+            ReferenceFieldInitializer {
+                val parent <- construction, val field <-, val operand <-,
+                val target <-, val readonly <-,
+            } -> {
+                if (parent != at || operand >= item || field >= used) return invalid_operand_tree();
+                if (facts[field].last_initializer == at) return repeated_readonly_initializer();
+                if (facts[operand].kind == never_result()) {
+                    set_result(facts, at, never_result());
+                    return 0u8
+                };
+                if ((if (target.kind == array_type()) { facts[operand].kind != source_array_loan() }
+                     else { facts[operand].kind != source_product_loan() && facts[operand].kind != product_kind() }) ||
+                    facts[operand].reception != borrowed_ref() ||
+                    facts[operand].identity_module != target.defining_module || facts[operand].identity != target.identity)
+                    return wrong_operand_type();
+                if (facts[operand].target_presence != present_target()) return unproved_nonnull_borrow();
+                if (facts[operand].owner != owner_site)
+                    return owner_conflict(nodes, owner_site, facts[operand].owner);
+                if (!readonly && facts[operand].target_readonly != 0u8) return expected_writable_place();
+                facts[field].last_initializer <- at;
+                (ready <- ready + 1u64):void
+            };
+            _ -> { return invalid_operand_tree() }
+        };
+        if (item == last) { (item <- no_node()):void }
+        else {
+            if (links[item].next <= item || links[item].next > last) return invalid_operand_tree();
+            (item <- links[item].next):void
+        }
+    };
+    return invalid_operand_tree()
+}
+
 func check_bits_construction(facts:OperandFacts in F, links:const NameWork in L,
     cases:const ConstructorCaseFacts in C, at:UInt64, type:const DeclaredType in T, count:UInt64,
     begin:UInt64, last:UInt64, used:UInt64) -> UInt8
@@ -6832,6 +6881,14 @@ func check_generic_call(nodes:const ExprNodes in N, names:const NameBindings in 
     return apply_generic_result(nodes, facts, interfaces, products, arguments, owners, at, first, past, signature, anchor, published)
 }
 
+func checked_stored_reference(facts:const OperandFacts in F, receiver:UInt64, owner_site:UInt64,
+    record:const DeclaredType in T) -> bool where {const owner F, const owner T} {
+    return facts[receiver].kind == source_product_loan() && facts[receiver].reception == borrowed_ref() &&
+        facts[receiver].target_presence == present_target() && facts[receiver].owner == owner_site &&
+        owner_site != no_node() && facts[receiver].identity == record.identity &&
+        facts[receiver].identity_module == record.defining_module
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H, products:const Products in M, arguments:const TypeKeys in M,
@@ -6909,8 +6966,22 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
             };
             LexicalProductReference { val construction <-, val owner_site <-, val readonly <-, } -> {
                 if (!source_only) return unsupported_product_layout();
+                if (construction < at && facts[construction].kind == source_product_loan()) {
+                    if (facts[construction].owner != owner_site ||
+                        facts[construction].target_presence != present_target()) return unproved_owner();
+                    copy_fact(facts, at, construction);
+                    if (readonly) { (facts[at].target_readonly <- 1u8):void };
+                    return 0u8
+                };
                 return check_lexical_bits_reference(facts, at, construction, owner_site, readonly,
                     independent_product_bits(), source_product_loan())
+            };
+            FixedReferenceRecordConstruction {
+                val record <-, val owner_site <-, val count <- field_count,
+                val begin <- first_initializer, val last <- last_initializer,
+            } -> {
+                if (!source_only || owner_site != names[at].scope) return unproved_owner();
+                return check_fixed_reference_record(nodes, facts, links, cases, at, record, owner_site, count, begin, last, used)
             };
             LexicalSumRebind { val destination <-, val construction <-, val owner_site <-, } -> {
                 if (!source_only) return unsupported_product_layout();
@@ -6955,19 +7026,36 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 if (!source_only) return unsupported_product_layout();
                 return check_stored_element_transfer(facts, at, destination, input, type)
             };
+            StoredProductAlias { val input <-, } -> {
+                if (!source_only || input >= at) return unsupported_product_layout();
+                if (facts[input].kind == never_result()) { copy_fact(facts, at, input); return 0u8 };
+                if (facts[input].kind != source_product_loan() || facts[input].reception != borrowed_ref() ||
+                    facts[input].target_presence != present_target() || facts[input].owner >= used)
+                    return unproved_nonnull_borrow();
+                copy_fact(facts, at, input);
+                return 0u8
+            };
+            StoredProductReference { val receiver <-, val owner_site <-, val record <-, val target <-, } -> {
+                if (!source_only || receiver >= at) return unsupported_product_layout();
+                if (facts[receiver].kind == never_result()) { copy_fact(facts, at, receiver); return 0u8 };
+                if (!checked_stored_reference(facts, receiver, owner_site, record)) return unproved_owner();
+                set_fact(facts, at, source_product_loan(), borrowed_ref(), owner_site, target.identity, 0u8);
+                facts[at].identity_module <- target.defining_module;
+                facts[at].target_readonly <- 1u8;
+                return 0u8
+            };
             StoredArrayField {
                 val receiver <-, val owner_site <-, val record <-, val array_module <-, val array_identity <-,
                 val element <-, val target_readonly <-,
             } -> {
                 if (!source_only || receiver >= at) return unsupported_product_layout();
                 if (facts[receiver].kind == never_result()) { copy_fact(facts, at, receiver); return 0u8 };
-                if (facts[receiver].kind != source_product_loan() || facts[receiver].reception != borrowed_ref() ||
-                    facts[receiver].target_presence != present_target() || facts[receiver].owner != owner_site || owner_site == no_node() ||
-                    facts[receiver].identity != record.identity ||
-                    facts[receiver].identity_module != record.defining_module) return unproved_owner();
+                if (!checked_stored_reference(facts, receiver, owner_site, record)) return unproved_owner();
                 set_fact(facts, at, source_array_loan(), borrowed_ref(), facts[receiver].owner, array_identity, 0u8);
                 facts[at].identity_module <- array_module;
-                facts[at].array_scalar <- if (element.kind == builtin_u8()) { scalar_u8() } else { 0u8 };
+                if (element.kind == builtin_u8() || element.kind == builtin_u64() || element.kind == builtin_bool()) {
+                    (facts[at].array_scalar <- source_scalar_kind(element.kind)):void
+                };
                 facts[at].target_readonly <- if (target_readonly) { 1u8 } else { (facts[receiver].target_readonly) };
                 return 0u8
             };
