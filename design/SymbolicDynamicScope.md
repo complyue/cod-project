@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 284 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 285 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r285 the [region and packet decision](../CHANGELOG.md#h-region-locality-and-packet-chans-20261128) scopes the same-pool check to pool-bound resource handoff. P-788 retains the required target on every launch. D-32/P-711 covers swarm-independent packet delivery over a typed chan.
 
 At r284 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires a target resource pool for both r283 entry forms and applies the same ownership boundary to launch and owning chan messages. D-10-ACTOR-CHAN/P-788 continues the entry and effects rules. D-32-RESOURCE-POOLS/P-789 records the pool and placement questions.
 
@@ -2416,7 +2418,7 @@ A candidate regional message carries a user-defined root, inputs and a typed des
 
 Both entry forms can transfer ownership to the child. The examples use the **proposed spelling** `go on(p)` to select the target pool. The pool can be passed to a library as an argument. In the named form, *entry procedure* names the role of the ordinary procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
 
-The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. The same rule applies to a subsequent owning chan send. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
+The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. The same rule applies if a typed chan carries that pool-bound resource. Packet regions travel through a typed chan independently of the endpoints’ pools. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
 
 ```cod
 proc build_index(own region part:Partition, own handle sink:IndexOutput, id:UInt64) -> void {
