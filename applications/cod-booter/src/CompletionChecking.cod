@@ -1,7 +1,7 @@
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
-    DiscardedExpression, CheckedTypeAssertion, PredicateAssertion, RaisePending, RaiseValue, NamedThrow,
+    DiscardedExpression, CheckedTypeAssertion, PredicateAssertion, RaisePending, RaiseValue, NamedThrow, BindSymbolEffect,
         CaseFallthrough, CaseFailure
 };
 using "./ParserStorage.cod" ExprPayload {
@@ -418,6 +418,11 @@ func direct_operand(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at
         (Vacant) -> { false };
         (Occupied { val syntax <- node, }) -> {
             case syntax.payload of {
+                (BindSymbolEffect { val input <-, }) -> {
+                    if (!published_syntax_id(nodes, revision, at, input)) return false;
+                    (child <- input.index):void;
+                    true
+                };
                 (DiscardedExpression { val operand <- operand, }) -> {
                     if (!published_syntax_id(nodes, revision, at, operand)) return false;
                     child <- operand.index;

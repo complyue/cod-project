@@ -1137,6 +1137,8 @@ The source operand checker uses the resolved lexical-builder type for a borrowed
 
 An empty builder constructed in the current lexical scope has an initialized descriptor after its fallible allocation. Reference bindings keep the selected owner and can weaken access. `make String(builder)` snapshots the builder as an immutable string under the ordinary text result owner. A builder loan supplies neither a value transfer nor a native parameter layout.
 
+For a checked builder installation into a non-null reference symbol, compare the builder and the symbol's required type by defining identity. An exact type or a direct declared abstract parent can satisfy the requirement. The defining visit publishes the builder's parent with its checked interface so an importing visit can apply the same comparison. Installing a writable output requires both writable target access and allocation access to the actual owner. The installation evaluates its operand before supplying the new binding. The completion checker retains failure during that preparation.
+
 The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs a completed imported callable contract for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
 
 ### Target layout for provider rows

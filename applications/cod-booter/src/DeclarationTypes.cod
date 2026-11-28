@@ -46,12 +46,12 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" {
     NameBindings, NameWork, locate_record_field, formal_binding, local_binding,
     ordinary_selection, record_type, array_type, native_scalar, enum_value, find_enum_member, find_enum_code,
-    is_lexical_builder, lexical_builder_record, lexical_builder_type,
+    is_lexical_builder, lexical_builder_record, lexical_builder_type, abstract_type_binding,
     builtin_i64, builtin_u64, builtin_u32, builtin_u8, builtin_bool, builtin_string, builtin_c_string, text_type, owner_binding,
 };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
 using "./ModuleExports.cod" {
-    SelectedExports, record_export, array_export, enum_export, enum_spelling, sum_export
+    SelectedExports, record_export, array_export, enum_export, enum_spelling, sum_export, abstract_type_export
 };
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, write_interface_header, write_payload_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
@@ -856,13 +856,53 @@ func describe_schema_field(nodes:const ExprNodes in N, names:const NameBindings 
     return describe_type(nodes, names, selected, binding.annotation, module, revision, used, result)
 }
 
+# An already bound builder may name a direct abstract parent. Preserve
+# this pair for consumers after the defining source and visit have closed.
+func builder_abstract_parent(names:const NameBindings in B, selected:const SelectedExports in E, marker:UInt64) -> bool
+    where {const owner B, const owner E} {
+    if (marker == no_node()) return false;
+    return names[marker].kind == abstract_type_binding() ||
+        (names[marker].kind == ordinary_selection() &&
+            selected[names[marker].declaration].kind == abstract_type_export())
+}
+
+export func lexical_builder_conforms(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    module:UInt64, builder:UInt64, required_module:UInt64, required:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner E, const owner I} {
+    if (module == required_module && builder == required) return true;
+    if (module != 0u64) {
+        val header <- find_interface(interfaces, published, module, builder);
+        return header != no_node() && interfaces[header].interface_kind == lexical_builder_type() &&
+            interfaces[header].entry_count == 0u64 && interfaces[header].type_module == required_module &&
+            interfaces[header].type_identity == required
+    };
+    ref definition = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    if (inspect_declaration(nodes, revision, used, builder, definition) != NominalRecord) return false;
+    val parent <- definition.parent_type;
+    return builder_abstract_parent(names, selected, parent) &&
+        type_module(names, selected, parent, 0u64) == required_module &&
+        type_identity(names, selected, parent) == required
+}
+
 func stage_record(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                   work:const NameWork in W, record:UInt64, defining_module:UInt64, count:UInt64, revision:UInt64, used:UInt64,
                   storage:AggregateStorage, shape:DeclarationSyntax,
                   declaration:const DeclarationSites in D, interfaces:ModuleInterfaces in I)
     -> UInt64 where {const owner N, const owner B, const owner E, const owner W, const owner D, owner I} {
-    if (lexical_builder_record(nodes, names, record, revision, used)) return count;
     val limit <- intrinsic (len)(interfaces);
+    if (lexical_builder_record(nodes, names, record, revision, used)) {
+        val parent <- declaration.parent_type;
+        if (!builder_abstract_parent(names, selected, parent)) return count;
+        if (count >= limit) return no_node();
+        write_interface_header(interfaces[count], defining_module, record, lexical_builder_type(), 0u8, 0u64);
+        interfaces[count].type_module <- type_module(names, selected, parent, defining_module);
+        interfaces[count].type_identity <- type_identity(names, selected, parent);
+        return count + 1u64
+    };
     if (count >= limit || storage == UnprovedAggregate) return no_node();
     ref field = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, declaration.entries, FormalSequence, field)) return no_node();

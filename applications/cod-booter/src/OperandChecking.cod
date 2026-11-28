@@ -8,7 +8,7 @@ using "./ModuleExportStorage.cod" {
 };
 using "./GenericTypes.cod" { Products, TypeKeys, TypeKey, TypeCategory { BitsNominal, ScalarType }, matches_member_application };
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
-using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array };
+using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, reference_symbol_shape };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -23,7 +23,7 @@ using "./ParserStorage.cod" FormalMode {
 using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ScopedProcedureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause
 };
-using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration };
+using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration, ReferenceSymbolDeclaration };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary, InvalidBinary };
 using "./ParserStorage.cod" ArithmeticOperation { Addition };
 using "./ParserStorage.cod" ComparisonRelation { Equal, Unequal };
@@ -41,7 +41,7 @@ using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
     CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion, ReturningCondition,
-    ScopedProcedureDefinition,
+    ScopedProcedureDefinition, BindSymbolEffect,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -102,7 +102,7 @@ using "./NameResolution.cod" {
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
     generic_method_binding, uninstantiated_method, unsupported_generic_type,
-    is_lexical_builder,
+    is_lexical_builder, reference_symbol_binding,
 };
 using "./ModuleExports.cod" {
     SelectedExports, symbol_export, print_export_identity,
@@ -127,7 +127,7 @@ using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
 using "./AggregateSchemas.cod" AggregateFacts;
-using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type };
+using "./DeclarationTypes.cod" { type_module, type_identity, DeclaredType, describe_type, lexical_builder_conforms };
 using "./CaseSchemas.cod" {
     ConstructorCaseFacts, prepare_imported_indexed_loan, published_array_field_record,
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
@@ -6963,6 +6963,49 @@ func checked_stored_reference(facts:const OperandFacts in F, receiver:UInt64, ow
         facts[receiver].identity_module == record.defining_module
 }
 
+# The actual is an already selected lexical target. The symbol's nominal
+# requirement comes from its declaration or its checked import identity.
+func check_builder_installation(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    facts:OperandFacts in F, at:UInt64, name:UInt64, input:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, const owner B, const owner E, const owner I, owner F} {
+    val definition <- names[name].declaration;
+    val required_module <- 0u64;
+    val required <- no_node();
+    val readonly <- false;
+    if (names[name].kind == symbolic_selection()) {
+        if (selected[definition].kind != symbol_export()) return unproved_operand();
+        val shape <- selected[definition].shape;
+        if (shape != reference_symbol_shape(false, false) && shape != reference_symbol_shape(false, true))
+            return unproved_operand();
+        readonly <- shape == reference_symbol_shape(false, true);
+        required_module <- selected[definition].owner_module;
+        (required <- selected[definition].owner_identity):void
+    } else {
+        ref declared = make DeclarationSites {
+            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+        };
+        if (names[name].kind != reference_symbol_binding() ||
+            inspect_declaration(nodes, revision, used, definition, declared) != ReferenceSymbolDeclaration ||
+            declared.nullable) return unproved_operand();
+        readonly <- declared.readonly;
+        required_module <- type_module(names, selected, declared.value_type, 0u64);
+        (required <- type_identity(names, selected, declared.value_type)):void
+    };
+    if (required == no_node() || required_module == no_node() ||
+        !lexical_builder_conforms(nodes, names, selected, interfaces, published,
+            facts[input].identity_module, facts[input].identity, required_module, required, used, revision))
+        return wrong_operand_type();
+    if (facts[input].reception != borrowed_ref() || facts[input].target_presence != present_target())
+        return unproved_nonnull_borrow();
+    if (!readonly && facts[input].target_readonly != 0u8) return expected_writable_place();
+    val access <- check_owner_access(nodes, facts[input].owner, !readonly);
+    if (access != 0u8) return access;
+    only_void(facts, at);
+    return 0u8
+}
+
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H, products:const Products in M, arguments:const TypeKeys in M,
@@ -7199,6 +7242,19 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 };
                 (NameReference) -> { return check_bound_name(names, links, facts, views, at); };
                 (ScopedProcedureDefinition) -> { only_void(facts, at); return 0u8 };
+                (BindSymbolEffect { val name <-, val input <-, }) -> {
+                    if (!source_only) return 0u8;
+                    if (!published_syntax_id(nodes, revision, at, name) ||
+                        !published_syntax_id(nodes, revision, at, input)) return invalid_operand_tree();
+                    if (facts[input.index].kind == never_result()) {
+                        set_result(facts, at, never_result());
+                        return 0u8
+                    };
+                    if (facts[input.index].kind == source_builder_loan())
+                        return check_builder_installation(nodes, names, selected, interfaces, published,
+                            facts, at, name.index, input.index, used, revision);
+                    return 0u8
+                };
                 (ArrayLength { val target <- target, }) -> {
                     if (!published_syntax_id(nodes, revision, at, target)) return invalid_operand_tree();
                     if (facts[target.index].kind == never_result()) {

@@ -228,7 +228,7 @@ func numeric_native(kind:UInt8) -> bool { return native_scalar(kind) && kind != 
 
 func owning_handle() -> UInt8 { return 1u8; }
 func child_handle() -> UInt8 { return 2u8; }
-func reference_symbol_shape(nullable:bool, readonly:bool) -> UInt8 {
+export func reference_symbol_shape(nullable:bool, readonly:bool) -> UInt8 {
     if (nullable) return if (readonly) { 6u8 } else { 5u8 };
     return if (readonly) { 4u8 } else { 3u8 };
 }
