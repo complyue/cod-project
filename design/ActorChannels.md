@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 10 · 2026-11-28
+Design and research revision: 11 · 2026-11-28
 
 ## Design authority
+
+At r11 the [transfer dispatch decision](../CHANGELOG.md#h-swarm-transfer-specialization-20261128) confirms static rejection when a provider has no matching transfer handler. The intended declaration is a method specialization dispatched on `swarm type XXX`. P-789 continues actual-swarm ownership and joint placement for the launch. The table below illustrates method selection.
 
 At r10 two [launch examples](#acceptance-scenarios) apply the existing rules for consuming calls, parameter defaults and fresh TLS to the r9 named entry. P-788/P-789 continue. [Scope and continuity](../CHANGELOG.md#k-swarm-launch-preparation-20261128)
 
@@ -96,15 +98,19 @@ A typed `chan` carries **only ordinary regions**. A packet is an ordinary region
 
 The **swarm provider** exposes the operations that transfer ownership to the launched go process and declares which transfers it supports. Both owning launch forms use this interface. The resource’s own contract still determines who can use and release it. Ordinary synchronous owner passing within one go process continues to use the ordinary call rules. Typed chan sends have their own message contract.
 
-**Proposed declaration model.** Publish a finite table of handoff signatures alongside the provider interface. Each supported row names the owned resource, any required backing or capability, any placement relation the provider must satisfy, such as two processes on the same host, and the operation implementing the handoff. An explicit unsupported row can document a known restriction. Only an applicable supported row supplies transfer authority. A provider that lacks a row for a new resource type acquires no permission by default. Conflicting declarations for the same case should be diagnosed when the interface is formed. These sample rows use descriptive names in place of a proposed CoD grammar:
+**Transfer support is checked statically.** The provider publishes the transfers it implements. If an owning argument has no applicable handler in that interface, the compiler rejects the launch at the argument. Omitting a handler suffices to leave that case unsupported. This check applies to both owning parameters of a named entry and the block’s owner list.
 
-| Provider | Resource and required evidence | Route from current holder to recipient | Declaration |
-| --- | --- | --- | --- |
-| LocalProcessPool | Swarm region with relocatable shared-memory backing | Distinct processes on the same host | Supported by `handoff_shared_region` |
-| LocalProcessPool | Exact nominal `IndexFile` handle with a transferable descriptor | Distinct processes on the same host | Supported by `pass_index_file` |
-| ClusterPool | Same `IndexFile` and descriptor | Processes on different hosts | Unsupported |
+The proposed declaration form is a transfer method specialized on the swarm type and the resource it accepts. For example, `swarm type LocalProcessPool` would identify the provider type for dispatch. Its signature identifies the accepted resource and can require particular backing or placement. For known types, ordinary method specificity selects among applicable specializations. An ambiguous best match is a static error. A same-named free method outside the published provider interface supplies no transfer permission. The examples show dispatch outcomes. The exact method head and spelling of its conditions remain open. [Receiver method families](DomainLanguageDesign.md#how-receiver-dispatch-works)
 
-Swarm identity, the resource’s actual owner, and the provider declaration answer separate questions. Two regions with the same roots can have different backing. A matching structural schema proves no shared-memory capability. For a nominal resource, an equally shaped type from another declaration cannot satisfy a row naming the original type. On success the selected operation makes the resource usable at the recipient with one release responsibility. Its declaration alone cannot guarantee successful execution. [Nominal resource identity](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) · [Owning inputs at launch](SymbolicDynamicScope.md#go-process-launch)
+| Swarm type | Owning argument and applicable placement | Result at the launch |
+| --- | --- | --- |
+| `LocalProcessPool` | `part`, a swarm region with relocatable shared-memory backing, between processes on one host | Select the provider’s shared-region transfer specialization. |
+| `LocalProcessPool` | `sink`, an `IndexFile` handle with a transferable descriptor, between processes on one host | Select the provider’s file-descriptor transfer specialization. |
+| `ClusterPool` | The same `sink` for a cross-host launch, with no applicable specialization in this provider | Reject at `sink` during compilation. |
+
+Two separately created swarms of type `LocalProcessPool` can use the same transfer method. A region belonging to the first still cannot be handed to an entry launched in the second. Dispatch identifies an operation. The owning launch also requires the same actual swarm.
+
+Swarm identity, the resource’s actual owner, and the provider declaration answer separate questions. Two regions with the same roots can have different backing. A matching structural schema proves no shared-memory capability. For a nominal resource, an equally shaped type from another declaration cannot satisfy a specialization naming the original type. On success the selected operation makes the resource usable at the recipient with one release responsibility. Its declaration alone cannot guarantee successful execution. [Nominal resource identity](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) · [Owning inputs at launch](SymbolicDynamicScope.md#go-process-launch)
 
 Consider `go on(s) build_index(part, sink, id)`, using the candidate launch spelling. The entry consumes a swarm region and a handle. The compiler checks the provider’s declared support for both owning arguments under one compatible placement. Two individually supported transfers that require incompatible placements cannot justify this launch. On admission the provider must arrange for the same child to receive both owners and maintain the placement conditions through handoff. Recruitment or replacement can change how the provider meets that obligation without changing the call or its types. Temporary lack of capacity for a supported launch is a separate issue. The wait or failure policy and the ownership outcome after an admitted handoff fails remain open.
 
