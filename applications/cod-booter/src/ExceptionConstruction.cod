@@ -38,7 +38,7 @@ func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes i
     names:const NameBindings in B,
                           work:const NameWork in W, arguments:const OperandFacts in A,
                               field_names:const SourceBytes in P,
-                          fields:const PayloadFields in F, field_count:UInt64,
+                          fields:const PayloadFields in F,
                               plans:ExceptionConstructionFacts in C,
                           type:const ExceptionType in T, site:UInt64, tail:UInt64, revision:UInt64,
                               result:ExceptionConstructionResult in R)
@@ -52,6 +52,7 @@ func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes i
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node();
         operator_at <- 0u64; };
     val field <- no_node();
+    val field_count <- intrinsic (len)(fields);
     ref initialized = make FieldReadiness(field_count, false);
     val ready <- 0u64;
     val abrupt <- false;
@@ -72,7 +73,7 @@ func prepare_initializers(source:const SourceBytes in S, nodes:const ExprNodes i
             return reject(result, item, unsupported_constructed_exception());
         field <- select_payload_field(source, syntax_first(nodes, site, assignment.destination),
             syntax_past(nodes, site, assignment.destination),
-                              field_names, fields, field_count);
+                              field_names, fields);
         if (field == no_node()) return reject(result, assignment.destination,
             unknown_exception_field());
         if (initialized[field] && fields[field].readonly)
@@ -137,9 +138,9 @@ export proc check_exception_construction(source:const SourceBytes in S, nodes:co
         return reject(result, site, unsupported_constructed_exception());
     if (schema.imported_header == no_node())
         return prepare_initializers(source, nodes, names, work, arguments, source, fields,
-            schema.count, plans,
+            plans,
                                     type, site, syntax.fields, revision, result);
     return prepare_initializers(source, nodes, names, work, arguments, spellings, fields,
-        schema.count, plans,
+        plans,
                                 type, site, syntax.fields, revision, result)
 }

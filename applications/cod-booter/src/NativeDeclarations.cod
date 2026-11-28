@@ -3325,6 +3325,8 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val adjacent_arrays <- false;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) {
+            # Schema helpers read checked inputs and fill one initialized
+            # product or product array.
             # Name binding receives a parse record and paired writable tables.
             # Operand checking lends the parse record with readonly tables
             # and two writable result arrays separated by input loans. Each
@@ -3332,7 +3334,10 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             # Schema completion writes an enum table. Enum selection updates
             # binding and work tables among readonly schema inputs. Native
             # declaration checking also writes aggregate and supplied views.
-            publication_signature <- (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
+            publication_signature <- (reads_record && readonly_arrays != 0u64 &&
+                ((writable_arrays == 0u64 && writable_records == 1u64) ||
+                 (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
+                (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
                 (adjacent_arrays || (writable_record_array && readonly_bytes))) ||
                 (!reads_record && writable_records == 1u64 &&
                     ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||

@@ -103,9 +103,9 @@ func imported_schema(interfaces:const ModuleInterfaces in I, head:UInt64, spelli
 
 export func select_payload_field(source:const SourceBytes in S, first:UInt64, past:UInt64,
     names:const SourceBytes in N,
-                  fields:const PayloadFields in F, count:UInt64) -> UInt64
+                  fields:const PayloadFields in F) -> UInt64
     where {const owner S, const owner N, const owner F} {
-    for (index in 0u64 .. count) {
+    for (index in 0u64 .. intrinsic (len)(fields)) {
         if (same_bytes(source, first, past, names, fields[index].first,
             fields[index].past)) return index;
     };
@@ -190,8 +190,8 @@ func prepare_caught_field(source:const SourceBytes in S, nodes:const ExprNodes i
     val name_first <- syntax_first(nodes, used, field);
     val name_past <- syntax_past(nodes, used, field);
     val ordinal <- if (schema.imported_header == no_node()) {
-        select_payload_field(source, name_first, name_past, source, fields, schema.count)
-    } else { select_payload_field(source, name_first, name_past, spellings, fields, schema.count) };
+        select_payload_field(source, name_first, name_past, source, fields)
+    } else { select_payload_field(source, name_first, name_past, spellings, fields) };
     if (ordinal == no_node()) return unknown_exception_field();
     uses[at] <- make CaughtField {
         binding <- binding; nominal <- type; ordinal <- ordinal; kind <- fields[ordinal].kind;

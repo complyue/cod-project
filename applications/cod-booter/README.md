@@ -423,7 +423,9 @@ For the deque's push and pop methods, the defining visit records the bound make 
 
 The source checker accepts a workspace record with fixed reference fields for named arrays of finite-bits records. Each projection keeps its own array and element identity and uses the actual owner of the workspace borrow. The enclosing loan and the declared field target independently constrain write access. Indexed access checks the selected backing and index before lending the element. A fixed local reference keeps that selected element, and a whole-record transfer into a writable formal copies the prepared value after the source index succeeds. Both source commands accept `GenericLayouts.cod`.
 
-`ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`. The first remaining source-checking limit in the `ModuleGraph.cod` closure is the imported `find_payload_schema` call in `ExceptionConstruction.cod`.
+`ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`.
+
+The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The `ModuleGraph.cod` closure now reaches a duplicate local binding in `ModuleLowering.cod`.
 
 ### Readonly queries
 
