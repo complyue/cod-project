@@ -10,6 +10,7 @@ using "./ParserStorage.cod" ExprPayload {
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, ScopeSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding,
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
+    ProtectedBlock, CatchClause, CatchHandler, CatchBinding,
     CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
     HereInvocation, HereSupply, HereReceiver, ContinueValue, Formal
 };
@@ -389,6 +390,10 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             Conditional -> true;
             ReturningCondition -> true;
             BlockSyntax -> true;
+            ProtectedBlock -> true;
+            CatchClause -> true;
+            CatchHandler -> true;
+            CatchBinding -> true;
             # The ordinary operand and completion passes already check this
             # invoked scope. Its reached operations stay in the current body.
             ScopeSyntax -> facts[at].kind == void_result();
@@ -483,7 +488,10 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                         (local[definition].bounds <- true):void
                     } else {
                         if (sites[at].category_module == 0u64 && sites[at].category == out_of_memory_identity() &&
-                            sites[at].destination == definition && lexical_array_allocation(names, facts, views, at)) {
+                            lexical_array_allocation(names, facts, views, at)) {
+                            # A local catch can translate the allocation failure
+                            # to a result. Keep the conservative allocation
+                            # category set on the source interface.
                             (local[definition].allocates <- true):void
                         } else { (local[definition].available <- false):void }
                     }

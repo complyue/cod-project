@@ -443,7 +443,7 @@ Both source commands check local workspace products with fixed references to ini
 
 Both source commands check the direct import of `ModuleExports.file_dependency_path` in dependency enumeration. The completed interface carries an independent `UInt64` result and two initialized writable products under one owner role. The result may be a path node or the no-edge sentinel. A completing call can update either output according to the selected parser operation.
 
-In the complete `ModuleGraph.cod` source check, both commands pass dependency enumeration and the whole-row transfers in `copy_publication`. They stop on the unsupported imported signature of `NativeDiagnostics.report_parse_rejection` in the recovered-parse path. Completion of the actual `@followDependency` body remains open.
+In the complete `ModuleGraph.cod` source check, both commands pass the recovered-parse call to `NativeDiagnostics.report_parse_rejection`. They stop at the unsupported imported signature of `ModuleExports.resolve_enum_selections` in `bind_graph_names`. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 
@@ -526,6 +526,8 @@ The two source commands also check direct same-revision calls that mix an initia
 The mixed-loan path also permits a writable array under a declared `const owner`. A callee can update the prepared array's existing elements. Its owner role carries no allocation authority. This covers the supplied-view table in `check_forwarded_here_call`. A linked probe distinguishes failure preparing a later argument from a failure inside the callee after its first write.
 
 Both source commands accept the unchanged `NativeDiagnostics`, including the position writer in the protected body of `write_ordered_reports`.
+
+Both commands also check the direct import of `report_parse_rejection`. Its completed source contract carries the diagnostic handle, ready nominal arrays, readonly frontend result, writable diagnostic runs and the independent `CompilerStatus` result. The body proof uses the existing catch routing for the ordered-report allocations and retains conservative allocation failure evidence for the caller. Normal CLI verification covers source order, diagnostic budgets and recovery when the native provider cannot retain the batch.
 
 ### Imported module-index path loans
 

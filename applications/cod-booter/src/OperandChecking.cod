@@ -3249,6 +3249,7 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
     val handle <- false;
     val array <- false;
     val output <- false;
+    val readonly_array <- false;
     val record <- false;
     val kind <- 0u8;
     val role <- no_node();
@@ -3264,7 +3265,7 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
             (handle <- true):void
         } else {
             if (kind == record_type()) {
-                if (result != builtin_u8() || role >= owners ||
+                if ((result != builtin_u8() && result != enum_type()) || role >= owners ||
                     !checked_readonly_loan_row(contracts[row], kind, role) ||
                     !published_bits_record(contracts, published, row)) return no_node();
                 (record <- true):void
@@ -3279,6 +3280,7 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
                 if (result == sum_type() &&
                     (contracts[row].target_readonly != 1u8 || contracts[row].owner_readonly != 1u8)) return no_node();
                 array <- true;
+                readonly_array <- readonly_array || contracts[row].target_readonly != 0u8;
                 (output <- output || contracts[row].target_readonly == 0u8):void
             } else {
                 if (!source_scalar_value_row(contracts[row], kind) || contracts[row].source_allocates)
@@ -3293,7 +3295,7 @@ func checked_array_procedure_past(contracts:const ModuleInterfaces in I, publish
         }
     };
     if (result == sum_type()) return if (array && !handle && !record && !output) { past } else { no_node() };
-    if (record && (!handle || !output)) return no_node();
+    if (record && (!handle || !output || !readonly_array)) return no_node();
     return if (array && (handle || (output && result == builtin_void()))) { past } else { no_node() }
 }
 
