@@ -2,6 +2,8 @@
 
 ## Design authority
 
+The proposed r230 [check traversal rule](#when-checks-can-share-a-traversal) refines [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) at r229 under P-682/P-683. It preserves per-fact publication, stage selection and the structural restart prohibition, and specifies when independent checks may execute in the same walk. [Proposal and scope](../CHANGELOG.md#h-check-traversal-ownership-20261128)
+
 At r229 [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) continues r228. The [seed switch retirement](../CHANGELOG.md#h-seed-shared-switch-retirement-20261126) makes paired seed-mode results throughout this review historical. Current parser recovery covers the affected command paths. The checked seed’s terminal-body verifier is archived. [Acceptance clarification](../CHANGELOG.md#k-bootstrap-recovery-acceptance-20261127)
 
 At r228 the [indexing terminology](CollectionsAndBuiltinContainers.md#indexing-terminology) names the existing bracket operations. The [D-ARCH-REVIEW](DesignAuthorityRegistry.md#d-arch-review) rules and acceptance at r227 continue.
@@ -646,6 +648,16 @@ Distinct, ordered phases may read the same immutable syntax or control-flow grap
 In the checked C++ seed, `read_effects` subscribes a caller instance to its callee. When the callee’s summary changes, `close_effects` can enqueue that caller and `check_instance` reconstructs its frame from entry. An ignored Boolean result in one conditional arm can thereby cause another walk over the prefix, the sibling arm and a suffix whose incoming facts all stayed the same. The legacy interface let a change to a fact schedule the operation that walked the caller’s body.
 
 For a new design, identify what each pass establishes and when its result is fit for consumption. The counterexample begins when a caller takes a provisional callee summary as input. Narrowing a later wakeup to one branch still leaves that dependency in place. During extraction a caller can record the call and continue reading its own source. The collector can forward a newly discovered callee requirement along recorded call edges. Only the later checking phase can use the completed behavior to discharge obligations at that call. A separate final pass can check the whole solved result before publication. [Completed callee behavior](#consuming-completed-callee-behavior) · [Standing rule](../AGENTS.md#passes-and-dependency-changes)
+
+### When checks can share a traversal
+
+In the seed, booter and production compiler, build each required graph relation once for a revision and interpretation. Keep node and edge identities stable across its consumers. Checks may use a reverse index or an ordered view of those identities. Each check reads its declared completed inputs and owns its result. A mutable cursor, visited set or work list belongs to the invocation of the walker.
+
+Give independently meaningful checks separate phases. Combine their execution only when the code establishes that each check alone would start from the same roots, visit the same nodes and edges in the same order, choose the same branches, and prune or stop under exactly the same conditions on every supported input. Include failure paths and diagnostic limits. The combined execution must also preserve completed-input boundaries, independent enablement, results and diagnostic order. Checks may of course report different findings at a visited node. A passing corpus cannot establish traversal identity.
+
+Enforce the rule through the interface. One driver owns all navigation. At each visit it passes the necessary facts to ordinary, separately defined checking functions. A function can return a finding or write its own result. Its arguments and reachable operations exclude the cursor, work list and any other means to change the walk. Account for captured state and abrupt completion if using a supplied callback. A condition inside a check decides what to record at the current site. A condition that decides whether the check needed to visit the site or one of its successors belongs to that check’s traversal. If the two checks need different such conditions, run them separately on the shared graph.
+
+For example, [W7’s two edge selections](https://github.com/complyue/cod-project/blob/2f95134941350d1ea404b0fae2a969a40eaf87dd/applications/cod-booter/src/ScopedTextChecking.cod#L424-L443) answer different questions about one bound call. Symbol availability follows the visible method family, including unselected overloads, and stops at a supplied contract. The concrete receiver obligation follows the selected method. Keep the call identity and both edge relations available to their respective checks. The booter already [builds one call graph and invokes the same walk separately for different effect origins](https://github.com/complyue/cod-project/blob/2f95134941350d1ea404b0fae2a969a40eaf87dd/applications/cod-booter/src/SourceContracts.cod#L831-L847).
 
 ### When a workqueue is justified
 
