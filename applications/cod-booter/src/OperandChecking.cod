@@ -138,7 +138,8 @@ using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination,
-    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall, CheckedScalarFunctionCall,
+    IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
+    CheckedScalarFunctionCall, CheckedScalarPredicateCall,
     CheckedWriterCall, CheckedSumWriterCall, CheckedArrayProcedureCall, CheckedArrayReaderCall, ImportedProductWriter, CheckedImportedArraySlotCall
 };
 using "./ParserStorage.cod" FormalMode { HandleFormal, ReferenceSlotFormal };
@@ -3773,6 +3774,9 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
             supplied[at] <- make CheckedScalarFunctionCall {};
             if (required == no_node()) { (required <- at):void }
+        } else {
+            # An already-demanded body can use this predicate's completed effects.
+            (supplied[at] <- make CheckedScalarPredicateCall {}):void
         };
         return true
     };

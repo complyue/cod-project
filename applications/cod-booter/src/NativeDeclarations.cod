@@ -1535,6 +1535,7 @@ export data SuppliedView =
     CheckedReadonlyReader { completion:ArrayReadCompletion; numeric_fault:bool; } |
     CheckedLiteralCall {} |
     CheckedScalarFunctionCall {} |
+    CheckedScalarPredicateCall {} |
     CheckedReadonlyCall { sum_loan:bool; } |
     CheckedWriterCall {} |
     CheckedSumWriterCall {} |
@@ -2271,9 +2272,13 @@ export func prepared_scalar_function(views:const SuppliedViews in V, site:UInt64
     return site < intrinsic (len)(views) && (case views[site] of { PreparedScalarFunction -> true; _ -> false })
 }
 
-export func checked_scalar_function_call(views:const SuppliedViews in V, site:UInt64) -> bool
+export func checked_scalar_call(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
-    return site < intrinsic (len)(views) && (case views[site] of { CheckedScalarFunctionCall -> true; _ -> false })
+    return site < intrinsic (len)(views) && (case views[site] of {
+        CheckedScalarFunctionCall -> true;
+        CheckedScalarPredicateCall -> true;
+        _ -> false
+    })
 }
 
 export func prepared_scalar_predicate(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
