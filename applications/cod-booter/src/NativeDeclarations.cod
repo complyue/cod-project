@@ -1890,7 +1890,7 @@ func prepare_array_slot_formal(nodes:const ExprNodes in N, names:const NameBindi
         if (owner_site < used && owner_constraint_syntax(nodes, owner_site) != NotOwnerConstraint) {
             val kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
                 binding.target_type, used, revision, proof);
-            if (kind == 0u8 && slot) {
+            if (kind == 0u8) {
                 ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
                 if (describe_product_array_element(nodes, names, selected, contracts, published, aggregate,
                     binding.target_type, used, revision, element)) {
@@ -3327,6 +3327,8 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val reads_record <- false;
     val readonly_arrays <- 0u64;
     val writable_records <- 0u64;
+    val product_owner <- no_node();
+    val shared_product_owner <- true;
     val writable_enum_array <- false;
     val writable_flag_array <- false;
     val writable_record_array <- false;
@@ -3334,6 +3336,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val readonly_bytes <- false;
     val value_parameters <- false;
     val publication_signature <- false;
+    val indexed_product_outputs <- false;
     val element <- 0u8;
     val previous_writable <- no_node();
     val adjacent_arrays <- false;
@@ -3350,7 +3353,11 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             # declaration checking also writes aggregate and supplied views.
             # Initialization phases fill ready command, graph and flag tables
             # through ordinary loans. Each table was checked independently.
-            publication_signature <- published_result && ((reads_record && readonly_arrays != 0u64 &&
+            # An independent index may accompany two initialized products
+            # under one owner. The result promises no particular field write.
+            indexed_product_outputs <- result_kind == builtin_u64() && readonly_arrays != 0u64 &&
+                !reads_record && writable_arrays == 0u64 && writable_records == 2u64 && shared_product_owner;
+            publication_signature <- indexed_product_outputs || (published_result && ((reads_record && readonly_arrays != 0u64 &&
                 ((writable_arrays == 0u64 && writable_records == 1u64) ||
                  (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
                 (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
@@ -3366,7 +3373,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 (writable_arrays == 1u64 && writable_record_array &&
                     readonly_arrays == 0u64 && writable_records == 0u64 && !reads_record &&
                     first < used && preceding < used && work[first].next == preceding &&
-                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64())));
+                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64()))));
             if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
                 (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
@@ -3403,8 +3410,11 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             } else {
                 if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
                     !checked_bits_record(contracts, published, aggregate, type)) return;
-                if (binding.readonly) { (reads_record <- true):void }
-                else { (writable_records <- writable_records + 1u64):void }
+                if (binding.readonly) { (reads_record <- true):void } else {
+                    if (writable_records == 0u64) { (product_owner <- role):void }
+                    else { (shared_product_owner <- shared_product_owner && product_owner == role):void };
+                    (writable_records <- writable_records + 1u64):void
+                }
             };
         } else { (value_parameters <- true):void };
         preceding <- formal;

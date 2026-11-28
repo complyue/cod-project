@@ -3549,9 +3549,10 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
     val owners <- contracts[header].owner_count;
+    val result <- contracts[header].result_kind;
     if (count < 2u64 || count >= published - header || owners == 0u64 ||
         contracts[header].source_writer != WorkspaceWriter ||
-        (contracts[header].result_kind != builtin_bool() && contracts[header].result_kind != builtin_void()) ||
+        (result != builtin_bool() && result != builtin_void() && result != builtin_u64()) ||
         contracts[header].interface_kind != callable_binding() || contracts[header].callable_kind != CheckedFunction ||
         contracts[header].membership != FixedMethods || contracts[header].native_function != no_node() ||
         contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64 ||

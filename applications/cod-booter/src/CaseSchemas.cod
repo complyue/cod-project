@@ -2253,15 +2253,19 @@ func prepare_indexed_product_copy(nodes:const ExprNodes in N, names:const NameBi
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     ref supplied = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (describe_prepared_bits_element(nodes, names, facts, destination, used, revision,
-        record_type(), target, type) == (NoLexicalArray:LexicalArrayAccess) ||
-        !describe_indexed_case_loan(nodes, names, selected, interfaces, published, input, used,
-            revision, record_type(), ReferenceSlotFormal, source, supplied)) return false;
+        record_type(), target, type) == (NoLexicalArray:LexicalArrayAccess) &&
+        !describe_indexed_case_loan(nodes, names, selected, interfaces, published, destination, used,
+            revision, record_type(), ReferenceFormal, target, type)) return false;
+    val ordinary <- describe_indexed_case_loan(nodes, names, selected, interfaces, published, input, used,
+        revision, record_type(), ReferenceFormal, source, supplied);
+    if (!ordinary && !describe_indexed_case_loan(nodes, names, selected, interfaces, published, input,
+        used, revision, record_type(), ReferenceSlotFormal, source, supplied)) return false;
     val formal <- names[source.array].declaration;
     if (formal >= intrinsic (len)(views) ||
         (case views[formal] of {
             ArraySlotFormal {
                 val slot <-, val element <-, val owner_site <-, val type_module <-, val type_identity <-,
-            } -> !slot || element != ProductArrayElement || owner_site != source.owner_site ||
+            } -> slot == ordinary || element != ProductArrayElement || owner_site != source.owner_site ||
                 type_module != source.array_module || type_identity != source.array_type;
             _ -> true
         }) || type.identity != supplied.identity || type.defining_module != supplied.defining_module ||
@@ -2436,7 +2440,7 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
             IndexedArraySource { val target <-, } -> {
                 product_source <- names[target].declaration;
                 names[target].kind == formal_binding() && product_source < used && (case views[product_source] of {
-                    ArraySlotFormal { val slot <-, val element <-, } -> slot && element == ProductArrayElement;
+                    ArraySlotFormal { val element <-, } -> element == ProductArrayElement;
                     _ -> false
                 })
             };
