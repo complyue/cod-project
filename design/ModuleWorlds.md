@@ -1,10 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 90 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 91 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
 
-At r90 the [generic ADT terminology revision](../CHANGELOG.md#h-type-family-term-reservation-20261127) continues the r89 D-15/P-208 identity and re-export rules for [member types](DomainLanguageDesign.md#generic-adts-and-member-types).
+At r91 the [type family and mixin decision](../CHANGELOG.md#h-type-families-and-static-mixin-params-20261127) continues the r90 D-15/P-208 identity and re-export rules for [member types](DomainLanguageDesign.md#type-families-and-member-types). [Static module parameters](#static-module-parameters-for-mixin) record the preferred direction for extending the receiving-context template in D-10-MIXIN/P-102. Its detailed design and implementation remain deferred.
 
 At r88 the [call-form decision](../CHANGELOG.md#h-dispatch-by-call-form-20261127) refines when lookup reaches the visible free family. The r87 identities, publication and extension grants continue under [D-15](DesignAuthorityRegistry.md#d-15).
 
@@ -144,7 +144,7 @@ Each receiver integrates exported information for identical identities in its ow
 
 ## Identity records, aliases and publication
 
-For a [generic ADT](DomainLanguageDesign.md#generic-adts-and-member-types), resolve the nominal type constructor and its ordered type arguments through their bindings. Two modules that declare their own `deque[T]` define distinct type constructors. A module that re-exports either declaration under a new name preserves its identity and the identities of its member types. A receiving world's selection of methods can change which operations are available on a member type while preserving its identity.
+For a [type family](DomainLanguageDesign.md#type-families-and-member-types), resolve the family and its ordered type arguments through their bindings. Two modules that declare their own `deque[T]` define distinct families. A module that re-exports either declaration under a new name preserves its identity and the identities of its member types. A receiving world's selection of methods can change which operations are available on a member type while preserving its identity.
 
 Identity is the key of semantic information. A module can have several local aliases and several public aliases for that identity. Aliases provide access; they neither own separate copies of the method set nor redefine the object. Selecting more information for the same identity merges into the receiving world's record, so every alias of that identity sees the locally combined information (H-234/H-248).
 
@@ -608,6 +608,14 @@ Four obligations remain even with one pool:
 For example, a receiver may use A, define local C, and declare type disjoint A, C. Keeping A's source association is compatible with that rule only if the receiver's checking environment also sees the local record. An imported alias and a source-preserved alias of one nominal identity cannot be used to evade an applicable local constraint. This preserves source independence without confusing a pool reference with the complete validation context.
 
 **Acceptance:** many local/imported types sharing a pool; using without source mutation; imports retaining upstream public records; local constraints mentioning source-preserved types; aliases preserving identity and applicable rules; n-ary publication without unrelated private leakage; reuse of endpoint ancestry without path snapshots; stable frozen dependencies and ordinary lifetime/relocation constraints. No per-runtime-value pool pointer, new public ABI, arbitrary cross-world editor or runtime mutation is selected. The full representation/value path and finite generic/cyclic proof procedures remain pending; compiler support is absent.
+
+## Static module parameters for mixin
+
+The preferred direction for type-level functions and broader type-level programming is to extend `mixin`. A source module would declare **static module parameters** for type- or kind-level entities. The author using the mixin would supply concrete arguments at the mixin site. The existing template model checks the selected definition as if written in the receiving context. [Body mixin contract](SymbolicDynamicScope.md#import-time-alias-translation) · [Charter §5](RegionalSemanticPlatformCharter.md#5-kindtypevalue-regions-与阶段化计算)
+
+For example, consider static inputs `F : Type → Type` and `A : Type` and a result defined as `F[A]`. Supplying `F = deque` and `A = UInt64` denotes the existing member type `deque[UInt64]`. A different template could take a kind `K` itself and a parameter `X : K`. Supplying `K = Type → Type` would allow `X = deque`. These are examples in mathematical notation. They distinguish supplying a type constructor of known kind from supplying the kind itself.
+
+Returning an existing type and declaring a fresh nominal type inside a template have different identity consequences. An open design question is what happens when two sites supply identical arguments to a template that declares a new type and then exchange values of its result. Parameter syntax, result publication, the operations admitted in type-level computations and their evaluation rules also need a concrete workload and design review. The existing seed and booter delivery scope continues. [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
 
 ## Vocabulary modules establish shared identities
 
