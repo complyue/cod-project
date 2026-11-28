@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Target heavy tasks and launch go processes with fresh TLS
+
+<a id="h-heavy-tasks-and-go-process-20261128"></a>
+**H-HEAVY-TASKS-AND-GO-PROCESS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) selects [charter §1 principle 8](design/RegionalSemanticPlatformCharter.md#核心原则): optimize engineering efficiency when one task draws on multiple threads, OS processes or cluster machines. A single thread serving many light tasks, such as API forwarding, is the contrasting workload. Traditional coroutines are outside CoD’s design. [D-10 r281→282](design/SymbolicDynamicScope.md#go-process-launch) specifies `go free_proc(...)` and `go { own region r <-, own handle h <- } {{ ... }}`. Each launches one dedicated OS thread with fresh initial TLS and no inherited dynamically scoped effects. [D-32 r2→3](design/ActorChannels.md#confirmed-basis) and D-12 r37→38 continue the [prior 1:1 Actor and typed chan boundary](https://github.com/complyue/cod-project/blob/7499c9d21236774f23fb5ea48645a2c3305a29ca/design/SymbolicDynamicScope.md#actor-concurrency-direction), and settle [initial binding inheritance](https://github.com/complyue/cod-project/blob/7499c9d21236774f23fb5ea48645a2c3305a29ca/design/ActorChannels.md#L384-L387). [D-20-BOOTSTRAP r55→56](applications/cod-booter/README.md#trusted-source-and-the-seed) excludes Actor use from booter source and Actor implementation from the seed. Failed-launch ownership and shutdown remain open. P-642/P-702 continued, P-788 confirmed, registry r1385→1386.
+
 ## 2026-11-28 — Apply type-level field projections in prefix form
 
 <a id="h-type-level-prefix-projections-20261128"></a>

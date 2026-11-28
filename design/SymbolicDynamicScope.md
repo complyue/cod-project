@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 281 · Recorded: 2026-11-27 · Phase: language/application co-design.
+Design revision: 282 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r282 the [heavy-task and go process decision](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) establishes the two launch forms and the effects boundary at child entry. D-10-ACTOR-CHAN/P-702 continues the dedicated thread and typed chan contract. P-788 links the production launch to charter §1.
 
 At r281 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to labeled here protocols and receiving headers. D-10-SEMICOLON-UX/P-570–P-572 continues to govern expression and statement boundaries.
 
@@ -2386,13 +2388,13 @@ A proposed lowering sequence is:
 
 A simple evaluator of the same whole-program-checked representation can validate semantics before optimized lowering. This is a validation candidate, not a separate-compilation execution model. Collection and layout make accesses direct; optimization can then remove accesses or save/restore work. Neither guarantees every access becomes a register or a single instruction. [LLVM's TLS reference](https://llvm.org/docs/LangRef.html#thread-local-storage-models) distinguishes platform/linkage-dependent access models. [LLVM's LTO design](https://llvm.org/docs/LinkTimeOptimization.html) explains the importance of definitions, uses and visibility for intermodule optimization; it supplies no automatic implementation of CoD's scope semantics.
 
-Each Actor enters its dedicated OS thread with its own dynamic context. Foreign entry and reentrant callbacks must preserve that Actor's identity, binding context and live owners. Native TLS layout and foreign-entry ABI remain implementation work; they do not introduce shared-worker Actors or migration between OS threads. An Actor's entry requirements and module initialization/shutdown responsibilities need their own contract.
+Each Actor enters its dedicated OS thread with [fresh initial TLS](#go-process-launch). A foreign call that calls back into CoD on the same Actor preserves its binding context and live owners. Native TLS layout, foreign-entry ABI and module initialization and shutdown responsibilities remain separate design questions.
 
 An on-demand compilation that changes the program's symbol set needs a compatible layout or a new layout/version with the affected code and contexts rebuilt/rebound at an appropriate boundary. Old code cannot keep using offsets whose meaning has changed. Cache identity must include the relevant program/type/layout dependencies; semantic symbol identity must remain independent of the current offset. This does not choose JIT or replace the existing build-and-run driver.
 
 ## Actor concurrency direction
 
-**CoD concurrency uses Actors communicating through statically typed chans.** Actor and chan are the language terms; native OS processes and threads describe implementation resources. Each Actor executes on one dedicated OS thread with its own execution stack and isolated TLS bindings. The mapping is one Actor to one OS thread. Several Actors may occupy one OS process, but do not multiplex onto a shared worker or migrate between OS threads. Stack capacity and native ABI are not selected by this mapping.
+**CoD concurrency uses Actors communicating through statically typed chans.** A *go process* is the independently running execution started by `go`. It gives an Actor its own stack, TLS and one dedicated OS thread for its lifetime. Several can run within one OS process. Launch is local. Distributing parts of a heavy task to other OS processes or physical machines uses explicit placement and communication. The [charter](RegionalSemanticPlatformCharter.md#核心原则) excludes a traditional coroutine mechanism.
 
 [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) supplies this scoped contract under [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan), continuing H-151/H-152's Actor direction and message type parameter. A chan has a statically checked message type. Its sending and receiving ends can be modeled independently. Their formal producer/transformer/consumer types will follow support for higher-kinded type synonyms. The concrete signatures, receiver count and ownership of endpoint references remain open. An unchecked wire representation or native address is not a well-typed CoD message.
 
@@ -2403,6 +2405,28 @@ An application reply is another message, with its own delivery risk. Local accep
 H-180 separates message transfer from constructing a region-backed effect resource and exposing it throughout a dynamic scope. They share regional storage, not an ownership transition or captured execution context. Packet construction and sending need no dynamic-resource installation; resource shadowing is not packet transfer.
 
 A candidate regional message carries a user-defined root, inputs and a typed description of computation. The receiver supplies its admitted interpretation and dynamic resources. Two Actors could handle the same request type under simulation or live-service bindings. The charter's program/execution separation (§3.2) and environment-specific effects (§6.1) motivate this candidate; the wire packet/entry protocol in H-06/C-08 retains its separate scope. [Network and cluster workloads](ActorChannels.md) examine nedh and sedh without adopting their dynamic typing or source-evaluation protocol.
+
+### Go process launch
+
+`go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. CoD specifies one new OS thread per successful launch. [Go language specification](https://go.dev/ref/spec#Go_statements)
+
+The `go free_proc(...)` form starts a named free procedure. The block form explicitly hands owners to the new body. Both run independently of the launching scope.
+
+```cod
+go index_partition(partition_id)
+
+go { own region r <-, own handle h <- } {{
+    index_region(r, h)
+}}
+```
+
+In the block form, `r` and `h` are existing owners in the launcher. On successful handoff the child owns those resources and the launcher's consumed names are unavailable. Each resource carries its existing release responsibility. The double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback. Cross-thread use of a native handle still follows its provider contract.
+
+**The effects boundary is at `go`.** The new thread starts with its initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
+
+For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go index_partition(n)`. The entry receives the ordinary value 7. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the owner-handoff form.
+
+Thread creation can fail. The launch failure channel and the exact point at which each owner is consumed on that path remain open. Any eventual rule must account for each owner's release responsibility. Joining, cancellation, and module startup and shutdown have separate contracts to settle. The selected launch belongs to `e-wrks/cod`. Booter source does not use the Actor model and the seed does not implement it. [Bootstrap scope](../applications/cod-booter/README.md#trusted-source-and-the-seed)
 
 ### Region holding and transfer
 

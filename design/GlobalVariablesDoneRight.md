@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 37 · 2026-11-24
+Design revision 38 · 2026-11-28
 
 ## Design authority
+
+At r38 the [go process decision](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) makes `go` the effects boundary for both Actor entry forms. D-12/P-702 continues r37 symbol identity, owner lifetime and the typed chan scope.
 
 At r37 the [Actor readiness review](#actor-implementation-readiness) applies P-711/P-712 to the two endpoint roles and the queued AKCP path. Its acceptance cases cover a slow receiver and loss within a multi-record region. [Decision](../CHANGELOG.md#h-actor-region-transport-and-chan-ends-20261124) · [Transport and endpoints](ActorChannels.md#regional-transport-over-akcp)
 
@@ -64,7 +66,7 @@ H-567/H-568 makes operation responsibility explicit: CoD has no C++-style object
 | Each module's dedicated world copy | Types, functions/procedures, overloaded methods, module bindings and related semantic information/values. A module explicitly exports what receivers may integrate. Information about identical imported identities merges in the receiver's own world; source worlds remain independent. |
 | Each Actor's typed dynamic-binding collection | Typed symbolic bindings. Bits payloads live directly in TLS; non-bits object references point into regions supplied by region symbols and retain their lifetime dependencies. Symbol identity S and declared type identity T remain distinct; a compatible value may originate from another module-world copy without importing that world into TLS. |
 
-Each Actor's dedicated OS thread supplies its isolated native TLS storage. Shared symbol identities do not share current bindings between Actors. The 1:1 execution mapping does not determine module initialization or shutdown ownership.
+Each go process starts on a new dedicated OS thread with fresh initial TLS. A parent installation of a symbol supplies no binding to the child, even when both select the same symbol identity. The child can install its own value. Module initialization and shutdown ownership remain separate. [Go process launch](SymbolicDynamicScope.md#go-process-launch)
 
 The worlds do not model the same set of entities. A type or callable in a module world is distinct from a typed symbolic binding. Symbol identity, type identity, the value's identity/address and its originating world are separate facts. Different local names for the same symbol reach the same TLS entry; different symbol identities do not collapse because their names match.
 
@@ -144,14 +146,14 @@ The execution mapping is settled: one Actor runs on one dedicated OS thread with
 | AKCP over UDP for remote regions | Admit a complete validated region to the receiver. Account for incomplete regions and apply backpressure as assembly or ready queues consume capacity. |
 | Fire-and-forget sending except for qualifying systemic faults | Ordinary loss needs runtime disposal, not a delivery receipt. Fault classification and its owner postcondition remain explicit design questions. |
 | Existing region and reference contracts | The handoff must preserve graph identity/sharing, actual owners, source consumption and valid access through every outcome. |
-| Scoped here and non-storable proc definitions | An Actor entry cannot be a queued escaping here body or ordinary proc value. Receiver-selected work needs its own admitted entry and resource contract. |
+| Scoped here and non-storable proc definitions | The named launch enters a free procedure. The block launch has its own body and transferred owners. Ordinary synchronous here calls still use their defining activation. |
 | Ordinary cleanup and exception contracts | Actor termination, waiting operations and native faults need defined integration; existing synchronous cleanup is not an asynchronous cancellation protocol. |
 
 ### Proposed first executable milestone
 
 A candidate first milestone uses two Actors in one native OS process, with one dedicated OS thread for each Actor. It must demonstrate isolated bindings and the selected typed-chan owner transitions. Queueing, receiving, waiting and shutdown still need their own contract. The 1:1 mapping does not select queue order, capacities or a global serial-handler policy.
 
-Use one declared regional work-package protocol and receiver entry bodies whose input/effect requirements can be checked. A receiving Actor invokes its own implementation under the required live owners. Runtime envelope bookkeeping remains separate from the user region; it cannot grant user records physical cross-region pointers. Concrete entry syntax, endpoint carriers and envelope layout remain open.
+Use one declared regional work-package protocol and receiver entry bodies whose input and effect requirements can be checked. A receiving Actor invokes its own implementation under the required live owners. Use the [two local launch forms](SymbolicDynamicScope.md#go-process-launch) when starting a new go process. Endpoint carriers and the wire envelope remain open. Runtime envelope bookkeeping grants no user record a direct pointer into another region.
 
 Exclusive whole-region handoff is a useful first candidate because it preserves internal sharing without sender mutation after completed handoff. In one address space, transferring system responsibility need not move payload bytes. Wire transport has separate byte, validation and compatibility costs. The [holding review](GraphGrainedMemoryManagement.md#actor-holding-and-transfer-review) compares the lifetime obligations without selecting the system-fault outcome.
 

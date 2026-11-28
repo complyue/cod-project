@@ -1,10 +1,12 @@
 # CoD booter: a compiler application written in CoD
 
-Roadmap revision: 55 · Recorded: 2026-11-28 · Phase: initial seed delivery through alternating booter and seed development.
+Roadmap revision: 56 · Recorded: 2026-11-28 · Phase: initial seed delivery through alternating booter and seed development.
 
 **Compiler design target.** On the command line, `cod` (Compile on Demand) compiles the entry for the host and executes it immediately, leaving no user-facing executable. The planned production command `cfe` (Compile for Ever) builds optimized executables for the host or a supported cross target and saves them for later use. The booter provides one practical code-generation mode. Both bootstrap compilers prioritize Go-like compile speed with moderate runtime performance. User-selectable performance options belong to `cfe`. **The seed’s default bootstrap build produces and keeps the `cod-booter` binary.** [Compiler modes and release milestones](docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
 ## Design authority
+
+At r56 the [Actor scope decision](../../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128) assigns `go` and the Actor model to the production language. D-20-BOOTSTRAP/P-642 continues r55's booter-driven seed scope.
 
 At r55 the [static mixin scope decision](../../CHANGELOG.md#h-static-mixin-bootstrap-scope-20261128) locates type-level programming in the production design. D-20-BOOTSTRAP/P-642 continues r54 support for ordinary type families used by the booter.
 
@@ -133,6 +135,8 @@ The three [compiler commands](src/ObjectCompiler.cod) lend one `GraphProgress` p
 The selected name for the C++ build output is `bin/cod-seed` (`bin/cod-seed.exe` on Windows). That compiler translates `applications/cod-booter/src/__main__.cod` to build the single `cod-booter` executable. Its launcher dispatches compilation, declaration checking and provider generation to three procedures in that entry module. The bootstrap commands continue to accept explicit source paths. [Implementation and cutover](../../design/ImplementationArchitecture.md#naming-the-bootstrap-executables-and-source-entry)
 
 ### Trusted source and the seed
+
+Booter source does not use the Actor model. The seed does not implement Actors or `go`. The two launch forms and fresh-TLS effects boundary are a production language design for `e-wrks/cod`. [Go process launch](../../design/SymbolicDynamicScope.md#go-process-launch)
 
 Booter source uses ordinary `using`, `import`, and concrete applications of type families such as `deque[UInt64]`. It uses neither `mixin` nor type-level programs. Seed support for mixin instantiation, quoted type-level source, or its evaluation is outside the bootstrap requirements. [Production design for static mixin parameters](../../design/ModuleWorlds.md#static-module-parameters-for-mixin)
 
