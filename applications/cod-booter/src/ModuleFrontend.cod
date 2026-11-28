@@ -695,7 +695,8 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; fixed_borrow <- false; signature <- false; body <- false;
+        slot_body <- false; fixed_borrow <- false; requires_byte_completion <- false;
+        signature <- false; body <- false;
     });
     ref products = make Products(0u64, make Product {
         module <- 0u64; declaration <- no_node(); arguments <- no_node(); arity <- 0u64;
@@ -721,7 +722,8 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; fixed_borrow <- false; signature <- false; body <- false;
+        slot_body <- false; fixed_borrow <- false; requires_byte_completion <- false;
+        signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructions = make ExceptionConstructionFacts(0u64, make NoExceptionConstruction {});

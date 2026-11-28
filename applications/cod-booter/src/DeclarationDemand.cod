@@ -1,3 +1,4 @@
+using "./Deque.cod" { deque, push_back, pop_back };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause, omits_callable_result,
     DirectCallSites, inspect_invocation, InvocationSyntax { InvalidCallSyntax, OrdinaryInvocation, EffectfulInvocation },
@@ -41,6 +42,7 @@ export data DeclarationDemand {
     mixed_aggregate_loan:bool,
     slot_body:bool,
     fixed_borrow:bool,
+    requires_byte_completion:bool,
     signature:bool,
     body:bool,
 }
@@ -204,9 +206,9 @@ func require_transfer_signatures(links:const NameWork in W, demand:DeclarationDe
 }
 
 func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindings in B,
-    links:const NameWork in W, views:const SuppliedViews in V, demand:DeclarationDemands in D,
+    links:const NameWork in W, demand:DeclarationDemands in D,
     scope:UInt64, revision:UInt64, used:UInt64, count:UInt64 in Q, receipt_count:UInt64 in R,
-    prove_loans:bool) -> UInt64 where {const owner N, const owner B, const owner W, const owner V,
+    prove_loans:bool) -> UInt64 where {const owner N, const owner B, const owner W,
         owner D, owner Q, owner R} {
     ref sites = make CallableSites {
         signature <- no_node(); body <- no_node(); function_form <- false;
@@ -214,7 +216,6 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
     val call <- demand[scope].first_call;
     val definition <- no_node();
     val form <- CEntry;
-    val byte_caller <- prepared_byte_function(views, scope, false);
     for (unused in 0u64 .. used) {
         if (call == no_node()) return no_node();
         definition <- demand[call].callee;
@@ -229,7 +230,6 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
             if ((demand[call].product_body_dependency || form == LexicalCallable ||
-                (byte_caller && prepared_byte_function(views, definition, false)) ||
                 (form == ModuleCallable && sites.function_form && links[definition].next_method == no_node() &&
                     names[definition].declaration == definition && links[definition].active == no_node() &&
                     omits_callable_result(nodes, revision, used, sites.signature))) &&
@@ -238,6 +238,39 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         (call <- demand[call].next_call):void
     };
     return call
+}
+
+# The enum interface still consumes the restricted byte completion.
+# Follow its bound source edges without demanding that proof of unrelated Bool readers.
+func require_byte_completions(views:const SuppliedViews in V, demand:DeclarationDemands in D,
+    used:UInt64, count:UInt64 in Q) -> UInt64 where {const owner V, owner D, owner Q} {
+    ref pending = make deque[UInt64]();
+    for (definition in 0u64 .. used) {
+        if (prepared_byte_function(views, definition, true)) {
+            demand[definition].requires_byte_completion <- true;
+            push_back(pending, definition)
+        }
+    };
+    val call <- no_node();
+    val definition <- no_node();
+    # One step takes a pending definition or advances a bound call edge.
+    for (step in 0u64 .. used + used) {
+        if (call == no_node()) {
+            case pop_back(pending) of {
+                (null) -> { return no_node(); };
+                (ref caller:UInt64 in here) -> { (call <- demand[caller].first_call):void; };
+            }
+        } else {
+            definition <- demand[call].callee;
+            if (prepared_byte_function(views, definition, false) && !demand[definition].requires_byte_completion) {
+                if (!require_body(demand, definition, count, used, true)) return call;
+                demand[definition].requires_byte_completion <- true;
+                push_back(pending, definition)
+            };
+            (call <- demand[call].next_call):void
+        }
+    };
+    return no_node()
 }
 
 export func discover_declaration_demand(
@@ -463,10 +496,11 @@ export func discover_declaration_demand(
     };
     # Reached bodies can forward a loan or determine allocation operands.
     # Check them before accepting the receiving body's contract.
-    val failed <- no_node();
+    val failed <- require_byte_completions(views, demand, used, count);
+    if (failed != no_node()) { problem <- failed; return false; };
     for (item in 0u64 .. used) {
         if (item < receipt_count) {
-            failed <- require_called_contracts(nodes, names, links, views, demand, demand[item].receipt_pending, revision,
+            failed <- require_called_contracts(nodes, names, links, demand, demand[item].receipt_pending, revision,
                 used, count, receipt_count, true);
             if (failed != no_node()) {
                 problem <- failed;
@@ -476,7 +510,7 @@ export func discover_declaration_demand(
     };
     for (item in 0u64 .. used) {
         if (item >= count) return true;
-        failed <- require_called_contracts(nodes, names, links, views, demand, demand[item].pending, revision, used,
+        failed <- require_called_contracts(nodes, names, links, demand, demand[item].pending, revision, used,
             count, receipt_count, false);
         if (failed != no_node()) {
             problem <- failed;

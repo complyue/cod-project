@@ -807,11 +807,17 @@ func supports_immediate_numeric_exit(nodes:const ExprNodes in N, names:const Nam
     return false
 }
 
+func requires_byte_completion(views:const SuppliedViews in V, demand:const DeclarationDemands in D,
+    definition:UInt64) -> bool where {const owner V, const owner D} {
+    return if (intrinsic (len)(demand) == 0u64) { prepared_byte_function(views, definition, false) }
+        else { definition < intrinsic (len)(demand) && demand[definition].requires_byte_completion }
+}
+
 func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                  facts:const OperandFacts in F, views:const SuppliedViews in H,
-                 constructions:const ExceptionConstructionFacts in E,
+                 demand:const DeclarationDemands in D, constructions:const ExceptionConstructionFacts in E,
                  sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
-    where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner E, owner X} {
+    where {const owner N, const owner B, const owner L, const owner F, const owner H, const owner D, const owner E, owner X} {
     if (sites[at].event == skipped_operand()) {
         sites[at].can_continue <- 0u8;
         return 0u8;
@@ -909,8 +915,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
             return unproved_deferred_error();
         val declaration <- sites[facts[at].call_definition].throws_clause;
         val definition <- facts[at].call_definition;
-        if (prepared_byte_function(views, definition, false) &&
-            (prepared_byte_function(views, enclosing_callable(nodes, names, names[at].scope), false) ||
+        if (requires_byte_completion(views, demand, definition) &&
+            (requires_byte_completion(views, demand, enclosing_callable(nodes, names, names[at].scope)) ||
              prepared_byte_function(views, definition, true))) {
             if (definition >= at || declaration != no_node() ||
                 sites[definition].array_read_completion == NoArrayRead) return unproved_byte_completion();
@@ -988,9 +994,9 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
 
 func record_array_read_completion(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L, facts:const OperandFacts in F, views:const SuppliedViews in V,
-    sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
-    where {const owner N, const owner B, const owner L, const owner F, const owner V, owner X} {
-    if (prepared_byte_function(views, at, false)) {
+    demand:const DeclarationDemands in D, sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner L, const owner F, const owner V, const owner D, owner X} {
+    if (requires_byte_completion(views, demand, at)) {
         if (can_miss_return(nodes, facts, sites, at, revision, used)) return unproved_byte_completion();
         if (sites[at].array_read_completion == NoArrayRead) {
             (sites[at].array_read_completion <- CheckedArrayRead):void
@@ -1000,7 +1006,7 @@ func record_array_read_completion(nodes:const ExprNodes in N, names:const NameBi
     val event <- sites[at].event;
     if (event == skipped_operand() || names[at].scope == no_node()) return 0u8;
     val definition <- enclosing_callable(nodes, names, names[at].scope);
-    if (!prepared_byte_function(views, definition, false)) return 0u8;
+    if (!requires_byte_completion(views, demand, definition)) return 0u8;
     if (allocated_source_array(facts, at)) return unproved_byte_completion();
     val failed <- event == possible_failure() || event == definite_failure();
     if (!failed && !can_continue(sites, at)) return 0u8;
@@ -1453,10 +1459,10 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         if (needs_body_check(demand, at)) {
             if (at < intrinsic (len)(demand) && demand[at].slot_body) { (slot_bodies <- true):void };
             report.diagnostic <- check_event(
-                nodes, names, links, facts, views, constructions, sites, at, tree.used, tree.revision);
+                nodes, names, links, facts, views, demand, constructions, sites, at, tree.used, tree.revision);
             if (report.diagnostic == 0u8) {
                 report.diagnostic <- record_array_read_completion(nodes, names, links, facts, views,
-                    sites, at, tree.used, tree.revision)
+                    demand, sites, at, tree.used, tree.revision)
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };

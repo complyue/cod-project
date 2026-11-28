@@ -2860,7 +2860,11 @@ func prepare_readonly_query(nodes:const ExprNodes in N, names:const NameBindings
 export func prepared_readonly_query(views:const SuppliedViews in V, site:UInt64) -> bool
     where {const owner V} {
     return site < intrinsic (len)(views) &&
-        (case views[site] of { PreparedReadonlyQuery -> true; _ -> false })
+        (case views[site] of {
+            PreparedReadonlyQuery -> true;
+            PreparedByteFunction { val enum_result <-, } -> !enum_result;
+            _ -> false
+        })
 }
 
 export func prepared_array_procedure(views:const SuppliedViews in V, site:UInt64) -> bool

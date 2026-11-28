@@ -700,6 +700,8 @@ Prove both the `UInt64` index and the `UInt8` element against the same defining 
 
 Check each actual in order before entering the callee. Preserve the declared array identity, owner role and access through the call to the private helper. Preserve the defining enum identity at the imported return. A read that executes can raise the ordinary unchecked bounds error. Route that possibility with the other proved outcomes through guards, calls, catches and cleanup. A skipped operand contributes no executed read. Earlier argument failure prevents callee entry. If the checked source interface cannot carry the required evidence, diagnose the unsupported call before publication.
 
+The declaration-demand pass follows the bound byte-reader dependencies of the enum classifier that needs this interface. Independent Boolean readers with the same input signature use the closed source-function analysis. For example, `ProviderNames.valid_identifier` can call `ascii_letter` with a byte selected from its loan. Completion accounts for the index read before entering the scalar helper. A skip or failure while preparing the operand contributes no helper effect. A renamed import of a published Boolean reader still checks the exact array identity and owner against its defining interface.
+
 Verify a direct byte read and the real classifier and resolver through declaration checking and provider generation. Include mismatched array identities, index kinds and result enums, malformed parameter evidence, a failure while computing an index or a later argument, and preserved artifacts. Product projections, sum construction and executable indexing have separate proofs.
 
 ### Checking the native package probe
