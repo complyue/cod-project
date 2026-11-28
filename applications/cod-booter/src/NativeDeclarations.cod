@@ -2939,6 +2939,25 @@ func aggregate_writer_loan(nodes:const ExprNodes in N, names:const NameBindings 
     return checked_bits_sum(contracts, published, aggregate, type)
 }
 
+func readonly_array_writer_input(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, formal:UInt64, owner_site:UInt64, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    val marker <- readonly_formal_marker(nodes, names, formal, owner_site, used, revision);
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    if (marker >= used ||
+        !describe_type(nodes, names, selected, marker, 0u64, revision, used, type)) return false;
+    if (type.kind == sum_type()) return checked_bits_sum(contracts, published, aggregate, type);
+    if (type.kind != record_type()) return false;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= used) return false;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+    };
+    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate
+}
+
 # An exported product writer with only one owner has a single initialized
 # writable output followed by independent scalar inputs.
 func prepare_published_product_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -3038,8 +3057,8 @@ func prepare_aggregate_writer(nodes:const ExprNodes in N, names:const NameBindin
         for (unused in 0u64 .. used) {
             if (parameter >= used) return;
             if (work[parameter].next == no_node()) {
-                if (aggregate_writer_loan(nodes, names, selected, contracts, published, aggregate,
-                    parameter, payload_owner, sum_type(), true, used, revision)) {
+                if (readonly_array_writer_input(nodes, names, selected, contracts, published, aggregate,
+                    parameter, payload_owner, used, revision)) {
                     (views[at] <- make PreparedAggregateWriter {}):void
                 };
                 return

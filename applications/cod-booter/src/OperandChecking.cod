@@ -3335,7 +3335,7 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
     return past
 }
 
-func checked_scalar_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
+func checked_record_writer_past(contracts:const ModuleInterfaces in I, published:UInt64, header:UInt64)
     -> UInt64 where {const owner I} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
@@ -3350,15 +3350,30 @@ func checked_scalar_writer_past(contracts:const ModuleInterfaces in I, published
         contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead)
         return no_node();
     val array <- header + 1u64;
-    val record <- header + 2u64;
-    if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 0u8) ||
-        !source_aggregate_formal(contracts, record, record_type(), 1u64, 0u8) ||
+    if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 0u8)) return no_node();
+    val past <- header + 1u64 + count;
+    val payload <- past - 1u64;
+    val second <- array + 1u64;
+    val kind <- 0u8;
+    if (count >= 3u64 && source_aggregate_formal(contracts, payload, record_type(), 1u64, 1u8)) {
+        val storage <- published_record_array_storage(contracts, published,
+            contracts[array].type_module, contracts[array].type_identity);
+        if ((storage != CLayoutBitsRecord && storage != CoDBitsAggregate) ||
+            !published_bits_record(contracts, published, payload) ||
+            !source_aggregate_formal(contracts, second, builtin_u64(), no_node(), 0u8)) return no_node();
+        for (row in second + 1u64 .. payload) {
+            kind <- contracts[row].value_kind;
+            if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
+                return no_node()
+        };
+        return past
+    };
+    val record <- second;
+    if (!source_aggregate_formal(contracts, record, record_type(), 1u64, 0u8) ||
         !published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity) ||
         contracts[record].type_module != contracts[header].defining_module ||
         checked_aggregate_storage(contracts, published, contracts[record].type_module,
             contracts[record].type_identity, record_type()) != CLayoutBitsRecord) return no_node();
-    val past <- header + 1u64 + count;
-    val kind <- 0u8;
     for (row in record + 1u64 .. past) {
         kind <- contracts[row].value_kind;
         if (!source_call_scalar(kind) || !source_aggregate_formal(contracts, row, kind, no_node(), 0u8))
@@ -3882,7 +3897,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         val has_payload <- links[site].selected_aggregate_writer == header;
         val only_array_output <- has_payload && contracts[header].owner_count == 2u64;
         val past <- if (has_payload) { header + 1u64 + contracts[header].entry_count } else {
-            checked_scalar_writer_past(contracts, interface_count, header)
+            checked_record_writer_past(contracts, interface_count, header)
         };
         if (obligation || past == no_node() || selected[site].dependency_module != module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
@@ -3891,22 +3906,33 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
+        val readonly_record <- !has_payload && contracts[past - 1u64].value_kind == record_type() &&
+            contracts[past - 1u64].target_readonly == 1u8;
         if (!only_array_output) {
-            ref first = make UInt64 { no_node() };
-            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
-                return operand_problem(report, at, invalid_operand_tree());
-            prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
-                aggregate, cases, links[first].next, used, revision, record_type(), true)
+            if (readonly_record) {
+                prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
+                    aggregate, cases, call.arguments, used, revision, record_type(), false)
+            } else {
+                ref first = make UInt64 { no_node() };
+                if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
+                    return operand_problem(report, at, invalid_operand_tree());
+                prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
+                    aggregate, cases, links[first].next, used, revision, record_type(), true)
+            }
         };
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
         if (only_array_output) {
-            supplied[at] <- make CheckedSumWriterCall {};
-            if (required == no_node()) { (required <- at):void }
+            (supplied[at] <- make CheckedSumWriterCall {}):void
         } else {
-            (supplied[at] <- make CheckedWriterCall {}):void
+            if (readonly_record) {
+                (supplied[at] <- make CheckedArrayCall { allocates <- false }):void
+            } else {
+                (supplied[at] <- make CheckedWriterCall {}):void
+            }
         };
+        if ((only_array_output || readonly_record) && required == no_node()) { (required <- at):void };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ArrayInspector) {
