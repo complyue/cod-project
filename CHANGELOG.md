@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Reserve the term type family for type-indexed definitions
+
+<a id="h-type-family-term-reservation-20261127"></a>
+**H-TYPE-FAMILY-TERM-RESERVATION-20261127.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) asked to keep the Haskell sense of *type family* available if CoD could support an analogous mechanism. [D-07 r236→237](design/DomainLanguageDesign.md#generic-adts-and-member-types) uses *generic ADT* for `deque` and *nominal type constructor* for its role in type formation. This supersedes the generic ADT name in the [preceding decision](https://github.com/complyue/cod-project/blob/b75681294647fbbebb1da9e2c96ca4cff541a106/design/DomainLanguageDesign.md#nominal-type-families-and-member-types). *Member type*, nominal identity, canonical arguments and the [D-15 r89→90 import rules](design/ModuleWorlds.md#identity-records-aliases-and-publication) continue. The possible language feature is uncommitted. P-18/P-208/P-229, registry r1378→1379.
+
 ## 2026-11-27 — Name nominal type families and their member types
 
 <a id="h-nominal-type-family-terms-20261127"></a>
