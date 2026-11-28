@@ -7,7 +7,7 @@ using "./ParserStorage.cod" ExprPayload { BindSymbolEffect };
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, published_local_family };
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { ImportedSourceTextCall, BoundReferenceSymbol, PreparedTextInstallation },
+    SuppliedViews, SuppliedView { ImportedSourceTextCall, ImportedTextWriterCall, BoundReferenceSymbol, PreparedTextInstallation },
 };
 using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver } };
 using "./OperandChecking.cod" {
@@ -131,7 +131,7 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
                 };
                 _ -> {}
             };
-            method <- facts[at].scoped_text_method;
+            method <- facts[at].text_method;
             if (method != no_node() && invocation_reached(nodes, sites, at, used, revision)) {
                 case views[at] of {
                     ImportedSourceTextCall { val first <-, val past <-, } -> {
@@ -142,6 +142,7 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
                         uses[at].imported_selected <- method;
                         (uses[at].caller <- if (demand[at].scope < used) { (demand[at].scope) } else { root }):void
                     };
+                    ImportedTextWriterCall -> {};
                     _ -> { return at }
                 }
             };
@@ -336,9 +337,11 @@ func collect_outstanding_text_need(scopes:const TextScopes in S, supplies:const 
     return problem
 }
 
-func first_prepared_writer(facts:const OperandFacts in F, used:UInt64) -> UInt64 where {const owner F} {
+func first_scoped_text_use(views:const SuppliedViews in V, facts:const OperandFacts in F, used:UInt64)
+    -> UInt64 where {const owner V, const owner F} {
     for (at in 0u64 .. used) {
-        if (facts[at].scoped_text_method != no_node()) return at
+        if (facts[at].text_method != no_node() && (case views[at] of { ImportedSourceTextCall -> true; _ -> false }))
+            return at
     };
     return no_node()
 }
@@ -350,7 +353,7 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
     module:UInt64, root:UInt64, used:UInt64, revision:UInt64, published:UInt64, report:OperandCheckResult in R)
     -> bool where {const owner N, const owner B, const owner L, const owner V, const owner I, const owner F,
         const owner D, const owner X, const owner E, owner C, owner R} {
-    val first <- first_prepared_writer(facts, used);
+    val first <- first_scoped_text_use(views, facts, used);
     if (first == no_node()) return true;
     if (used > 9223372036854775807u64 || published > 9223372036854775807u64) {
         report.node <- first;

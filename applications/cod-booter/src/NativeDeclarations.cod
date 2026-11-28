@@ -97,8 +97,8 @@ using "./ModuleExportStorage.cod" {
     CallableObjectView { NoCallableObjectView },
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
-    array_length_family_interface, source_text_family_interface, ScopedRoutineContracts,
-    InterfacePayload { NoInterfacePayload, DeferredTextReceiver, CheckedTextReceiver }, constructor_type,
+    array_length_family_interface, source_text_family_interface, text_writer_family_interface, ScopedRoutineContracts,
+    InterfacePayload { NoInterfacePayload, DeferredTextReceiver, CheckedTextReceiver, CheckedTextWriter }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor, SumConstructorPosition };
@@ -1560,6 +1560,7 @@ export data SuppliedView =
     PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
     ImportedSourceTextCall { family:UInt64, first:UInt64, past:UInt64, } |
+    ImportedTextWriterCall { family:UInt64, past:UInt64, } |
     PreparedTextInstallation { operation:UInt64, name:UInt64, input:UInt64, previous:UInt64, } |
     PreparedFormattingMethod { marker:UInt64, operation:UInt64, receiver:UInt64, writer:UInt64, } |
     CompletedFormattingMethod {
@@ -6233,6 +6234,48 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
     return first
 }
 
+# Every visible member competes using its exact prepared signature.
+# An unsupported member leaves this completed family unavailable.
+func stage_text_writer_family(names:const NameBindings in B, work:const NameWork in W,
+    views:const SuppliedViews in V, head:UInt64, used:UInt64, module:UInt64, function_form:bool,
+    contracts:ModuleInterfaces in C, first:UInt64) -> UInt64
+    where {const owner B, const owner W, const owner V, owner C} {
+    if (!prepared_text_writer(views, head)) return first;
+    if (first >= intrinsic (len)(contracts)) return no_node();
+    val method <- head;
+    val row <- first + 1u64;
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) {
+            write_interface_header(contracts[first], module, head, text_writer_family_interface(),
+                builtin_void(), row - first - 1u64);
+            contracts[first].membership <- FixedMethods;
+            (contracts[first].callable_kind <- checked_callable_kind(function_form)):void;
+            return row
+        };
+        if (method >= used || names[method].declaration != head) return first;
+        case views[method] of {
+            CheckedTextWriterMethod { val target_module <-, val target_identity <-, val piece_module <-,
+                                      val piece_identity <-, val string_piece <-, val out_of_memory <-, } -> {
+                if (row >= intrinsic (len)(contracts)) return no_node();
+                write_interface_header(contracts[row], module, method, 0u8, builtin_void(), 0u64);
+                contracts[row].value_kind <- if (string_piece) { builtin_string() } else { lexical_builder_type() };
+                if (!string_piece) {
+                    contracts[row].type_module <- if (piece_module == 0u64) { module } else { piece_module };
+                    (contracts[row].type_identity <- piece_identity):void
+                };
+                (contracts[row].payload <- make CheckedTextWriter {
+                    target_module <- if (target_module == 0u64) { module } else { target_module };
+                    target_identity <- target_identity; out_of_memory <- out_of_memory
+                }):void
+            };
+            _ -> { return first }
+        };
+        method <- work[method].next_method;
+        (row <- row + 1u64):void
+    };
+    return first
+}
+
 export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B,
                                selected:const SelectedExports in E, work:const NameWork in W,
                                views:const SuppliedViews in V, routines:const ScopedRoutineContracts in H,
@@ -6297,6 +6340,10 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                     if (count == first && ordinary && failure == no_node()) {
                         (count <- stage_source_text_family(nodes, names, selected, work, views, at, used,
                             defining_module, revision, contracts, count)):void
+                    };
+                    if (count == first && ordinary && failure == no_node()) {
+                        (count <- stage_text_writer_family(names, work, views, at, used, defining_module,
+                            callable.function_form, contracts, first)):void
                     };
                     if (count == no_node()) return no_node();
                     if (count == first) {

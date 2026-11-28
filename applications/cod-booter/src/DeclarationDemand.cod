@@ -20,7 +20,7 @@ using "./NameResolution.cod" {
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
-    SuppliedViews, SuppliedView { PreparedFormattingMethod, ImportedSourceTextCall, PreparedGenericConstruction, BoundGenericCall, ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayCall, CheckedReadonlyCall, CheckedSumWriterCall, CheckedWorkspaceWriterCall, CheckedScalarFunctionCall }, read_acquisition_failure,
+    SuppliedViews, SuppliedView { PreparedFormattingMethod, ImportedSourceTextCall, ImportedTextWriterCall, PreparedGenericConstruction, BoundGenericCall, ImportedProductWriter, CheckedImportedArraySlotCall, CheckedArrayCall, CheckedReadonlyCall, CheckedSumWriterCall, CheckedWorkspaceWriterCall, CheckedScalarFunctionCall }, read_acquisition_failure,
     source_text_routine_signature, native_loan_requires_body, source_handle_callable, prepared_array_procedure, prepared_text_writer,
     prepared_source_here_relay, SourceArrayFormals { NoSourceArrayFormal, ArrayReferenceSlotFormal },
     prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_workspace_writer, prepared_array_inspector
@@ -520,6 +520,7 @@ export func discover_declaration_demand(
                  })));
             if (site < intrinsic (len)(views) && (case views[site] of {
                 ImportedSourceTextCall -> true;
+                ImportedTextWriterCall -> true;
                 _ -> false
             })) { (checked_call <- true):void };
             shape <- inspect_invocation(nodes, revision, used, site, invocation);

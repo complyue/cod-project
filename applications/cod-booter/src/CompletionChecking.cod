@@ -890,7 +890,7 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
                 return unproved_deferred_error();
             return 0u8
         };
-        if (links[at].imported_interface != no_node() && facts[at].scoped_text_method == no_node()) {
+        if (links[at].imported_interface != no_node() && facts[at].text_method == no_node()) {
             val diagnostic <- check_call_completion(nodes, names, links, facts, sites, at,
                 links[at].imported_failure_module, links[at].imported_failure,
                                                     links[at].imported_failure_checked, used, revision);
@@ -1289,7 +1289,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 (count <- enqueue_failure(reached, at, count)):void;
             } else {};
             event <- sites[at].event;
-            routed <- (array_summary || (builder_summary && ((facts[at].text_intrinsic == builder_append_export() || facts[at].text_intrinsic == text_slice_export()) || facts[at].scoped_text_method != no_node()))) &&
+            routed <- (array_summary || (builder_summary && ((facts[at].text_intrinsic == builder_append_export() || facts[at].text_intrinsic == text_slice_export()) || facts[at].text_method != no_node()))) &&
                 (event == possible_failure() || event == definite_failure());
             if ((routed || (!builder_summary && !slice_summary && is_failure_statement(nodes, at))) &&
                 sites[at].category_module == 0u64 && sites[at].category == category) {
@@ -1300,7 +1300,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 } else {};
             } else {};
             imported <- !builder_summary && !slice_summary && !text_bounds_summary &&
-                (array_summary || facts[at].scoped_text_method == no_node()) && links[at].imported_interface != no_node() &&
+                (array_summary || facts[at].text_method == no_node()) && links[at].imported_interface != no_node() &&
                 (if (array_summary) {
                     invocation_reached(nodes, sites, at, used, revision) &&
                         (imported_array_escapes(views, at, category) ||
@@ -1503,7 +1503,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
             text_slice <- text_slice || (facts[at].text_intrinsic == text_slice_export() &&
                 sites[at].event == possible_failure()) || (at < intrinsic (len)(text) && text[at].invalid_slice);
             builder_append <- builder_append || ((facts[at].text_intrinsic == builder_append_export() ||
-                facts[at].scoped_text_method != no_node()) && sites[at].event == possible_failure());
+                facts[at].text_method != no_node()) && sites[at].event == possible_failure());
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
             if (definition < tree.used && definition != at &&
                 sites[definition].array_read_completion != NoArrayRead) {

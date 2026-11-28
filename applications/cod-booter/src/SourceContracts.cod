@@ -620,7 +620,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val stops_before_entry <- false;
     val checked_call <- false;
     val imported_effects <- false;
-    val scoped_call <- false;
+    val imported_text <- false;
     val intrinsic_kind <- 0u8;
     val text_operation <- false;
     val entered <- false;
@@ -633,9 +633,9 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             stops_before_entry <- ordinary &&
                 (!can_continue(sites, call.callee) || !can_continue(sites, call.arguments));
             imported_effects <- checked_source_array_call(views, at) || checked_scalar_call(views, at);
-            scoped_call <- facts[at].scoped_text_method != no_node();
+            imported_text <- facts[at].text_method != no_node();
             intrinsic_kind <- facts[at].text_intrinsic;
-            text_operation <- scoped_call || intrinsic_kind == text_size_export() ||
+            text_operation <- imported_text || intrinsic_kind == text_size_export() ||
                 intrinsic_kind == text_byte_export() || intrinsic_kind == text_slice_export();
             entered <- ordinary && invocation_reached(nodes, sites, at, used, revision);
             checked_call <- ordinary && (text_operation || imported_effects ||
@@ -654,7 +654,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                 }) { (local[definition].text_storage <- true):void };
                 if (entered && text_operation) {
                     local[definition].text_storage <- true;
-                    if (scoped_call) {
+                    if (imported_text) {
                         local[definition].bounds <- local[definition].bounds || text[at].bounds;
                         local[definition].numeric <- local[definition].numeric || text[at].numeric_fault;
                         local[definition].text_allocation <- local[definition].text_allocation || text[at].out_of_memory;
