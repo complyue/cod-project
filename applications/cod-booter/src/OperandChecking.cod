@@ -31,7 +31,7 @@ using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
-    CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion,
+    CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion, ReturningCondition,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -1808,12 +1808,17 @@ func receipt_loan_signature(nodes:const ExprNodes in N, links:const NameWork in 
                           facts[parameter].target_readonly != 0u8)) return false;
                     if (facts[parameter].target_readonly == 0u8) {
                         if (procedure_call && !mixed_aggregate_loan) return false;
-                        if (kind != source_product_loan() &&
-                            ((!allow_writable_array && !mixed_aggregate_loan) || kind != source_array_loan() ||
-                             inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
-                             syntax.mode != ReferenceFormal)) return false;
-                        if (owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
-                            return false
+                        if (kind == source_array_loan()) {
+                            # A writable target can be borrowed without authority to allocate in its owner.
+                            if ((!allow_writable_array && !mixed_aggregate_loan) ||
+                                inspect_formal(nodes, revision, used, parameter, syntax) != OrdinaryFormal ||
+                                syntax.mode != ReferenceFormal ||
+                                !owner_parameter(nodes, facts[parameter].owner)) return false
+                        } else {
+                            if (kind != source_product_loan() ||
+                                owner_constraint_syntax(nodes, facts[parameter].owner) != WritableOwnerConstraint)
+                                return false
+                        }
                     } else {
                         if (owner_constraint_syntax(nodes, facts[parameter].owner) != ReadonlyOwnerConstraint)
                             return false
@@ -4477,6 +4482,7 @@ func set_bits_result(facts:OperandFacts in F, at:UInt64, value:UInt64) -> void w
 
 func explicit_discard() -> UInt8 { return 1u8; }
 func loop_discard() -> UInt8 { return 2u8; }
+func statement_guard_discard() -> UInt8 { return 3u8; }
 
 # List entries carry the reached normal tail type. Explicit discard still
 # checks that type, without imposing a read of the tail's target.
@@ -4534,7 +4540,8 @@ func merge_arm_result(nodes:const ExprNodes in N, facts:OperandFacts in F, at:UI
     val kind <- facts[arm].kind;
     if (kind == 0u8) return unproved_result_contract();
     if (kind == never_result()) return 0u8;
-    if (discard && facts[at].discarded_result == loop_discard())
+    if (discard && (facts[at].discarded_result == loop_discard() ||
+        facts[at].discarded_result == statement_guard_discard()))
         return merge_result(facts, at, void_result(), 0u64, 0u64);
     if (immutable_text_kind(kind)) return unsupported_text_operation();
     if (kind == product_kind()) return unsupported_product_layout();
@@ -6705,6 +6712,21 @@ func discard_aggregate_statement(nodes:const ExprNodes in N, cases:const Constru
     }
 }
 
+func is_braced_statement_guard(nodes:const ExprNodes in N, branch:const ConditionalSites in C,
+    used:UInt64, revision:UInt64) -> bool where {const owner N, const owner C} {
+    ref tail = make UInt64 { no_node() };
+    if (is_scope_block(nodes, branch.consequent) || is_scope_block(nodes, branch.alternative) ||
+        !block_tail(nodes, revision, used, branch.consequent, tail) ||
+        !block_tail(nodes, revision, used, branch.alternative, tail) || tail != no_node()) return false;
+    return case nodes[branch.test] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            ReturningCondition -> false;
+            _ -> true
+        };
+        Vacant -> false
+    }
+}
+
 # Carry discard through parentheses, a grouping block's tail and the
 # normal arms of a guard. Argument and arithmetic operands and independent
 # invocations still establish results required by their own operations.
@@ -6725,6 +6747,13 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     if (inspect_conditional(nodes, revision, used, at, branch)) {
         facts[branch.consequent].arm_result <- 1u8;
         facts[branch.alternative].arm_result <- 1u8;
+        if (facts[at].statement_operand && is_braced_statement_guard(nodes, branch, used, revision)) {
+            # The guard can join without a payload. Only ordinary discard
+            # reaches its arms, so nested value joins still check their types.
+            discard_result(facts, at, statement_guard_discard());
+            discard_result(facts, branch.consequent, explicit_discard());
+            return
+        };
         facts[branch.consequent].discarded_result <- facts[at].discarded_result;
         facts[branch.alternative].discarded_result <- facts[at].discarded_result;
         return;

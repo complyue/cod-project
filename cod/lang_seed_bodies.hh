@@ -2317,7 +2317,8 @@ class BodyExtraction {
       return true;
     }
 
-    CheckedOperation operation(const Expression &expr, bool discard_iteration_result) {
+    CheckedOperation operation(const Expression &expr, bool discard_iteration_result,
+                               bool discard_statement_guard) {
       CheckedOperation op;
       switch (expr.kind) {
       case Kind::integer: case Kind::real: return numeric_literal(expr);
@@ -2383,7 +2384,8 @@ class BodyExtraction {
             if (!call_operation) continue;
             op.type = remember(item, std::move(*call_operation)).type;
           } else {
-            const auto &result = extract(item, discard_iteration_result || (intermediate && guarded_full_scope(item)));
+            const auto &result = extract(item, discard_iteration_result || (intermediate && guarded_full_scope(item)),
+                                         intermediate && item.braced_if_with_empty_alternative());
             op.type = result.type;
             if (!intermediate && text_type(result.type) && result.view && result.read_only && result.owners.size() == 1) {
               op.view = op.read_only = true;
@@ -2422,7 +2424,7 @@ class BodyExtraction {
         if (no.type == Type::never) supplied_ = std::move(after_yes);
         else if (yes.type != Type::never)
           std::erase_if(supplied_, [&](size_t symbol) { return !after_yes.contains(symbol); });
-        if (discard_iteration_result) {
+        if (discard_iteration_result || discard_statement_guard) {
           op.type = yes.type == Type::never && no.type == Type::never ? Type::never : Type::void_type;
           return op;
         }
@@ -2513,7 +2515,8 @@ class BodyExtraction {
              expr.at, "seed has no extracted transport for this expression");
     }
 
-    const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false) {
+    const CheckedOperation &extract(const Expression &expr, bool discard_iteration_result = false,
+                                    bool discard_statement_guard = false) {
       require_executable_expression(expr);
       // The lexical path ends at a return independently of its pending result.
       static const CheckedOperation terminal = [] {
@@ -2522,7 +2525,7 @@ class BodyExtraction {
         return operation;
       }();
       if (record_pending_return(expr)) return terminal;
-      return remember(expr, operation(expr, discard_iteration_result));
+      return remember(expr, operation(expr, discard_iteration_result, discard_statement_guard));
     }
 
   public:
