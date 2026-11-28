@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Main owns the swarm and the live swarm releases its regions
+
+<a id="h-main-owns-swarm-20261128"></a>
+**H-MAIN-OWNS-SWARM-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) requires `own swarm s <- ...` to be held by the main process, each child go process to hold a borrowed `swarm s`, and the live `s` to release every `own region within(s) r <- ...`. [D-32 r11→12](design/ActorChannels.md#swarm-ownership-and-region-release) supersedes the [receiving-side release wording and candidate owning declarations](https://github.com/complyue/cod-project/blob/3cf94f9821daef9d0098ed247aa9227ecf3bde20/design/ActorChannels.md#process-local-regions-pool-bound-regions-and-packets). D-10 r286→287 and D-22 r80→81 preserve same-swarm handoff and ordinary call preparation under P-788/P-789. The release rule applies on normal and abrupt paths. Ordinary local regions, swarm-independent packet traffic and native handle cleanup keep their respective contracts. Shutdown coordination and the provider mechanism for release remain open. Registry r1394→1395.
+
 ## 2026-11-28 — Reject unmatched swarm transfers at compile time
 
 <a id="h-swarm-transfer-specialization-20261128"></a>

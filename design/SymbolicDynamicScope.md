@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 286 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 287 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r287 the [swarm ownership decision](../CHANGELOG.md#h-main-owns-swarm-20261128) qualifies P-788/P-789 for both launch forms. The main process owns the swarm, the child borrows it, and the actual live swarm releases its regions.
 
 At r286 the [swarm implementation and chan decision](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) separates the selected worker’s placement from the launch effects boundary. P-788 continues fresh initial TLS on each entry. P-789 requires an ordinary region for a chan send even within one swarm.
 
@@ -2418,7 +2420,7 @@ A candidate regional message carries a user-defined root, inputs and a typed des
 
 `go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. Every launch requires an actual target resource pool, including a niladic entry with no owners to hand off. An expression with no target pool cannot launch a go process. The established local execution uses one dedicated OS thread and fresh initial TLS. A thread or process reused by the swarm starts each entry with fresh initial TLS. Worker selection and recruitment protocols remain open. [Go language specification](https://go.dev/ref/spec#Go_statements)
 
-Both entry forms can transfer ownership to the child. The examples use the **proposed spelling** `go on(p)` to select the target pool. The pool can be passed to a library as an argument. In the named form, *entry procedure* names the role of the ordinary procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
+Both entry forms can transfer ownership to the child. The examples use the **proposed spelling** `go on(p)` to select the target pool. The main process holds the owning swarm binding. A library can borrow the swarm, and a launched child holds a borrow of its target swarm. In the named form, *entry procedure* names the role of the ordinary procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
 
 The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. Only an ordinary region may travel through a typed chan. A swarm region is ineligible even if both endpoints are in its swarm. An ordinary packet can travel between distinct swarms. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
 
@@ -2440,7 +2442,7 @@ go on(p) { own region r <-, own handle h <- } {{
 }}
 ```
 
-In either form the child takes over the existing release responsibility for each transferred resource. On normal or exceptional exit it releases each resource it still owns exactly once. Each native handle must support use and release at the selected worker’s placement. In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
+In either form the child can receive the region binding and use the region through the admitted handoff. The same live swarm releases a region declared `within(p)`, including when child cleanup is triggered by an exception. A transferred native handle follows its provider’s use and release contract at the selected placement. The child borrows `p` and cannot destroy it. [Swarm ownership and region release](ActorChannels.md#swarm-ownership-and-region-release) In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
 
 **The effects boundary is at `go`.** The worker thread starts this invocation with initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
 

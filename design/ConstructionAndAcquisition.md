@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 80 · Recorded: 2026-11-28 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 81 · Recorded: 2026-11-28 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r81 the [main-process swarm ownership decision](../CHANGELOG.md#h-main-owns-swarm-20261128) names the swarm responsible for a region in its owning declaration. P-789 continues ordinary local construction and same-swarm handoff.
 
 At r80 the [ordinary-region chan rule](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) distinguishes a swarm region at construction from an ordinary region sent as a packet. P-789 continues local construction with the pool omitted.
 
@@ -703,7 +705,7 @@ For a fresh sum instance, select its dctor with `make`. An explicit receiving ow
 
 ## Region construction and named root initializers
 
-An ordinary region needs no swarm at construction. It can serve as local scratch or, if it meets a typed chan’s message contract, travel as a packet. Creating a region associated with a particular swarm produces a swarm region. Its owner can pass to an eligible entry in that swarm. Sending it through any chan is invalid. The spelling for selecting a swarm at construction remains open. [Construction and handoff examples](ActorChannels.md#process-local-regions-pool-bound-regions-and-packets)
+An ordinary region needs no swarm at construction. It can serve as local scratch or, if it meets a typed chan’s message contract, travel as a packet. In `own region within(s) r <- ...`, the actual live swarm `s` must release `r`. A same-swarm launch may hand the binding to an eligible entry. Sending the region through any chan is invalid. The right-hand acquisition expression has its own construction rules. [Swarm ownership and region release](ActorChannels.md#swarm-ownership-and-region-release)
 
 H-596 requires individual root initializers; H-597 accepts a construction-local owner name, and H-598/H-599 admits initialization through helpers in a free initialization block. A named structural region schema fixes the root labels, storage kinds and full component contracts; construction supplies their initial contents in the new region. The bounded form uses `make region`, with allocator arguments separate from the initialization block:
 
