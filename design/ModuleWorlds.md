@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 93 · Recorded: 2026-11-28 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 94 · Recorded: 2026-11-28 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r94 the [projection decision](../CHANGELOG.md#h-type-level-prefix-projections-20261128) gives the product-kind example a prefix projection and an explicit field mapping. D-15/P-102/P-208 continue the r93 bootstrap scope and nominal identity rules. The decision covers the three quoted forms below for `e-wrks/cod`. General equation syntax and rules for contributing mappings remain open.
 
 At r93 the [bootstrap scope decision](../CHANGELOG.md#h-static-mixin-bootstrap-scope-20261128) excludes `mixin` and type-level programming from booter source and seed requirements. D-15/P-102/P-208 continue r92 receiving-module and vocabulary identity. The quoted forms below are a proposal for `e-wrks/cod`.
 
@@ -630,21 +632,37 @@ A mixin that merely refers to a supplied type, or applies the supplied `deque` f
 
 ### Quoted type-level expressions and blocks
 
-The proposed spelling encloses one type-level expression in `'…'` and a block of type-level declarations in `''' … '''`. Inside either form, `t:K` relates a type-level term to its kind. In a parameter declaration it could bind `t` at kind `K`. In an expression it could check the kind of a term already in scope. For the static inputs above, the receiving module could supply `'deque : Type -> Type'` and `'UInt64 : Type'`. The template expression `'F[A] : Type'` would then denote the existing member type `deque[UInt64]`. Supplying `UInt64` for `F` would give a kind error at the argument.
+Single apostrophes delimit one type-level form, including the kind declaration, mapping and expression below. The proposed triple-apostrophe form groups declarations into a block. Inside either form, `t:K` relates a type-level term to its kind. In a parameter declaration it could bind `t` at kind `K`. In an expression it could check the kind of a term already in scope. For the static inputs above, the receiving module could supply `'deque : Type -> Type'` and `'UInt64 : Type'`. The template expression `'F[A] : Type'` would then denote the existing member type `deque[UInt64]`. Supplying `UInt64` for `F` would give a kind error at the argument.
 
-One possible block borrows Haskell’s separate signature and pattern equations. This sketch assumes the receiving module has selected the `deque` and `Maybe` families. Each equation binds its own `t`. [Haskell 2010, §4.4](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html)
+#### Product kinds and prefix projections
+
+```text
+'type Container [elem: Type]'
+'deque[T] : Container { T -> elem }'
+'elem deque[UInt64]'
+```
+
+The first declaration introduces a product kind with a named field. Its projection has the signature `elem : Container -> Type`. The second declaration supplies that field for each member of the selected `deque` family. Inside the braces, the expression on the left supplies the named field on the right. With `T = UInt64`, the last expression evaluates to the type `UInt64`. With `T = deque[UInt64]`, the same rule makes `'elem deque[deque[UInt64]]'` evaluate to `deque[UInt64]`.
+
+Type-level application uses prefix syntax. Bracket application forms the operand first, so `elem deque[UInt64]` reads as `elem (deque[UInt64])`. Given a static parameter `C : Container`, write `'elem C'`. Dotted OO syntax such as `'C.elem'` is outside the type-level language. Evaluation needs the selected projection, family identity and type argument. It requires no deque instance and performs no value-level method lookup.
+
+A source-preserving rename of `deque` keeps this mapping. Another module’s independently declared `deque` keeps its own identity and needs its own mapping to supply this projection. Two vocabularies can also define distinct projections spelled `elem`. The spelling alone gives neither priority. How static projections are exported and selected, who may add mappings, and how conflicting contributions are diagnosed remain open. [Type family identity](DomainLanguageDesign.md#type-families-and-member-types)
+
+#### Type-level functions with equations
+
+One possible block borrows Haskell’s separate signature and pattern equations. A widening function illustrates a computation whose result the author specifies for each case. [Haskell 2010, §4.4](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html)
 
 ```text
 '''
-element : Type -> Type;
-element (deque[t]) = t;
-element (Maybe[t]) = t
+widen : Type -> Type;
+widen UInt8 = UInt32;
+widen UInt32 = UInt64
 '''
 ```
 
-Where `element` is in scope, `'element (Maybe[UInt64]) : Type'` would yield `UInt64`. The pattern names the selected family by identity, so a locally renamed import still matches and an independently declared family named `Maybe` does not. Applying `element` to `UInt64` presents a different question from a wrong-kind argument. `UInt64` has kind `Type` and neither equation covers it. One option is a located error when that result is demanded.
+Where `widen` is in scope, `'widen UInt32 : Type'` would yield `UInt64`. Applying `widen` to `UInt64` presents a different question from a wrong-kind argument. `UInt64` has kind `Type` and neither equation covers it. One option is a located error when that result is demanded.
 
-The proposed quotes delimit parsed static source. Ordinary text and doclets use double quotes. Apostrophe is outside the symbolic-operator alphabet. In the sketch, semicolons separate the signature and equations even if the entire block is written on one line. A first production use should settle which names a block exposes and how the mixin site supplies them. Adding `element t = t` would overlap both equations and force a choice about ordering or rejection. Recursive equations would also need a rule for whether evaluation finishes. These choices and the exact equation grammar remain open. [Operator tokens](SymbolicDynamicScope.md#symbolic-operator-tokens) · [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
+The proposed quotes delimit parsed static source. Ordinary text and doclets use double quotes. Apostrophe is outside the symbolic-operator alphabet. In the sketch, semicolons separate the signature and equations even if the entire block is written on one line. A first production use should settle which names a block exposes and how the mixin site supplies them. Adding `widen t = t` would overlap both equations and force a choice about ordering or rejection. Recursive equations would also need a rule for whether evaluation finishes. These choices and the exact equation grammar remain open. [Operator tokens](SymbolicDynamicScope.md#symbolic-operator-tokens) · [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
 
 ## Vocabulary modules establish shared identities
 
