@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Reject unmatched swarm transfers at compile time
+
+<a id="h-swarm-transfer-specialization-20261128"></a>
+**H-SWARM-TRANSFER-SPECIALIZATION-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirms static rejection when no transfer handler matches and suggests method specialization dispatched on `swarm type XXX`. [D-32 r10→11](design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations) uses specializations to express the [previously proposed provider signature table](https://github.com/complyue/cod-project/blob/604354652ca7c0b56d7f2e3a5ef59629d04018bb/design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations). P-789 continues same-swarm ownership and a compatible placement for all owning arguments. Temporary lack of capacity remains a runtime admission matter. The concrete method spelling and placement constraint syntax remain open. Registry r1393→1394.
+
 ## 2026-11-28 — Trace ordinary argument preparation across a go process launch
 
 <a id="k-swarm-launch-preparation-20261128"></a>
