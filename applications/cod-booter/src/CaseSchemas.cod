@@ -122,7 +122,7 @@ func describe_case_array_element(nodes:const ExprNodes in N, names:const NameBin
 }
 
 func find_indexed_case_formal(nodes:const ExprNodes in N, names:const NameBindings in B,
-    expression:UInt64, used:UInt64, revision:UInt64, mode:FormalMode, loan:IndexedCaseLoan in L) -> bool
+    expression:UInt64, used:UInt64, revision:UInt64, mode:FormalMode, sum_slot:bool, loan:IndexedCaseLoan in L) -> bool
     where {const owner N, const owner B, owner L} {
     ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
     if (!inspect_index_selection(nodes, revision, used, expression, indexed) ||
@@ -132,7 +132,7 @@ func find_indexed_case_formal(nodes:const ExprNodes in N, names:const NameBindin
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
     };
     if (inspect_formal(nodes, revision, used, names[indexed.target].declaration, formal) != OrdinaryFormal ||
-        formal.mode != mode ||
+        (formal.mode != mode && !(sum_slot && formal.mode == ReferenceSlotFormal)) ||
         inspect_binding(nodes, revision, used, formal.binding, binding) != TypedBinding ||
         binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return false;
     val owner_site <- names[binding.owner_name].declaration;
@@ -174,7 +174,8 @@ func describe_indexed_case_loan(nodes:const ExprNodes in N, names:const NameBind
         expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
         array_module <- 0u64; array_type <- no_node();
     };
-    if (!find_indexed_case_formal(nodes, names, expression, used, revision, mode, candidate)) return false;
+    if (!find_indexed_case_formal(nodes, names, expression, used, revision, mode,
+        expected_kind == sum_type() && mode == ReferenceFormal, candidate)) return false;
     val marker <- candidate.array_type;
     val described <- if (names[marker].kind == array_type()) {
         describe_case_array_element(nodes, names, selected, names[marker].declaration, used, revision,

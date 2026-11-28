@@ -1791,11 +1791,17 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
         val head <- published_u64_indexed_array(contracts, published, module, identity);
         if (head == no_node()) return 0u8;
         val kind <- contracts[head].element_kind;
-        if (kind == enum_type()) {
-            if (!published_enum_element(contracts, published, contracts[head].type_module,
-                contracts[head].type_identity)) return 0u8;
-            proof.element_module <- contracts[head].type_module;
-            (proof.element_identity <- contracts[head].type_identity):void
+        if (kind == enum_type() || kind == sum_type()) {
+            val element_module <- contracts[head].type_module;
+            val element_identity <- contracts[head].type_identity;
+            if (kind == enum_type()) {
+                if (!published_enum_element(contracts, published, element_module, element_identity)) return 0u8
+            } else {
+                if (checked_aggregate_storage(contracts, published, element_module,
+                    element_identity, sum_type()) != CoDBitsAggregate) return 0u8
+            };
+            proof.element_module <- element_module;
+            (proof.element_identity <- element_identity):void
         } else {
             # The published element/index pair qualifies ordinary Boolean
             # storage independently of the native numeric loan shape.
@@ -2017,21 +2023,6 @@ func prepare_source_array_construction(nodes:const ExprNodes in N, names:const N
         requested, used, revision, proof);
     val element_identity <- proof.element_identity;
     val element_module <- proof.element_module;
-    if (kind == 0u8 && placement == no_node() && names[requested].kind == ordinary_selection()) {
-        val selection <- names[requested].declaration;
-        if (selection < used && selected[selection].kind == array_export()) {
-            val module <- selected[selection].origin_module;
-            val identity <- selected[selection].identity;
-            val header <- published_sum_array_header(contracts, published, module, identity);
-            if (header != no_node()) {
-                kind <- sum_type();
-                proof.type_module <- module;
-                proof.type_identity <- identity;
-                element_module <- contracts[header].type_module;
-                (element_identity <- contracts[header].type_identity):void
-            }
-        }
-    };
     if (kind == 0u8) {
         ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
         if (describe_product_array_element(nodes, names, selected, contracts, published, aggregate,
