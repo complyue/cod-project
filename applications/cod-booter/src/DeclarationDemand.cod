@@ -355,7 +355,7 @@ export func discover_declaration_demand(
                      CheckedScalarFunctionCall -> true;
                      ImportedProductWriter -> true; CheckedArrayCall -> true; CheckedImportedArraySlotCall -> true;
                      CheckedSumWriterCall -> true;
-                     CheckedWorkspaceWriterCall -> true;
+                     CheckedWorkspaceWriterCall { val requires_body <-, } -> requires_body;
                      CheckedReadonlyCall { val aggregate_loan <-, } -> aggregate_loan;
                      _ -> false
                  })));

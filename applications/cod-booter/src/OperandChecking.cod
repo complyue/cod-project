@@ -3547,7 +3547,7 @@ func published_workspace_array(contracts:const ModuleInterfaces in I, published:
 }
 
 func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, published:UInt64,
-    header:UInt64) -> UInt64 where {const owner I} {
+    header:UInt64, requires_body:bool in R) -> UInt64 where {const owner I, owner R} {
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val count <- contracts[header].entry_count;
     val owners <- contracts[header].owner_count;
@@ -3567,6 +3567,10 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val role <- no_node();
     val kind <- 0u8;
     val access <- 0u8;
+    val readonly_array <- false;
+    val writable_record <- false;
+    val report_writer <- result == builtin_void() && count > 2u64 && owners == 2u64 &&
+        !contracts[header].array_slot_failures.out_of_memory;
     for (row in header + 1u64 .. past) {
         if (!checked_source_scalar_parameter(contracts, published, row)) {
             role <- contracts[row].owner_role;
@@ -3576,11 +3580,18 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
                 return no_node();
             if (kind == array_type()) {
                 if (!published_workspace_array(contracts, published, row)) return no_node();
+                report_writer <- report_writer && access == 1u8 && !readonly_array;
+                (readonly_array <- true):void
             } else {
-                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node()
+                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
+                report_writer <- report_writer && access == 0u8 && !writable_record;
+                (writable_record <- true):void
             }
         }
     };
+    # A supported report update is available to an already-required body.
+    # Its operands do not by themselves require checking an enclosing body.
+    requires_body <- !(report_writer && readonly_array && writable_record);
     return past
 }
 
@@ -4209,19 +4220,27 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == WorkspaceWriter) {
-        val workspace_past <- checked_workspace_writer_past(contracts, interface_count, header);
+        ref requires_body = make bool { true };
+        val workspace_past <- checked_workspace_writer_past(contracts, interface_count, header, requires_body);
         if (obligation || workspace_past == no_node() || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
             !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
             !contains_checked_interface(visits, visit_count, origin_module, workspace_past - 1u64, interface_count)) return true;
+        if (!requires_body) {
+            ref first_report_argument = make UInt64 { no_node() };
+            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first_report_argument)) return true;
+            val count <- contracts[header].entry_count;
+            val last_report_argument <- argument_at_position(links, first_report_argument, count - 1u64);
+            if (last_report_argument == no_node() || links[last_report_argument].next != no_node()) return true;
+        };
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
         val workspace_allocates <- contracts[header].array_slot_failures.out_of_memory;
-        (supplied[at] <- make CheckedWorkspaceWriterCall { allocates <- workspace_allocates }):void;
-        if (required == no_node()) { (required <- at):void };
+        supplied[at] <- make CheckedWorkspaceWriterCall { allocates <- workspace_allocates; requires_body <- requires_body };
+        if (requires_body && required == no_node()) { (required <- at):void };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {

@@ -1546,7 +1546,7 @@ export data SuppliedView =
     CheckedReadonlyCall { aggregate_loan:bool, } |
     CheckedWriterCall {} |
     CheckedParserWriterCall { inline_input:bool, } |
-    CheckedWorkspaceWriterCall { allocates:bool, } |
+    CheckedWorkspaceWriterCall { allocates:bool, requires_body:bool, } |
     CheckedSumWriterCall {} |
     CheckedArrayCall { allocates:bool, } |
     CheckedArrayReaderCall {} |
@@ -3364,6 +3364,8 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                      (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
                 (!reads_record && result_kind == builtin_bool() && readonly_arrays > 1u64 && writable_records == 1u64 &&
                     (writable_arrays == 0u64 || (readonly_bytes && writable_arrays == 1u64 && writable_record_array))) ||
+                (!reads_record && result_kind == builtin_void() && readonly_arrays == 1u64 && writable_arrays == 0u64 &&
+                    writable_records == 1u64 && value_parameters) ||
                 (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
                 (adjacent_arrays || (writable_record_array && readonly_bytes))) ||
                 (!reads_record && writable_records == 1u64 &&
