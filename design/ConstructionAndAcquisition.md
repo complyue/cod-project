@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 77 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 78 · Recorded: 2026-11-28 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r78 the [terminology clarification](../CHANGELOG.md#h-dbmr-storage-technique-20261128) scopes the DBMR modes below to CoD’s intrinsic provider. The confirmed publication and image-completion requirements continue.
 
 At r77 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to structural schemas, standalone reception and the related here, case and generator forms. P-515–P-517 continue label lookup, owner, overlap and successful delivery. Labeled make by init retains its executable field writes.
 
@@ -998,7 +1000,7 @@ Migrate live fixtures, generated programs and examples together, and diagnose un
 
 **Design status: confirmed.** [H-DBMR-APPROVED-20261119](../CHANGELOG.md#h-dbmr-approved-20261119) covers these modes, same-filesystem publication, and image completion after writer-process exit.
 
-A published DBMR is immutable through CoD. Any number of processes may open it readonly. A process changing a graph works in a private region and publishes a complete new image. Exclusivity belongs to that private region and requires no claim on the destination name. These operations require no file locks, sidecar markers, holder registration or acquisition retries. The C provider implements three modes.
+An image published through CoD’s intrinsic [DBMR facilities](GraphGrainedMemoryManagement.md#dbmr-as-a-storage-technique) is immutable through CoD. Any number of processes may open it readonly. A process changing a graph works in a private region and publishes a complete new image. Exclusivity belongs to that private region and requires no claim on the destination name. These operations require no file locks, sidecar markers, holder registration or acquisition retries. The C provider implements three modes.
 
 | Operation | While the region is live | Filesystem effect |
 | --- | --- | --- |

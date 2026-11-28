@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Distinguish DBMR storage from a nominal region interface
+
+<a id="h-dbmr-storage-technique-20261128"></a>
+**H-DBMR-STORAGE-TECHNIQUE-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) clarified that DBMR denotes a technique which different products and region providers can use. A custom nominal region may equally use other backing. [D-13 r42→43](design/GraphGrainedMemoryManagement.md#dbmr-as-a-storage-technique) and the charter §7 terminology continue C-05/P-786/P-787 and the [existing nominal contract](https://github.com/complyue/cod-project/blob/845ed7c23f09cb3548a1917e72e3f93f17e7acb6/design/GraphGrainedMemoryManagement.md#opaque-nominal-region-types). [D-22 r77→78](design/ConstructionAndAcquisition.md#dbmr-modes) retains the intrinsic publication guarantees. DSDS draft 4→5 and guide draft 3→4 clarify stock provider choices under [D-DBMR-SERVICE-RESEARCH](design/DesignAuthorityRegistry.md#d-dbmr-service-research), preserving the service-level acceptance under P-752/P-753. Registry r1382→1383.
+
 ## 2026-11-27 — Separate field and receiver entries with commas
 
 <a id="h-comma-field-and-receive-lists-20261127"></a>
