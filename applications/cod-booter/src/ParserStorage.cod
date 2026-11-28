@@ -307,6 +307,44 @@ func accepts_here_body(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
     };
 }
 
+export func reference_here_receiver(nodes:const ExprNodes in N, at:UInt64) -> bool where {const owner N} {
+    if (at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Vacant -> false;
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            HereReceiver { val reference <- explicit_ref, } -> reference;
+            _ -> false
+        }
+    }
+}
+
+export data NamedArgumentSites { operand:UInt64, label:UInt64, }
+
+export func inspect_named_argument(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    at:UInt64, sites:NamedArgumentSites in R) -> bool where {const owner N, owner R} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Vacant -> false;
+        Occupied { val syntax <- node, } -> case syntax.payload of {
+            NamedArgument { val operand <-, val label <-, } -> {
+                if (!published_syntax_id(nodes, revision, at, label) ||
+                    !optional_syntax_link(nodes, revision, at, operand, sites.operand)) return false;
+                sites.label <- label.index;
+                true
+            };
+            _ -> false
+        }
+    };
+}
+
+export func inspect_here_actual(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+    sites:HereSites in R) -> bool where {const owner N, owner R} {
+    if (!inspect_here_supply(nodes, revision, used, make NodeId { revision <- revision; index <- at }, sites))
+        return false;
+    sites.supplied <- at;
+    return true
+}
+
 export func inspect_here_invocation(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
                                     sites:HereSites in R) -> HereSyntax where {const owner N, owner R} {
     if (at >= used || at >= intrinsic (len)(nodes)) return (InvalidHere:HereSyntax);

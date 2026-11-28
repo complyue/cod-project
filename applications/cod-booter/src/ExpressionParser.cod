@@ -540,7 +540,7 @@ func parse_behave(source:const SourceBytes in S, tokens:const Tokens in T,
     if (punct_at(source, tokens, result.next, past) == LEFT_PAREN) { # '('
         result.next <- result.next + 1u64;
         if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) { # ')'
-            arguments <- parse_arguments(source, tokens, nodes, result, past, false, false);
+            arguments <- parse_arguments(source, tokens, nodes, result, past, UnlabelledOperands:ArgumentContext);
             if (result.diagnostic != 0u8) return;
         } else {};
         end <- tokens[result.next].past;
@@ -806,7 +806,7 @@ func parse_initialize_reservation(source:const SourceBytes in S, tokens:const To
     result.next <- open + 1u64;
     ref arguments = make NoLink {};
     if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) {
-        val last <- parse_arguments(source, tokens, nodes, result, past, true, false);
+        val last <- parse_arguments(source, tokens, nodes, result, past, ReservationOperands:ArgumentContext);
         if (result.diagnostic != 0u8) return;
         arguments = make LinkTo { node <- make NodeId { revision <- result.revision; index <- last; }; };
         {}
@@ -1849,10 +1849,14 @@ func append_argument(nodes:ExprNodes in A, result:ParseResult in R, first:UInt64
     });
 }
 
+enum ArgumentContext:UInt8 { UnlabelledOperands, ReservationOperands, ConstructorOperands, CallOperands, }
+
 func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
                     nodes:ExprNodes in A, result:ParseResult in R,
-                    first:UInt64, previous:UInt64, past:UInt64, named:bool, field_labels:bool) -> bool
+                    first:UInt64, previous:UInt64, past:UInt64, context:ArgumentContext) -> bool
     where {const owner S, const owner T, owner A, owner R} {
+    val named <- context != (UnlabelledOperands:ArgumentContext);
+    val field_labels <- context == (ConstructorOperands:ArgumentContext);
     val argument <- no_node();
     val start <- result.next;
     val operand_first <- tokens[start].first;
@@ -1862,7 +1866,14 @@ func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
         ref controls = make ParseControls {
             supplied_here <- result.supplied_here; case_control <- result.case_control
         };
-        parse_expression_at(source, tokens, nodes, result, past, 1u8);
+        val header <- if (context == (CallOperands:ArgumentContext) && !checked) {
+            here_header_close(source, tokens, result.next, past)
+        } else { no_node() };
+        if (header != no_node()) {
+            parse_here_supply(source, tokens, nodes, result, past, header)
+        } else {
+            parse_expression_at(source, tokens, nodes, result, past, 1u8)
+        };
         if (result.diagnostic != 0u8) {
             restore_controls(result, controls);
             if (!recover_syntax(source, tokens, nodes, result, start, past, ArgumentOperandRole))
@@ -1897,7 +1908,7 @@ func parse_argument(source:const SourceBytes in S, tokens:const Tokens in T,
 }
 
 func parse_arguments(source:const SourceBytes in S, tokens:const Tokens in T,
-                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, named:bool, field_labels:bool) -> UInt64
+                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, context:ArgumentContext) -> UInt64
     where {const owner S, const owner T, owner A, owner R} {
     val start <- result.next;
     if (start >= past) { result.diagnostic <- expected_operand(); return no_node(); } else {};
@@ -1905,7 +1916,7 @@ func parse_arguments(source:const SourceBytes in S, tokens:const Tokens in T,
     val list_first <- tokens[start].first;
     val separator <- 0u8;
     for (unused in start .. past) {
-        if (!parse_argument(source, tokens, nodes, result, list_first, prefix, past, named, field_labels)) return no_node();
+        if (!parse_argument(source, tokens, nodes, result, list_first, prefix, past, context)) return no_node();
         prefix <- result.root;
         separator <- punct_at(source, tokens, result.next, past);
         if (separator == RIGHT_PAREN) return prefix;
@@ -2111,7 +2122,7 @@ func parse_make_handle(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- result.next + 1u64;
     val arguments <- no_node();
     if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) {
-        arguments <- parse_arguments(source, tokens, nodes, result, past, false, false);
+        arguments <- parse_arguments(source, tokens, nodes, result, past, UnlabelledOperands:ArgumentContext);
         if (result.diagnostic != 0u8) return;
     } else {};
     val end <- tokens[result.next].past;
@@ -2224,7 +2235,7 @@ func parse_construction(source:const SourceBytes in S, tokens:const Tokens in T,
     if (positional) {
         result.next <- result.next + 1u64;
         if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) {
-            arguments <- parse_arguments(source, tokens, nodes, result, past, true, true);
+            arguments <- parse_arguments(source, tokens, nodes, result, past, ConstructorOperands:ArgumentContext);
             if (result.diagnostic != 0u8) return;
         } else {};
         (result.next <- result.next + 1u64):void;
@@ -2311,7 +2322,7 @@ func parse_call(source:const SourceBytes in S, tokens:const Tokens in T,
     result.next <- open + 1u64;
     val arguments <- no_node();
     if (punct_at(source, tokens, result.next, past) != RIGHT_PAREN) { # ')'
-        arguments <- parse_arguments(source, tokens, nodes, result, past, true, false);
+        arguments <- parse_arguments(source, tokens, nodes, result, past, CallOperands:ArgumentContext);
         if (result.diagnostic != 0u8) return false;
     } else {};
     val close <- result.next;
@@ -2429,10 +2440,9 @@ func parse_here_receivers(source:const SourceBytes in S, tokens:const Tokens in 
     return receivers;
 }
 
-func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
-                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, close:UInt64) -> void
+func parse_here_supply(source:const SourceBytes in S, tokens:const Tokens in T,
+                       nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, close:UInt64) -> void
     where {const owner S, const owner T, owner A, owner R} {
-    val call <- result.root;
     val first <- tokens[result.next].first;
     val receivers <- no_node();
     if (close != no_node()) {
@@ -2456,7 +2466,15 @@ func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
         receivers <- parameters;
         body <- make NodeId { revision <- result.revision; index <- body; };
     });
+}
+
+func parse_here_body(source:const SourceBytes in S, tokens:const Tokens in T,
+                     nodes:ExprNodes in A, result:ParseResult in R, past:UInt64, close:UInt64) -> void
+    where {const owner S, const owner T, owner A, owner R} {
+    val call <- result.root;
+    parse_here_supply(source, tokens, nodes, result, past, close);
     if (result.diagnostic != 0u8) return;
+    val end <- syntax_past(nodes, result.used, result.root);
     append_syntax_node(nodes, result, syntax_first(nodes, result.used, call), end, make HereInvocation {
         call <- make NodeId { revision <- result.revision; index <- call; };
         supplied <- make NodeId { revision <- result.revision; index <- result.root; };

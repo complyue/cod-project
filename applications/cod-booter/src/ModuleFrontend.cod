@@ -332,7 +332,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 (RaiseWithCause) -> { 42u8 };
                 (NamedThrow) -> { constructing_throw_profile(nodes, revision, used, at) };
                 (RethrowWithCause) -> { 44u8 };
-                (NamedArgument) -> { 45u8 };
+                (NamedArgument) -> { if (emit_object) { 45u8 } else { 0u8 } };
                 (_) -> { 0u8 };
             }
         };
@@ -659,7 +659,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };
-        if (!check_native_declarations(nodes, bindings, work, selected, interfaces, interface_used,
+        if (!check_native_declarations(source, nodes, bindings, work, selected, interfaces, interface_used,
             facts, views,
                                         used, revision, emit_object, declarations)) {
             binding_diagnostic(nodes, result, module_binding_failed(), declarations.diagnostic, declarations.node);

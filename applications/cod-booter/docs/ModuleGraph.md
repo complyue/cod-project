@@ -1035,6 +1035,12 @@ In the common module frontend, prepare the checked signature for the selected le
 
 Check the unedited wrapper with its braced throw and forwarded call. Include an independent here formal and a renamed enum, an equal-width distinct enum, wrong arity, a different actual owner, an unavailable loan and a shadowing local named `work`. Check the checked-failure path separately from normal feedback. A rejected declaration preserves the previous provider pair.
 
+### Checking ordinary here argument slots
+
+The declaration and provider commands check ordinary fixed calls within the current source revision. The bound head supplies the formal order and expected callback types. Bind the trailing body to the first slot, then bind the written operands and labels. An inline here body retains the particular formal and call that received it. Slot binding finishes before the operand and completion checks consume it. Check a forwarded formal against the selected callback signature. Missing or duplicated arguments, scalar arguments containing here literals, and receiver mismatches fail before provider publication.
+
+The current source profile admits ordered independent scalar offers with no declared callback failures and a scalar or void feedback result. A single-brace return uses the supplying callable's result. Its continue uses callback feedback and its break uses the supplying call's result. A double-brace body has its own return destination. Body checking includes supplied literals that may never run, while preparation and entry still follow the ordinary written argument order. The seed translates the linked workloads and the native callback bridge retains its existing interface. Ordinary here lowering in the booter object command remains an explicit profile limit. [Callback syntax and destinations](../../../design/SymbolicDynamicScope.md#inline-here-arguments)
+
 ### Supplying the output destination
 
 Keep the three typed command entries. Object emission receives its output `String`, provider publication receives a borrowed native directory `Path`, and declaration checking needs only the common inputs. A `GraphPurpose` chooses the traversal work. Each entry supplies its output behavior by a synchronous `here` body with direct lexical access to that entry’s real arguments.

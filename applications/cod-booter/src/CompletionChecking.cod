@@ -24,6 +24,7 @@ using "./ExceptionTypes.cod" ExceptionType;
 using "./ExceptionConstructionFacts.cod" {
     ExceptionConstructionFacts, ExceptionConstructionFact { ConstructedException, ExceptionInitializerTargetRead },
 };
+using "./NativeDeclarations.cod" SuppliedView { OrdinaryHereBody, OrdinaryHereWrapper, OrdinaryHereLabel };
 using "./NativeDeclarations.cod" has_prepared_native_loans;
 using "./NativeDeclarations.cod" { SuppliedViews, read_acquisition_failure, source_literal_kind, array_reader_result_kind, checked_literal_call };
 using "./ParserStorage.cod" {
@@ -53,7 +54,7 @@ using "./ParserStorage.cod" SequenceSyntax {
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry, InvalidCallable };
 using "./ParserStorage.cod" native_installation_input;
-using "./ParserStorage.cod" { HereSites, HereSyntax { HereReady }, inspect_here_invocation };
+using "./ParserStorage.cod" { HereSites, HereSyntax { HereReady }, inspect_here_invocation, inspect_here_actual };
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause, ValueResultClause };
 using "./ParserStorage.cod" LogicalSyntax { LogicalNot, LogicalAnd, LogicalOr, InvalidLogical };
 using "./ParserStorage.cod" RhsEvaluation { ConditionalRhs, SkipsRhs, TakesRhs };
@@ -190,9 +191,9 @@ func inherit_context(sites:CompletionSites in X, parent:UInt64, child:UInt64, gu
     return;
 }
 
-func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F, views:const SuppliedViews in V,
                      sites:CompletionSites in X, at:UInt64, used:UInt64, revision:UInt64) -> void
-    where {const owner N, const owner F, owner X} {
+    where {const owner N, const owner F, const owner V, owner X} {
     val guard <- sites[at].guarded_by;
     val incoming <- sites[at].incoming_handler;
     val replacing <- sites[at].replacing_try;
@@ -363,10 +364,37 @@ func prepare_context(nodes:const ExprNodes in N, facts:const OperandFacts in F,
         call <- no_node(); supplied <- no_node(); receivers <- no_node();
         body <- no_node(); full_scope <- false
     };
+    if (at < intrinsic (len)(views)) {
+        case views[at] of {
+            OrdinaryHereLabel { val input <- operand, } -> {
+                inherit_context(sites, at, input, guard, incoming, replacing);
+                return
+            };
+            OrdinaryHereBody -> {
+                if (inspect_here_actual(nodes, revision, used, at, supplied)) {
+                    if (supplied.full_scope) {
+                        inherit_context(sites, at, supplied.body, no_node(), no_node(), no_node())
+                    } else {
+                        inherit_context(sites, at, supplied.body, guard, incoming, replacing)
+                    };
+                    # The body is an invoked scope even when it is supplied inside another call.
+                    sites[supplied.body].in_supplied_body <- true;
+                    (sites[supplied.body].in_delayed_body <- 0u8):void
+                };
+                return
+            };
+            _ -> {}
+        }
+    };
     if (inspect_here_invocation(nodes, revision, used, at, supplied) == HereReady) {
         inherit_context(sites, at, supplied.call, guard, incoming, replacing);
-        inherit_context(sites, at, supplied.body, guard, incoming, replacing);
-        sites[supplied.body].in_supplied_body <- true;
+        if (at < intrinsic (len)(views) &&
+            (case views[at] of { OrdinaryHereWrapper -> true; _ -> false })) {
+            inherit_context(sites, at, supplied.supplied, guard, incoming, replacing)
+        } else {
+            inherit_context(sites, at, supplied.body, guard, incoming, replacing);
+            (sites[supplied.body].in_supplied_body <- true):void
+        };
         return
     };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
@@ -962,7 +990,18 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         return 0u8;
     };
     val completion <- completion_syntax(nodes, at);
-    if (completion == BreakCompletion) return check_case_transfer(nodes, names, facts, sites, at, used, revision, true);
+    if (completion == BreakCompletion) {
+        val destination <- names[at].declaration;
+        if (destination < intrinsic (len)(views) && (case views[destination] of {
+            OrdinaryHereBody -> true;
+            OrdinaryHereWrapper -> true;
+            _ -> false
+        })) {
+            sites[at].can_continue <- 0u8;
+            return 0u8
+        };
+        return check_case_transfer(nodes, names, facts, sites, at, used, revision, true)
+    };
     case nodes[at] of {
         (Vacant) -> { return invalid_completion_tree(); };
         (Occupied { val syntax <- node, }) -> {
@@ -1481,7 +1520,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     # before the child is visited. Ordinary brace groups keep that context.
     for (offset in 0u64 .. tree.used) {
         site <- tree.root - offset;
-        prepare_context(nodes, facts, sites, site, tree.used, tree.revision);
+        prepare_context(nodes, facts, views, sites, site, tree.used, tree.revision);
     };
     val slot_bodies <- false;
     val builder_append <- false;

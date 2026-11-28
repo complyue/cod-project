@@ -33,8 +33,8 @@ using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CE
 using "./ParserStorage.cod" LocalMode { ValueLocal, ReferenceLocal, PointerLocal, ExceptionLocal };
 using "./ParserStorage.cod" TextLiteralSyntax { NulFreeLiteral };
 using "./ParserStorage.cod" { DirectInvocationSyntax { DirectInvocationReady }, HereSites,
-    inspect_here_invocation, NodeId,
-    HereSyntax { HereReady }, ExprPayload { HereInvocation, ContinueValue, ContinueVoid } };
+    inspect_here_invocation, inspect_here_actual, NamedArgumentSites, inspect_named_argument, NodeId,
+    HereSyntax { HereReady }, ExprPayload { HereInvocation, HereSupply, NamedArgument, ContinueValue, ContinueVoid } };
 using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
@@ -122,7 +122,7 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion {
 };
 using "./ModuleIndex.cod" { Visits, contains_checked_interface };
 using "./ModuleExportStorage.cod" { array_length_family_interface, source_text_family_interface, text_writer_family_interface };
-using "./ParserStorage.cod" { completion_syntax, CompletionSyntax { ReturnCompletion } };
+using "./ParserStorage.cod" { completion_syntax, CompletionSyntax { ReturnCompletion, ContinueCompletion } };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, needs_signature_check };
 using "./NameResolution.cod" EnumAssertion { FoldedEnumOperand, ConstantEnumAssertion, ValueEnumAssertion };
@@ -142,7 +142,7 @@ using "./ExceptionPayload.cod" {
     CaughtFieldUses, CaughtFieldUse { CaughtField }, unknown_exception_field
 };
 using "./NativeDeclarations.cod" {
-    SuppliedViews, HereContract, inspect_here_contract, HandleContract, inspect_handle_contract,
+    SuppliedViews, HereContract, inspect_here_contract, independent_formal_kind, HandleContract, inspect_handle_contract,
     inspect_acquired_handle_loan,
     prepared_here_formal, prepared_native_operation, prepared_array_signature, published_record_array, published_record_array_storage,
 };
@@ -155,6 +155,8 @@ using "./NativeDeclarations.cod" { prepared_workspace_loans, workspace_sum_outpu
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall, ImportedSourceTextCall, ImportedTextWriterCall, BoundReferenceSymbol, PreparedTextInstallation,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
+    OrdinaryHereBody, OrdinaryHereReceiver, OrdinaryHereCall, OrdinaryHereArgument,
+    OrdinaryHereLabel, OrdinaryHereWrapper, OrdinaryHereInvocation,
     ReadonlyByteRead, PreparedArrayConstruction, PreparedGenericConstruction, BoundGenericCall, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
     CheckedScalarFunctionCall, CheckedScalarPredicateCall,
@@ -1832,9 +1834,9 @@ func check_augmented_transfer(nodes:const ExprNodes in N, facts:OperandFacts in 
 func ordinary_argument_value(nodes:const ExprNodes in N, used:UInt64, revision:UInt64, argument:UInt64) -> UInt64
     where {const owner N} {
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
-    return if (inspect_sequence_entry(nodes, revision, used, argument, entry) == ArgumentSequence) {
-        (entry.item)
-    } else { no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence) return no_node();
+    ref named = make NamedArgumentSites { operand <- no_node(); label <- no_node() };
+    return if (inspect_named_argument(nodes, revision, argument, entry.item, named)) { (named.operand) } else { (entry.item) };
 }
 
 func callable_formals(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
@@ -2735,6 +2737,50 @@ func select_value_method(nodes:const ExprNodes in N, links:const NameWork in L, 
     return invalid_operand_tree()
 }
 
+func check_here_result(nodes:const ExprNodes in N, facts:OperandFacts in F, value:UInt64, expected:UInt8)
+    -> UInt8 where {const owner N, owner F} {
+    if (expected == 0u8) return unproved_result_contract();
+    val actual <- if (value == no_node()) { void_result() } else { (facts[value].kind) };
+    if (actual == never_result()) return 0u8;
+    if (expected == builtin_void() || value == no_node())
+        return if (actual == void_result() && expected == builtin_void()) { 0u8 } else { wrong_return_type() };
+    val kind <- source_scalar_kind(expected);
+    if (kind == source_u32()) return require_source_u32(nodes, facts, value, false);
+    return require_typed_bits(nodes, facts, value, kind)
+}
+
+func check_ordinary_here_invocation(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, facts:OperandFacts in F, contract:const HereContract in C,
+    at:UInt64, arguments:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner L, owner F, const owner C} {
+    val argument <- no_node();
+    if (!first_sequence_entry(nodes, revision, at, arguments, ArgumentSequence, argument)) return invalid_operand_tree();
+    val parameter <- contract.first_parameter;
+    val input <- no_node();
+    val diagnostic <- 0u8;
+    val can_enter <- true;
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node() || argument == no_node()) {
+            if (parameter != argument) return wrong_argument_count();
+            if (!can_enter) { set_result(facts, at, never_result()); return 0u8 };
+            set_result(facts, at, if (contract.result_kind == builtin_void()) { void_result() }
+                else { source_scalar_kind(contract.result_kind) });
+            return 0u8
+        };
+        input <- ordinary_argument_value(nodes, used, revision, argument);
+        if (input >= argument || argument >= at || checked_ref_argument(nodes, argument)) return invalid_operand_tree();
+        can_enter <- can_enter && facts[input].kind != never_result();
+        if (can_enter) {
+            diagnostic <- check_here_result(nodes, facts, input,
+                independent_formal_kind(nodes, names, parameter, used, revision));
+            if (diagnostic != 0u8) return diagnostic
+        };
+        parameter <- links[parameter].next;
+        (argument <- links[argument].next):void
+    };
+    return invalid_operand_tree()
+}
+
 func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                        selected:const SelectedExports in E, facts:OperandFacts in F,
                        owners:CallOwners in O, views:const SuppliedViews in H, cases:const ConstructorCaseFacts in C, at:UInt64, callee:UInt64,
@@ -2762,8 +2808,12 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
             first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity
                 <- 0u64
         };
-        if (callback >= used || prepared_here_formal(views, at) != callback ||
-            !inspect_here_contract(views, callback, contract)) return unproved_call_target();
+        if (callback >= used || !inspect_here_contract(views, callback, contract)) return unproved_call_target();
+        if (source_only && at < intrinsic (len)(views) && (case views[at] of {
+            OrdinaryHereInvocation { val selected <- formal, } -> selected == callback;
+            _ -> false
+        })) return check_ordinary_here_invocation(nodes, names, links, facts, contract, at, arguments, used, revision);
+        if (prepared_here_formal(views, at) != callback) return unproved_call_target();
         return remember_native_result(facts, at, contract.result_kind, contract.result_module,
             contract.result_identity)
     };
@@ -2832,6 +2882,10 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (pending && !facts[at].statement_operand) return unproved_result_contract();
     val result_owner <- facts[definition].owner;
     val first_formal <- formal;
+    val ordinary_here <- source_only && at < intrinsic (len)(views) && (case views[at] of {
+        OrdinaryHereCall { val selected <- definition, } -> selected == definition;
+        _ -> false
+    });
     val independent_loan_result <- source_only &&
         (scalar_kind(facts[definition].kind) || facts[definition].kind == source_u32() ||
             facts[definition].kind == void_result()) &&
@@ -2856,9 +2910,13 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     val can_enter <- true;
     val diagnostic <- 0u8;
     val input <- no_node();
+    val here_operand <- false;
+    ref receipt = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
     for (unused in 0u64 .. used) {
-        if (formal == no_node() || argument == no_node()) {
-            if (formal != argument) return wrong_argument_count();
+        if (argument == no_node() || (!ordinary_here && formal == no_node())) {
+            if (!ordinary_here && formal != argument) return wrong_argument_count();
             if (!can_enter) { set_result(facts, at, never_result()); return 0u8 };
             if (!pending) { copy_fact(facts, at, definition) };
             if (facts[definition].reception == borrowed_ref()) {
@@ -2871,12 +2929,23 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
             facts[at].loans_array_slot <- loans_array_slot;
             return 0u8;
         } else {};
-        if (checks_slot_call || checks_scoped_call || pending || facts[at].text_call) {
-            input <- ordinary_argument_value(nodes, used, revision, argument);
+        if (ordinary_here) {
+            case views[argument] of {
+                OrdinaryHereArgument { val slot <- formal, val prepared <- operand, } -> {
+                    formal <- slot;
+                    (input <- prepared):void
+                };
+                _ -> { return invalid_operand_tree() }
+            };
+            if (formal >= used) return invalid_operand_tree();
+            (here_operand <- inspect_here_contract(views, formal, receipt)):void
+        } else { (here_operand <- false):void };
+        if (!here_operand && (ordinary_here || checks_slot_call || checks_scoped_call || pending || facts[at].text_call)) {
+            if (!ordinary_here) { (input <- ordinary_argument_value(nodes, used, revision, argument)):void };
             if (input >= argument || argument >= at || formal >= used) return invalid_operand_tree();
             (can_enter <- can_enter && facts[input].kind != never_result()):void
         };
-        if (can_enter) {
+        if (can_enter && !here_operand) {
             diagnostic <- check_argument(nodes, names, selected, links, facts, owners, cases, argument,
                 formal, at, used, revision, independent_loan_result, definition, first_formal, source_only,
                 checks_scoped_call, checks_slot_call, checked_mixed_loan);
@@ -2885,7 +2954,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
             loans_scoped_aggregate <- loans_scoped_aggregate || facts[argument].loans_scoped_aggregate;
             (loans_array_slot <- loans_array_slot || facts[argument].array_slot != no_node()):void
         };
-        formal <- links[formal].next;
+        if (!ordinary_here) { (formal <- links[formal].next):void };
         argument <- links[argument].next;
     };
     return invalid_operand_tree();
@@ -6397,6 +6466,9 @@ func check_bound_name(names:const NameBindings in B, links:const NameWork in L,
                     facts[at].identity_module <- module;
                     (facts[at].target_readonly <- if (readonly) { 1u8 } else { 0u8 }):void
                 };
+                (OrdinaryHereReceiver { val kind <-, }) -> {
+                    set_result(facts, at, source_scalar_kind(kind))
+                };
                 _ -> {}
             }
         }
@@ -6445,12 +6517,89 @@ func check_native_here_value(nodes:const ExprNodes in N, links:const NameWork in
     return 0u8
 }
 
+func check_ordinary_here_exit(nodes:const ExprNodes in N, links:const NameWork in L,
+    facts:OperandFacts in F, views:const SuppliedViews in H, target:UInt64, at:UInt64,
+    used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner L, owner F, const owner H} {
+    val supplied <- target;
+    ref actual = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false
+    };
+    if (case views[target] of { OrdinaryHereWrapper -> true; _ -> false }) {
+        if (inspect_here_invocation(nodes, revision, used, target, actual) != HereReady) return invalid_operand_tree();
+        (supplied <- actual.supplied):void
+    };
+    val formal <- no_node();
+    val call <- no_node();
+    case views[supplied] of {
+        OrdinaryHereBody { val selected <- formal, val origin <- call, } -> {
+            formal <- selected;
+            (call <- origin):void
+        };
+        _ -> { return unproved_call_target() }
+    };
+    ref contract = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
+    val value <- no_node();
+    if (!completion_operand(nodes, revision, used, at, value) ||
+        !inspect_here_contract(views, formal, contract)) return invalid_operand_tree();
+    val kind <- if (completion_syntax(nodes, at) == ContinueCompletion) {
+        (contract.result_kind)
+    } else { (links[call].value_kind) };
+    val diagnostic <- check_here_result(nodes, facts, value, kind);
+    if (diagnostic == 0u8) { set_result(facts, at, never_result()) };
+    return diagnostic
+}
+
+func check_ordinary_here_body(nodes:const ExprNodes in N, facts:OperandFacts in F,
+    views:const SuppliedViews in H, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, owner F, const owner H} {
+    val formal <- case views[at] of {
+        OrdinaryHereBody { val expected <- formal, } -> expected;
+        _ -> no_node()
+    };
+    if (formal == no_node()) return 0u8;
+    ref actual = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false
+    };
+    ref contract = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
+    if (!inspect_here_actual(nodes, revision, used, at, actual) ||
+        !inspect_here_contract(views, formal, contract)) return invalid_operand_tree();
+    if (actual.full_scope || contract.result_kind != builtin_void()) {
+        val diagnostic <- check_here_result(nodes, facts, actual.body, contract.result_kind);
+        if (diagnostic != 0u8) return diagnostic
+    };
+    only_void(facts, at);
+    return 0u8
+}
+
+func ordinary_here_site(views:const SuppliedViews in V, at:UInt64) -> bool where {const owner V} {
+    return at < intrinsic (len)(views) && (case views[at] of {
+        OrdinaryHereBody -> true;
+        OrdinaryHereWrapper -> true;
+        _ -> false
+    })
+}
+
+func check_break(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:OperandFacts in F, views:const SuppliedViews in H, at:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, const owner B, const owner L, owner F, const owner H} {
+    val target <- names[at].declaration;
+    if (ordinary_here_site(views, target)) return check_ordinary_here_exit(nodes, links, facts, views, target, at, used, revision);
+    return record_case_break(nodes, names, facts, at, used, revision)
+}
+
 func check_here_continue(nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in L,
-                         facts:OperandFacts in F, at:UInt64, used:UInt64, revision:UInt64) -> UInt8
-    where {const owner N, const owner B, const owner L, owner F} {
+                         facts:OperandFacts in F, views:const SuppliedViews in H,
+                         at:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner L, owner F, const owner H} {
     val target <- names[at].declaration;
     if (target >= used) return unproved_call_target();
+    if (ordinary_here_site(views, target))
+        return check_ordinary_here_exit(nodes, links, facts, views, target, at, used, revision);
     ref invocation = make HereSites {
         call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node();
             full_scope <- false
@@ -7812,16 +7961,34 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                         at, callee.index, no_node(), used, revision, source_only, false);
                 };
                 (HereInvocation { val call <- call, }) -> {
+                    if (ordinary_here_site(views, at)) {
+                        copy_fact(facts, at, call.index);
+                        return 0u8
+                    };
                     return check_native_here_value(nodes, links, facts, at, call, used, revision)
+                };
+                (HereSupply) -> {
+                    if (at < intrinsic (len)(views))
+                        return check_ordinary_here_body(nodes, facts, views, at, used, revision);
+                    return 0u8
+                };
+                (NamedArgument) -> {
+                    if (at < intrinsic (len)(views)) {
+                        case views[at] of {
+                            OrdinaryHereLabel { val input <- operand, } -> { copy_fact(facts, at, input); };
+                            _ -> {}
+                        }
+                    };
+                    return 0u8
                 };
                 (ReturnValue { val value <- value, }) -> {
                     if (!published_syntax_id(nodes, revision, used, value)) return invalid_operand_tree();
                     return check_return(nodes, names, facts, at, value.index, used, revision);
                 };
                 (ReturnVoid) -> { return check_return(nodes, names, facts, at, no_node(), used, revision); };
-                (ContinueValue) -> { return check_here_continue(nodes, names, links, facts, at,
+                (ContinueValue) -> { return check_here_continue(nodes, names, links, facts, views, at,
                     used, revision); };
-                (ContinueVoid) -> { return check_here_continue(nodes, names, links, facts, at, used,
+                (ContinueVoid) -> { return check_here_continue(nodes, names, links, facts, views, at, used,
                     revision); };
                 (PredicateAssertion { val predicate <-, }) -> {
                     if (!published_syntax_id(nodes, revision, at, predicate)) return invalid_operand_tree();
@@ -7864,8 +8031,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     return 0u8;
                 };
                 (NamedThrow) -> { set_result(facts, at, never_result()); return 0u8; };
-                (BreakValue) -> { return record_case_break(nodes, names, facts, at, used, revision); };
-                (BreakVoid) -> { return record_case_break(nodes, names, facts, at, used, revision); };
+                (BreakValue) -> { return check_break(nodes, names, links, facts, views, at, used, revision) };
+                (BreakVoid) -> { return check_break(nodes, names, links, facts, views, at, used, revision) };
                 (CaseFallthrough) -> { return record_case_fallthrough(nodes, names, facts, at, used, revision); };
                 (CaseFailure) -> { set_result(facts, at, never_result()); return 0u8; };
                 (_) -> {};

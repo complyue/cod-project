@@ -1,3 +1,4 @@
+using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax };
 using "./ModuleExportStorage.cod" SourceWriter;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
@@ -9,7 +10,8 @@ using "./ParserStorage.cod" { SourceSpan, BulkSelectionSites, inspect_bulk_selec
     PublicView { DefaultPublic } };
 using "./ParserStorage.cod" {
     ExprNodes, no_node,
-    HereSites, inspect_here_invocation, DirectCallSites, direct_invocation,
+    HereSites, inspect_here_invocation, inspect_here_actual, is_here_formal, DirectCallSites, direct_invocation,
+    NamedArgumentSites, inspect_named_argument, reference_here_receiver,
     SequenceEntry, inspect_sequence_entry, first_sequence_entry, is_scope_block, linear_void_body, completion_syntax, completion_operand,
     checked_ref_argument,
     ungrouped, ConditionalSites, inspect_conditional, LogicalSites, inspect_logical,
@@ -51,6 +53,7 @@ using "./ParserStorage.cod" SignatureSyntax {
     OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
 };
 using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint };
+using "./ParserStorage.cod" ExprPayload { HereSupply, NamedArgument };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength, NameReference,
@@ -140,6 +143,12 @@ func wrong_constructor_arity() -> UInt8 { return 57u8; }
 func unproved_constructor_operand() -> UInt8 { return 58u8; }
 func mismatched_actual_handle_owner() -> UInt8 { return 59u8; }
 func invalid_constructor_bits() -> UInt8 { return 60u8; }
+func ordinary_here_parameter_required() -> UInt8 { return 170u8; }
+func duplicate_call_argument() -> UInt8 { return 171u8; }
+func incompatible_forwarded_here() -> UInt8 { return 172u8; }
+func missing_call_argument() -> UInt8 { return 173u8; }
+func unknown_argument_label() -> UInt8 { return 174u8; }
+func extra_call_argument() -> UInt8 { return 175u8; }
 func here_operation_required() -> UInt8 { return 64u8; }
 func unproved_imported_here_signature() -> UInt8 { return 65u8; }
 func mismatched_here_receivers() -> UInt8 { return 66u8; }
@@ -1495,6 +1504,13 @@ export data SuppliedView =
     HereFormalContract { first_parameter:UInt64, result_kind:UInt8, result_module:UInt64,
         result_identity:UInt64, } |
     PreparedHereInvocation { formal:UInt64, } |
+    OrdinaryHereBody { formal:UInt64, call:UInt64, } |
+    OrdinaryHereReceiver { kind:UInt8, } |
+    OrdinaryHereCall { definition:UInt64, } |
+    OrdinaryHereArgument { formal:UInt64, operand:UInt64, } |
+    OrdinaryHereLabel { operand:UInt64, } |
+    OrdinaryHereWrapper {} |
+    OrdinaryHereInvocation { formal:UInt64, } |
     PreparedSourceHereRelay { formal:UInt64, } |
     PreparedSynchronousHere { call:UInt64, } |
     PreparedHandleFormal { marker:UInt64, owner_site:UInt64, readonly:bool, } |
@@ -2161,7 +2177,7 @@ func independent_formal_type(nodes:const ExprNodes in N, formal:UInt64, used:UIn
     return (binding.target_type)
 }
 
-func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
+export func independent_formal_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
     formal:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B} {
     val type <- independent_formal_type(nodes, formal, used, revision);
     return if (type < used) { (names[type].kind) } else { 0u8 }
@@ -3960,7 +3976,7 @@ func prepare_here_contract(nodes:const ExprNodes in N, names:const NameBindings 
         inspect_signature(nodes, revision, used, clause, result) != ValueResultClause) return;
     val feedback <- result.annotation;
     val kind <- native_value_kind(names, selected, feedback);
-    if (!native_scalar(kind) && kind != enum_type()) return;
+    if (!native_scalar(kind) && kind != enum_type() && kind != builtin_void()) return;
     val module <- 0u64;
     val identity <- 0u64;
     if (kind == enum_type()) {
@@ -4320,6 +4336,297 @@ func prepare_native_loan_call(nodes:const ExprNodes in N, names:const NameBindin
     return
 }
 
+array ArgumentSlots[UInt64]:UInt64;
+
+func here_formal_name(nodes:const ExprNodes in N, formal:UInt64, used:UInt64, revision:UInt64)
+    -> UInt64 where {const owner N} {
+    ref parameter = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    val form <- inspect_formal(nodes, revision, used, formal, parameter);
+    if (form == HereFormalSyntax) {
+        val head <- no_node();
+        ref header = make SignatureSites {
+            previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+        };
+        if (!find_signature_clause(nodes, revision, used, parameter.signature, SignatureHead, head) ||
+            inspect_signature(nodes, revision, used, head, header) != SignatureHead) return no_node();
+        return header.name
+    };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (form != OrdinaryFormal || inspect_binding(nodes, revision, used, parameter.binding, binding) != TypedBinding)
+        return no_node();
+    return binding.name
+}
+
+func find_labeled_formal(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    work:const NameWork in W, label:UInt64, first:UInt64, used:UInt64, revision:UInt64) -> UInt64
+    where {const owner S, const owner N, const owner W} {
+    val first_byte <- syntax_first(nodes, used, label);
+    val past_byte <- syntax_past(nodes, used, label);
+    val formal <- first;
+    val name <- no_node();
+    for (unused in 0u64 .. used) {
+        if (formal == no_node()) return no_node();
+        name <- here_formal_name(nodes, formal, used, revision);
+        if (name == no_node()) return no_node();
+        if (same_bytes(source, first_byte, past_byte, source, syntax_first(nodes, used, name),
+            syntax_past(nodes, used, name))) return formal;
+        (formal <- work[formal].next):void
+    };
+    return no_node()
+}
+
+func scalar_here_contract(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, contract:const HereContract in H, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner W, const owner H} {
+    if (contract.result_kind != builtin_void() && !source_call_scalar(contract.result_kind)) return false;
+    val parameter <- contract.first_parameter;
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node()) return true;
+        if (!source_call_scalar(independent_formal_kind(nodes, names, parameter, used, revision))) return false;
+        (parameter <- work[parameter].next):void
+    };
+    return false
+}
+
+func matches_forwarded_here(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:const SuppliedViews in V, input:UInt64,
+    expected:const HereContract in H, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner W, const owner V, const owner H} {
+    if (input >= used || names[input].kind != formal_binding()) return false;
+    ref actual = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
+    if (!inspect_here_contract(views, names[input].declaration, actual) ||
+        actual.result_kind != expected.result_kind) return false;
+    val left <- actual.first_parameter;
+    val right <- expected.first_parameter;
+    val kind <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (left == no_node() || right == no_node()) return left == right;
+        kind <- independent_formal_kind(nodes, names, right, used, revision);
+        if (kind == 0u8 || kind != independent_formal_kind(nodes, names, left, used, revision)) return false;
+        left <- work[left].next;
+        (right <- work[right].next):void
+    };
+    return false
+}
+
+func bind_ordinary_here_body(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, actual:const HereSites in A,
+    expected:const HereContract in H, formal:UInt64, call:UInt64, used:UInt64, revision:UInt64)
+    -> UInt8 where {const owner N, const owner B, const owner W, owner V, const owner A, const owner H} {
+    val receiver <- no_node();
+    if (!first_sequence_entry(nodes, revision, used, actual.receivers, HereReceiverSequence, receiver))
+        return invalid_native_callback();
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    val parameter <- expected.first_parameter;
+    val shape <- InvalidBindingSyntax;
+    val kind <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (receiver == no_node() || parameter == no_node()) {
+            if (receiver != parameter) return mismatched_here_receivers();
+            views[actual.supplied] <- make OrdinaryHereBody { formal <- formal; call <- call };
+            return 0u8
+        };
+        if (inspect_sequence_entry(nodes, revision, used, receiver, entry) != HereReceiverSequence)
+            return invalid_native_callback();
+        shape <- inspect_binding(nodes, revision, used, entry.item, binding);
+        kind <- independent_formal_kind(nodes, names, parameter, used, revision);
+        if (shape == InvalidBindingSyntax || kind == 0u8) return invalid_native_callback();
+        if (reference_here_receiver(nodes, receiver) ||
+            (shape == TypedBinding && (binding.owner_name != no_node() || binding.target_type >= used ||
+                names[binding.target_type].kind != kind))) return mismatched_here_receiver_type();
+        views[receiver] <- make OrdinaryHereReceiver { kind <- kind };
+        receiver <- work[receiver].next;
+        (parameter <- work[parameter].next):void
+    };
+    return invalid_native_callback()
+}
+
+func bind_ordinary_here_input(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:SuppliedViews in V, input:UInt64, formal:UInt64,
+    call:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner W, owner V} {
+    ref actual = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false
+    };
+    val literal <- inspect_here_actual(nodes, revision, used, input, actual);
+    ref expected = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
+    if (!inspect_here_contract(views, formal, expected)) {
+        if (literal || (input < used && names[input].kind == formal_binding() &&
+            is_here_formal(nodes, used, names[input].declaration))) return ordinary_here_parameter_required();
+        return 0u8
+    };
+    if (literal) return bind_ordinary_here_body(nodes, names, work, views, actual, expected, formal, call, used, revision);
+    return if (matches_forwarded_here(nodes, names, work, views, input, expected, used, revision)) {
+        0u8
+    } else { incompatible_forwarded_here() }
+}
+
+func bind_ordinary_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, work:const NameWork in W, views:SuppliedViews in V, slots:ArgumentSlots in M,
+    actual:const DirectCallSites in A, call:UInt64, definition:UInt64, first:UInt64, attached:UInt64,
+    used:UInt64, revision:UInt64, report:NativeDeclarationResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner W, owner V, owner M, const owner A, owner R} {
+    val positional <- first;
+    val issue <- 0u8;
+    if (attached != no_node()) {
+        ref trailing = make HereSites {
+            call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false
+        };
+        if (inspect_here_invocation(nodes, revision, used, attached, trailing) != HereReady || trailing.call != call) {
+            reject_declaration(report, attached, invalid_native_callback());
+            return false
+        };
+        issue <- bind_ordinary_here_input(nodes, names, work, views, trailing.supplied, first, call, used, revision);
+        if (issue != 0u8) { reject_declaration(report, trailing.supplied, issue); return false };
+        slots[first] <- call;
+        (positional <- work[first].next):void
+    };
+    val argument <- no_node();
+    if (!first_sequence_entry(nodes, revision, call, actual.arguments, ArgumentSequence, argument)) {
+        reject_declaration(report, call, invalid_native_callback());
+        return false
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref named = make NamedArgumentSites { operand <- no_node(); label <- no_node() };
+    val input <- no_node();
+    val formal <- no_node();
+    val named_suffix <- false;
+    val labeled <- false;
+    for (unused in 0u64 .. used) {
+        if (argument == no_node()) {
+            formal <- first;
+            for (remaining in 0u64 .. used) {
+                if (formal == no_node()) {
+                    views[call] <- make OrdinaryHereCall { definition <- definition };
+                    if (attached != no_node()) { (views[attached] <- make OrdinaryHereWrapper {}):void };
+                    return true
+                };
+                if (slots[formal] != call) { reject_declaration(report, call, missing_call_argument()); return false };
+                (formal <- work[formal].next):void
+            };
+            reject_declaration(report, call, invalid_native_callback());
+            return false
+        };
+        if (inspect_sequence_entry(nodes, revision, call, argument, entry) != ArgumentSequence ||
+            checked_ref_argument(nodes, argument)) {
+            reject_declaration(report, argument, invalid_native_callback());
+            return false
+        };
+        input <- entry.item;
+        formal <- positional;
+        labeled <- inspect_named_argument(nodes, revision, argument, input, named);
+        if (labeled) {
+            formal <- find_labeled_formal(source, nodes, work, named.label, first, used, revision);
+            if (formal == no_node()) {
+                reject_declaration(report, named.label, unknown_argument_label());
+                return false
+            };
+            if (named.operand == no_node()) {
+                reject_declaration(report, input, missing_call_argument());
+                return false
+            };
+            named_suffix <- named_suffix || formal != positional;
+            views[input] <- make OrdinaryHereLabel { operand <- named.operand };
+            (input <- named.operand):void
+        } else {
+            if (named_suffix) { reject_declaration(report, input, 45u8); return false }
+        };
+        if (formal == no_node()) {
+            reject_declaration(report, entry.item, extra_call_argument());
+            return false
+        };
+        if (slots[formal] == call) {
+            reject_declaration(report, if (labeled) { (named.label) } else { (entry.item) }, duplicate_call_argument());
+            return false
+        };
+        issue <- bind_ordinary_here_input(nodes, names, work, views, input, formal, call, used, revision);
+        if (issue != 0u8) { reject_declaration(report, input, issue); return false };
+        slots[formal] <- call;
+        views[argument] <- make OrdinaryHereArgument { formal <- formal; operand <- input };
+        if (formal == positional) { (positional <- work[formal].next):void };
+        (argument <- work[argument].next):void
+    };
+    reject_declaration(report, call, invalid_native_callback());
+    return false
+}
+
+func scalar_here_formals(nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in W, views:const SuppliedViews in V, first:UInt64, used:UInt64,
+    revision:UInt64) -> bool where {const owner N, const owner B, const owner W, const owner V} {
+    ref expected = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
+    if (!is_here_formal(nodes, used, first)) return false;
+    val parameter <- first;
+    for (unused in 0u64 .. used) {
+        if (parameter == no_node() || !is_here_formal(nodes, used, parameter)) return true;
+        if (!inspect_here_contract(views, parameter, expected) ||
+            !scalar_here_contract(nodes, names, work, expected, used, revision)) return false;
+        (parameter <- work[parameter].next):void
+    };
+    return false
+}
+
+func prepare_ordinary_here_calls(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, work:const NameWork in W, views:SuppliedViews in V,
+    used:UInt64, revision:UInt64, report:NativeDeclarationResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner W, owner V, owner R} {
+    ref slots = make ArgumentSlots(used, no_node());
+    ref attached = make ArgumentSlots(used, no_node());
+    ref syntax = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false
+    };
+    for (at in 0u64 .. used) {
+        if (inspect_here_invocation(nodes, revision, used, at, syntax) == HereReady) {
+            attached[syntax.call] <- at;
+            (attached[syntax.supplied] <- at):void
+        }
+    };
+    ref actual = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    val first <- no_node();
+    val head <- no_node();
+    val definition <- no_node();
+    for (at in 0u64 .. used) {
+        if (direct_invocation(nodes, revision, used, at, actual) == DirectInvocationReady &&
+            names[actual.callee].kind == callable_binding()) {
+            definition <- names[actual.callee].declaration;
+            if (definition < used && work[definition].next_method == no_node() &&
+                work[definition].active == no_node() &&
+                inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable &&
+                signature_formals(nodes, revision, used, callable.signature, head, first) &&
+                scalar_here_formals(nodes, names, work, views, first, used, revision) &&
+                variadic_method_formal(nodes, revision, used, definition) == no_node()) {
+                if (!bind_ordinary_here_call(source, nodes, names, work, views, slots,
+                    actual, at, definition, first, attached[at], used, revision, report)) return false
+            }
+        }
+    };
+    ref named = make NamedArgumentSites { operand <- no_node(); label <- no_node() };
+    for (at in 0u64 .. used) {
+        if (inspect_named_argument(nodes, revision, used, at, named) &&
+            !(case views[at] of { OrdinaryHereLabel -> true; _ -> false })) {
+            reject_declaration(report, at, 45u8);
+            return false
+        };
+        if (attached[at] == no_node() && inspect_here_actual(nodes, revision, used, at, syntax) &&
+            !(case views[at] of { OrdinaryHereBody -> true; _ -> false })) {
+            reject_declaration(report, at, here_operation_required());
+            return false
+        }
+    };
+    return true
+}
+
 func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
                          work:NameWork in W, views:SuppliedViews in V, used:UInt64, revision:UInt64,
                          emit_object:bool, report:NativeDeclarationResult in R) -> bool
@@ -4334,6 +4641,9 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
     val callee <- no_node();
     val definition <- no_node();
     val callback <- no_node();
+    ref expected = make HereContract {
+        first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64
+    };
     for (at in 0u64 .. used) {
         direct <- direct_invocation(nodes, revision, used, at, invocation);
         if (direct == InvalidInvocation) {
@@ -4342,6 +4652,12 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
         };
         if (direct == DirectInvocationReady) {
             callee <- invocation.callee;
+            if (!emit_object && names[callee].kind == formal_binding() &&
+                inspect_here_contract(views, names[callee].declaration, expected) &&
+                scalar_here_contract(nodes, names, work, expected, used, revision)) {
+                views[at] <- make OrdinaryHereInvocation { formal <- names[callee].declaration };
+                work[at].value_kind <- expected.result_kind
+            };
             if (names[callee].kind == c_operation() || names[callee].kind == callable_binding() || names[callee].kind == c_entry()) {
                 definition <- names[callee].declaration;
                 if ((names[callee].kind != callable_binding() || work[definition].next_method ==
@@ -4364,7 +4680,7 @@ func prepare_local_calls(nodes:const ExprNodes in N, names:const NameBindings in
                 reject_declaration(report, at, invalid_native_callback());
                 return false;
             };
-            if (here == HereReady) {
+            if (here == HereReady && !(case views[at] of { OrdinaryHereWrapper -> true; _ -> false })) {
                 call <- sites.call;
                 if (direct_invocation(nodes, revision, used, call, invocation) != DirectInvocationReady) {
                     reject_declaration(report, sites.supplied, here_operation_required());
@@ -4407,7 +4723,8 @@ func here_completion_destination(nodes:const ExprNodes in N, names:const NameBin
         ref sites = make HereSites {
             call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
         };
-        if (inspect_here_invocation(nodes, revision, used, target, sites) == HereReady) return target;
+        if (inspect_here_invocation(nodes, revision, used, target, sites) == HereReady &&
+            work[sites.call].expects_here != 0u8) return target;
         return no_node();
     };
     val scope <- names[at].scope;
@@ -5418,7 +5735,8 @@ export func check_module_interfaces(
     for (at in 0u64 .. used) {
         bind_reference_symbol(nodes, names, selected, views, at, used, revision);
         if (prepare_text_writer_family(nodes, names, work, views, at, used, revision) ||
-            prepared_source_here_relay(views, at) != no_node()) {
+            prepared_source_here_relay(views, at) != no_node() ||
+            (case views[at] of { OrdinaryHereCall -> true; OrdinaryHereInvocation -> true; _ -> false })) {
             if (first_required == no_node()) { (first_required <- at):void }
         };
         mode <- inspect_handle_construction(nodes, revision, used, at, acquired);
@@ -5463,12 +5781,13 @@ export func check_module_interfaces(
 
 # Name binding supplies declaration identities and finishes using the active
 # name table before these checks reuse its workspace.
-export func check_native_declarations(nodes:const ExprNodes in N, names:NameBindings in B, work:NameWork in W,
+export func check_native_declarations(source:const SourceBytes in S, nodes:const ExprNodes in N,
+                                      names:NameBindings in B, work:NameWork in W,
                                       selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, interface_used:UInt64,
                                       facts:AggregateFacts in F, views:SuppliedViews in V, used:UInt64,
                                           revision:UInt64, emit_object:bool,
                                       report:NativeDeclarationResult in R) -> bool
-    where {const owner N, owner B, owner W, const owner E, const owner I, owner F, owner V,
+    where {const owner S, const owner N, owner B, owner W, const owner E, const owner I, owner F, owner V,
         owner R} {
     if (used > intrinsic (len)(views)) {
         reject_declaration(report, no_node(), invalid_native_callback());
@@ -5504,10 +5823,22 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         ValueFormal; };
     val form <- InvalidCallable;
     val definition <- no_node();
+    val ordinary_here_work <- false;
     for (at in 0u64 .. used) {
         if (inspect_formal(nodes, revision, used, at, formal) == HereFormalSyntax) {
-            prepare_here_contract(nodes, names, selected, views, at, formal.signature, used,
-                revision)
+            prepare_here_contract(nodes, names, selected, views, at, formal.signature, used, revision);
+            (ordinary_here_work <- true):void
+        };
+        if (!emit_object && !ordinary_here_work) {
+            ordinary_here_work <- case nodes[at] of {
+                Occupied { val syntax <- node, } -> case syntax.payload of {
+                    HereSupply -> true;
+                    NamedArgument -> true;
+                    _ -> false
+                };
+                Vacant -> false
+            };
+            {}
         };
         form <- inspect_callable(nodes, revision, used, at, callable);
         if (form == CProvider || form == CEntry) {
@@ -5527,6 +5858,7 @@ export func check_native_declarations(nodes:const ExprNodes in N, names:NameBind
         if (report.diagnostic != 0u8) return false;
     };
     return check_handle_expressions(nodes, names, selected, work, used, revision, emit_object, report) &&
+        (emit_object || !ordinary_here_work || prepare_ordinary_here_calls(source, nodes, names, work, views, used, revision, report)) &&
         prepare_local_calls(nodes, names, selected, work, views, used, revision, emit_object,
             report) &&
         (!emit_object ||

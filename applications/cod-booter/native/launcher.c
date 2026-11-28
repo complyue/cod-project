@@ -252,6 +252,18 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: break or continue requires an active single-brace here body\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 64)
         fputs(": error: the selected call has no supported first here parameter\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 170)
+        fputs(": error: a here argument requires a here parameter at this position\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 171)
+        fputs(": error: this argument supplies a parameter more than once\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 172)
+        fputs(": error: the forwarded here argument does not match the selected callback signature\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 173)
+        fputs(": error: a required call argument is missing\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 174)
+        fputs(": error: the selected declaration has no parameter with this label\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 175)
+        fputs(": error: too many arguments for the selected declaration\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 66)
         fputs(": error: here receiver count does not match the selected callback signature\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 67)

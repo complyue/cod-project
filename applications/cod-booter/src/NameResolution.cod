@@ -10,7 +10,7 @@ using "ASCII.cod" ASCII {
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, BlockSyntax, ScopeSyntax,
-    SymbolReference, SymbolicInvocation, HereInvocation, ContinueValue, ContinueVoid, BreakValue, BreakVoid, RangeLoop,
+    SymbolReference, SymbolicInvocation, HereInvocation, HereSupply, NamedArgument, ContinueValue, ContinueVoid, BreakValue, BreakVoid, RangeLoop,
     Parenthesized, Transfer, Rebind, InitializerTransfer, InitializerRebind, NamedConstruction,
     BooleanLiteral, EnumInteger, Negation, Conjunction, Disjunction, ArithmeticExpression, ComparisonExpression, Concatenation,
     IndexSelection, FieldSelection, ArrayLength, DiscardedExpression, Conditional, TextLiteral,
@@ -80,7 +80,7 @@ using "./ParserStorage.cod" {
     ProtectedSites, inspect_protected, GuardClauseSites, inspect_guard_clause, CatchSites, inspect_catch_binding,
     HandlerSites, inspect_handler, EnumMemberSites, inspect_enum_member, EnumIntegerSyntax, inspect_enum_integer, completion_syntax, syntax_first, syntax_past, published_syntax_id,
     NodeLink, SequenceEntry, inspect_sequence_entry, first_sequence_entry, first_module_item, block_tail,
-    HereSites, inspect_here_invocation, name_syntax, completion_operand, RangeSites, RangeBounds, inspect_range_header, inspect_range_loop, no_node,
+    HereSites, inspect_here_invocation, inspect_here_actual, name_syntax, completion_operand, RangeSites, RangeBounds, inspect_range_header, inspect_range_loop, no_node,
     is_function,
     BinaryOperands, named_operator_at, inspect_assignment, AssignmentSites,
     ConstructionSites, inspect_construction, NamedThrowSites, inspect_named_throw,
@@ -1853,18 +1853,9 @@ func resolve_here_receivers(source:const SourceBytes in S, nodes:const ExprNodes
     };
 }
 
-func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                       work:NameWork in W, state:NameState in R, at:UInt64) -> void
-    where {const owner S, const owner N, owner B, owner W, owner R} {
-    ref sites = make HereSites {
-        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
-    };
-    if (inspect_here_invocation(nodes, state.syntax_revision, state.syntax_used, at, sites) != HereReady) {
-        reject_name(state, at, invalid_module_tree());
-        return;
-    };
-    resolve_expression(source, nodes, bindings, work, state, sites.call);
-    if (state.diagnostic != 0u8) return;
+func resolve_here_supply(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:NameWork in W, state:NameState in R, at:UInt64, sites:const HereSites in H) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R, const owner H} {
     val body <- sites.body;
     val first <- state.first;
     val used <- state.used;
@@ -1893,8 +1884,37 @@ func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     state.here_group <- group;
     state.case_target <- case_target;
     state.case_arm <- case_arm;
-    state.native_installation <- if (sites.full_scope) { native_installation } else { (state.syntax_used) };
+    state.native_installation <- native_installation;
     (state.handoff <- target):void;
+}
+
+func resolve_here_call(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                       work:NameWork in W, state:NameState in R, at:UInt64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    ref sites = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
+    };
+    if (inspect_here_invocation(nodes, state.syntax_revision, state.syntax_used, at, sites) != HereReady) {
+        reject_name(state, at, invalid_module_tree());
+        return;
+    };
+    resolve_expression(source, nodes, bindings, work, state, sites.call);
+    if (state.diagnostic != 0u8) return;
+    resolve_here_supply(source, nodes, bindings, work, state, at, sites);
+    if (!sites.full_scope) { (state.native_installation <- state.syntax_used):void }
+}
+
+func resolve_inline_here(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:NameWork in W, state:NameState in R, at:UInt64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    ref sites = make HereSites {
+        call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
+    };
+    if (!inspect_here_actual(nodes, state.syntax_revision, state.syntax_used, at, sites)) {
+        reject_name(state, at, invalid_module_tree());
+        return
+    };
+    resolve_here_supply(source, nodes, bindings, work, state, at, sites)
 }
 
 func resolve_case(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -2463,6 +2483,27 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 (HereInvocation) -> {
                     resolve_here_call(source, nodes, bindings, work, state, at);
                     return;
+                };
+                (HereSupply) -> {
+                    resolve_inline_here(source, nodes, bindings, work, state, at);
+                    return;
+                };
+                (NamedArgument { val operand <- operand, val label <- label, }) -> {
+                    if (!published_syntax_id(nodes, state.syntax_revision, at, label)) {
+                        reject_name(state, at, invalid_module_tree());
+                        return
+                    };
+                    case operand of {
+                        (NoLink) -> {};
+                        (LinkTo { val tail <- node, }) -> {
+                            if (!published_syntax_id(nodes, state.syntax_revision, at, tail)) {
+                                reject_name(state, at, invalid_module_tree());
+                                return
+                            };
+                            resolve_expression(source, nodes, bindings, work, state, tail.index);
+                        }
+                    };
+                    return
                 };
                 (BlockSyntax { val items <- items, }) -> {
                     resolve_expression_links(source, nodes, bindings, work, state, items, at);
