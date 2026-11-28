@@ -12,7 +12,7 @@ using "./ParserStorage.cod" ExprPayload {
     NameReference, BooleanLiteral, IntegerLiteral, Negation, Conjunction, Disjunction, Parenthesized,
     Transfer, ComparisonExpression, ArithmeticExpression, DiscardedExpression, FieldSelection, IndexSelection,
     ArrayLength, Conditional, ReturningCondition, BlockSyntax, ScopeSyntax, BlockItem, ArgumentItem, ReturnVoid, ReturnValue, LocalBinding, TextLiteral,
-    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, ReserveStorage, InitializerTransfer,
+    RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, ReserveStorage, InitializerTransfer, AugmentedTransfer,
     ProtectedBlock, CatchClause, CatchHandler, CatchBinding,
     CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
     HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal, BindSymbolEffect
@@ -539,6 +539,8 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             Disjunction -> true;
             Parenthesized -> true;
             Transfer -> names[at].kind == 0u8;
+            AugmentedTransfer -> names[at].kind == 0u8 &&
+                (facts[at].kind == scalar_u64() || facts[at].kind == never_result());
             ComparisonExpression -> true;
             ArithmeticExpression -> checked_unsigned_arithmetic_kind(facts[at].kind) || facts[at].kind == never_result();
             DiscardedExpression -> true;
@@ -730,7 +732,9 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                         (checked_unsigned_arithmetic_kind(facts[at].kind) &&
                          (case nodes[at] of {
                             Occupied { val syntax <- node, } -> case syntax.payload of {
-                                ArithmeticExpression -> true; _ -> false
+                                ArithmeticExpression -> true;
+                                AugmentedTransfer -> true;
+                                _ -> false
                             };
                             Vacant -> false
                          }))) {
