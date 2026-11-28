@@ -265,7 +265,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 状态：已启动预研；基础执行与消息语义已确定，具体接口和生命周期继续讨论。
 
-CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。每次 `go` 都必须有目标资源池，即使入口不带参数。不指定目标池的启动不成立。现有本机执行采用专属 OS 线程。两种入口都能移交所有权：以候选拼法 `go on(p) entry_proc(...)` 为例，按入口过程签名中的 `own region`、`own handle` 形参接收实参的所有权；双花括号正文则用显式列表接收。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
+CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。每次 `go` 都必须有目标资源池，即使入口不带参数。不指定目标池的启动不成立。swarm 的实现形式包括线程池、本机进程池和动态招募的跨机进程池。每个运行中的 go process 占用 worker 上的专属 OS 线程。两种入口都能移交所有权：以候选拼法 `go on(p) entry_proc(...)` 为例，按入口过程签名中的 `own region`、`own handle` 形参接收实参的所有权；双花括号正文则用显式列表接收。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
 
 基础发送采用 UDP 式语义，不保证接收、不提供回执。应用按需建立可靠流、重试和业务结算协议。
 当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
@@ -279,7 +279,7 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 
 跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 packet region。packet region 始终不关联资源池，经类型化 `chan` 传递，两端可以属于不同的池。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
 
-普通 region 在 `make` 时省略池，就只在当前 go process 内使用。需要在 go process 之间移交的普通 region 在创建时关联一个实际资源池。只有同池才能在启动时或通过类型化 `chan` 移交这类资源的所有权。同机子进程可以把可重定位的普通 region 映射到不同基址，实际映射与 CoD 所有权移交分别处理。待检验的选择包括池身份怎样进入静态签名、一个池是否可跨机器，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
+普通 region 在 `make` 时无须指定 swarm，可作为本地工作空间，也可在满足消息契约时作为 packet 经 `chan` 发送。swarm region 的所有权可随启动参数在同一 swarm 内移交。即使同一 swarm 的两个线程共享地址空间，向 `chan` 发送 swarm region 也不合法。同机进程可用共享内存支持启动时的移交。待检验的选择包括成员身份怎样进入静态签名、如何验证动态招募的 worker，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
 发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)
 

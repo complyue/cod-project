@@ -1,12 +1,14 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 6 · 2026-11-28
+Design and research revision: 7 · 2026-11-28
 
 ## Design authority
 
+At r7 the [swarm and chan decision](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) admits thread pools, local process pools and dynamically recruited cross-machine process pools. D-32-RESOURCE-POOLS/P-789 limits swarm-region handoff to its swarm. D-32-REGION-TRANSPORT/P-711 admits only ordinary regions as chan payloads. This supersedes the r5–r6 same-pool chan example.
+
 At r6 the [region and packet decision](../CHANGELOG.md#h-region-locality-and-packet-chans-20261128) distinguishes ordinary region handoff from packet delivery. D-32-RESOURCE-POOLS/P-789 covers local and pool-bound ordinary regions. D-32-REGION-TRANSPORT/P-711 continues whole-packet validation and adds swarm-independent typed chan delivery. The source spellings below are proposals.
 
-At r5 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires an actual target pool for every go process and makes the pool a first-class ownership boundary. D-32-RESOURCE-POOLS/P-789 relates that boundary to both r4 launch forms and typed chan communication. The same-host shared-memory example examines feasibility. Pool construction, placement policy and endpoint syntax remain open for `e-wrks/cod`.
+At r5 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires an actual target pool for every go process and makes the pool a first-class ownership boundary for both r4 launch forms. The same-host shared-memory example examines feasibility. Pool construction, placement policy and endpoint syntax remain open for `e-wrks/cod`.
 
 At r4 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) extends the r3 ownership example to the named entry procedure and its consuming parameters. Both forms use the same dedicated thread and fresh-TLS boundary under D-10-ACTOR-CHAN/P-788.
 
@@ -46,7 +48,7 @@ double-braced body with an owner list. Each launch begins with
 fresh initial TLS. The launcher keeps its own active bindings. Several such executions can run in
 one OS process. **Chan** is the typed messaging facility. For example, a cluster coordinator can
 send work to an existing Actor on another machine, where local code can launch a go process to
-handle a partition. The local launch itself allocates one thread on that machine.
+handle a partition. While the go process runs, it occupies a dedicated OS thread on its worker. A reused worker starts the new invocation with fresh initial TLS.
 [Launch forms and effects boundary](SymbolicDynamicScope.md#go-process-launch)
 
 A chan has a **statically checked message type**. Sender and receiver code must satisfy that type's
@@ -76,23 +78,23 @@ delivery risk.
 
 ## Resource pools and ownership handoff
 
-A **resource pool** is a first-class CoD object identifying the domain within which go processes can transfer resource ownership. A program should be able to pass a pool to a library and use that same pool for related work. Every go process launch targets a particular pool, even if it passes only scalars. A scheduling policy such as “use a subprocess” by itself does not identify a pool. A pool answers *where ownership can pass*. At any instant a particular holder still has the release obligation for each owned resource. Pool membership gives no general access to another member’s resources. A thread pool or subprocess pool supplies execution capacity. A region’s internal block pool supplies storage. Neither shared capacity nor shared storage establishes ownership-transfer authority. [Regional allocation policy](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
+A **swarm** is a first-class resource pool. Every `go` launch names a target swarm. A swarm can supply a pool of OS threads in one process, a pool of OS processes on one host, or a pool of worker processes dynamically recruited across machines. Passing a swarm to a library preserves its identity. Equally configured swarms have distinct identities. The implementation determines where work runs and which physical transports it supports.
 
-Apply the same actual-pool check when a pool-bound resource passes through an owning argument of a named entry procedure, a block’s explicit owner list, or an owning message sent over a typed `chan`. Each receiving go process must be in the same actual pool for that handoff. Compare two independently created pools with identical configuration: the same-pool transfer is eligible, and the cross-pool transfer is invalid even if both workers share an OS process. Passing the same pool through a parameter or alias preserves its identity. Wrapping an owner in another message cannot change the boundary. Message type, ordinary owner/lifetime rules and the provider’s ability to transport that particular resource still apply.
+A producer can hand a **swarm region** to an indexing worker through an owning entry parameter or the block’s owner list. The producer, resource and worker must satisfy the same actual swarm requirement. The selected worker must also be able to use and release that resource. For example, shared memory can support a handoff to a local subprocess. Recruiting a remote worker into the same swarm establishes membership, but the local mapping cannot give that worker access to the bytes.
 
-For example, a producer in pool `P` builds a partition associated with `P`, then sends its region to an indexing worker. One candidate static signature relates the owned partition and the destination end of the chan through a common pool parameter `P`. A generic producer can then use either a thread worker or a subprocess worker when the backing works for both. An endpoint leading to a different pool `Q` fails the ownership check even if its message schema is identical. For a shared queue, the guarantee must cover every eligible receiver of an owning message. The way to express that relation and recover evidence after a dynamic pool selection is still a design question.
+A typed `chan` carries **only ordinary regions**. A packet is an ordinary region used as a message and has no swarm association. The same rule applies when sender and receiver belong to the very same swarm, even when both are threads in one OS process. A swarm region is ineligible as a chan payload, including inside a wrapper.
 
 ### Process-local regions, pool-bound regions and packets
 
-| Region | Association at construction | How another go process can receive it |
+| Use | Association | Rule |
 | --- | --- | --- |
-| Ordinary region for local work | Omit the pool. This also applies inside a go process launched in a pool. | The owner stays within that go process. Ordinary calls there can borrow the region or take and return ownership. |
-| Pool-bound ordinary region | Select one actual pool. The constructing holder has the release obligation. | An owning launch or typed chan handoff can pass it to another member of that same pool, subject to the resource’s transport requirements. |
-| Packet region | A packet is always independent of any pool. | Send the packet through a typed `chan`. Endpoints may belong to go processes in different pools. The receiver can use the whole packet after validation. |
+| Ordinary region for local work | Omit the swarm at construction. | A procedure in the same go process can borrow, consume or return it. Running inside a swarm gives a local region no implicit association. |
+| Ordinary region sent as a packet | Independent of swarms. | If it satisfies the chan’s message contract, the endpoint can send it within or across swarms. Reception publishes the whole validated packet. |
+| Swarm region | Belongs to one actual swarm. | An owning launch can hand it off within that swarm when its transport permits. Every chan rejects it. |
 
-For example, a coordinator in one pool sends a packet of keys to a worker in another. The worker interprets those keys using its own index. The packet needs no pool identity at construction, in transit or on receipt. An index region bound to the coordinator’s pool cannot cross that boundary inside the packet. The [packet contract](DomainLanguageDesign.md#dl-04) governs the delivered representation and its compatibility. The [chan contract](#confirmed-basis) governs send feedback.
+For example, a coordinator in one pool sends a packet of keys to a worker in another. The worker interprets those keys using its own index. The packet needs no pool identity at construction, in transit or on receipt. The coordinator keeps its swarm index region. Sending that index itself would fail even to another worker in the coordinator’s swarm. The [packet contract](DomainLanguageDesign.md#dl-04) governs the delivered representation and its compatibility. The [chan contract](#confirmed-basis) governs send feedback.
 
-**Candidate source spelling.** `swarm s` would declare a first-class resource pool with its own identity. At an ordinary region construction, `within s` would select that identity. Compare these constructions in a producer already participating in `s`:
+**Candidate source spelling.** `swarm s` would declare a first-class resource pool with its own identity. On region construction, `within s` would create a swarm region associated with that identity. Compare these constructions in a producer already participating in `s`:
 
 ```cod
 own region scratch <- make region Partition(bytes -> capacity) { count <- 0 }
@@ -104,7 +106,7 @@ Assume `Partition` has a single `count` root and the entry procedure takes its o
 
 ### A shared-memory region between local processes
 
-An ordinary structural `Partition` region can in principle use OS shared memory as its backing. Consider one partition whose nodes refer to each other through region-relative locators. The parent finishes its writes. A local subprocess maps the same backing at its own base address and resolves the same root, shared nodes and cycles. The handoff must publish the completed writes before the receiving entry or chan consumer can use the region. Linux shared-memory objects and descriptor passing provide the native pieces for such a transport. The source root schema can stay the same. [Regional graph representation](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph) · [POSIX shared memory on Linux](https://man7.org/linux/man-pages/man7/shm_overview.7.html) · [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html)
+A swarm region with the structural `Partition` schema can use OS shared memory for an owning launch to another process on the same host. Consider one partition whose nodes refer to each other through region-relative locators. The parent finishes its writes. A local subprocess maps the same backing at its own base address and resolves the same root, shared nodes and cycles. The handoff must publish the completed writes before the receiving entry can use the region. Linux shared-memory objects and descriptor passing provide the native pieces for such a transport. The source root schema can stay the same. [Regional graph representation](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph) · [POSIX shared memory on Linux](https://man7.org/linux/man-pages/man7/shm_overview.7.html) · [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html)
 
 Mapping the bytes and transferring the owner are separate events. After successful handoff the sender’s consumed binding and stale sender access paths cannot use the region, even if its native mapping still exists. The receiving side has the release obligation. A process-local native pointer or handle requires its own valid transport before the receiving program can use it. The mapping alone does not synchronize concurrent mutation or establish a lifetime for an external resource.
 
@@ -113,17 +115,19 @@ Mapping the bytes and transferring the owner are separate events. After successf
 | Case | Outcome or decision |
 | --- | --- |
 | Niladic entry or owner-free block with no target pool | Reject the launch. Having no ownership to check does not supply a target. |
-| Same pool, different OS processes on one host, relocatable shared backing | Permit the ownership path. Verify a different mapping base, preserved graph edges, visible completed writes and one release responsibility. |
-| Different pools, same address space, same region and message types | Reject the ownership path. Changing the backing or using a chan cannot authorize it. |
+| Owning launch within one swarm, different OS processes on one host, relocatable shared backing | Permit the swarm-region handoff. Verify a different mapping base, preserved graph edges, visible completed writes and one release responsibility. |
+| Two threads in one swarm send the swarm’s region through a typed chan | Reject the send even when the root matches the message schema and both threads can address the bytes. |
+| Owning launch across two distinct swarms in the same address space | Reject transfer of the swarm region. |
+| A recruited worker on another machine receives an ordinary packet via chan | Apply ordinary packet type and whole-region validation. Swarm membership supplies no mapping for a host-local resource. |
 | Same pool, subprocess receiver, opaque handle usable only in the sender process | Pool identity meets one condition. The handle still lacks a usable subprocess transport. |
 | Work is accepted into a queue and the receiving worker dies | The responsible queue or transport must account for the resource under the eventual failure contract. An ordinary chan send still gives no delivery receipt. |
-| Two pools need the same business data | Send a self-contained packet over a typed chan. The receiver may use the packet or construct its own ordinary region from the data. The sender’s pool-bound resource stays in its pool. |
+| Two pools need the same business data | Send a self-contained packet over a typed chan. The receiver may use the packet or construct its own ordinary region from the data. The sender’s swarm region stays in its swarm. |
 
-One open placement question is whether a logical pool may span machines. Shared memory covers the local-host case. A distributed pool would need to establish common membership for pool-bound resource handoff. The network path for packets works independently of that placement decision. The placement syntax, pool startup and shutdown, queue acceptance and release after failure remain separate decisions. The booter and seed retain their existing scope.
+How a distributed swarm authenticates recruited workers, places work and handles worker loss remains open. The same resource and chan rules apply regardless of worker placement. The seed and booter retain their bootstrap scope.
 
 ## Regional transport over AKCP
 
-The network transfer unit visible to the receiving Actor is one whole packet region. Typed chan delivery works within a pool or across pools. A sender may submit a
+The network transfer unit visible to the receiving Actor is one whole packet region. The packet is an ordinary region. Typed chan delivery works within a swarm or across swarms. A sender may submit a
 region of any finite length that the peers can represent and have resources to handle. The carrier
 can make progress across many UDP datagrams, AKCP records and repair windows. Bytes can arrive,
 be repaired or become permanently unavailable while a region is in progress. The runtime may

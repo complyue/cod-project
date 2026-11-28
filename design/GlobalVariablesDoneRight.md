@@ -2,9 +2,11 @@
 
 *显式组合，动态上下文 · Explicit composition and dynamic context*
 
-Design revision 39 · 2026-11-28
+Design revision 40 · 2026-11-28
 
 ## Design authority
+
+At r40 the [swarm implementation decision](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) continues P-702/P-788 for pooled workers. A new go process starts with fresh initial TLS, including when a worker previously ran another entry.
 
 At r39 the [entry procedure decision](../CHANGELOG.md#h-go-owning-parameters-20261128) applies the same fresh-TLS boundary as r38 when owning arguments enter the child. P-702/P-788 continue.
 
@@ -68,7 +70,7 @@ H-567/H-568 makes operation responsibility explicit: CoD has no C++-style object
 | Each module's dedicated world copy | Types, functions/procedures, overloaded methods, module bindings and related semantic information/values. A module explicitly exports what receivers may integrate. Information about identical imported identities merges in the receiver's own world; source worlds remain independent. |
 | Each Actor's typed dynamic-binding collection | Typed symbolic bindings. Bits payloads live directly in TLS; non-bits object references point into regions supplied by region symbols and retain their lifetime dependencies. Symbol identity S and declared type identity T remain distinct; a compatible value may originate from another module-world copy without importing that world into TLS. |
 
-Each go process starts on a new dedicated OS thread with fresh initial TLS. A parent installation of a symbol supplies no binding to the child, even when both select the same symbol identity. The child can install its own value. Module initialization and shutdown ownership remain separate. [Go process launch](SymbolicDynamicScope.md#go-process-launch)
+Each go process starts with fresh initial TLS on its dedicated OS thread. If a swarm reuses a worker, the next entry observes initial bindings. A parent installation of a symbol supplies no binding to the child, even when both select the same symbol identity. The child can install its own value. Module initialization and shutdown ownership remain separate. [Go process launch](SymbolicDynamicScope.md#go-process-launch)
 
 The worlds do not model the same set of entities. A type or callable in a module world is distinct from a typed symbolic binding. Symbol identity, type identity, the value's identity/address and its originating world are separate facts. Different local names for the same symbol reach the same TLS entry; different symbol identities do not collapse because their names match.
 
@@ -155,7 +157,7 @@ The execution mapping is settled: one Actor runs on one dedicated OS thread with
 
 A candidate first milestone uses two Actors in one native OS process, with one dedicated OS thread for each Actor. It must demonstrate isolated bindings and the selected typed-chan owner transitions. Queueing, receiving, waiting and shutdown still need their own contract. The 1:1 mapping does not select queue order, capacities or a global serial-handler policy.
 
-Use one declared regional work-package protocol and receiver entry bodies whose input and effect requirements can be checked. A receiving Actor invokes its own implementation under the required live owners. Use the [two local launch forms](SymbolicDynamicScope.md#go-process-launch) when starting a new go process. Endpoint carriers and the wire envelope remain open. Runtime envelope bookkeeping grants no user record a direct pointer into another region.
+Use one declared regional work-package protocol and receiver entry bodies whose input and effect requirements can be checked. A receiving Actor invokes its own implementation under the required live owners. Use the [two swarm-targeted launch forms](SymbolicDynamicScope.md#go-process-launch) when starting a new go process. Endpoint carriers and the wire envelope remain open. Runtime envelope bookkeeping grants no user record a direct pointer into another region.
 
 Exclusive whole-region handoff is a useful first candidate because it preserves internal sharing without sender mutation after completed handoff. In one address space, transferring system responsibility need not move payload bytes. Wire transport has separate byte, validation and compatibility costs. The [holding review](GraphGrainedMemoryManagement.md#actor-holding-and-transfer-review) compares the lifetime obligations without selecting the system-fault outcome.
 
