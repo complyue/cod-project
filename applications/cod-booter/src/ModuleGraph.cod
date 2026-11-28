@@ -1484,6 +1484,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             word_offset <- 0u64; last_initializer <- no_node(); writable_text_place <- 0u8; call_definition <- no_node();
             text_nul <- 0u8; allocation_owner <- no_node(); owner_chain <- no_node(); owner_use_next <- no_node();
             passes_owner <- 0u8; text_assertion <- 0u8; enum_assertion_check <- false; predicate_assertion_check <- false; text_intrinsic <- 0u8;
+            omitted_result <- false; statement_operand <- false;
         });
         ref owners = make CallOwners(capacity, make OwnerEvidence {
             call_site <- no_node(); actual_owner <- no_node(); uses <- 0u64;

@@ -54,7 +54,7 @@ using "./ParserStorage.cod" {
     inspect_assignment, AssignmentSites, ConstructionSites, inspect_construction,
     inspect_group, is_scope_block, SequenceEntry, inspect_sequence_entry, first_sequence_entry, block_tail,
     DeferSites, inspect_defer, syntax_first, syntax_past, owner_constraint_syntax, binds_local_storage,
-    CallableSites, inspect_callable, SignatureSites, inspect_signature, find_signature_clause,
+    CallableSites, inspect_callable, SignatureSites, inspect_signature, find_signature_clause, omits_callable_result,
     DeclarationSites, inspect_declaration, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding, inspect_type_annotation,
     LocalBindingSites, inspect_local_binding, text_literal_syntax, DirectCallSites,
         direct_invocation, inspect_invocation,
@@ -207,6 +207,8 @@ export data OperandFact {
     enum_assertion_check:bool;
     predicate_assertion_check:bool;
     text_intrinsic:UInt8;
+    omitted_result:bool;
+    statement_operand:bool;
 }
 export array OperandFacts[UInt64]:OperandFact;
 
@@ -865,7 +867,7 @@ func check_signature_clauses(nodes:const ExprNodes in N, names:const NameBinding
 func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                      facts:OperandFacts in F, views:const SuppliedViews in H,
                      selected:const SelectedExports in E, cases:const ConstructorCaseFacts in P,
-                     source_only:bool, report:OperandCheckResult in R, definition:UInt64, used:UInt64,
+                     source_only:bool, module_callable:bool, report:OperandCheckResult in R, definition:UInt64, used:UInt64,
                          revision:UInt64, callable:const CallableSites in C) -> void
     where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
         const owner P, owner R, const owner C} {
@@ -885,16 +887,17 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     check_signature_clauses(nodes, names, links, facts, selected, cases, report, source_only, definition,
         links[head].next, used, revision);
     if (report.diagnostic != 0u8 || facts[definition].kind != 0u8) return;
-    ref value = make UInt64 { no_node() };
-    ref borrowed = make UInt64 { no_node() };
-    if (source_only && !callable.function_form &&
-        find_signature_clause(nodes, revision, used, callable.signature, ValueResultClause,
-            value) &&
-        find_signature_clause(nodes, revision, used, callable.signature, BorrowedResultClause,
-            borrowed) &&
-        value == no_node() && borrowed == no_node()) {
-        only_void(facts, definition);
-        return
+    if (source_only && omits_callable_result(nodes, revision, used, callable.signature)) {
+        if (!callable.function_form) {
+            only_void(facts, definition);
+            return
+        };
+        if (module_callable &&
+            names[definition].declaration == definition && links[definition].next_method == no_node() &&
+            links[definition].active == no_node()) {
+            (facts[definition].omitted_result <- true):void;
+            return
+        }
     };
     report.node <- head;
     (report.diagnostic <- unproved_result_contract()):void
@@ -2526,6 +2529,8 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
         return procedure_call_in_function();
     if (!callable_formals(nodes, revision, used, definition, source_only, formal)) return invalid_operand_tree();
+    val pending <- facts[definition].omitted_result;
+    if (pending && !facts[at].statement_operand) return unproved_result_contract();
     val result_owner <- facts[definition].owner;
     val first_formal <- formal;
     val allow_owned_loan <- source_only &&
@@ -2555,7 +2560,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         if (formal == no_node() || argument == no_node()) {
             if (formal != argument) return wrong_argument_count();
             if (!can_enter) { set_result(facts, at, never_result()); return 0u8 };
-            copy_fact(facts, at, definition);
+            if (!pending) { copy_fact(facts, at, definition) };
             if (facts[definition].reception == borrowed_ref()) {
                 if (owners[result_owner].call_site != at) return unproved_owner();
                 (facts[at].owner <- owners[result_owner].actual_owner):void;
@@ -2566,7 +2571,7 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
             facts[at].loans_array_slot <- loans_array_slot;
             return 0u8;
         } else {};
-        if (checks_slot_call || checks_scoped_call) {
+        if (checks_slot_call || checks_scoped_call || pending) {
             input <- ordinary_argument_value(nodes, used, revision, argument);
             if (input >= argument || argument >= at || formal >= used) return invalid_operand_tree();
             (can_enter <- can_enter && facts[input].kind != never_result()):void
@@ -4479,6 +4484,13 @@ func check_sequence_item(nodes:const ExprNodes in N, facts:OperandFacts in F, at
     val expression <- entry.item;
     if (facts[expression].kind == never_result()) { set_result(facts, at, never_result()); return; } else {};
     val kind <- void_result();
+    val callee <- facts[expression].call_definition;
+    # The sequence discards the call's payload. The invocation row still
+    # lacks a result until the selected definition is complete.
+    if (facts[expression].statement_operand && callee != no_node() && facts[callee].omitted_result) {
+        only_void(facts, at);
+        return
+    };
     if (!binds_local_storage(nodes, expression)) {
         if (facts[at].arm_result != 0u8 && scalar_kind(facts[expression].kind)) {
             copy_fact(facts, at, expression);
@@ -5253,7 +5265,7 @@ export func has_value_tail(facts:const OperandFacts in F, body:UInt64, function_
 
 func check_callable_tail(facts:const OperandFacts in F, definition:UInt64, callable:const CallableSites in C) -> UInt8
     where {const owner F, const owner C} {
-    if (!callable.function_form) return 0u8;
+    if (!callable.function_form || facts[definition].omitted_result) return 0u8;
     val kind <- facts[callable.body].kind;
     if (kind == 0u8) return unproved_result_contract();
     if (scalar_kind(kind) && facts[definition].kind == void_result()) return value_tail_in_void_function();
@@ -5275,6 +5287,10 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
     } else {};
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- inspect_callable(nodes, revision, used, scope, callable);
+    if (facts[scope].omitted_result) {
+        if (value == no_node() || facts[value].kind == never_result() || facts[value].kind == void_result()) return 0u8;
+        return wrong_return_type()
+    };
     if ((form != ModuleCallable && form != LexicalCallable && form != CEntry) || facts[scope].kind == 0u8)
         return unproved_result_contract();
     if (value != no_node() && facts[value].kind == never_result()) return 0u8;
@@ -6751,6 +6767,196 @@ func prepare_result_use(nodes:const ExprNodes in N, facts:OperandFacts in F, at:
     return;
 }
 
+# Result evidence is computed only for demanded omitted-result functions.
+# This profile requires a normal void tail or a reached void return, with
+# no unproved call on the path used as evidence.
+data ResultPath { normal:bool; returns_void:bool; }
+array ResultPaths[UInt64]:ResultPath;
+
+func path_normal(paths:const ResultPaths in P, at:UInt64) -> bool where {const owner P} {
+    return at == no_node() || paths[at].normal
+}
+
+func path_returns_void(paths:const ResultPaths in P, at:UInt64) -> bool where {const owner P} {
+    return at != no_node() && paths[at].returns_void
+}
+
+func append_result_path(paths:ResultPaths in P, at:UInt64, first:UInt64, next:UInt64) -> void
+    where {owner P} {
+    val enters <- path_normal(paths, first);
+    paths[at].normal <- enters && path_normal(paths, next);
+    (paths[at].returns_void <- path_returns_void(paths, first) || (enters && path_returns_void(paths, next))):void
+}
+
+func branch_result_path(paths:ResultPaths in P, at:UInt64, test:UInt64,
+    first:UInt64, second:UInt64, takes_first:bool, takes_second:bool) -> void where {owner P} {
+    val enters <- path_normal(paths, test);
+    paths[at].normal <- enters &&
+        ((takes_first && path_normal(paths, first)) || (takes_second && path_normal(paths, second)));
+    val returns_void <- (takes_first && path_returns_void(paths, first)) ||
+        (takes_second && path_returns_void(paths, second));
+    (paths[at].returns_void <- path_returns_void(paths, test) || (enters && returns_void)):void
+}
+
+func collect_result_path(nodes:const ExprNodes in N, facts:const OperandFacts in F, paths:ResultPaths in P,
+    at:UInt64, used:UInt64, revision:UInt64) -> void where {const owner N, const owner F, owner P} {
+    ref child = make UInt64 { no_node() };
+    if (completion_syntax(nodes, at) == ReturnCompletion &&
+        completion_operand(nodes, revision, used, at, child)) {
+        (paths[at].returns_void <- path_returns_void(paths, child) ||
+            (path_normal(paths, child) && (child == no_node() || facts[child].kind == void_result()))):void;
+        return
+    };
+    ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node(); };
+    if (inspect_conditional(nodes, revision, used, at, branch)) {
+        val truth <- boolean_literal(nodes, used, ungrouped(nodes, revision, used, branch.test));
+        branch_result_path(paths, at, branch.test, branch.consequent, branch.alternative,
+            truth != LiteralFalse, truth != LiteralTrue);
+        return
+    };
+    ref loop = make RangeSites { header <- no_node(); body <- no_node(); empty <- no_node(); };
+    if (inspect_range_loop(nodes, revision, used, at, loop)) {
+        val shape <- classify_literal_range(nodes, revision, used, loop.header);
+        branch_result_path(paths, at, loop.header, loop.body, loop.empty,
+            shape != EmptyLiteralRange, shape != NonemptyLiteralRange);
+        return
+    };
+    ref bounds = make RangeBounds { index_binding <- no_node(); lower <- no_node(); upper <- no_node(); separator <- 0u64; };
+    if (inspect_range_header(nodes, revision, used, at, bounds)) {
+        append_result_path(paths, at, bounds.lower, bounds.upper);
+        return
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    val sequence <- inspect_sequence_entry(nodes, revision, used, at, entry);
+    if (sequence == BlockSequence || sequence == ArgumentSequence) {
+        append_result_path(paths, at, entry.previous, entry.item);
+        return
+    };
+    if (is_scope_block(nodes, at)) return;
+    if (block_tail(nodes, revision, used, at, child) ||
+        inspect_group(nodes, revision, used, at, child) == ParenthesizedExpression) {
+        append_result_path(paths, at, child, no_node());
+        return
+    };
+    ref local = make LocalBindingSites {
+        binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false;
+    };
+    if (inspect_local_binding(nodes, revision, used, at, local) && local.mode != ExceptionLocal) {
+        append_result_path(paths, at, local.initializer, no_node());
+        return
+    };
+    val kind <- facts[at].kind;
+    if (kind == 0u8 || kind == never_result()) return;
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
+        append_result_path(paths, at, call.arguments, no_node());
+        return
+    };
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node();
+    };
+    val construction_form <- inspect_construction(nodes, revision, used, at, construction);
+    if (construction_form == BracedConstruction || construction_form == PositionalConstruction) {
+        append_result_path(paths, at, construction.placement, construction.contents);
+        return
+    };
+    ref binary = make BinarySites {
+        left_operand <- no_node(); right_operand <- no_node(); operator_at <- 0u64; arithmetic <- Addition; relation <- Equal;
+    };
+    val binary_form <- inspect_binary(nodes, revision, used, at, binary);
+    if (binary_form == ArithmeticBinary || binary_form == ComparisonBinary) {
+        append_result_path(paths, at, binary.left_operand, binary.right_operand);
+        return
+    };
+    ref logical = make LogicalSites { left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs; };
+    val operation <- inspect_logical(nodes, revision, used, at, logical);
+    if (operation == LogicalNot || operation == LogicalAnd || operation == LogicalOr) {
+        branch_result_path(paths, at, logical.left_operand, logical.right_operand, no_node(),
+            operation != LogicalNot, logical.right_evaluation != TakesRhs);
+        return
+    };
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node(); };
+    val transfer <- inspect_assignment(nodes, revision, used, at, assignment);
+    if (transfer == PlaceTransfer || transfer == FieldTransfer || transfer == PlaceRebind ||
+        transfer == FieldRebind || transfer == AugmentedPlaceTransfer) {
+        append_result_path(paths, at, assignment.destination, assignment.input);
+        return
+    };
+    ref index = make IndexSites { target <- no_node(); index <- no_node(); };
+    if (inspect_index_selection(nodes, revision, used, at, index)) {
+        append_result_path(paths, at, index.target, index.index);
+        return
+    };
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node(); };
+    if (inspect_field_selection(nodes, revision, used, at, field)) {
+        append_result_path(paths, at, field.receiver, no_node());
+        return
+    };
+    case nodes[at] of {
+        Occupied { val syntax <- node; } -> {
+            case syntax.payload of {
+                NameReference -> { (paths[at].normal <- true):void };
+                IntegerLiteral -> { (paths[at].normal <- true):void };
+                BooleanLiteral -> { (paths[at].normal <- true):void };
+                TextLiteral -> { (paths[at].normal <- true):void };
+                NullLiteral -> { (paths[at].normal <- true):void };
+                ArrayLength { val target <-; } -> {
+                    if (published_syntax_id(nodes, revision, at, target)) {
+                        append_result_path(paths, at, target.index, no_node())
+                    }
+                };
+                DiscardedExpression { val operand <-; } -> {
+                    if (published_syntax_id(nodes, revision, at, operand)) {
+                        append_result_path(paths, at, operand.index, no_node())
+                    }
+                };
+                _ -> {}
+            }
+        };
+        _ -> {}
+    };
+    return
+}
+
+func complete_omitted_results(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:const OperandFacts in F, tree:const ParseResult in T, report:OperandCheckResult in R) -> bool
+    where {const owner N, const owner B, const owner F, const owner T, owner R} {
+    ref paths = make ResultPaths(tree.used, make ResultPath { normal <- false; returns_void <- false });
+    val scope <- no_node();
+    for (at in 0u64 .. tree.used) {
+        scope <- names[at].scope;
+        if (scope < tree.used && facts[scope].omitted_result) {
+            collect_result_path(nodes, facts, paths, at, tree.used, tree.revision)
+        };
+    };
+    return validate_omitted_results(nodes, facts, paths, tree, report)
+}
+
+func validate_omitted_results(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    paths:const ResultPaths in P, tree:const ParseResult in T, report:OperandCheckResult in R) -> bool
+    where {const owner N, const owner F, const owner P, const owner T, owner R} {
+    ref sites = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    ref head = make UInt64 { no_node() };
+    val body <- no_node();
+    val kind <- 0u8;
+    for (at in 0u64 .. tree.used) {
+        if (facts[at].omitted_result) {
+            if (inspect_callable(nodes, tree.revision, tree.used, at, sites) != ModuleCallable ||
+                !find_signature_clause(nodes, tree.revision, tree.used, sites.signature, SignatureHead, head))
+                return operand_problem(report, at, invalid_operand_tree());
+            body <- sites.body;
+            kind <- facts[body].kind;
+            if (kind != void_result() && kind != never_result())
+                return operand_problem(report, head,
+                    if (scalar_kind(kind)) { value_tail_in_void_function() } else { unproved_result_contract() });
+            if (!(kind == void_result() && paths[body].normal) && !paths[body].returns_void)
+                return operand_problem(report, head, unproved_result_contract())
+        }
+    };
+    return true
+}
+
 # A declared receiving reference supplies placement for a directly
 # contained text construction. Explicit placement is checked separately.
 func prepare_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -6876,6 +7082,8 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
         facts[at].enum_assertion_check <- false;
         facts[at].predicate_assertion_check <- false;
         facts[at].text_intrinsic <- 0u8;
+        facts[at].omitted_result <- false;
+        facts[at].statement_operand <- false;
         owners[at].call_site <- no_node();
         owners[at].actual_owner <- no_node();
         owners[at].uses <- no_node();
@@ -6917,13 +7125,15 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     };
     val source_only <- intrinsic (len)(demand) != 0u64;
     val form <- InvalidCallable;
+    val has_omitted_result <- false;
     for (at in 0u64 .. tree.used) {
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
         if (needs_signature_check(demand, at) && (form == ModuleCallable || (source_only &&
             (form == CEntry || form == LexicalCallable)))) {
             check_signature(nodes, names, links, facts, views, selected, cases, source_only,
-                            report, at, tree.used, tree.revision, callable);
+                            form == ModuleCallable && needs_body_check(demand, at), report, at, tree.used, tree.revision, callable);
             if (report.diagnostic != 0u8) return false;
+            has_omitted_result <- has_omitted_result || facts[at].omitted_result;
             if (form == ModuleCallable &&
                 transfer_name(source, nodes, definition_name(nodes, tree.revision, tree.used,
                     at)) &&
@@ -6950,21 +7160,22 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     ref void_result_clause = make UInt64 { no_node() };
     for (offset in 0u64 .. tree.used) {
         at <- tree.used - 1u64 - offset;
-        if (source_only && intrinsic (len)(cases) != 0u64) {
-            if (links[at].next < tree.used &&
-                inspect_sequence_entry(nodes, tree.revision, tree.used, at, entry) == BlockSequence) {
+        if (source_only && links[at].next < tree.used &&
+            inspect_sequence_entry(nodes, tree.revision, tree.used, at, entry) == BlockSequence) {
+            facts[entry.item].statement_operand <- true;
+            if (intrinsic (len)(cases) != 0u64) {
                 discard_aggregate_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
-            };
-            if (facts[at].kind == void_result()) {
-                form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
-                if ((form == ModuleCallable || form == LexicalCallable) && !callable.function_form &&
-                    find_signature_clause(nodes, tree.revision, tree.used, callable.signature, ValueResultClause,
-                        void_result_clause) && void_result_clause != no_node() &&
-                    !is_scope_block(nodes, callable.body) &&
-                    block_tail(nodes, tree.revision, tree.used, callable.body, tail) &&
-                    inspect_sequence_entry(nodes, tree.revision, tree.used, tail, entry) == BlockSequence) {
-                    discard_aggregate_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
-                }
+            }
+        };
+        if (source_only && intrinsic (len)(cases) != 0u64 && facts[at].kind == void_result()) {
+            form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
+            if ((form == ModuleCallable || form == LexicalCallable) && !callable.function_form &&
+                find_signature_clause(nodes, tree.revision, tree.used, callable.signature, ValueResultClause,
+                    void_result_clause) && void_result_clause != no_node() &&
+                !is_scope_block(nodes, callable.body) &&
+                block_tail(nodes, tree.revision, tree.used, callable.body, tail) &&
+                inspect_sequence_entry(nodes, tree.revision, tree.used, tail, entry) == BlockSequence) {
+                discard_aggregate_statement(nodes, cases, facts, entry.item, tree.used, tree.revision)
             }
         };
         prepare_result_use(nodes, facts, at, tree.used, tree.revision);
@@ -6977,6 +7188,20 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     if (!check_operand_range(source, nodes, names, links, selected, facts, interfaces, published, owners, fields, views,
         cases, demand, report,
                              0u64, tree.used, tree.used, tree.revision, no_node())) return false;
+    if (has_omitted_result) {
+        if (!complete_omitted_results(nodes, names, facts, tree, report)) return false;
+        for (definition in 0u64 .. tree.used) {
+            if (facts[definition].omitted_result) { (facts[definition].kind <- void_result()):void }
+        };
+        val callee <- no_node();
+        for (site in 0u64 .. tree.used) {
+            callee <- facts[site].call_definition;
+            if (callee < tree.used && facts[callee].omitted_result) {
+                # Preserve the prepared actuals and their loan evidence.
+                (facts[site].kind <- facts[callee].kind):void
+            }
+        };
+    };
     close_allocation_owners(facts, owners, tree.used);
     # Number reserved allocation-chain words after the syntax-indexed words.
     val next <- tree.used;

@@ -1,5 +1,5 @@
 using "./ParserStorage.cod" {
-    ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause,
+    ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause, omits_callable_result,
     DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
     module_tail, AssignmentSites, inspect_assignment, predicate_operand, formal_binding_is_fixed,
@@ -203,7 +203,11 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if ((demand[call].product_body_dependency || form == LexicalCallable || (byte_caller && prepared_byte_function(views, definition, false))) &&
+            if ((demand[call].product_body_dependency || form == LexicalCallable ||
+                (byte_caller && prepared_byte_function(views, definition, false)) ||
+                (form == ModuleCallable && sites.function_form && links[definition].next_method == no_node() &&
+                    names[definition].declaration == definition && links[definition].active == no_node() &&
+                    omits_callable_result(nodes, revision, used, sites.signature))) &&
                 !require_body(demand, definition, count, used, true)) return call
         };
         (call <- demand[call].next_call):void

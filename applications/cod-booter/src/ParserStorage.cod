@@ -1567,6 +1567,17 @@ export func find_signature_clause(nodes:const ExprNodes in N, revision:UInt64, u
     return false;
 }
 
+export func omits_callable_result(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, signature:UInt64)
+    -> bool where {const owner N} {
+    ref clause = make UInt64 { no_node() };
+    return find_signature_clause(nodes, revision, used, signature, (ValueResultClause:SignatureSyntax), clause) &&
+        clause == no_node() &&
+        find_signature_clause(nodes, revision, used, signature, (BorrowedResultClause:SignatureSyntax), clause) &&
+        clause == no_node() &&
+        find_signature_clause(nodes, revision, used, signature, (ExceptionResultClause:SignatureSyntax), clause) &&
+        clause == no_node()
+}
+
 export data ScopedProcedureSites { head:UInt64; signature:UInt64; body:UInt64; }
 
 func read_scoped_procedure(nodes:const ExprNodes in N, revision:UInt64, at:UInt64, header:const NodeId in H,
