@@ -156,7 +156,7 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 `mixin` 按 C++ template 的心智模型理解：把选中的代码体当作在接收模块现场重新写了一遍，按该处的绑定检查。将来有具体用例时，再细化并实现这个特性。[接收环境中的定义](../design/SymbolicDynamicScope.md#import-time-alias-translation)
 
-类型级函数以及更完整的类型级编程优先从 `mixin` 扩展。模块声明静态参数，使用者在 mixin 处提供具体的类型级或 kind 级实参。例如给模板传入 `deque` 和 `UInt64`，可以得到已有的成员类型 `deque[UInt64]`。若模板自身声明新类型，两个位置用相同实参混入后，能否互传该类型的值？这个用例用于讨论结果身份和发布规则。参数语法及求值规则留待设计。[静态模块参数](../design/ModuleWorlds.md#static-module-parameters-for-mixin)
+类型级函数以及更完整的类型级编程优先从 `mixin` 扩展。模块声明静态参数，使用者在 mixin 处提供具体的类型级或 kind 级实参。例如给模板传入 `deque` 和 `UInt64`，可以得到已有的成员类型 `deque[UInt64]`。若模板声明新的名义类型，两个接收模块各自混入，各有自己的类型身份。需要互传同一类型的值时，在共享 vocabulary 模块定义一次并导出，双方选入即可。静态参数语法、计算结果的发布形式及求值规则留待设计。[静态模块参数](../design/ModuleWorlds.md#static-module-parameters-for-mixin)
 
 一个待讨论的例子是，模板原本声明两个独立的 symbol，先向 `@output` 写入 9，再读取 `@input`。若接收方显式写 `with { @cell as @output; @cell as @input; }`，是否应接受并读到 9，还是要求这两个角色在接收方也保持独立？这个选择留待用例检验。
 
