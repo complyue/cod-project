@@ -21,7 +21,7 @@ using "./ParserStorage.cod" FormalMode {
     ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, PlaceFormal, InitializingPlaceFormal,
 };
 using "./ParserStorage.cod" SignatureSyntax {
-    SignatureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause
+    SignatureHead, ScopedProcedureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause
 };
 using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary, InvalidBinary };
@@ -41,6 +41,7 @@ using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, NameReference, Call, EmptyCall, ReturnValue, ReturnVoid, RangeHeader, RangeLoop, Parenthesized,
     BooleanLiteral, TextLiteral, NullLiteral, DiscardedExpression, BreakValue, BreakVoid, CaseFallthrough,
     CaseFailure, RaiseValue, RaisePending, NamedThrow, ArrayLength, PredicateAssertion, ReturningCondition,
+    ScopedProcedureDefinition,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" CallableSyntax { InvalidCallable };
@@ -64,6 +65,8 @@ using "./ParserStorage.cod" {
     inspect_group, is_scope_block, SequenceEntry, inspect_sequence_entry, first_sequence_entry, block_tail,
     DeferSites, inspect_defer, syntax_first, syntax_past, owner_constraint_syntax, binds_local_storage,
     CallableSites, inspect_callable, SignatureSites, inspect_signature, find_signature_clause, omits_callable_result,
+    ScopedProcedureSites, inspect_scoped_procedure, ProcedureSymbolSites, inspect_procedure_symbol,
+    ProcedureTypeSites, inspect_procedure_type,
     DeclarationSites, inspect_declaration, FormalSites, inspect_formal, formal_binding_is_fixed, BindingSites, inspect_binding, inspect_type_annotation,
     LocalBindingSites, inspect_local_binding, text_literal_syntax, DirectCallSites,
         direct_invocation, inspect_invocation,
@@ -82,7 +85,7 @@ using "./ParserStorage.cod" BooleanSyntax { LiteralTrue, LiteralFalse };
 using "./ParserStorage.cod" ConstructionSyntax {
     StorageReservation, PositionalConstruction, BracedConstruction, InvalidConstruction
 };
-using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence };
+using "./ParserStorage.cod" SequenceSyntax { ArgumentSequence, BlockSequence, FormalSequence, ProcedureTypeSequence };
 using "./ParserStorage.cod" GroupSyntax { ParenthesizedExpression };
 using "./ParserStorage.cod" AssignmentSyntax {
     PlaceTransfer, PlaceRebind, FieldTransfer, FieldRebind, InvalidAssignment
@@ -94,7 +97,7 @@ using "./ParserInput.cod" ParseResult;
 using "./NameResolution.cod" { c_operation, c_handle_type };
 using "./NameResolution.cod" {
     NameBindings, NameWork, enclosing_callable, builtin_u64, builtin_u32,
-    builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding,
+    builtin_void, builtin_bool, ordinary_selection, symbolic_selection, callable_binding, procedure_symbol_binding,
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
@@ -925,6 +928,48 @@ func check_signature(nodes:const ExprNodes in N, names:const NameBindings in B, 
     };
     report.node <- head;
     (report.diagnostic <- unproved_result_contract()):void
+}
+
+func procedure_operand_kind(nodes:const ExprNodes in N, names:const NameBindings in B,
+    annotation:UInt64, used:UInt64, revision:UInt64) -> UInt8 where {const owner N, const owner B} {
+    ref type = make ProcedureTypeSites { name <- no_node(); mode <- ValueFormal; readonly <- false };
+    if (!inspect_procedure_type(nodes, revision, used, annotation, type) ||
+        (type.mode != ValueFormal && type.mode != ExplicitValueFormal)) return 0u8;
+    val binding <- names[type.name].kind;
+    return if (binding == builtin_void()) { void_result() } else { source_scalar_kind(binding) }
+}
+
+func check_scoped_operand_signature(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:OperandFacts in F, views:const SuppliedViews in H, selected:const SelectedExports in E,
+    cases:const ConstructorCaseFacts in P, report:OperandCheckResult in R, definition:UInt64, used:UInt64,
+    revision:UInt64, handler:const ScopedProcedureSites in C) -> void
+    where {const owner N, const owner B, const owner L, owner F, const owner H, const owner E,
+        const owner P, owner R, const owner C} {
+    ref head = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    ref contract = make ProcedureSymbolSites {
+        symbol <- no_node(); input_tail <- no_node(); result_type <- no_node(); arrow <- no_node()
+    };
+    if (inspect_signature(nodes, revision, used, handler.head, head) != ScopedProcedureHead ||
+        names[head.name].kind != procedure_symbol_binding() ||
+        !inspect_procedure_symbol(nodes, revision, used, names[head.name].declaration, contract)) {
+        report.node <- definition;
+        report.diagnostic <- invalid_operand_tree();
+        return
+    };
+    check_formals(nodes, names, links, facts, views, selected, cases, true, report,
+        definition, head.parameter_tail, used, revision);
+    if (report.diagnostic != 0u8) return;
+    val kind <- procedure_operand_kind(nodes, names, contract.result_type, used, revision);
+    if (kind == 0u8) {
+        report.node <- handler.signature;
+        report.diagnostic <- unproved_result_contract();
+        return
+    };
+    # The head carries the already matched return type. The definition node
+    # denotes the installation expression, which has no value.
+    set_result(facts, handler.head, kind)
 }
 
 export func allocated_source_array(facts:const OperandFacts in F, at:UInt64) -> bool
@@ -4724,10 +4769,54 @@ func publish_callable_parameter(nodes:const ExprNodes in N, links:const NameWork
     return;
 }
 
-func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in B,
+func check_procedure_actuals(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:OperandFacts in F, at:UInt64, definition:UInt64, tail:UInt64, used:UInt64, revision:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner L, owner F} {
+    ref contract = make ProcedureSymbolSites {
+        symbol <- no_node(); input_tail <- no_node(); result_type <- no_node(); arrow <- no_node()
+    };
+    ref formal = make UInt64 { no_node() };
+    ref argument = make UInt64 { no_node() };
+    if (!inspect_procedure_symbol(nodes, revision, used, definition, contract) ||
+        !first_sequence_entry(nodes, revision, used, contract.input_tail, ProcedureTypeSequence, formal) ||
+        !first_sequence_entry(nodes, revision, used, tail, ArgumentSequence, argument)) return invalid_operand_tree();
+    ref parameter = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val entered <- true;
+    val operand <- no_node();
+    val kind <- 0u8;
+    val diagnostic <- 0u8;
+    for (unused in 0u64 .. used) {
+        if (formal == no_node() && argument == no_node()) {
+            kind <- procedure_operand_kind(nodes, names, contract.result_type, used, revision);
+            if (kind == 0u8) return unproved_result_contract();
+            set_result(facts, at, if (entered) { kind } else { never_result() });
+            return 0u8
+        };
+        if (formal == no_node() || argument == no_node()) return wrong_argument_count();
+        if (inspect_sequence_entry(nodes, revision, used, formal, parameter) != ProcedureTypeSequence)
+            return invalid_operand_tree();
+        operand <- ordinary_argument_value(nodes, used, revision, argument);
+        if (operand == no_node()) return invalid_operand_tree();
+        if (facts[operand].kind == never_result()) { (entered <- false):void };
+        if (entered) {
+            kind <- procedure_operand_kind(nodes, names, parameter.item, used, revision);
+            if (kind == 0u8 || kind == void_result()) return unsupported_imported_call();
+            diagnostic <- check_argument_operand(nodes, facts, argument,
+                kind, local_place(), 0u64, 0u64, 0u8, used, revision);
+            if (diagnostic != 0u8) return diagnostic
+        };
+        formal <- links[formal].next;
+        (argument <- links[argument].next):void
+    };
+    return invalid_operand_tree()
+}
+
+func check_symbolic_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                          selected:const SelectedExports in E, facts:OperandFacts in F,
                          at:UInt64, callee:UInt64, argument:UInt64, used:UInt64, revision:UInt64) -> UInt8
-    where {const owner N, const owner B, const owner E, owner F} {
+    where {const owner N, const owner B, const owner L, const owner E, owner F} {
+    if (names[callee].kind == procedure_symbol_binding())
+        return check_procedure_actuals(nodes, names, links, facts, at, names[callee].declaration, argument, used, revision);
     if (names[callee].kind != symbolic_selection()) return unproved_call_target();
     val site <- names[callee].declaration;
     if (selected[site].kind != symbol_export() || selected[site].identity != print_export_identity())
@@ -5670,48 +5759,54 @@ func validate_return(nodes:const ExprNodes in N, names:const NameBindings in B, 
     } else {};
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val form <- inspect_callable(nodes, revision, used, scope, callable);
-    if (facts[scope].omitted_result) {
+    val result_site <- scope;
+    if (form != ModuleCallable && form != LexicalCallable && form != CEntry) {
+        ref handler = make ScopedProcedureSites { head <- no_node(); signature <- no_node(); body <- no_node() };
+        if (!inspect_scoped_procedure(nodes, revision, used, scope, handler)) return unproved_result_contract();
+        (result_site <- handler.head):void
+    };
+    if (facts[result_site].omitted_result) {
         if (value == no_node() || facts[value].kind == never_result() || facts[value].kind == void_result()) return 0u8;
         return wrong_return_type()
     };
-    if ((form != ModuleCallable && form != LexicalCallable && form != CEntry) || facts[scope].kind == 0u8)
+    if (facts[result_site].kind == 0u8)
         return unproved_result_contract();
     if (value != no_node() && facts[value].kind == never_result()) return 0u8;
-    if (facts[scope].kind == void_result()) {
+    if (facts[result_site].kind == void_result()) {
         if (value != no_node() && facts[value].kind != void_result()) return wrong_return_type();
         return 0u8;
     } else {};
     if (value == no_node()) return wrong_return_type();
-    if (facts[scope].kind == independent_sum_bits()) {
+    if (facts[result_site].kind == independent_sum_bits()) {
         return if (facts[value].kind == independent_sum_bits() && facts[value].reception == independent_value() &&
-            facts[value].identity == facts[scope].identity && facts[value].identity_module == facts[scope].identity_module) {
+            facts[value].identity == facts[result_site].identity && facts[value].identity_module == facts[result_site].identity_module) {
             0u8
         } else { wrong_return_type() }
     };
-    if (facts[scope].kind == product_kind()) {
-        if (!same_operand_type(facts, value, scope) || facts[value].reception != borrowed_ref())
+    if (facts[result_site].kind == product_kind()) {
+        if (!same_operand_type(facts, value, result_site) || facts[value].reception != borrowed_ref())
             return wrong_return_type();
-        if (facts[value].owner != facts[scope].owner)
-            return owner_conflict(nodes, facts[value].owner, facts[scope].owner);
-        if (facts[value].target_readonly != 0u8 && facts[scope].target_readonly == 0u8)
+        if (facts[value].owner != facts[result_site].owner)
+            return owner_conflict(nodes, facts[value].owner, facts[result_site].owner);
+        if (facts[value].target_readonly != 0u8 && facts[result_site].target_readonly == 0u8)
             return expected_writable_place();
         return 0u8;
     };
-    if (immutable_text_kind(facts[scope].kind)) {
+    if (immutable_text_kind(facts[result_site].kind)) {
         if (!immutable_text_kind(facts[value].kind) ||
-            (facts[scope].kind == c_string_kind() && facts[value].kind != c_string_kind()))
+            (facts[result_site].kind == c_string_kind() && facts[value].kind != c_string_kind()))
             return wrong_return_type();
-        if (facts[value].owner != facts[scope].owner) return wrong_text_result_owner();
+        if (facts[value].owner != facts[result_site].owner) return wrong_text_result_owner();
         return 0u8;
     };
-    val kind <- facts[scope].kind;
+    val kind <- facts[result_site].kind;
     val diagnostic <- if (kind == source_u32() && !supplies_enum_backing(facts, value, kind)) {
         require_source_u32(nodes, facts, value, true)
     } else {
-        if (facts[scope].reception == independent_value()) {
-            require_matching_value_bits(nodes, facts, value, scope)
+        if (facts[result_site].reception == independent_value()) {
+            require_matching_value_bits(nodes, facts, value, result_site)
         } else {
-            if (!compatible_operand_nominal(facts, value, kind, facts[scope].identity, facts[scope].identity_module))
+            if (!compatible_operand_nominal(facts, value, kind, facts[result_site].identity, facts[result_site].identity_module))
                 { wrong_operand_type() }
             else { require_typed_bits(nodes, facts, value, kind) }
         }
@@ -6941,6 +7036,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                     return check_group(nodes, facts, at, expression.index);
                 };
                 (NameReference) -> { return check_bound_name(names, links, facts, views, at); };
+                (ScopedProcedureDefinition) -> { only_void(facts, at); return 0u8 };
                 (ArrayLength { val target <- target, }) -> {
                     if (!published_syntax_id(nodes, revision, at, target)) return invalid_operand_tree();
                     if (facts[target.index].kind == never_result()) {
@@ -7192,7 +7288,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
     val invocation <- inspect_invocation(nodes, revision, used, at, call);
     if (invocation == InvalidCallSyntax) return invalid_operand_tree();
     if (invocation == EffectfulInvocation)
-        return check_symbolic_call(nodes, names, selected, facts, at, call.callee, call.arguments, used, revision);
+        return check_symbolic_call(nodes, names, links, selected, facts, at, call.callee, call.arguments, used, revision);
     ref tail = make UInt64 { no_node() };
     if (block_tail(nodes, revision, used, at, tail)) {
         if (is_scope_block(nodes, at)) return check_scope_tail(facts, at, tail);
@@ -7763,6 +7859,7 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
     val source_only <- intrinsic (len)(demand) != 0u64;
     val form <- InvalidCallable;
     val has_omitted_result <- false;
+    ref handler = make ScopedProcedureSites { head <- no_node(); signature <- no_node(); body <- no_node() };
     for (at in 0u64 .. tree.used) {
         form <- inspect_callable(nodes, tree.revision, tree.used, at, callable);
         if (needs_signature_check(demand, at) && (form == ModuleCallable || (source_only &&
@@ -7776,7 +7873,14 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
                     at)) &&
                 !supported_transfer_signature(nodes, links, facts, at, tree.used, tree.revision))
                 return operand_problem(report, at, unsupported_transfer_signature());
-        } else {};
+        } else {
+            if (source_only && needs_signature_check(demand, at) &&
+                inspect_scoped_procedure(nodes, tree.revision, tree.used, at, handler)) {
+                check_scoped_operand_signature(nodes, names, links, facts, views, selected, cases,
+                    report, at, tree.used, tree.revision, handler);
+                if (report.diagnostic != 0u8) return false
+            }
+        };
     };
     for (at in 0u64 .. tree.used) {
         if (needs_signature_check(demand, at) && inspect_callable(nodes, tree.revision, tree.used,

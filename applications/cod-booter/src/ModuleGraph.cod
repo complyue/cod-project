@@ -82,7 +82,7 @@ using "./CaseSchemas.cod" {
     needs_constructor_case_plan, prepare_constructor_cases
 }
 using "./NameResolution.cod" {
-    protected_symbol_name,
+    protected_symbol_name, unsupported_scoped_procedure,
     NameBinding, NameBindings, NameWorkSlot, NameWork, ProductTypeRecovery, record_type, project_module_selection_candidates,
     ModuleNameUse { LexicalName }, first_module_variadic_formal
 };
@@ -770,6 +770,11 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
             operands.node);
         return false
     };
+    if (result.unchecked_scoped != no_node()) {
+        binding_diagnostic(nodes, result, module_binding_failed(), unsupported_scoped_procedure(),
+            result.unchecked_scoped);
+        return false
+    };
     val construction_count <- if (first == no_node()) { 0u64 } else { used };
     ref plans = make ExceptionConstructionFacts(construction_count, make NoExceptionConstruction {});
     ref syntax = make NamedThrowSites { requested <- no_node(); fields <- no_node(); cause <-
@@ -1012,7 +1017,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
             };
             diagnostic_first <- no_node(); diagnostic_past <- no_node();
         };
-        stage <- 0u8; diagnostic <- 0u8; related_first <- no_node(); symbol_binder <- no_node();
+        stage <- 0u8; diagnostic <- 0u8; related_first <- no_node(); symbol_binder <- no_node(); unchecked_scoped <- no_node();
         requires_operand_checks <- false; has_closed_application <- false;
     };
     val used <- result.frontend.tree.used;

@@ -88,6 +88,7 @@ export data ModuleBindingResult {
     diagnostic:UInt8,
     related_first:UInt64,
     symbol_binder:UInt64,
+    unchecked_scoped:UInt64,
     requires_operand_checks:bool,
     has_closed_application:bool,
 }
@@ -368,6 +369,7 @@ export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:
     result.diagnostic <- 0u8;
     result.related_first <- no_node();
     result.requires_operand_checks <- false;
+    result.unchecked_scoped <- no_node();
     return check_source_profile(nodes, result.frontend.tree.used, emit_object, result)
 }
 
@@ -651,10 +653,8 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             };
         };
     };
-    if (unchecked_scoped != no_node()) {
-        binding_diagnostic(nodes, result, module_binding_failed(), unsupported_scoped_procedure(), unchecked_scoped);
-        return false
-    };
+    result.unchecked_scoped <- unchecked_scoped;
+    result.requires_operand_checks <- result.requires_operand_checks || unchecked_scoped != no_node();
     result.has_closed_application <- names.has_closed_application;
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {

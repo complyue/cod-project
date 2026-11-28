@@ -1,6 +1,7 @@
 using "./ParserStorage.cod" {
     ExprNodes, no_node, CallableSites, inspect_callable, find_signature_clause, omits_callable_result,
-    DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
+    DirectCallSites, inspect_invocation, InvocationSyntax { InvalidCallSyntax, OrdinaryInvocation, EffectfulInvocation },
+    ScopedProcedureSites, inspect_scoped_procedure, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
     module_tail, AssignmentSites, inspect_assignment, predicate_operand, formal_binding_is_fixed,
     FormalSites, inspect_formal, FormalSyntax { OrdinaryFormal }, FormalMode { ExplicitValueFormal, ReferenceFormal },
@@ -9,10 +10,10 @@ using "./ParserStorage.cod" {
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CEntry };
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
-using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
 using "./ParserStorage.cod" { case_pattern, CasePatternSyntax { ReferenceCaseTarget } };
 using "./NameResolution.cod" {
-    NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type, uninstantiated_method
+    NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type,
+    uninstantiated_method, procedure_symbol_binding
 };
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
@@ -80,6 +81,19 @@ func require_body(demand:DeclarationDemands in D, definition:UInt64, count:UInt6
     demand[count].pending <- definition;
     count <- count + 1u64;
     return true
+}
+
+func require_capture_context(nodes:const ExprNodes in N, names:const NameBindings in B,
+    demand:DeclarationDemands in D, first:UInt64, root:UInt64, used:UInt64, count:UInt64 in Q)
+    -> bool where {const owner N, const owner B, owner D, owner Q} {
+    val scope <- first;
+    for (unused in 0u64 .. used) {
+        if (scope == no_node()) return true;
+        if (!require_body(demand, scope, count, used, scope != root)) return false;
+        if (scope == root) return true;
+        (scope <- enclosing_callable(nodes, names, names[scope].scope)):void
+    };
+    return false
 }
 
 func require_receipt_body(demand:DeclarationDemands in D, definition:UInt64, body_count:UInt64 in B,
@@ -297,6 +311,7 @@ export func discover_declaration_demand(
         };
     };
     ref invocation = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
+    ref handler = make ScopedProcedureSites { head <- no_node(); signature <- no_node(); body <- no_node() };
     ref assignment = make AssignmentSites {
         destination <- no_node(); input <- no_node(); operator_at <- no_node()
     };
@@ -311,7 +326,7 @@ export func discover_declaration_demand(
     };
     val definition <- no_node();
     val checked_call <- false;
-    val shape <- InvalidInvocation;
+    val shape <- InvalidCallSyntax;
     val callee <- no_node();
     val transfer <- InvalidAssignment;
     val aggregate_operation <- false;
@@ -320,6 +335,12 @@ export func discover_declaration_demand(
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
+        if (inspect_scoped_procedure(nodes, revision, used, site, handler) &&
+            (!require_body(demand, site, count, used, true) ||
+             !require_capture_context(nodes, names, demand, scope, root, used, count))) {
+            problem <- site;
+            return false
+        };
         if (scope >= used || !uninstantiated_method(names[scope].kind)) {
             if (site < intrinsic (len)(cases) &&
                 (case cases[site] of { SumValueResult -> true; _ -> false }) &&
@@ -338,12 +359,16 @@ export func discover_declaration_demand(
                      CheckedReadonlyCall { val aggregate_loan <-, } -> aggregate_loan;
                      _ -> false
                  })));
-            shape <- direct_invocation(nodes, revision, used, site, invocation);
-            if (shape == InvalidInvocation) {
+            shape <- inspect_invocation(nodes, revision, used, site, invocation);
+            if (shape == InvalidCallSyntax) {
                 problem <- site;
                 return false
             };
-            callee <- if (shape == DirectInvocationReady) { (invocation.callee) } else { no_node() };
+            if (shape == EffectfulInvocation &&
+                names[invocation.callee].kind == procedure_symbol_binding()) {
+                (checked_call <- true):void
+            };
+            callee <- if (shape == OrdinaryInvocation) { (invocation.callee) } else { no_node() };
             if (names[site].kind == callable_binding()) {
                 transfer <- inspect_assignment(nodes, revision, used, site, assignment);
                 if (transfer == PlaceTransfer || transfer == FieldTransfer) { (callee <- site):void; };
@@ -367,7 +392,7 @@ export func discover_declaration_demand(
                 };
                 checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
                     prepared_byte_function(views, definition, true);
-                if (shape == DirectInvocationReady) {
+                if (shape == OrdinaryInvocation) {
                     needs_receipt <- collect_aggregate_loan_demand(nodes, names, links, cases,
                         invocation.arguments, used, revision, mixed_aggregate);
                     if (mixed_aggregate && links[definition].next_method == no_node() &&
@@ -426,7 +451,9 @@ export func discover_declaration_demand(
                 (formal_binding_is_fixed(nodes, revision, used, site) &&
                     inspect_formal(nodes, revision, used, site, formal) == OrdinaryFormal &&
                     formal.mode == ExplicitValueFormal)) {
-                if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
+                if (scope >= used ||
+                    (scope != root && !local_body(nodes, revision, used, scope, callable) &&
+                     !inspect_scoped_procedure(nodes, revision, used, scope, handler)) ||
                     !require_body(demand, scope, count, used, scope != root)) {
                     problem <- site;
                     return false
