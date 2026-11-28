@@ -1,0 +1,430 @@
+using "./NameResolution.cod" builtin_void;
+using "./ParserStorage.cod" { no_node, FormalMode, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal } };
+using "./GenericTypes.cod" {
+    Products, TypeKeys, TypeCategory, TypeCategory { UnknownType, ScalarType, BitsNominal, ConcreteProductType },
+    matches_member_application,
+};
+using "./ModuleExportStorage.cod" {
+    ModuleInterfaces, find_interface, generic_product_interface,
+    RecipeResultMode { ValueRecipe, PointerRecipe },
+    InterfacePayload { RecipeParameter, RecipeApplication, RecipeTypeParameter, RecipeBuiltin, RecipeField,
+        RecipeFormal, RecipeOwner, RecipeResult, RecipeBodyOperand, RecipeBodyMake, RecipeBodyInitialize, RecipeBodyStore,
+        RecipeBodyCase, RecipeBodyReturn, RecipeBodyRefArm, RecipeBodyEnd },
+};
+
+data BodyValue {
+    binding:UInt64;
+    category:TypeCategory;
+    type_kind:UInt8;
+    module:UInt64;
+    identity:UInt64;
+    mode:FormalMode;
+    role:UInt64;
+    readonly:bool;
+    can_rebind:bool;
+    field_place:bool;
+}
+array BodyValues[UInt64]:BodyValue;
+array InitializedFields[UInt64]:bool;
+
+data BodyCursor {
+    first:UInt64;
+    next:UInt64;
+    past:UInt64;
+    anchor:UInt64;
+    values:UInt64;
+    allocation:UInt64;
+    normal:bool;
+}
+
+func read_body_type(rows:const ModuleInterfaces in I, products:const Products in M, arguments:const TypeKeys in A,
+    first:UInt64, past:UInt64, anchor:UInt64, term:UInt64, value:BodyValue in R) -> UInt64
+    where {const owner I, const owner M, const owner A, owner R} {
+    if (term >= past) return no_node();
+    val ordinal <- 0u64;
+    val slot <- no_node();
+    val equal <- false;
+    case rows[term].payload of {
+        RecipeBuiltin { val kind <-; } -> {
+            value.category <- ScalarType;
+            value.type_kind <- kind;
+            value.module <- 0u64;
+            value.identity <- 0u64;
+            return term + 1u64
+        };
+        RecipeTypeParameter { val binder <-; } -> {
+            for (row in first .. past) {
+                if (case rows[row].payload of { RecipeParameter -> true; _ -> false }) {
+                    if (rows[row].declaration == binder) {
+                        if (ordinal >= products[anchor].arity) return no_node();
+                        slot <- products[anchor].arguments + ordinal;
+                        value.category <- arguments[slot].category;
+                        value.type_kind <- arguments[slot].type_kind;
+                        value.module <- arguments[slot].module;
+                        value.identity <- arguments[slot].identity;
+                        return term + 1u64
+                    };
+                    (ordinal <- ordinal + 1u64):void
+                }
+            };
+            return no_node()
+        };
+        RecipeApplication { val defining_module <-; val declaration <-; val arity <- arguments; } -> {
+            if (arity != products[anchor].arity ||
+                !matches_member_application(rows, first, past, term, defining_module, declaration, arity)) return no_node();
+            for (member in 0u64 .. intrinsic (len)(products)) {
+                if (!products[member].complete) return no_node();
+                if (products[member].module == defining_module && products[member].declaration == declaration &&
+                    products[member].arity == arity) {
+                    equal <- true;
+                    for (index in 0u64 .. arity) {
+                        (equal <- equal && same_argument(arguments, products[member].arguments + index,
+                            products[anchor].arguments + index)):void
+                    };
+                    if (equal) {
+                        value.category <- ConcreteProductType;
+                        value.type_kind <- 0u8;
+                        value.module <- 0u64;
+                        value.identity <- member;
+                        return term + 1u64 + arity
+                    }
+                }
+            };
+            return no_node()
+        };
+        _ -> { return no_node() }
+    }
+}
+
+func same_argument(arguments:const TypeKeys in A, left:UInt64, right:UInt64) -> bool where {const owner A} {
+    return arguments[left].category == arguments[right].category && arguments[left].type_kind == arguments[right].type_kind &&
+        arguments[left].module == arguments[right].module && arguments[left].identity == arguments[right].identity
+}
+
+func copy_body_value(source:const BodyValue in S, output:BodyValue in R) -> void where {const owner S, owner R} {
+    output.binding <- source.binding;
+    output.category <- source.category;
+    output.type_kind <- source.type_kind;
+    output.module <- source.module;
+    output.identity <- source.identity;
+    output.mode <- source.mode;
+    output.role <- source.role;
+    output.readonly <- source.readonly;
+    output.can_rebind <- source.can_rebind;
+    (output.field_place <- source.field_place):void
+}
+
+func body_binding(values:const BodyValues in V, count:UInt64, binding:UInt64) -> UInt64 where {const owner V} {
+    for (slot in 0u64 .. count) {
+        if (values[slot].binding == binding) return slot
+    };
+    return no_node()
+}
+
+func body_field_row(rows:const ModuleInterfaces in I, first:UInt64, past:UInt64, declaration:UInt64) -> UInt64
+    where {const owner I} {
+    for (row in first .. past) {
+        if (rows[row].declaration == declaration && (case rows[row].payload of { RecipeField -> true; _ -> false }))
+            return row
+    };
+    return no_node()
+}
+
+# Use the defining product's frozen field rows and the selected member's
+# substitution. A nullable place is readable, but cannot act as a receiver.
+func read_body_field(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, member:UInt64, field:UInt64, value:BodyValue in R) -> bool
+    where {const owner I, const owner M, const owner A, owner R} {
+    if (member >= intrinsic (len)(products) || !products[member].complete) return false;
+    val header <- find_interface(rows, published, products[member].module, products[member].declaration);
+    if (header == no_node() || rows[header].interface_kind != generic_product_interface()) return false;
+    val first <- header + 1u64;
+    val past <- first + rows[header].entry_count;
+    val row <- body_field_row(rows, first, past, field);
+    if (row == no_node() || read_body_type(rows, products, arguments, first, past, member, row + 1u64, value) == no_node())
+        return false;
+    return case rows[row].payload of {
+        RecipeField { val mode <-; val readonly <-; val fixed <-; } -> {
+            value.mode <- mode;
+            value.readonly <- value.readonly || readonly;
+            (value.can_rebind <- value.can_rebind && !fixed):void;
+            true
+        };
+        _ -> false
+    }
+}
+
+func read_body_place(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, values:const BodyValues in V, count:UInt64,
+    binding:UInt64, field:UInt64, result:BodyValue in R) -> bool
+    where {const owner I, const owner M, const owner A, const owner V, owner R} {
+    val slot <- body_binding(values, count, binding);
+    if (slot == no_node()) return false;
+    copy_body_value(values[slot], result);
+    if (field == no_node()) return true;
+    if (result.category != ConcreteProductType || result.mode != ReferenceFormal) return false;
+    result.can_rebind <- !result.readonly;
+    result.field_place <- true;
+    return read_body_field(rows, published, products, arguments, result.identity, field, result)
+}
+
+func read_body_operand(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, values:const BodyValues in V, cursor:BodyCursor in C, result:BodyValue in R) -> bool
+    where {const owner I, const owner M, const owner A, const owner V, owner C, owner R} {
+    val row <- cursor.next;
+    if (row >= cursor.past) return false;
+    cursor.next <- row + 1u64;
+    return case rows[row].payload of {
+        RecipeBodyOperand { val binding <-; val field <-; val owner_role <-; } -> {
+            if (binding != no_node())
+                return read_body_place(rows, published, products, arguments, values, cursor.values, binding, field, result);
+            result.category <- UnknownType;
+            result.role <- owner_role;
+            result.mode <- PointerFormal;
+            result.field_place <- false;
+            (result.readonly <- false):void;
+            true
+        };
+        _ -> false
+    }
+}
+
+func same_body_type(left:const BodyValue in L, right:const BodyValue in R) -> bool where {const owner L, const owner R} {
+    return left.category == right.category && left.type_kind == right.type_kind &&
+        left.module == right.module && left.identity == right.identity
+}
+
+func can_bind_field(destination:const BodyValue in D, input:const BodyValue in A) -> bool
+    where {const owner D, const owner A} {
+    if (destination.mode != PointerFormal && destination.mode != ReferenceFormal) return false;
+    if (input.category == UnknownType)
+        return destination.mode == PointerFormal && (input.role == no_node() || input.role == destination.role);
+    return same_body_type(destination, input) && destination.role == input.role &&
+        (!input.readonly || destination.readonly) &&
+        (input.mode == ReferenceFormal || (input.mode == PointerFormal && destination.mode == PointerFormal))
+}
+
+func writable_body_role(rows:const ModuleInterfaces in I, first:UInt64, past:UInt64, role:UInt64) -> bool
+    where {const owner I} {
+    for (row in first .. past) {
+        if (rows[row].declaration == role &&
+            (case rows[row].payload of { RecipeOwner { val readonly <-; } -> !readonly; _ -> false })) return true
+    };
+    return false
+}
+
+func finish_body_make(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, values:BodyValues in V, cursor:BodyCursor in C, binding:UInt64, role:UInt64) -> bool
+    where {const owner I, const owner M, const owner A, owner V, owner C} {
+    if (!writable_body_role(rows, cursor.first, cursor.past, role) ||
+        (cursor.allocation != no_node() && cursor.allocation != role) || cursor.values >= intrinsic (len)(values)) return false;
+    val output <- cursor.values;
+    val end <- read_body_type(rows, products, arguments, cursor.first, cursor.past, cursor.anchor, cursor.next, values[output]);
+    if (end == no_node() || values[output].category != ConcreteProductType) return false;
+    val member <- values[output].identity;
+    if (products[member].constructor != no_node()) return false;
+    val header <- find_interface(rows, published, products[member].module, products[member].declaration);
+    if (header == no_node()) return false;
+    val first <- header + 1u64;
+    val past <- first + rows[header].entry_count;
+    ref initialized = make InitializedFields(past - first, false);
+    ref destination = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- role; readonly <- false; can_rebind <- true; field_place <- false
+    };
+    ref input = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    };
+    cursor.next <- end;
+    val row <- no_node();
+    val field_row <- no_node();
+    for (step in end .. cursor.past) {
+        row <- cursor.next;
+        if (row >= cursor.past) return false;
+        cursor.next <- row + 1u64;
+        case rows[row].payload of {
+            RecipeBodyEnd -> {
+                for (field in first .. past) {
+                    if ((case rows[field].payload of { RecipeField -> true; _ -> false }) &&
+                        !initialized[field - first]) return false
+                };
+                values[output].binding <- binding;
+                values[output].mode <- ReferenceFormal;
+                values[output].role <- role;
+                values[output].readonly <- false;
+                values[output].can_rebind <- false;
+                values[output].field_place <- false;
+                cursor.values <- output + 1u64;
+                (cursor.allocation <- role):void;
+                return true
+            };
+            RecipeBodyInitialize { val field <-; val transfer <-; } -> {
+                destination.readonly <- false;
+                destination.can_rebind <- true;
+                field_row <- body_field_row(rows, first, past, field);
+                if (field_row == no_node() ||
+                    !read_body_field(rows, published, products, arguments, member, field, destination) ||
+                    (initialized[field_row - first] && (!destination.can_rebind || (transfer && destination.readonly))) ||
+                    !read_body_operand(rows, published, products, arguments, values, cursor, input)) return false;
+                if (transfer) {
+                    if ((destination.mode != ValueFormal && destination.mode != ExplicitValueFormal) ||
+                        (destination.category != ScalarType && destination.category != BitsNominal) ||
+                        (input.mode != ValueFormal && input.mode != ExplicitValueFormal && input.mode != ReferenceFormal) ||
+                        !same_body_type(destination, input)) return false
+                } else {
+                    if (!can_bind_field(destination, input)) return false
+                };
+                (initialized[field_row - first] <- true):void
+            };
+            _ -> { return false }
+        }
+    };
+    return false
+}
+
+func finish_body_case(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, values:BodyValues in V, cursor:BodyCursor in C, result:const BodyValue in R, depth:UInt64) -> bool
+    where {const owner I, const owner M, const owner A, owner V, owner C, const owner R} {
+    ref subject = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    };
+    if (!read_body_operand(rows, published, products, arguments, values, cursor, subject) ||
+        subject.category != ConcreteProductType || subject.mode != PointerFormal) return false;
+    val incoming <- cursor.values;
+    if (!finish_body_block(rows, published, products, arguments, values, cursor, result, depth + 1u64)) return false;
+    val missing_continues <- cursor.normal;
+    cursor.values <- incoming;
+    cursor.normal <- true;
+    val row <- cursor.next;
+    if (row >= cursor.past || incoming >= intrinsic (len)(values)) return false;
+    val end <- read_body_type(rows, products, arguments, cursor.first, cursor.past, cursor.anchor, row + 1u64, values[incoming]);
+    if (end == no_node() || !same_body_type(subject, values[incoming])) return false;
+    case rows[row].payload of {
+        RecipeBodyRefArm { val binding <-; val owner_role <-; val readonly <-; } -> {
+            if (subject.role != owner_role || (subject.readonly && !readonly)) return false;
+            values[incoming].binding <- binding;
+            values[incoming].role <- owner_role;
+            (values[incoming].readonly <- readonly):void
+        };
+        _ -> { return false }
+    };
+    values[incoming].mode <- ReferenceFormal;
+    values[incoming].can_rebind <- false;
+    values[incoming].field_place <- false;
+    cursor.values <- incoming + 1u64;
+    cursor.next <- end;
+    if (!finish_body_block(rows, published, products, arguments, values, cursor, result, depth + 1u64)) return false;
+    cursor.values <- incoming;
+    (cursor.normal <- missing_continues || cursor.normal):void;
+    return true
+}
+
+func legal_body_return(result:const BodyValue in R, input:const BodyValue in I) -> bool
+    where {const owner R, const owner I} {
+    if (result.mode != PointerFormal) return false;
+    if (input.category == UnknownType)
+        return input.role == no_node() || input.role == result.role;
+    return same_body_type(result, input) && input.role == result.role &&
+        (!input.readonly || result.readonly) &&
+        (input.mode == PointerFormal || input.mode == ReferenceFormal || input.field_place)
+}
+
+func finish_body_block(rows:const ModuleInterfaces in I, published:UInt64, products:const Products in M,
+    arguments:const TypeKeys in A, values:BodyValues in V, cursor:BodyCursor in C, result:const BodyValue in R, depth:UInt64) -> bool
+    where {const owner I, const owner M, const owner A, owner V, owner C, const owner R} {
+    if (depth >= 128u64) return false;
+    ref destination = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    };
+    ref input = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    };
+    val row <- no_node();
+    for (step in cursor.next .. cursor.past) {
+        row <- cursor.next;
+        if (row >= cursor.past || (!cursor.normal &&
+            !(case rows[row].payload of { RecipeBodyEnd -> true; _ -> false }))) return false;
+        cursor.next <- row + 1u64;
+        case rows[row].payload of {
+            RecipeBodyEnd -> { return true };
+            RecipeBodyMake { val binding <-; val owner_role <-; } -> {
+                if (!finish_body_make(rows, published, products, arguments, values, cursor, binding, owner_role))
+                    return false
+            };
+            RecipeBodyCase -> {
+                if (!finish_body_case(rows, published, products, arguments, values, cursor, result, depth)) return false
+            };
+            RecipeBodyReturn -> {
+                if (!read_body_operand(rows, published, products, arguments, values, cursor, input) ||
+                    !legal_body_return(result, input)) return false;
+                (cursor.normal <- false):void
+            };
+            RecipeBodyStore { val binding <-; val field <-; } -> {
+                if (!read_body_place(rows, published, products, arguments, values, cursor.values, binding, field, destination) ||
+                    !destination.can_rebind ||
+                    !read_body_operand(rows, published, products, arguments, values, cursor, input) ||
+                    !can_bind_field(destination, input)) return false
+            };
+            _ -> { return false }
+        }
+    };
+    return false
+}
+
+# The caller has verified the actuals before requesting body completion.
+# Operands here refer only to frozen formals and body-local places.
+export func complete_generic_field_body(rows:const ModuleInterfaces in I, published:UInt64,
+    products:const Products in M, arguments:const TypeKeys in A,
+    first:UInt64, body:UInt64, past:UInt64, anchor:UInt64, allocation:UInt64 in R) -> bool
+    where {const owner I, const owner M, const owner A, owner R} {
+    if (first > body || body >= past || past > published) return false;
+    ref values = make BodyValues(past - first, make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    });
+    ref cursor = make BodyCursor {
+        first <- first; next <- body; past <- past; anchor <- anchor; values <- 0u64; allocation <- no_node(); normal <- true
+    };
+    ref result = make BodyValue {
+        binding <- no_node(); category <- UnknownType; type_kind <- 0u8; module <- 0u64; identity <- no_node();
+        mode <- ValueFormal; role <- no_node(); readonly <- false; can_rebind <- false; field_place <- false
+    };
+    val slot <- 0u64;
+    for (row in first .. body) {
+        case rows[row].payload of {
+            RecipeResult { val mode <-; val owner_role <-; val readonly <-; } -> {
+                if (result.category != UnknownType ||
+                    read_body_type(rows, products, arguments, first, body, anchor, row + 1u64, result) == no_node())
+                    return false;
+                if (mode == ValueRecipe) {
+                    if (result.category != ScalarType || result.type_kind != builtin_void() || owner_role != no_node())
+                        return false
+                } else {
+                    if (mode != PointerRecipe || owner_role == no_node()) return false;
+                    result.mode <- PointerFormal;
+                    result.role <- owner_role;
+                    (result.readonly <- readonly):void
+                }
+            };
+            RecipeFormal { val mode <-; val owner_role <-; val readonly <-; } -> {
+                if (read_body_type(rows, products, arguments, first, body, anchor, row + 1u64, values[slot]) == no_node()) return false;
+                values[slot].mode <- if (mode == ValueFormal && owner_role != no_node()) { ReferenceFormal } else { mode };
+                values[slot].binding <- rows[row].declaration;
+                values[slot].role <- owner_role;
+                values[slot].readonly <- readonly;
+                (slot <- slot + 1u64):void
+            };
+            _ -> {}
+        }
+    };
+    cursor.values <- slot;
+    if (result.category == UnknownType ||
+        !finish_body_block(rows, published, products, arguments, values, cursor, result, 0u64) ||
+        cursor.next != past || cursor.normal == (result.mode == PointerFormal)) return false;
+    (allocation <- cursor.allocation):void;
+    return true
+}

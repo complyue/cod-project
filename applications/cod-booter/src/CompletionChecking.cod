@@ -81,7 +81,7 @@ using "./ModuleExportStorage.cod" ArrayReadCompletion {
     NoArrayRead, CheckedArrayRead, ArrayReadMayFailBounds
 };
 using "./NativeDeclarations.cod" { prepared_byte_function, prepared_array_length_call };
-using "./NativeDeclarations.cod" { source_call_allocates, SuppliedView { CheckedImportedArraySlotCall } };
+using "./NativeDeclarations.cod" { source_call_allocates, SuppliedView { CheckedImportedArraySlotCall, BoundGenericCall } };
 
 export data CompletionSite {
     event:UInt8;
@@ -847,7 +847,8 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
         return route_failure(nodes, names, links, facts, sites, at, used, revision,
             index_out_of_bounds_identity(), 0u8, possible_failure());
     if (facts[at].allocation_owner != no_node()) {
-        if (allocated_source_array(facts, at) && (sites[at].registration != no_node() ||
+        val generic <- at < intrinsic (len)(views) && (case views[at] of { BoundGenericCall -> true; _ -> false });
+        if ((allocated_source_array(facts, at) || generic) && (sites[at].registration != no_node() ||
             sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)) return unproved_deferred_error();
         return route_failure(nodes, names, links, facts, sites, at, used, revision,
             out_of_memory_identity(), 0u8, possible_failure())

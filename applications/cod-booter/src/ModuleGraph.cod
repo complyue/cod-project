@@ -1103,7 +1103,7 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         declaration <- no_node(); pointer <- false; fixed <- false; next <- no_node()
     });
     ref members = make ConcreteMembers { products = member_products; arguments = member_arguments; fields = member_fields };
-    val generic_prefix <- stage_generic_interfaces(nodes, names, selected, work, staged_interfaces, interface_report,
+    val generic_prefix <- stage_generic_interfaces(source, nodes, names, selected, work, staged_interfaces, interface_report,
         used, revision, progress[0u64].identity, 0u64);
     if (generic_prefix == no_node() ||
         (result.has_closed_application &&

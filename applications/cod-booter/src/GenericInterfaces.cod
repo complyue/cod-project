@@ -1,13 +1,19 @@
+using "./SourceStorage.cod" SourceBytes;
 using "./ParserStorage.cod" {
     ExprNodes, no_node, block_tail, ungrouped, published_syntax_id, completion_operand, completion_syntax,
     CompletionSyntax { ReturnCompletion }, syntax_first, syntax_past, SequenceEntry, inspect_sequence_entry, first_sequence_entry,
     GenericProductSites, inspect_generic_product, TypeApplicationSites, inspect_type_application, type_list_count,
     BindingSites, inspect_binding, inspect_type_annotation, FormalSites, inspect_formal, formal_binding_is_fixed,
     AssignmentSites, inspect_assignment,
-    AssignmentSyntax { PlaceRebind }, NodeLink { NoLink, LinkTo }, AstSlot { Vacant, Occupied },
+    LocalBindingSites, inspect_local_binding, LocalMode { ReferenceLocal },
+    FieldSelectionSites, inspect_field_selection, name_syntax, NameSyntax { OrdinaryName },
+    CaseSites, CaseArmSites, inspect_case, inspect_case_arm, inspect_reference_case, case_pattern,
+    CasePatternSyntax { NullCaseTarget }, is_scope_block,
+    ConstructionSites, inspect_construction, ConstructionSyntax { BracedConstruction },
+    AssignmentSyntax { PlaceRebind, FieldTransfer, FieldRebind }, NodeLink { NoLink, LinkTo }, AstSlot { Vacant, Occupied },
     ExprPayload { NullLiteral, DiscardedExpression },
     CallableSites, inspect_callable, SignatureSites, inspect_signature, find_signature_clause, explicit_value_result_type,
-    SequenceSyntax { TypeSequence, FormalSequence, BlockSequence }, BindingSyntax { TypedBinding },
+    SequenceSyntax { TypeSequence, FormalSequence, BlockSequence }, BindingSyntax { TypedBinding, BareBinding },
     FormalSyntax { OrdinaryFormal }, FormalMode { ValueFormal },
     CallableSyntax { ModuleCallable },
     SignatureSyntax { SignatureHead, TypeSignatureClause, OwnerSignatureClause, ValueResultClause, BorrowedResultClause,
@@ -16,7 +22,7 @@ using "./ParserStorage.cod" {
 using "./NameResolution.cod" {
     NameBindings, NameWork, builtin_type_kind, type_parameter_binding, product_application_binding,
     generic_product_binding, generic_method_binding, generic_constructor_binding, owner_binding,
-    unsupported_generic_export, formal_binding, lexical_owner,
+    unsupported_generic_export, formal_binding, lexical_owner, local_binding, find_named_field,
 };
 using "./ModuleExports.cod" SelectedExports;
 using "./DeclarationTypes.cod" { type_module, type_identity };
@@ -24,10 +30,11 @@ using "./NativeDeclarations.cod" NativeDeclarationResult;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, write_payload_row, recipe_entry, generic_product_interface, generic_callable_interface,
     RecipeResultMode { ValueRecipe, ReferenceRecipe, PointerRecipe },
-    GenericMethodExit { UnprovedMethodBody, EmptyMethodBody, NullMethodResult },
+    GenericMethodExit { UnprovedMethodBody, EmptyMethodBody, NullMethodResult, FieldOperationsBody },
     InterfacePayload { NoInterfacePayload, GenericProduct, GenericCallable, RecipeParameter, RecipeOwner,
         RecipeFormal, RecipeField, RecipeResult, RecipeBuiltin, RecipeNominal, RecipeTypeParameter, RecipeApplication,
-        RecipeNullInitializer, RecipeReturnNull },
+        RecipeNullInitializer, RecipeReturnNull,
+        RecipeBodyOperand, RecipeBodyMake, RecipeBodyInitialize, RecipeBodyStore, RecipeBodyReturn, RecipeBodyCase, RecipeBodyRefArm, RecipeBodyEnd },
 };
 
 data RecipeWriter { revision:UInt64; used:UInt64; module:UInt64; next:UInt64; exhausted:bool; }
@@ -210,6 +217,13 @@ func discarded_operand(nodes:const ExprNodes in N, writer:const RecipeWriter in 
     }
 }
 
+func append_null_initializer(interfaces:ModuleInterfaces in I, writer:RecipeWriter in W,
+    site:UInt64, field:UInt64, role:UInt64) -> bool where {owner I, owner W} {
+    return append_recipe(interfaces, writer, site, 0u64, 0u64, make RecipeNullInitializer {
+        field <- field; owner_role <- role
+    })
+}
+
 # Record a straight-line constructor's actual bound operations. The consuming
 # phase decides field membership, readiness and the destination owner role.
 func append_null_initializers(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -236,10 +250,218 @@ func append_null_initializers(nodes:const ExprNodes in N, names:const NameBindin
         input <- ungrouped(nodes, writer.revision, writer.used, assignment.input);
         if (destination >= writer.used || names[destination].kind != formal_binding() ||
             !written_null_owner(nodes, names, writer, input, owner_role)) return false;
-        if (!append_recipe(interfaces, writer, expression, 0u64, 0u64, make RecipeNullInitializer {
-            field <- names[destination].declaration; owner_role <- owner_role
-        })) return false;
+        if (!append_null_initializer(interfaces, writer, expression, names[destination].declaration, owner_role))
+            return false;
         (at <- work[at].next):void
+    };
+    return false
+}
+
+func local_product_field(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, writer:const RecipeWriter in W, marker:UInt64, label:UInt64)
+    -> UInt64 where {const owner S, const owner N, const owner B, const owner L, const owner W} {
+    if (marker >= writer.used || !product_application_binding(names[marker].kind)) return no_node();
+    val product <- names[marker].declaration;
+    if (product >= writer.used || names[product].kind != generic_product_binding()) return no_node();
+    ref recipe = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
+    if (!inspect_generic_product(nodes, writer.revision, writer.used, product, recipe)) return no_node();
+    return find_named_field(source, nodes, work, recipe.fields, label, writer.revision, writer.used)
+}
+
+func body_receiver_marker(nodes:const ExprNodes in N, writer:const RecipeWriter in W, declaration:UInt64)
+    -> UInt64 where {const owner N, const owner W} {
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref reception = make UInt64 { no_node() };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (inspect_formal(nodes, writer.revision, writer.used, declaration, formal) == OrdinaryFormal) {
+        (reception <- formal.binding):void
+    } else {
+        if (!inspect_reference_case(nodes, writer.revision, writer.used, declaration, reception)) return no_node()
+    };
+    if (inspect_binding(nodes, writer.revision, writer.used, reception, binding) != TypedBinding) return no_node();
+    return binding.target_type
+}
+
+data BodyPlaceSites { binding:UInt64; field:UInt64; }
+
+func body_place(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, writer:const RecipeWriter in W, at:UInt64, place:BodyPlaceSites in P) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, const owner W, owner P} {
+    if (at >= writer.used) return false;
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    val receiver <- at;
+    if (inspect_field_selection(nodes, writer.revision, writer.used, at, field)) {
+        (receiver <- ungrouped(nodes, writer.revision, writer.used, field.receiver)):void
+    };
+    if (receiver >= writer.used || name_syntax(nodes, writer.used, receiver) != OrdinaryName ||
+        (names[receiver].kind != local_binding() && names[receiver].kind != formal_binding())) return false;
+    place.binding <- names[receiver].declaration;
+    place.field <- no_node();
+    if (receiver != at) {
+        val marker <- body_receiver_marker(nodes, writer, place.binding);
+        place.field <- local_product_field(source, nodes, names, work, writer, marker, field.field);
+        if (place.field == no_node()) return false
+    };
+    return true
+}
+
+func append_body_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, site:UInt64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, owner I, owner W} {
+    val at <- ungrouped(nodes, writer.revision, writer.used, site);
+    ref role = make UInt64 { no_node() };
+    if (written_null_owner(nodes, names, writer, at, role)) {
+        return append_recipe(interfaces, writer, at, 0u64, 0u64, make RecipeBodyOperand {
+            binding <- no_node(); field <- no_node(); owner_role <- role
+        })
+    };
+    ref place = make BodyPlaceSites { binding <- no_node(); field <- no_node() };
+    if (!body_place(source, nodes, names, work, writer, at, place)) return false;
+    return append_recipe(interfaces, writer, at, 0u64, 0u64, make RecipeBodyOperand {
+        binding <- place.binding; field <- place.field; owner_role <- no_node()
+    })
+}
+
+func append_field_initialization(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, marker:UInt64, site:UInt64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, owner I, owner W} {
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
+    val shape <- inspect_assignment(nodes, writer.revision, writer.used, site, assignment);
+    if (shape != FieldTransfer && shape != FieldRebind) return false;
+    val field <- local_product_field(source, nodes, names, work, writer, marker, assignment.destination);
+    if (field == no_node()) return false;
+    return append_recipe(interfaces, writer, site, 0u64, 0u64, make RecipeBodyInitialize {
+        field <- field; transfer <- shape == FieldTransfer
+    }) && append_body_operand(source, nodes, names, work, interfaces, writer, assignment.input)
+}
+
+func append_body_end(interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, site:UInt64) -> bool
+    where {owner I, owner W} {
+    return append_recipe(interfaces, writer, site, 0u64, 0u64, make RecipeBodyEnd {})
+}
+
+func append_body_make(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in L, interfaces:ModuleInterfaces in I,
+    writer:RecipeWriter in W, at:UInt64, local:const LocalBindingSites in K) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner L, owner I, owner W, const owner K} {
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (local.mode != ReferenceLocal || inspect_binding(nodes, writer.revision, writer.used, local.binding, binding) != BareBinding ||
+        binding.readonly || binding.owner_name != no_node()) return false;
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node(); initializer <- no_node(); contents <- no_node()
+    };
+    if (inspect_construction(nodes, writer.revision, writer.used, local.initializer, construction) != BracedConstruction ||
+        construction.placement >= writer.used || names[construction.placement].kind != owner_binding() ||
+        construction.requested >= writer.used || !product_application_binding(names[construction.requested].kind)) return false;
+    if (!append_recipe(interfaces, writer, at, 0u64, 0u64, make RecipeBodyMake {
+        binding <- at; owner_role <- names[construction.placement].declaration
+    }) || !append_type_recipe(nodes, names, selected, work, interfaces, writer, construction.requested)) return false;
+    ref tail = make UInt64 { no_node() };
+    ref item = make UInt64 { no_node() };
+    if (!block_tail(nodes, writer.revision, writer.used, construction.contents, tail) ||
+        !first_sequence_entry(nodes, writer.revision, writer.used, tail, BlockSequence, item)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    for (remaining in 0u64 .. writer.used) {
+        if (item == no_node()) return append_body_end(interfaces, writer, at);
+        if (inspect_sequence_entry(nodes, writer.revision, writer.used, item, entry) != BlockSequence ||
+            !append_field_initialization(source, nodes, names, work, interfaces, writer, construction.requested, entry.item))
+            return false;
+        (item <- work[item].next):void
+    };
+    return false
+}
+
+func append_body_store(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, at:UInt64, has_successor:bool) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, owner I, owner W} {
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- 0u64 };
+    val direct <- discarded_operand(nodes, writer, at);
+    val rebind <- if (direct == no_node() && has_successor) { at } else { direct };
+    if (inspect_assignment(nodes, writer.revision, writer.used, rebind, assignment) != PlaceRebind) return false;
+    ref place = make BodyPlaceSites { binding <- no_node(); field <- no_node() };
+    if (!body_place(source, nodes, names, work, writer, assignment.destination, place) || place.field == no_node()) return false;
+    return append_recipe(interfaces, writer, rebind, 0u64, 0u64, make RecipeBodyStore {
+        binding <- place.binding; field <- place.field
+    }) && append_body_operand(source, nodes, names, work, interfaces, writer, assignment.input)
+}
+
+# Each arm is collected under its original bound declarations. Both arms
+# have an explicit end and no fallthrough into each other.
+func append_body_case(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W,
+    at:UInt64, choice:const CaseSites in C, depth:UInt64) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner L, owner I, owner W, const owner C} {
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref missing = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    ref present = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
+    if (inspect_sequence_entry(nodes, writer.revision, writer.used, choice.items, entry) != BlockSequence ||
+        !inspect_case_arm(nodes, writer.revision, writer.used, entry.item, present) ||
+        inspect_sequence_entry(nodes, writer.revision, writer.used, entry.previous, entry) != BlockSequence ||
+        entry.previous != no_node() || !inspect_case_arm(nodes, writer.revision, writer.used, entry.item, missing) ||
+        missing.guard != no_node() || present.guard != no_node() ||
+        case_pattern(nodes, writer.used, missing.pattern) != NullCaseTarget) return false;
+    ref receiver = make UInt64 { no_node() };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    if (!inspect_reference_case(nodes, writer.revision, writer.used, present.pattern, receiver) ||
+        inspect_binding(nodes, writer.revision, writer.used, receiver, binding) != TypedBinding ||
+        binding.owner_name >= writer.used || names[binding.owner_name].kind != owner_binding()) return false;
+    return append_recipe(interfaces, writer, at, 0u64, 0u64, make RecipeBodyCase {}) &&
+        append_body_operand(source, nodes, names, work, interfaces, writer, choice.subject) &&
+        append_body_block(source, nodes, names, selected, work, interfaces, writer, missing.body, depth + 1u64) &&
+        append_recipe(interfaces, writer, present.pattern, 0u64, 0u64, make RecipeBodyRefArm {
+            binding <- present.pattern; owner_role <- names[binding.owner_name].declaration; readonly <- binding.readonly
+        }) &&
+        append_type_recipe(nodes, names, selected, work, interfaces, writer, binding.target_type) &&
+        append_body_block(source, nodes, names, selected, work, interfaces, writer, present.body, depth + 1u64)
+}
+
+func append_body_return(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, at:UInt64) -> bool
+    where {const owner S, const owner N, const owner B, const owner L, owner I, owner W} {
+    ref returned = make UInt64 { no_node() };
+    return completion_operand(nodes, writer.revision, writer.used, at, returned) &&
+        append_recipe(interfaces, writer, at, 0u64, 0u64, make RecipeBodyReturn {}) &&
+        append_body_operand(source, nodes, names, work, interfaces, writer, returned)
+}
+
+func append_body_block(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W,
+    body:UInt64, depth:UInt64) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner L, owner I, owner W} {
+    if (depth >= 128u64 || is_scope_block(nodes, body)) return false;
+    ref tail = make UInt64 { no_node() };
+    ref item = make UInt64 { no_node() };
+    if (!block_tail(nodes, writer.revision, writer.used, body, tail) ||
+        !first_sequence_entry(nodes, writer.revision, writer.used, tail, BlockSequence, item)) return false;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref local = make LocalBindingSites { binding <- no_node(); initializer <- no_node(); mode <- ReferenceLocal; declaration_const <- false };
+    ref choice = make CaseSites { subject <- no_node(); items <- no_node() };
+    val at <- no_node();
+    for (unused in 0u64 .. writer.used) {
+        if (item == no_node()) return append_body_end(interfaces, writer, body);
+        if (inspect_sequence_entry(nodes, writer.revision, writer.used, item, entry) != BlockSequence) return false;
+        at <- ungrouped(nodes, writer.revision, writer.used, entry.item);
+        if (completion_syntax(nodes, at) == ReturnCompletion) {
+            if (!append_body_return(source, nodes, names, work, interfaces, writer, at)) return false
+        } else {
+            if (inspect_local_binding(nodes, writer.revision, writer.used, at, local)) {
+                if (!append_body_make(source, nodes, names, selected, work, interfaces, writer, at, local)) return false
+            } else {
+                if (inspect_case(nodes, writer.revision, writer.used, at, choice)) {
+                    if (!append_body_case(source, nodes, names, selected, work, interfaces, writer, at, choice, depth)) return false
+                } else {
+                    if (!append_body_store(source, nodes, names, work, interfaces, writer, at, work[item].next != no_node()))
+                        return false
+                }
+            };
+        };
+        (item <- work[item].next):void
     };
     return false
 }
@@ -277,9 +499,9 @@ func seal_callable_recipe(nodes:const ExprNodes in N, interfaces:ModuleInterface
         })
 }
 
-func stage_callable_recipe(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+func stage_callable_recipe(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
     work:const NameWork in L, interfaces:ModuleInterfaces in I, writer:RecipeWriter in W, site:UInt64) -> bool
-    where {const owner N, const owner B, const owner E, const owner L, owner I, owner W} {
+    where {const owner S, const owner N, const owner B, const owner E, const owner L, owner I, owner W} {
     val constructor_of <- if (names[site].kind == generic_constructor_binding()) {
         (names[site].declaration)
     } else { no_node() };
@@ -313,7 +535,14 @@ func stage_callable_recipe(nodes:const ExprNodes in N, names:const NameBindings 
                 append_null_initializers(nodes, names, work, interfaces, writer, callable.body);
             if (!null_initialization) { (writer.next <- body_first):void };
             if (constructor_of == no_node()) {
-                (method_exit <- append_method_exit(nodes, names, interfaces, writer, callable.body)):void
+                method_exit <- append_method_exit(nodes, names, interfaces, writer, callable.body);
+                if (method_exit == UnprovedMethodBody) {
+                    if (append_body_block(source, nodes, names, selected, work, interfaces, writer, callable.body, 0u64)) {
+                        (method_exit <- FieldOperationsBody):void
+                    } else {
+                        (writer.next <- body_first):void
+                    }
+                }
             };
             if (writer.exhausted) return false;
             seal_callable_recipe(nodes, interfaces, writer, start, site, name, count, constructor_of,
@@ -343,10 +572,10 @@ func stage_callable_recipe(nodes:const ExprNodes in N, names:const NameBindings 
 
 # Collect complete signature and field recipes from the already bound
 # revision. The graph publishes the staged prefix only after success.
-export func stage_generic_interfaces(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+export func stage_generic_interfaces(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
     work:const NameWork in L, interfaces:ModuleInterfaces in I, report:NativeDeclarationResult in R,
     used:UInt64, revision:UInt64, module:UInt64, start:UInt64) -> UInt64
-    where {const owner N, const owner B, const owner E, const owner L, owner I, owner R} {
+    where {const owner S, const owner N, const owner B, const owner E, const owner L, owner I, owner R} {
     ref writer = make RecipeWriter { revision <- revision; used <- used; module <- module; next <- start; exhausted <- false };
     val kind <- 0u8;
     val ready <- false;
@@ -357,7 +586,7 @@ export func stage_generic_interfaces(nodes:const ExprNodes in N, names:const Nam
         } else {
             if ((kind == generic_method_binding() || kind == generic_constructor_binding()) &&
                 names[site].declaration != no_node()) {
-                stage_callable_recipe(nodes, names, selected, work, interfaces, writer, site)
+                stage_callable_recipe(source, nodes, names, selected, work, interfaces, writer, site)
             } else { true }
         };
         if (!ready) {

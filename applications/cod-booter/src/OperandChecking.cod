@@ -1,8 +1,10 @@
+using "./GenericBodyChecking.cod" complete_generic_field_body;
 using "./ModuleExportStorage.cod" {
-    generic_callable_interface, GenericMethodExit, GenericMethodExit { UnprovedMethodBody, EmptyMethodBody, NullMethodResult },
+    generic_callable_interface, GenericMethodExit, GenericMethodExit { UnprovedMethodBody, EmptyMethodBody, NullMethodResult, FieldOperationsBody },
     RecipeResultMode { ValueRecipe, PointerRecipe },
     InterfacePayload { GenericCallable, RecipeApplication, RecipeParameter, RecipeTypeParameter, RecipeBuiltin,
-        RecipeOwner, RecipeFormal, RecipeResult, RecipeReturnNull },
+        RecipeOwner, RecipeFormal, RecipeResult, RecipeReturnNull,
+        RecipeBodyMake, RecipeBodyStore, RecipeBodyReturn, RecipeBodyCase, RecipeBodyEnd },
 };
 using "./GenericTypes.cod" { Products, TypeKeys, TypeKey, TypeCategory { BitsNominal, ScalarType }, matches_member_application };
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
@@ -3400,10 +3402,7 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
             contracts[header].type_module != 0u64 || contracts[header].type_identity != 0u64) return no_node()
     };
     val first <- header + 1u64;
-    if (!checked_readonly_byte_loan(contracts, published, first, 0u64) &&
-        !(source_aggregate_formal(contracts, first, array_type(), 0u64, 1u8) &&
-          published_sum_array(contracts, published, contracts[first].type_module,
-              contracts[first].type_identity))) return no_node();
+    if (!checked_readonly_loan_row(contracts[first], array_type(), 0u64)) return no_node();
     val past <- first + arity;
     if (result == builtin_void()) {
         return if (checked_array_inspector_inputs(contracts, published, first, past, owner_count, true)) {
@@ -6451,6 +6450,7 @@ data GenericCallSignature {
     count:UInt64;
     result:UInt64;
     null_return:UInt64;
+    body:UInt64;
     exit:GenericMethodExit;
     function_form:bool;
 }
@@ -6468,6 +6468,9 @@ func generic_call_signature(interfaces:const ModuleInterfaces in I, header:UInt6
         _ -> { return false }
     };
     for (row in header + 1u64 .. past) {
+        if (signature.body == no_node() && (case interfaces[row].payload of {
+            RecipeBodyMake -> true; RecipeBodyStore -> true; RecipeBodyReturn -> true; RecipeBodyCase -> true; RecipeBodyEnd -> true; _ -> false
+        })) { (signature.body <- row):void };
         case interfaces[row].payload of {
             RecipeResult -> {
                 if (signature.result != no_node()) return false;
@@ -6597,10 +6600,10 @@ func check_generic_actual(nodes:const ExprNodes in N, facts:const OperandFacts i
     return 0u8
 }
 
-func apply_generic_result(facts:OperandFacts in F, interfaces:const ModuleInterfaces in I,
+func apply_generic_result(nodes:const ExprNodes in N, facts:OperandFacts in F, interfaces:const ModuleInterfaces in I,
     products:const Products in M, arguments:const TypeKeys in M, owners:const PreparedGenericOwners in O, at:UInt64, first:UInt64, past:UInt64,
-    signature:const GenericCallSignature in S, anchor:UInt64) -> UInt8
-    where {owner F, const owner I, const owner M, const owner O, const owner S} {
+    signature:const GenericCallSignature in S, anchor:UInt64, published:UInt64) -> UInt8
+    where {const owner N, owner F, const owner I, const owner M, const owner O, const owner S} {
     val role <- no_node();
     val mode <- ValueRecipe;
     val readonly <- false;
@@ -6615,9 +6618,25 @@ func apply_generic_result(facts:OperandFacts in F, interfaces:const ModuleInterf
     ref key = make TypeKey { category <- ScalarType; type_kind <- 0u8; module <- 0u64; identity <- no_node() };
     if (!scalar_generic_term(interfaces, first, past, signature.result + 1u64, products, arguments, anchor, key))
         return unsupported_generic_type();
+    ref allocation = make UInt64 { no_node() };
+    val allocation_owner <- no_node();
+    if (signature.exit == FieldOperationsBody) {
+        if (signature.body == no_node() ||
+            !complete_generic_field_body(interfaces, published, products, arguments, first, signature.body,
+                past, anchor, allocation)) return 168u8;
+        if (allocation != no_node()) {
+            val row <- generic_owner_row(interfaces, first, past, allocation);
+            if (row == no_node() || owners[row - first] == no_node()) return unproved_owner();
+            allocation_owner <- owners[row - first];
+            # Region allocation also needs the region capacity failure path.
+            if (owner_constraint_syntax(nodes, allocation_owner) != NotOwnerConstraint)
+                return unsupported_generic_type()
+        }
+    };
     if (mode == ValueRecipe && key.category == ScalarType && key.type_kind == builtin_void() && role == no_node()) {
-        if (signature.exit != EmptyMethodBody) return unproved_generic_body();
+        if (signature.exit != EmptyMethodBody && signature.exit != FieldOperationsBody) return unproved_generic_body();
         only_void(facts, at);
+        (facts[at].allocation_owner <- allocation_owner):void;
         return 0u8
     };
     if (mode != PointerRecipe) return unsupported_generic_type();
@@ -6633,26 +6652,31 @@ func apply_generic_result(facts:OperandFacts in F, interfaces:const ModuleInterf
     if (kind == 0u8) return unsupported_generic_type();
     val owner <- generic_owner_row(interfaces, first, past, role);
     if (owner == no_node() || owners[owner - first] == no_node()) return unproved_owner();
-    if (signature.exit != NullMethodResult || signature.null_return == no_node()) return unproved_generic_body();
-    if (!(case interfaces[signature.null_return].payload of {
-        RecipeReturnNull { val written <- owner_role; } -> written == no_node() || written == role;
-        _ -> false
-    })) return unproved_owner();
+    val presence <- unknown_target();
+    if (signature.exit != FieldOperationsBody) {
+        if (signature.exit != NullMethodResult || signature.null_return == no_node()) return unproved_generic_body();
+        if (!(case interfaces[signature.null_return].payload of {
+            RecipeReturnNull { val written <- owner_role; } -> written == no_node() || written == role;
+            _ -> false
+        })) return unproved_owner();
+        (presence <- absent_target()):void
+    };
     set_fact(facts, at, kind, nullable_ptr(), owners[owner - first], key.identity, 0u8);
     facts[at].identity_module <- key.module;
     facts[at].target_readonly <- if (readonly) { 1u8 } else { 0u8 };
-    facts[at].target_presence <- absent_target();
+    facts[at].target_presence <- presence;
+    facts[at].allocation_owner <- allocation_owner;
     (facts[at].selection <- at):void;
     return 0u8
 }
 
 func check_generic_call(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
     facts:OperandFacts in F, interfaces:const ModuleInterfaces in I, products:const Products in M, arguments:const TypeKeys in M,
-    at:UInt64, used:UInt64, revision:UInt64, header:UInt64, past:UInt64, tail:UInt64) -> UInt8
+    at:UInt64, used:UInt64, revision:UInt64, header:UInt64, past:UInt64, tail:UInt64, published:UInt64) -> UInt8
     where {const owner N, const owner B, const owner L, owner F, const owner I, const owner M} {
     if (header >= past || past > intrinsic (len)(interfaces)) return invalid_operand_tree();
     ref signature = make GenericCallSignature {
-        count <- 0u64; result <- no_node(); null_return <- no_node(); exit <- UnprovedMethodBody; function_form <- false
+        count <- 0u64; result <- no_node(); null_return <- no_node(); body <- no_node(); exit <- UnprovedMethodBody; function_form <- false
     };
     if (!generic_call_signature(interfaces, header, past, signature)) return unsupported_generic_type();
     if (!signature.function_form && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
@@ -6689,13 +6713,13 @@ func check_generic_call(nodes:const ExprNodes in N, names:const NameBindings in 
     };
     if (argument != no_node()) return wrong_argument_count();
     if (abrupt) { set_result(facts, at, never_result()); return 0u8 };
-    return apply_generic_result(facts, interfaces, products, arguments, owners, at, first, past, signature, anchor)
+    return apply_generic_result(nodes, facts, interfaces, products, arguments, owners, at, first, past, signature, anchor, published)
 }
 
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
                    selected:const SelectedExports in E, facts:OperandFacts in F, owners:CallOwners in O,
                    fields:const CaughtFieldUses in X, views:const SuppliedViews in H, products:const Products in M, arguments:const TypeKeys in M,
-                   cases:const ConstructorCaseFacts in C, interfaces:const ModuleInterfaces in I,
+                   cases:const ConstructorCaseFacts in C, interfaces:const ModuleInterfaces in I, published:UInt64,
                        source_only:bool, mixed_aggregate_loan:bool,
                    at:UInt64, used:UInt64, revision:UInt64) -> UInt8
     where {const owner S, const owner N, const owner B, const owner L, const owner E, owner F,
@@ -6706,7 +6730,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         case views[at] of {
             BoundGenericCall { val header <-; val past <-; val tail <- arguments; } -> {
                 return check_generic_call(nodes, names, links, facts, interfaces, products, arguments, at, used, revision,
-                    header, past, tail)
+                    header, past, tail, published)
             };
             PreparedGenericConstruction { val owner_site <-; val member <-; } -> {
                 if (owner_site >= used || names[at].scope != owner_site) return unproved_owner();
@@ -7199,7 +7223,7 @@ func check_operand_range(source:const SourceBytes in S, nodes:const ExprNodes in
                                 at, used, revision, context)) return false;
             } else {
                 diagnostic <- check_operand(source, nodes, names, links, selected, facts, owners,
-                    fields, views, products, arguments, cases, interfaces, intrinsic (len)(demand) != 0u64,
+                    fields, views, products, arguments, cases, interfaces, published, intrinsic (len)(demand) != 0u64,
                     at < intrinsic (len)(demand) && demand[at].mixed_aggregate_loan, at, used, revision);
                 if (diagnostic != 0u8) return operand_problem(report, at, diagnostic)
             };
