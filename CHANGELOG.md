@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Set the bootstrap boundary for mixin and type-level programming
+
+<a id="h-static-mixin-bootstrap-scope-20261128"></a>
+**H-STATIC-MIXIN-BOOTSTRAP-SCOPE-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirms that booter source uses neither `mixin` nor type-level programming and the seed need not support them. The user proposes single-apostrophe expressions, triple-apostrophe blocks, `t:K` within them and possible Haskell-style signatures and equations. [D-15 r92→93](design/ModuleWorlds.md#quoted-type-level-expressions-and-blocks) continues the [receiving-context and vocabulary identity rules](https://github.com/complyue/cod-project/blob/4e0817757e95a295a4b065b7a09e6a5df52864af/design/ModuleWorlds.md#static-module-parameters-for-mixin) under P-102/P-208. [D-20-BOOTSTRAP r54→55](applications/cod-booter/README.md#trusted-source-and-the-seed) retains ordinary type family applications under P-642. Quotation grammar, static evaluation and result publication remain pending-human for `e-wrks/cod`. Registry r1383→1384.
+
 ## 2026-11-28 — Distinguish DBMR storage from a nominal region interface
 
 <a id="h-dbmr-storage-technique-20261128"></a>

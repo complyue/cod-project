@@ -1,8 +1,10 @@
 # Module worlds and flat TLS bindings
 
-Design revision: 92 · Recorded: 2026-11-27 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
+Design revision: 93 · Recorded: 2026-11-28 · Status: module-world contract; implementation evidence refers to the preserved source-compiler baseline.
 
 ## Design authority
+
+At r93 the [bootstrap scope decision](../CHANGELOG.md#h-static-mixin-bootstrap-scope-20261128) excludes `mixin` and type-level programming from booter source and seed requirements. D-15/P-102/P-208 continue r92 receiving-module and vocabulary identity. The quoted forms below are a proposal for `e-wrks/cod`.
 
 At r92 the [identity clarification](../CHANGELOG.md#k-mixin-vocabulary-type-identity-20261127) applies the receiving-declaration and vocabulary rules (P-102/P-208) to the r91 static mixin proposal. Syntax and evaluation remain deferred.
 
@@ -624,7 +626,25 @@ The author chooses type identity by choosing where the nominal declaration is ma
 
 A mixin that merely refers to a supplied type, or applies the supplied `deque` family to `UInt64`, preserves the identity of that type or member in each receiver. The same template can therefore use a shared protocol type and declare a private local type. Ordinary name and declaration rules apply as if the declarations were written at the mixin site.
 
-Static parameter syntax, the form for publishing computed results and the permitted type-level computations remain open. [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
+**Bootstrap scope.** The booter uses neither `mixin` nor type-level programs in its source. The seed has no obligation to support either. Ordinary type family applications such as `deque[UInt64]` remain available to bootstrap clients. The production compiler in `e-wrks/cod` is the target for the following design exploration. [Booter roadmap](../applications/cod-booter/README.md#trusted-source-and-the-seed)
+
+### Quoted type-level expressions and blocks
+
+The proposed spelling encloses one type-level expression in `'…'` and a block of type-level declarations in `''' … '''`. Inside either form, `t:K` relates a type-level term to its kind. In a parameter declaration it could bind `t` at kind `K`. In an expression it could check the kind of a term already in scope. For the static inputs above, the receiving module could supply `'deque : Type -> Type'` and `'UInt64 : Type'`. The template expression `'F[A] : Type'` would then denote the existing member type `deque[UInt64]`. Supplying `UInt64` for `F` would give a kind error at the argument.
+
+One possible block borrows Haskell’s separate signature and pattern equations. This sketch assumes the receiving module has selected the `deque` and `Maybe` families. Each equation binds its own `t`. [Haskell 2010, §4.4](https://www.haskell.org/onlinereport/haskell2010/haskellch4.html)
+
+```text
+'''
+element : Type -> Type;
+element (deque[t]) = t;
+element (Maybe[t]) = t
+'''
+```
+
+Where `element` is in scope, `'element (Maybe[UInt64]) : Type'` would yield `UInt64`. The pattern names the selected family by identity, so a locally renamed import still matches and an independently declared family named `Maybe` does not. Applying `element` to `UInt64` presents a different question from a wrong-kind argument. `UInt64` has kind `Type` and neither equation covers it. One option is a located error when that result is demanded.
+
+The proposed quotes delimit parsed static source. Ordinary text and doclets use double quotes. Apostrophe is outside the symbolic-operator alphabet. In the sketch, semicolons separate the signature and equations even if the entire block is written on one line. A first production use should settle which names a block exposes and how the mixin site supplies them. Adding `element t = t` would overlap both equations and force a choice about ordering or rejection. Recursive equations would also need a rule for whether evaluation finishes. These choices and the exact equation grammar remain open. [Operator tokens](SymbolicDynamicScope.md#symbolic-operator-tokens) · [Deferred mixin design](../docs/DesignTopics.md#body-mixin-templates)
 
 ## Vocabulary modules establish shared identities
 
