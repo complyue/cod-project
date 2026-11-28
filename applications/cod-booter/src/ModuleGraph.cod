@@ -1,3 +1,4 @@
+using "./ScopedTextChecking.cod" check_scoped_text_requirements;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter };
 using "./ModuleExportStorage.cod" { ByteArrayFailures, ArrayReadCompletion { NoArrayRead } };
 using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
@@ -113,7 +114,7 @@ using "./DeclarationTypes.cod" {
 using "./ModuleWorkspace.cod" { plan_module_source, plan_module_workspace, ExpressionScratchPlan, ModuleWorkspacePlan };
 using "./OperandChecking.cod" {
     OperandFact, OperandFacts, OwnerEvidence, CallOwners, OperandCheckResult,
-        prepare_imported_calls, ScopedTextOutcomes, apply_scoped_text_calls, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
+        prepare_imported_calls, ScopedTextOutcomes, collect_text_outcomes, first_declared_failure, append_callable_interfaces, mark_literal_source_bodies, append_array_slot_interfaces,
     check_module_operands,
 };
 using "./CompletionChecking.cod" { CompletionSite, CompletionSites };
@@ -743,7 +744,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; fixed_borrow <- false; requires_byte_completion <- false;
+        slot_body <- false; fixed_borrow <- false; text_call <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });
     val field_capacity <- if (caught_field == no_node()) { 0u64 } else { used };
@@ -773,10 +774,7 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
     };
     val text_capacity <- if (executable) { 0u64 } else { used };
     ref text_outcomes = make ScopedTextOutcomes(text_capacity, false);
-    if (!executable && !apply_scoped_text_calls(nodes, names, views, interfaces, facts, text_outcomes, module, used, operands)) {
-        binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
-        return false
-    };
+    if (!executable) { collect_text_outcomes(interfaces, facts, text_outcomes, used) };
     if (result.unchecked_scoped != no_node()) {
         binding_diagnostic(nodes, result, module_binding_failed(), unsupported_scoped_procedure(),
             result.unchecked_scoped);
@@ -800,6 +798,11 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
     };
     if (!analyze_bound_declaration_completion(nodes, names, work, facts, views, demand, text_outcomes, plans, sites, result))
         return false;
+    if (!executable && !check_scoped_text_requirements(nodes, names, work, views, interfaces, facts, demand,
+        sites, module, result.frontend.tree.root, used, revision, interface_count, operands)) {
+        binding_diagnostic(nodes, result, module_operands_failed(), operands.diagnostic, operands.node);
+        return false
+    };
     if (!executable) {
         finish_text_predicates(nodes, names, work, views, facts, sites, used, revision);
         finish_closed_source_functions(nodes, names, work, views, facts, demand, sites, cases, used, revision);
@@ -1566,7 +1569,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             next <- no_node(); next_method <- no_node();
             imported_interface <- no_node(); imported_type_module <- 0u64; imported_type_identity <-
                 0u64;
-            imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
+            imported_function <- no_node(); imported_owner_argument <- no_node(); text_installation_prefix <- no_node(); imported_failure <- 0u64;
             imported_failure_module <- 0u64;
             imported_kind <- 0u8; imported_callable_kind <- NoCallableKind;
             imported_array_read_completion <- NoArrayRead; imported_numeric_fault <- false;
@@ -1595,7 +1598,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             text_nul <- 0u8; allocation_owner <- no_node(); owner_chain <- no_node(); owner_use_next <- no_node();
             passes_owner <- 0u8; text_assertion <- 0u8; enum_assertion_check <- false; predicate_assertion_check <- false; text_intrinsic <- 0u8;
             omitted_result <- false; statement_operand <- false;
-            scoped_text_method <- no_node();
+            scoped_text_method <- no_node(); text_call <- false;
         });
         ref owners = make CallOwners(capacity, make OwnerEvidence {
             call_site <- no_node(); actual_owner <- no_node(); uses <- 0u64;

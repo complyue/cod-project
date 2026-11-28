@@ -180,6 +180,7 @@ export data NameWorkSlot {
     imported_type_identity:UInt64,
     imported_function:UInt64,
     imported_owner_argument:UInt64,
+    text_installation_prefix:UInt64,
     imported_failure:UInt64,
     imported_failure_module:UInt64,
     imported_kind:UInt8,
@@ -1001,6 +1002,7 @@ func link_entries(nodes:const ExprNodes in N, work:NameWork in W, revision:UInt6
         work[at].array_construction <- false;
         work[at].product_type_diagnostic <- 0u8;
         work[at].product_type_site <- no_node();
+        work[at].text_installation_prefix <- no_node();
         work[at].imported_interface <- no_node();
         work[at].imported_type_module <- 0u64;
         work[at].imported_type_identity <- 0u64;

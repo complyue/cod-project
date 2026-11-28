@@ -1559,7 +1559,7 @@ export data SuppliedView =
     CheckedArrayReaderForward { completion:ArrayReadCompletion, } |
     PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
-    ImportedSourceTextCall { family:UInt64, past:UInt64, preceding:UInt64, } |
+    ImportedSourceTextCall { family:UInt64, past:UInt64, } |
     PreparedTextInstallation { operation:UInt64, name:UInt64, input:UInt64, previous:UInt64, } |
     PreparedTextWriterMethod {} |
     CheckedTextWriterMethod { target_module:UInt64, target_identity:UInt64,

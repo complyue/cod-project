@@ -76,7 +76,7 @@ using "./OperandChecking.cod" {
 using "./ModuleExports.cod" {
     exception_root_identity, null_pointer_identity, missing_return_identity, unexpected_case_identity,
     out_of_memory_identity, region_capacity_identity, invalid_capacity_identity, index_out_of_bounds_identity,
-    type_assertion_failed_identity, assertion_failed_identity, text_byte_export, text_size_export, builder_append_export,
+    type_assertion_failed_identity, assertion_failed_identity, text_byte_export, text_size_export, text_slice_export, builder_append_export,
 };
 using "./ExceptionTypes.cod" exception_type_covers;
 using "./ModuleExportStorage.cod" ByteArrayFailures;
@@ -910,9 +910,11 @@ func check_event(nodes:const ExprNodes in N, names:const NameBindings in B, link
                     index_out_of_bounds_identity(), 0u8, possible_failure());
             return 0u8;
         };
-        if (text_oom && (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
+        val slice <- facts[at].text_intrinsic == text_slice_export();
+        if ((text_oom || slice) && (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8))
             return unproved_deferred_error();
-        if (facts[at].text_intrinsic == builder_append_export() || text_oom)
+        if (slice && sites[at].in_supplied_body) return unproved_deferred_error();
+        if (facts[at].text_intrinsic == builder_append_export() || text_oom || slice)
             return route_failure(nodes, names, links, facts, sites, at, used, revision, out_of_memory_identity(), 0u8, possible_failure());
         if (facts[at].text_intrinsic == text_byte_export())
             return route_failure(nodes, names, links, facts, sites, at, used, revision, index_out_of_bounds_identity(), 0u8, possible_failure());
@@ -1167,7 +1169,7 @@ func record_array_failure(failures:ByteArrayFailures in F, category:UInt64) -> b
     return false
 }
 
-func invocation_reached(nodes:const ExprNodes in N, sites:const CompletionSites in X,
+export func invocation_reached(nodes:const ExprNodes in N, sites:const CompletionSites in X,
     at:UInt64, used:UInt64, revision:UInt64) -> bool where {const owner N, const owner X} {
     return sites[at].event != skipped_operand() && operands_can_complete(nodes, sites, at, used, revision)
 }
@@ -1259,6 +1261,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
     # This non-array allocation pass follows only the checked builder
     # append origin and ordinary local calls.
     val builder_summary <- !array_summary && category == out_of_memory_identity();
+    val slice_summary <- !array_summary && category == type_assertion_failed_identity();
     val count <- 0u64;
     val definition <- no_node();
     val form <- InvalidCallable;
@@ -1269,6 +1272,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
     val allocation <- false;
     val broad_rethrow <- false;
     val replacement <- false;
+    val invalid_slice <- false;
     for (at in 0u64 .. used) {
         if (!array_summary || in_slot_summary(demand, sites, at, used)) {
             form <- inspect_callable(nodes, revision, used, at, callable);
@@ -1278,9 +1282,9 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 (count <- enqueue_failure(reached, at, count)):void;
             } else {};
             event <- sites[at].event;
-            routed <- (array_summary || (builder_summary && (facts[at].text_intrinsic == builder_append_export() || facts[at].scoped_text_method != no_node()))) &&
+            routed <- (array_summary || (builder_summary && ((facts[at].text_intrinsic == builder_append_export() || facts[at].text_intrinsic == text_slice_export()) || facts[at].scoped_text_method != no_node()))) &&
                 (event == possible_failure() || event == definite_failure());
-            if ((routed || (!builder_summary && is_failure_statement(nodes, at))) &&
+            if ((routed || (!builder_summary && !slice_summary && is_failure_statement(nodes, at))) &&
                 sites[at].category_module == 0u64 && sites[at].category == category) {
                 definition <- enclosing_callable(nodes, names, names[at].scope);
                 form <- inspect_callable(nodes, revision, used, definition, callable);
@@ -1288,7 +1292,7 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                     (count <- enqueue_failure(reached, definition, count)):void;
                 } else {};
             } else {};
-            imported <- !builder_summary && links[at].imported_interface != no_node() &&
+            imported <- !builder_summary && !slice_summary && links[at].imported_interface != no_node() &&
                 (if (array_summary) {
                     invocation_reached(nodes, sites, at, used, revision) &&
                         (imported_array_escapes(views, at, category) ||
@@ -1300,7 +1304,11 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 sites[at].category_module == 0u64 && sites[at].category == exception_root_identity();
             replacement <- routed && sites[at].category_module == 0u64 && sites[at].category == category &&
                 sites[at].replacing_try != no_node();
-            if (needs_body_check(demand, at) && (imported || allocation || broad_rethrow || replacement) &&
+            # The completed slice also has an invalid-range/UTF-8 exit.
+            # Its catch test is independent of the recorded allocation exit.
+            invalid_slice <- slice_summary && facts[at].text_intrinsic == text_slice_export() &&
+                invocation_reached(nodes, sites, at, used, revision);
+            if (needs_body_check(demand, at) && (imported || allocation || broad_rethrow || replacement || invalid_slice) &&
                 (array_summary || sites[at].replacing_try == no_node()) &&
                 matching_handler(nodes, links, facts, sites, at, 0u64, category, 0u8, used,
                     revision) == no_node()) {
@@ -1467,6 +1475,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
     };
     val slot_bodies <- false;
     val builder_append <- false;
+    val text_slice <- false;
     val definition <- no_node();
     val reader_result <- 0u8;
     for (at in 0u64 .. tree.used) {
@@ -1480,6 +1489,8 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
                     demand, sites, at, tree.used, tree.revision)
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
+            text_slice <- text_slice || (facts[at].text_intrinsic == text_slice_export() &&
+                sites[at].event == possible_failure());
             builder_append <- builder_append || ((facts[at].text_intrinsic == builder_append_export() ||
                 facts[at].scoped_text_method != no_node()) && sites[at].event == possible_failure());
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
@@ -1504,8 +1515,10 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         tree.used, tree.revision, missing_return_identity(), false) &&
         check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report, tree.used,
             tree.revision, unexpected_case_identity(), false) &&
-        (!builder_append || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+        (!(builder_append || text_slice) || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
             tree.used, tree.revision, out_of_memory_identity(), false)) &&
+        (!text_slice || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            tree.used, tree.revision, type_assertion_failed_identity(), false)) &&
         (!slot_bodies || (mark_slot_summary_dependencies(nodes, facts, demand, sites,
             tree.used, tree.revision, report) &&
             check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,

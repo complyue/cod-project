@@ -1,0 +1,389 @@
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, published_syntax_id, CallableSites, inspect_callable,
+    SequenceEntry, inspect_sequence_entry, SequenceSyntax { ModuleSequence }, module_item_publication,
+    DeclarationSites, inspect_declaration, DeclarationSyntax { LocalPublication },
+};
+using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable };
+using "./ParserStorage.cod" AstSlot { Occupied };
+using "./ParserStorage.cod" ExprPayload { BindSymbolEffect };
+using "./NameResolution.cod" { NameBindings, NameWork, callable_binding };
+using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check };
+using "./NativeDeclarations.cod" {
+    SuppliedViews, SuppliedView { ImportedSourceTextCall, BoundReferenceSymbol, PreparedTextInstallation },
+};
+using "./ModuleExportStorage.cod" { ModuleInterfaces, InterfacePayload { CheckedTextReceiver } };
+using "./OperandChecking.cod" {
+    OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver,
+};
+using "./CompletionChecking.cod" { CompletionSites, invocation_reached, skipped_operand };
+
+data TextNeed {
+    symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
+}
+array TextNeeds[UInt64]:TextNeed;
+array SeenInterfaces[UInt64]:bool;
+enum TextSupply:UInt8 { Incoming, Supplied, Unproved, }
+
+data TextUse {
+    caller:UInt64, later_family:UInt64, later_selected:UInt64,
+    imported_first:UInt64, imported_past:UInt64, imported_selected:UInt64, installation_name:UInt64, later_installation:UInt64,
+}
+array TextUses[UInt64]:TextUse;
+
+data TextScope {
+    reusable:bool, public_family:bool, family:UInt64, family_uses:UInt64, selected_uses:UInt64, installations:UInt64,
+}
+array TextScopes[UInt64]:TextScope;
+
+data TextReach {
+    origin:UInt64, family_seen:bool, pending:UInt64,
+    reached:bool,
+}
+array TextReaches[UInt64]:TextReach;
+
+data TextUseSupply { supply:TextSupply, origin:bool, }
+array TextUseSupplies[UInt64]:TextUseSupply;
+
+func local_symbol_module(origin:UInt64, module:UInt64) -> UInt64 {
+    return if (origin == 0u64) { module } else { origin }
+}
+
+func names_symbol(views:const SuppliedViews in V, name:UInt64, module:UInt64,
+    required:const TextNeed in K) -> bool where {const owner V, const owner K} {
+    return case views[name] of {
+        BoundReferenceSymbol { val origin <- symbol_module, val identity <- symbol_identity, } ->
+            local_symbol_module(origin, module) == required.symbol_module && identity == required.symbol_identity;
+        _ -> false
+    }
+}
+
+func include_text_need(needs:TextNeeds in K, count:UInt64 in C, module:UInt64, identity:UInt64,
+    receiver_module:UInt64, receiver_identity:UInt64) -> void where {owner K, owner C} {
+    for (i in 0u64 .. count) {
+        if (needs[i].symbol_module == module && needs[i].symbol_identity == identity &&
+            needs[i].receiver_module == receiver_module && needs[i].receiver_identity == receiver_identity) return
+    };
+    needs[count] <- make TextNeed {
+        symbol_module <- module; symbol_identity <- identity;
+        receiver_module <- receiver_module; receiver_identity <- receiver_identity
+    };
+    (count <- count + 1u64):void;
+    return
+}
+
+func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNeeds in K,
+    seen:SeenInterfaces in W, first:UInt64, past:UInt64, selected:UInt64, count:UInt64 in C)
+    -> bool where {const owner I, owner K, owner W, owner C} {
+    if (!seen[first]) {
+        for (member in first + 1u64 .. past) {
+            case interfaces[member].payload of {
+                CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, } -> {
+                    include_text_need(needs, count, symbol_module, symbol_identity, no_node(), no_node())
+                };
+                _ -> { return false }
+            }
+        };
+        (seen[first] <- true):void
+    };
+    case interfaces[selected].payload of {
+        CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-, } -> {
+            include_text_need(needs, count, symbol_module, symbol_identity, receiver_module, receiver_identity)
+        };
+        _ -> { return false }
+    };
+    return true
+}
+
+func published_local_family(nodes:const ExprNodes in N, names:const NameBindings in B, at:UInt64,
+    used:UInt64, revision:UInt64) -> UInt64 where {const owner N, const owner B} {
+    if (!module_item_publication(nodes, used, at)) return no_node();
+    ref item = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, at, item) != ModuleSequence) return no_node();
+    val member <- item.item;
+    if (names[member].kind == callable_binding()) return names[member].declaration;
+    ref declared = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
+    };
+    if (inspect_declaration(nodes, revision, used, member, declared) == LocalPublication &&
+        declared.name < used && names[declared.name].kind == callable_binding())
+        return names[declared.name].declaration;
+    return no_node()
+}
+
+# Freeze the entered local call edges, complete imported interface ranges,
+# and every installation that could hide an incoming selection.
+func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in V, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
+    demand:const DeclarationDemands in D, sites:const CompletionSites in X, uses:TextUses in U, scopes:TextScopes in S,
+    needs:TextNeeds in K, count:UInt64 in C, root:UInt64, used:UInt64, revision:UInt64, published:UInt64)
+    -> UInt64 where {const owner N, const owner B, const owner V, const owner I, const owner F, const owner D,
+        const owner X, owner U, owner S, owner K, owner C} {
+    ref seen = make SeenInterfaces(published, false);
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    val form <- ModuleCallable;
+    val scope <- no_node();
+    val method <- no_node();
+    val family <- no_node();
+    for (at in 0u64 .. used) {
+        family <- published_local_family(nodes, names, at, used, revision);
+        if (family < used) { (scopes[family].public_family <- true):void };
+        form <- inspect_callable(nodes, revision, used, at, callable);
+        if (form == ModuleCallable || form == LexicalCallable) {
+            scopes[at].reusable <- true;
+            scopes[at].family <- if (names[at].declaration < used) { (names[at].declaration) } else { at };
+        };
+        if (needs_body_check(demand, at) && sites[at].event != skipped_operand()) {
+            scope <- names[at].scope;
+            case nodes[at] of {
+                Occupied { val syntax <- node, } -> {
+                    case syntax.payload of {
+                        BindSymbolEffect { val name <-, } -> {
+                            if (scope < used && published_syntax_id(nodes, revision, at, name)) {
+                                uses[at].later_installation <- scopes[scope].installations;
+                                scopes[scope].installations <- at;
+                                (uses[at].installation_name <- name.index):void
+                            }
+                        };
+                        _ -> {}
+                    }
+                };
+                _ -> {}
+            };
+            method <- facts[at].scoped_text_method;
+            if (method != no_node() && invocation_reached(nodes, sites, at, used, revision)) {
+                case views[at] of {
+                    ImportedSourceTextCall { val family <-, val past <-, } -> {
+                        if (method <= family || method >= past || past > published ||
+                            !collect_imported_needs(interfaces, needs, seen, family, past, method, count)) return at;
+                        uses[at].imported_first <- family + 1u64;
+                        uses[at].imported_past <- past;
+                        uses[at].imported_selected <- method;
+                        (uses[at].caller <- if (demand[at].scope < used) { (demand[at].scope) } else { root }):void
+                    };
+                    _ -> { return at }
+                }
+            };
+            method <- facts[at].call_definition;
+            family <- demand[at].callee;
+            if (method < used && family < used && invocation_reached(nodes, sites, at, used, revision)) {
+                uses[at].caller <- if (demand[at].scope < used) { (demand[at].scope) } else { root };
+                uses[at].later_family <- scopes[family].family_uses;
+                scopes[family].family_uses <- at;
+                uses[at].later_selected <- scopes[method].selected_uses;
+                (scopes[method].selected_uses <- at):void
+            }
+        }
+    };
+    return no_node()
+}
+
+func installation_input(names:const NameBindings in B, links:const NameWork in L, views:const SuppliedViews in V,
+    facts:const OperandFacts in F, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64)
+    -> UInt64 where {const owner B, const owner L, const owner V, const owner F, const owner K} {
+    val previous <- links[at].text_installation_prefix;
+    for (unused in 0u64 .. used) {
+        if (previous >= used) return no_node();
+        case views[previous] of {
+            PreparedTextInstallation { val operation <-, val name <-, val input <-, val predecessor <- previous, } -> {
+                if (names[operation].scope != names[at].scope ||
+                    facts[operation].kind != void_result() || facts[input].kind != source_builder_loan()) return no_node();
+                if (names_symbol(views, name, module, required)) return input;
+                (previous <- predecessor):void
+            };
+            _ -> { return no_node() }
+        }
+    };
+    return no_node()
+}
+
+func use_text_supply(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    views:const SuppliedViews in V, facts:const OperandFacts in F, sites:const CompletionSites in X, scopes:const TextScopes in S,
+    uses:const TextUses in U, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64)
+    -> TextSupply where {const owner N, const owner B, const owner L, const owner V, const owner F, const owner X,
+        const owner S, const owner U, const owner K} {
+    if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)
+        return (Unproved:TextSupply);
+    val input <- installation_input(names, links, views, facts, required, module, at, used);
+    if (input != no_node()) {
+        if (required.receiver_identity != no_node() &&
+            (local_symbol_module(facts[input].identity_module, module) != required.receiver_module ||
+                facts[input].identity != required.receiver_identity || facts[input].target_readonly != 0u8 ||
+                check_owner_access(nodes, facts[input].owner, true) != 0u8)) return (Unproved:TextSupply);
+        return (Supplied:TextSupply)
+    };
+    val scope <- names[at].scope;
+    val installation <- no_node();
+    # A possibly intervening installation needs a concrete selection. The
+    # existence of an incoming binding cannot discharge an unknown rebind.
+    for (step in 0u64 .. used + used) {
+        if (installation != no_node()) {
+            if (names_symbol(views, uses[installation].installation_name, module, required))
+                return (Unproved:TextSupply);
+            (installation <- uses[installation].later_installation):void
+        } else {
+            if (scope >= used) return (Incoming:TextSupply);
+            installation <- scopes[scope].installations;
+            (scope <- if (scope == uses[at].caller) { no_node() } else { (names[scope].scope) }):void
+        }
+    };
+    return (Unproved:TextSupply)
+}
+
+func imported_needs(interfaces:const ModuleInterfaces in I, use:const TextUse in U, key:const TextNeed in K)
+    -> bool where {const owner I, const owner U, const owner K} {
+    if (key.receiver_identity != no_node()) {
+        return case interfaces[use.imported_selected].payload of {
+            CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-, } ->
+                symbol_module == key.symbol_module && symbol_identity == key.symbol_identity &&
+                receiver_module == key.receiver_module && receiver_identity == key.receiver_identity;
+            _ -> false
+        }
+    };
+    for (row in use.imported_first .. use.imported_past) {
+        if (case interfaces[row].payload of {
+            CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, } ->
+                symbol_module == key.symbol_module && symbol_identity == key.symbol_identity;
+            _ -> false
+        }) return true
+    };
+    return false
+}
+
+func request_need(rows:TextReaches in R, definition:UInt64, origin:UInt64, count:UInt64 in C)
+    -> void where {owner R, owner C} {
+    if (rows[definition].origin == no_node()) {
+        rows[definition].origin <- origin;
+        rows[count].pending <- definition;
+        (count <- count + 1u64):void
+    };
+    return
+}
+
+func earlier_site(previous:UInt64, site:UInt64) -> UInt64 {
+    return if (site < previous) { site } else { previous }
+}
+
+# A work item can propagate one key across a recorded edge. Supplies
+# and the graph are complete inputs; the output contains reachability only.
+func close_text_need(uses:const TextUses in U, scopes:const TextScopes in S, supplies:const TextUseSupplies in A,
+    rows:TextReaches in R, used:UInt64, receiver:bool) -> void
+    where {const owner U, const owner S, const owner A, owner R} {
+    ref count = make UInt64 { 0u64 };
+    for (at in 0u64 .. used) {
+        if (supplies[at].origin) {
+            rows[at].reached <- true;
+            if (supplies[at].supply == (Incoming:TextSupply)) { request_need(rows, uses[at].caller, at, count) }
+        }
+    };
+    val pending <- 0u64;
+    val method <- no_node();
+    val family <- no_node();
+    val use <- no_node();
+    for (step in 0u64 .. used + used) {
+        if (use == no_node()) {
+            if (pending == count) return;
+            method <- rows[pending].pending;
+            pending <- pending + 1u64;
+            if (scopes[method].reusable) {
+                if (receiver) {
+                    (use <- scopes[method].selected_uses):void
+                } else {
+                    family <- scopes[method].family;
+                    if (!rows[family].family_seen) {
+                        rows[family].family_seen <- true;
+                        (use <- scopes[family].family_uses):void
+                    }
+                }
+            }
+        } else {
+            rows[use].reached <- true;
+            if (supplies[use].supply == (Incoming:TextSupply)) { request_need(rows, uses[use].caller, use, count) };
+            (use <- if (receiver) { (uses[use].later_selected) } else { (uses[use].later_family) }):void
+        }
+    };
+    return
+}
+
+func first_unsatisfied_text_need(scopes:const TextScopes in S, supplies:const TextUseSupplies in A,
+    rows:const TextReaches in R, used:UInt64, receiver:bool) -> UInt64
+    where {const owner S, const owner A, const owner R} {
+    val problem <- no_node();
+    for (at in 0u64 .. used) {
+        if (rows[at].reached && supplies[at].supply == (Unproved:TextSupply)) { (problem <- earlier_site(problem, at)):void };
+        if (rows[at].origin != no_node()) {
+            if (!scopes[at].reusable || scopes[scopes[at].family].public_family ||
+                (if (receiver) { scopes[at].selected_uses == no_node() }
+                    else { scopes[scopes[at].family].family_uses == no_node() })) {
+                (problem <- earlier_site(problem, rows[at].origin)):void
+            }
+        }
+    };
+    return problem
+}
+
+func first_prepared_writer(facts:const OperandFacts in F, used:UInt64) -> UInt64 where {const owner F} {
+    for (at in 0u64 .. used) {
+        if (facts[at].scoped_text_method != no_node()) return at
+    };
+    return no_node()
+}
+
+export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:const NameBindings in B,
+    links:const NameWork in L, views:const SuppliedViews in V, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
+    demand:const DeclarationDemands in D, sites:const CompletionSites in X,
+    module:UInt64, root:UInt64, used:UInt64, revision:UInt64, published:UInt64, report:OperandCheckResult in R)
+    -> bool where {const owner N, const owner B, const owner L, const owner V, const owner I, const owner F,
+        const owner D, const owner X, owner R} {
+    val first <- first_prepared_writer(facts, used);
+    if (first == no_node()) return true;
+    if (used > 9223372036854775807u64 || published > 9223372036854775807u64) {
+        report.node <- first;
+        report.diagnostic <- unproved_text_receiver();
+        return false
+    };
+    ref uses = make TextUses(used, make TextUse {
+        caller <- no_node(); later_family <- no_node();
+        later_selected <- no_node(); imported_first <- no_node(); imported_past <- no_node();
+        imported_selected <- no_node(); installation_name <- no_node(); later_installation <- no_node()
+    });
+    ref scopes = make TextScopes(used, make TextScope {
+        reusable <- false; public_family <- false; family <- no_node(); family_uses <- no_node(); selected_uses <- no_node(); installations <- no_node()
+    });
+    ref needs = make TextNeeds(published + published, make TextNeed {
+        symbol_module <- no_node(); symbol_identity <- no_node(); receiver_module <- no_node(); receiver_identity <- no_node()
+    });
+    ref count = make UInt64 { 0u64 };
+    val problem <- collect_text_uses(nodes, names, views, interfaces, facts, demand, sites,
+        uses, scopes, needs, count, root, used, revision, published);
+    if (problem == no_node() && count != 0u64) {
+        ref supplies = make TextUseSupplies(used, make TextUseSupply {
+            supply <- (Incoming:TextSupply); origin <- false
+        });
+        ref rows = make TextReaches(used, make TextReach {
+            origin <- no_node(); family_seen <- false; pending <- no_node(); reached <- false
+        });
+        for (key in 0u64 .. count) {
+            for (at in 0u64 .. used) {
+                rows[at].origin <- no_node();
+                rows[at].family_seen <- false;
+                rows[at].reached <- false;
+                supplies[at].origin <- false;
+                if (uses[at].caller < used) {
+                    supplies[at].supply <- use_text_supply(nodes, names, links, views, facts, sites, scopes, uses,
+                        needs[key], module, at, used);
+                    if (uses[at].imported_first < published) {
+                        (supplies[at].origin <- imported_needs(interfaces, uses[at], needs[key])):void
+                    }
+                }
+            };
+            close_text_need(uses, scopes, supplies, rows, used, needs[key].receiver_identity != no_node());
+            (problem <- earlier_site(problem, first_unsatisfied_text_need(scopes, supplies, rows, used,
+                needs[key].receiver_identity != no_node()))):void
+        }
+    };
+    if (problem == no_node()) return true;
+    report.node <- problem;
+    report.diagnostic <- unproved_text_receiver();
+    return false
+}

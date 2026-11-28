@@ -42,6 +42,7 @@ export data DeclarationDemand {
     mixed_aggregate_loan:bool,
     slot_body:bool,
     fixed_borrow:bool,
+    text_call:bool,
     requires_byte_completion:bool,
     signature:bool,
     body:bool,
@@ -273,6 +274,87 @@ func require_byte_completions(views:const SuppliedViews in V, demand:Declaration
     return no_node()
 }
 
+data TextBodyDemand {
+    first_use:UInt64, next_use:UInt64, pending:UInt64, seen:bool, family_seen:bool,
+}
+array TextBodyDemands[UInt64]:TextBodyDemand;
+
+func text_call_profile(views:const SuppliedViews in V, at:UInt64) -> bool where {const owner V} {
+    return at < intrinsic (len)(views) && (case views[at] of {
+        ImportedSourceTextCall -> true;
+        _ -> false
+    })
+}
+
+func first_text_use(views:const SuppliedViews in V, used:UInt64) -> UInt64 where {const owner V} {
+    for (at in 0u64 .. used) {
+        if (text_call_profile(views, at)) return at
+    };
+    return no_node()
+}
+
+func request_text_body(rows:TextBodyDemands in X, definition:UInt64, count:UInt64 in Q) -> void
+    where {owner X, owner Q} {
+    if (!rows[definition].seen) {
+        rows[definition].seen <- true;
+        rows[count].pending <- definition;
+        (count <- count + 1u64):void
+    };
+    return
+}
+
+# Demand the ordinary callers that can receive a pending incoming
+# requirement. Only already-bound direct family edges participate here.
+func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in V, demand:DeclarationDemands in D, root:UInt64,
+    used:UInt64, revision:UInt64, body_count:UInt64 in Q) -> UInt64
+    where {const owner N, const owner B, const owner V, owner D, owner Q} {
+    val first <- first_text_use(views, used);
+    if (first == no_node()) return no_node();
+    if (used > 9223372036854775807u64) return first;
+    ref rows = make TextBodyDemands(used, make TextBodyDemand {
+        first_use <- no_node(); next_use <- no_node(); pending <- no_node(); seen <- false; family_seen <- false
+    });
+    ref count = make UInt64 { 0u64 };
+    val callee <- no_node();
+    val scope <- no_node();
+    for (at in 0u64 .. used) {
+        scope <- demand[at].scope;
+        callee <- demand[at].callee;
+        if (scope < used && !uninstantiated_method(names[scope].kind)) {
+            if (callee < used) {
+                rows[at].next_use <- rows[callee].first_use;
+                (rows[callee].first_use <- at):void
+            };
+            if (at >= first && text_call_profile(views, at)) { request_text_body(rows, scope, count) }
+        }
+    };
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    val body <- no_node();
+    val head <- no_node();
+    val use <- no_node();
+    val item <- 0u64;
+    for (step in 0u64 .. used + used) {
+        if (use == no_node()) {
+            if (item == count) return no_node();
+            body <- rows[item].pending;
+            item <- item + 1u64;
+            if (body != root && !local_body(nodes, revision, used, body, callable)) return body;
+            if (!require_body(demand, body, body_count, used, body != root)) return body;
+            head <- names[body].declaration;
+            if (head < used && !rows[head].family_seen) {
+                rows[head].family_seen <- true;
+                (use <- rows[head].first_use):void
+            }
+        } else {
+            demand[use].text_call <- true;
+            request_text_body(rows, demand[use].scope, count);
+            (use <- rows[use].next_use):void
+        }
+    };
+    return no_node()
+}
+
 export func discover_declaration_demand(
     nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in W, selected:const SelectedExports in E,
@@ -394,7 +476,7 @@ export func discover_declaration_demand(
                      _ -> false
                  })));
             if (site < intrinsic (len)(views) && (case views[site] of {
-                ImportedSourceTextCall { val preceding <-, } -> preceding != no_node();
+                ImportedSourceTextCall -> true;
                 _ -> false
             })) { (checked_call <- true):void };
             shape <- inspect_invocation(nodes, revision, used, site, invocation);
@@ -499,6 +581,8 @@ export func discover_declaration_demand(
             };
         };
     };
+    val text_problem <- require_text_callers(nodes, names, views, demand, root, used, revision, count);
+    if (text_problem != no_node()) { problem <- text_problem; return false };
     # Reached bodies can forward a loan or determine allocation operands.
     # Check them before accepting the receiving body's contract.
     val failed <- require_byte_completions(views, demand, used, count);
