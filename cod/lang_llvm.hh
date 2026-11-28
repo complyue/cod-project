@@ -1250,7 +1250,7 @@ class LLVMEmission {
     }
     if (only_native_effects) return;
     if (expr.kind == K::deferred && checked_.operations->contains(&expr)) {
-      scope.actions.push_back({&expr, cleanup_header_, {}, slot(cleanup_header_, "defer.here.record")});
+      scope.actions.push_back({&expr, cleanup_header_, {}, slot(cleanup_header_, "defer.block.record")});
       return;
     }
     if (expr.kind == K::region_binding) {
@@ -1274,7 +1274,32 @@ class LLVMEmission {
     b_.CreateStore(load(scope.head), b_.CreateStructGEP(cleanup_header_, record, 0));
     b_.CreateStore(integer(action), b_.CreateStructGEP(cleanup_header_, record, 1));
   }
-  void complete_cleanup(const std::function<void()> &emit) {
+  struct DeferredOutcomes {
+    llvm::AllocaInst *failures, *count, *fatal;
+  };
+  llvm::Value *current_failure() {
+    return outcome(empty_scalar(), load(completion_.category), load(completion_.site), load(completion_.fatal),
+                   load(completion_.requested), load(completion_.available), load(completion_.cause), nullptr,
+                   load(completion_.failure_owner));
+  }
+  void record_deferred_failure(const DeferredOutcomes &queue) {
+    auto *failure = current_failure();
+    b_.CreateStore(null_pointer(), completion_.failure_owner);
+    auto *append = block("defer.failure.append"), *terminal = block("defer.failure.fatal");
+    auto *done = block("defer.failure.saved");
+    b_.CreateCondBr(b_.CreateIsNull(b_.CreateExtractValue(failure, 3)), append, terminal);
+    b_.SetInsertPoint(append);
+    auto *count = load(queue.count);
+    b_.CreateStore(failure, b_.CreateInBoundsGEP(outcome_, queue.failures, count));
+    b_.CreateStore(b_.CreateAdd(count, integer(1)), queue.count);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(terminal);
+    release_failure_owner(b_, b_.CreateExtractValue(load(queue.fatal), failure_owner_field()));
+    b_.CreateStore(failure, queue.fatal);
+    b_.CreateBr(done);
+    b_.SetInsertPoint(done);
+  }
+  void complete_cleanup(const std::function<void()> &emit, const DeferredOutcomes *deferred = nullptr) {
     // Suspend the pending completion while cleanup executes its own control flow.
     auto pending = completion_.transform([&](auto *place) { return load(place); });
     b_.CreateStore(b_.getInt8(0), completion_.kind);
@@ -1291,8 +1316,22 @@ class LLVMEmission {
     control_ = action.parent;
     auto *restore = block("cleanup.preserve"), *replace = block("cleanup.replace"), *done = block("cleanup.done");
     auto *kind = load(completion_.kind);
-    auto *normal = b_.CreateICmpEQ(kind, b_.getInt8(0));
-    b_.CreateCondBr(normal, restore, replace);
+    llvm::Value *resume = b_.CreateICmpEQ(kind, b_.getInt8(0));
+    if (deferred) {
+      auto *record = block("defer.failure"), *nonfailure = block("defer.nonfailure");
+      b_.CreateCondBr(b_.CreateICmpEQ(kind, b_.getInt8(2)), record, nonfailure);
+      b_.SetInsertPoint(record);
+      record_deferred_failure(*deferred);
+      if (protected_outcomes_) discard_transfer_failure(load(completion_.transfer), pending.transfer);
+      b_.CreateBr(restore);
+      b_.SetInsertPoint(nonfailure);
+      // A return in the receiver's cleanup cannot consume its supplier's
+      // pending transfer. A new transfer still has its own destination.
+      llvm::Value *must_resume = b_.CreateIsNotNull(pending.fatal);
+      if (protected_outcomes_) must_resume = b_.CreateOr(must_resume, b_.CreateIsNotNull(pending.transfer));
+      resume = b_.CreateOr(resume, b_.CreateAnd(b_.CreateICmpEQ(kind, b_.getInt8(1)), must_resume));
+    }
+    b_.CreateCondBr(resume, restore, replace);
     b_.SetInsertPoint(restore);
     const auto places = completion_.fields();
     const auto values = pending.fields();
@@ -1314,9 +1353,134 @@ class LLVMEmission {
     }
     preserve_transfer(transfer);
   }
-  void drain(Scope &scope) {
+  void retain_deferred_failure(llvm::Value *aggregate, bool member, llvm::Value *failure, llvm::Value *owner) {
+    std::vector<llvm::Type *> types{b_.getPtrTy()};
+    types.insert(types.end(), 6, b_.getInt64Ty());
+    types.push_back(b_.getPtrTy());
+    b_.CreateCall(runtime("cod_lang_retain_deferred_failure", b_.getVoidTy(), types),
+                  {aggregate, integer(member), b_.CreateExtractValue(failure, 1), b_.CreateExtractValue(failure, 2),
+                   b_.CreateExtractValue(failure, 4), b_.CreateExtractValue(failure, 5),
+                   b_.CreateExtractValue(failure, 6), owner});
+  }
+  void clear_completion_transfer() {
+    if (!protected_outcomes_) return;
+    discard_transfer_failure(take_failure_owner(b_, completion_.transfer), null_pointer());
+  }
+  struct DeferredBodyFailure {
+    llvm::Value *value, *owner;
+  };
+  DeferredBodyFailure deferred_body_failure() {
+    auto *body = current_failure();
+    auto *body_owner = completion_.failure_owner;
+    if (!protected_outcomes_) return {body, body_owner};
+    // An incoming group failure belongs to the body, even when the
+    // receiver's own exception slot is empty.
+    auto *entry = b_.GetInsertBlock();
+    auto *transfer = load(completion_.transfer);
+    auto *inspect = block("defer.inspect.supplier"), *join = block("defer.body.failure");
+    b_.CreateCondBr(b_.CreateAnd(b_.CreateNot(failed(body)), b_.CreateIsNotNull(transfer)), inspect, join);
+    b_.SetInsertPoint(inspect);
+    auto *kind = b_.CreateLoad(b_.getInt8Ty(), b_.CreateStructGEP(here_transfer_, transfer, 0));
+    auto *incoming = b_.CreateICmpEQ(kind, b_.getInt8(static_cast<unsigned>(HereExit::failure)));
+    auto *value = b_.CreateLoad(outcome_, here_payload_slot(b_, transfer));
+    auto *from_transfer = b_.CreateSelect(incoming, value, body);
+    auto *owner = b_.CreateSelect(incoming, transfer_failure_slot(b_, transfer), body_owner);
+    b_.CreateBr(join);
+    b_.SetInsertPoint(join);
+    auto *selected = b_.CreatePHI(outcome_, 2);
+    selected->addIncoming(body, entry);
+    selected->addIncoming(from_transfer, inspect);
+    auto *selected_owner = b_.CreatePHI(b_.getPtrTy(), 2);
+    selected_owner->addIncoming(body_owner, entry);
+    selected_owner->addIncoming(owner, inspect);
+    return {selected, selected_owner};
+  }
+  void finish_deferred_failures(const DeferredOutcomes &queue, const Location &at) {
+    auto *count = load(queue.count);
+    auto *fatal = load(queue.fatal);
+    auto *has_fatal = b_.CreateIsNotNull(b_.CreateExtractValue(fatal, 3));
+    auto *decide = block("defer.finish"), *done = block("defer.completed");
+    b_.CreateCondBr(b_.CreateOr(has_fatal, b_.CreateICmpNE(count, integer(0))), decide, done);
+    b_.SetInsertPoint(decide);
+    auto *aggregate = slot(b_.getPtrTy(), "defer.aggregate");
+    b_.CreateStore(null_pointer(), aggregate);
+    auto *terminal = block("defer.deliver.fatal"), *test_body = block("defer.test.body");
+    auto *retire = block("defer.retire.failures");
+    b_.CreateCondBr(has_fatal, terminal, test_body);
+    b_.SetInsertPoint(terminal);
+    clear_completion_transfer();
+    save_abrupt(fatal);
+    b_.CreateBr(retire);
+
+    b_.SetInsertPoint(test_body);
+    const auto [body, body_owner] = deferred_body_failure();
+    auto *publish = block("defer.publish");
+    b_.CreateCondBr(b_.CreateIsNotNull(b_.CreateExtractValue(body, 3)), retire, publish);
+    b_.SetInsertPoint(publish);
+    auto *status = slot(b_.getInt64Ty(), "defer.aggregate.status");
+    auto acquire = runtime("cod_lang_acquire_deferred_aggregate", b_.getPtrTy(), {b_.getInt64Ty(), b_.getPtrTy()});
+    auto *owner = b_.CreateCall(acquire, {count, status});
+    auto *ready = block("defer.aggregate.ready"), *unavailable = block("defer.aggregate.unavailable");
+    auto *where = integer(site(at));
+    b_.CreateCondBr(b_.CreateIsNotNull(owner), ready, unavailable);
+    b_.SetInsertPoint(unavailable);
+    clear_completion_transfer();
+    save_abrupt(outcome(empty_scalar(), load(status), where, null_pointer()));
+    b_.CreateBr(retire);
+    b_.SetInsertPoint(ready);
+    b_.CreateStore(owner, aggregate);
+    auto *attach = block("defer.attach.body"), *deliver = block("defer.deliver.aggregate");
+    b_.CreateCondBr(failed(body), attach, deliver);
+    b_.SetInsertPoint(attach);
+    retain_deferred_failure(owner, false, body, take_failure_owner(b_, body_owner));
+    b_.CreateBr(deliver);
+    b_.SetInsertPoint(deliver);
+    clear_completion_transfer();
+    save_abrupt(outcome(empty_scalar(), integer(deferred_aggregate_id), where, null_pointer(),
+                        nullptr, nullptr, nullptr, nullptr, owner));
+    b_.CreateBr(retire);
+
+    b_.SetInsertPoint(retire);
+    auto *check = block("defer.member.next"), *test = block("defer.member.test");
+    auto *keep = block("defer.member.attach"), *release = block("defer.member.release");
+    auto *step = block("defer.member.complete");
+    auto *retained = load(aggregate);
+    b_.CreateBr(check);
+    b_.SetInsertPoint(check);
+    auto *index = b_.CreatePHI(b_.getInt64Ty(), 2);
+    index->addIncoming(integer(0), retire);
+    b_.CreateCondBr(b_.CreateICmpEQ(index, count), done, test);
+    b_.SetInsertPoint(test);
+    auto *failure = b_.CreateLoad(outcome_, b_.CreateInBoundsGEP(outcome_, queue.failures, index));
+    auto *child = b_.CreateExtractValue(failure, failure_owner_field());
+    b_.CreateCondBr(b_.CreateIsNotNull(retained), keep, release);
+    b_.SetInsertPoint(keep);
+    retain_deferred_failure(retained, true, failure, child);
+    b_.CreateBr(step);
+    b_.SetInsertPoint(release);
+    release_failure_owner(b_, child);
+    b_.CreateBr(step);
+    b_.SetInsertPoint(step);
+    index->addIncoming(b_.CreateAdd(index, integer(1)), step);
+    b_.CreateBr(check);
+    b_.SetInsertPoint(done);
+  }
+  void drain(Scope &scope, const Location &at, size_t deferred_blocks = 0) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
+    std::optional<DeferredOutcomes> failures;
+    auto *next = scope.cleanup;
+    if (deferred_blocks) {
+      // A non-repeated registration contributes at most one escaping failure.
+      // Reserve the slots up front so appending after OOM cannot allocate.
+      failures.emplace(slot(llvm::ArrayType::get(outcome_, deferred_blocks), "defer.failures"),
+                       slot(b_.getInt64Ty(), "defer.failure.count"), slot(outcome_, "defer.fatal"));
+      b_.CreateStore(integer(0), failures->count);
+      b_.CreateStore(llvm::Constant::getNullValue(outcome_), failures->fatal);
+      next = block("defer.next");
+      b_.CreateBr(next);
+      b_.SetInsertPoint(next);
+    }
     auto *pop = block("defer.pop"), *done = block("defer.done"), *invalid = block("defer.invalid");
     auto *record = load(scope.head);
     b_.CreateCondBr(b_.CreateICmpEQ(record, null_pointer()), done, pop);
@@ -1328,11 +1492,12 @@ class LLVMEmission {
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
       if (descriptor.action->kind == Expression::Kind::deferred) {
-        auto *run = block("defer.here");
+        auto *run = block("defer.block");
         dispatch->addCase(integer(i), run);
         b_.SetInsertPoint(run);
-        complete_cleanup([&] { emit_expression(*descriptor.action->children.front()); });
-        b_.CreateBr(scope.cleanup);
+        complete_cleanup([&] { emit_expression(*descriptor.action->children.front(), Projection::value, true); },
+                         &failures.value());
+        b_.CreateBr(next);
         continue;
       }
       if (descriptor.region_release) {
@@ -1341,7 +1506,7 @@ class LLVMEmission {
         b_.SetInsertPoint(destroy);
         auto *owner = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
         b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {owner});
-        b_.CreateBr(scope.cleanup);
+        b_.CreateBr(next);
         continue;
       }
       if (descriptor.exception_release) {
@@ -1350,7 +1515,7 @@ class LLVMEmission {
         b_.SetInsertPoint(destroy);
         auto *holder = b_.CreateLoad(b_.getPtrTy(), b_.CreateStructGEP(descriptor.layout, record, 1));
         release_failure_owner(b_, take_failure_owner(b_, holder));
-        b_.CreateBr(scope.cleanup);
+        b_.CreateBr(next);
         continue;
       }
       if (descriptor.native_constructor) {
@@ -1366,15 +1531,16 @@ class LLVMEmission {
         auto *resource = b_.CreateLoad(b_.getInt64Ty(), resource_address);
         const auto &handle = program_->native_constructors.at(*descriptor.native_constructor).handle;
         b_.CreateCall(runtime(native_destroy_name(handle), b_.getVoidTy(), {b_.getInt64Ty()}), {resource});
-        b_.CreateBr(scope.cleanup);
+        b_.CreateBr(next);
         continue;
       }
       throw std::logic_error("missing compiled cleanup operation");
     }
     b_.SetInsertPoint(invalid);
     save_abrupt(outcome(empty_scalar(), integer(exception_id(ExceptionCategory::unsound_runtime_typing)), integer(0), null_pointer()));
-    b_.CreateBr(scope.cleanup);
+    b_.CreateBr(next);
     b_.SetInsertPoint(done);
+    if (failures) finish_deferred_failures(*failures, at);
   }
   llvm::Value *sequence(const std::vector<const Expression *> &expressions, Projection projection = Projection::value, bool discard_last = false) {
     llvm::Value *value = empty_scalar();
@@ -1435,7 +1601,7 @@ class LLVMEmission {
     auto *value = emit_expression(expr, Projection::value, discard);
     if (reachable()) { b_.CreateStore(value, result); b_.CreateBr(control.exit); }
     b_.SetInsertPoint(control.exit);
-    if (!native.actions.empty()) drain(native);
+    if (!native.actions.empty()) drain(native, expr.at);
     native_effect_scope_ = outer_native;
     restore_effects(saved);
     control_ = control.parent;
@@ -1448,6 +1614,7 @@ class LLVMEmission {
     return load(result);
   }
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
+                  size_t deferred_blocks,
                   llvm::Value *requires_return = nullptr, const Type *feedback = nullptr,
                   llvm::Value *returns_void_at_end = nullptr) {
     auto *outer_native = native_effect_scope_;
@@ -1489,7 +1656,7 @@ class LLVMEmission {
       b_.CreateBr(draining);
       scope.cleanup = draining;
     }
-    drain(scope); restore_effects(effects);
+    drain(scope, at, deferred_blocks); restore_effects(effects);
     if (lexical_allocations_) {
       auto *head = load(lexical_allocations_);
       auto *release_storage = block("storage.release"), *done = block("storage.released");
@@ -3141,7 +3308,7 @@ class LLVMEmission {
     case K::deferred: {
       auto &scope = *scope_;
       const auto action = std::ranges::find(scope.actions, &expr, &CleanupAction::action);
-      if (action == scope.actions.end()) throw std::logic_error("uncollected here cleanup");
+      if (action == scope.actions.end()) throw std::logic_error("uncollected deferred block");
       auto *record = action->activation_record;
       prepare_cleanup_record(scope, record, std::distance(scope.actions.begin(), action));
       b_.CreateStore(record, scope.head);
@@ -3376,7 +3543,7 @@ class LLVMEmission {
     llvm::Value *returns_void_at_end = nullptr;
     if (!method.regional_initializer && method.source->returns_void_at_end(Type::void_type))
       returns_void_at_end = requires_return ? b_.CreateNot(requires_return) : b_.getTrue();
-    call_scope({method.source->body.get()}, method.source->at, requires_return,
+    call_scope({method.source->body.get()}, method.source->at, layout.deferred_blocks, requires_return,
         call.here_group ? &*layout.result.type : nullptr, returns_void_at_end);
     control_ = nullptr;
     b_.SetInsertPoint(finish_);
@@ -3569,7 +3736,8 @@ public:
       return allocates_lexically(instance.operations);
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && method.instance.has_value(); });
-    owned_failures_ = program.exception_types.size() > exception_categories.size();
+    owned_failures_ = program.exception_types.size() > exception_categories.size() ||
+        std::ranges::any_of(program.instances, [](const auto &instance) { return instance.deferred_blocks != 0; });
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
       return method.source->case_scan_scope && method.instance.has_value();
     });

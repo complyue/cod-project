@@ -511,6 +511,7 @@ class BodyExtraction {
     std::vector<ActiveCatch> catches_;
     size_t protected_depth_ = 0;
     bool in_iteration_ = false;
+    bool in_deferred_block_ = false;
     using Kind = Expression::Kind;
 
     const Binding *find(const std::string &name) const {
@@ -2532,16 +2533,21 @@ class BodyExtraction {
       case Kind::raise: return throw_exception(expr);
       case Kind::try_scope: return try_statement(expr);
       case Kind::deferred: {
+        expect(method_ && body_.instance.result.type && !in_iteration_ && !in_deferred_block_ &&
+               expr.children.size() == 1 && expr.children.front()->kind == Kind::block,
+               expr.at, "seed needs a non-repeated plain deferred block in a declared callable");
+        const auto &result = body_.instance.result;
+        expect(!result.owns_region() && !result.owns_exception(), expr.at,
+               "seed needs cleanup disposition for an owning return");
         const auto &body = *expr.children.front();
-        expect(method_ && form_.body->kind == Kind::block &&
-               std::ranges::any_of(form_.body->children, [&](const auto &item) { return item.get() == &expr; }) &&
-               expr.children.size() == 1 && body.kind == Kind::block && body.children.size() == 1,
-               expr.at, "seed needs a direct deferred block invoking a void here formal");
-        const auto &invocation = *body.children.front();
-        expect(invocation.kind == Kind::call && invocation.children.empty() && !invocation.intrinsic &&
-               !visible_local(invocation.text) && here_.contains(invocation.text),
-               invocation.at, "seed needs a niladic here cleanup call");
-        expect(extract(body).type == Type::void_type, body.at, "here cleanup must complete with void");
+        auto supplied = supplied_;
+        in_deferred_block_ = true;
+        // Bind lexical places now. The emitter reads their current values after
+        // this registration has been popped from the owning invocation's drain.
+        extract(body, true);
+        in_deferred_block_ = false;
+        supplied_ = std::move(supplied);
+        ++body_.instance.deferred_blocks;
         return op;
       }
       case Kind::rebind: case Kind::transfer: return assign(expr);
