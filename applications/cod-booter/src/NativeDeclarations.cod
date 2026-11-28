@@ -1590,6 +1590,14 @@ func describe_local_u64_array_element(nodes:const ExprNodes in N, names:const Na
         describe_type(nodes, names, selected, schema.value_type, 0u64, revision, used, element)
 }
 
+func published_u64_indexed_array(contracts:const ModuleInterfaces in C, published:UInt64,
+    module:UInt64, declaration:UInt64) -> UInt64 where {const owner C} {
+    val row <- find_interface(contracts, published, module, declaration);
+    if (row >= published || contracts[row].interface_kind != array_type() ||
+        contracts[row].entry_count != 0u64 || contracts[row].array_index_kind != builtin_u64()) return no_node();
+    return row
+}
+
 export func describe_byte_array(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     marker:UInt64, used:UInt64, revision:UInt64, proof:ArraySlotType in F) -> bool
@@ -1605,10 +1613,8 @@ export func describe_byte_array(nodes:const ExprNodes in N, names:const NameBind
         if (names[marker].kind != ordinary_selection() || names[marker].declaration >= used ||
             selected[names[marker].declaration].kind != array_export() ||
             selected[names[marker].declaration].shape != readonly_numeric_array() || module == 0u64) return false;
-        val row <- find_interface(contracts, published, module, declaration);
-        if (row == no_node() || contracts[row].interface_kind != array_type() ||
-            contracts[row].entry_count != 0u64 || contracts[row].array_index_kind != builtin_u64() ||
-            contracts[row].element_kind != builtin_u8()) return false
+        val row <- published_u64_indexed_array(contracts, published, module, declaration);
+        if (row == no_node() || contracts[row].element_kind != builtin_u8()) return false
     };
     proof.type_module <- module;
     proof.type_identity <- declaration;
@@ -1619,10 +1625,8 @@ export func describe_byte_array(nodes:const ExprNodes in N, names:const NameBind
 
 export func published_record_array_storage(contracts:const ModuleInterfaces in C, published:UInt64,
     module:UInt64, declaration:UInt64) -> AggregateStorage where {const owner C} {
-    val header <- find_interface(contracts, published, module, declaration);
-    if (header >= published || contracts[header].interface_kind != array_type() ||
-        contracts[header].entry_count != 0u64 || contracts[header].array_index_kind != builtin_u64() ||
-        contracts[header].element_kind != record_type()) return UnprovedAggregate;
+    val header <- published_u64_indexed_array(contracts, published, module, declaration);
+    if (header == no_node() || contracts[header].element_kind != record_type()) return UnprovedAggregate;
     return checked_aggregate_storage(contracts, published, contracts[header].type_module,
         contracts[header].type_identity, record_type())
 }
@@ -1634,10 +1638,8 @@ export func published_record_array(contracts:const ModuleInterfaces in C, publis
 
 func published_sum_array_header(contracts:const ModuleInterfaces in C, published:UInt64,
     module:UInt64, declaration:UInt64) -> UInt64 where {const owner C} {
-    val header <- find_interface(contracts, published, module, declaration);
-    if (header >= published || contracts[header].interface_kind != array_type() ||
-        contracts[header].entry_count != 0u64 || contracts[header].array_index_kind != builtin_u64() ||
-        contracts[header].element_kind != sum_type() ||
+    val header <- published_u64_indexed_array(contracts, published, module, declaration);
+    if (header == no_node() || contracts[header].element_kind != sum_type() ||
         checked_aggregate_storage(contracts, published, contracts[header].type_module,
             contracts[header].type_identity, sum_type()) != CoDBitsAggregate) return no_node();
     return header
@@ -1656,10 +1658,8 @@ func published_enum_element(contracts:const ModuleInterfaces in C, published:UIn
 
 export func published_enum_array_header(contracts:const ModuleInterfaces in C, published:UInt64,
     module:UInt64, declaration:UInt64) -> UInt64 where {const owner C} {
-    val head <- find_interface(contracts, published, module, declaration);
-    if (head >= published || contracts[head].interface_kind != array_type() ||
-        contracts[head].entry_count != 0u64 || contracts[head].array_index_kind != builtin_u64() ||
-        contracts[head].element_kind != enum_type() ||
+    val head <- published_u64_indexed_array(contracts, published, module, declaration);
+    if (head == no_node() || contracts[head].element_kind != enum_type() ||
         !published_enum_element(contracts, published, contracts[head].type_module, contracts[head].type_identity))
         return no_node();
     return head
@@ -1761,20 +1761,28 @@ func describe_slot_array(nodes:const ExprNodes in N, names:const NameBindings in
     where {const owner N, const owner B, const owner E, const owner C, const owner A, owner F} {
     if (marker >= used || used > intrinsic (len)(names)) return 0u8;
     if (names[marker].kind != array_type()) {
-        if (describe_byte_array(nodes, names, selected, contracts, published, marker, used, revision, proof))
-            return builtin_u8();
         val selection <- names[marker].declaration;
         if (names[marker].kind != ordinary_selection() || selection >= used ||
             selected[selection].kind != array_export()) return 0u8;
         val module <- selected[selection].origin_module;
         val identity <- selected[selection].identity;
-        val head <- published_enum_array_header(contracts, published, module, identity);
+        val head <- published_u64_indexed_array(contracts, published, module, identity);
         if (head == no_node()) return 0u8;
+        val kind <- contracts[head].element_kind;
+        if (kind == enum_type()) {
+            if (!published_enum_element(contracts, published, contracts[head].type_module,
+                contracts[head].type_identity)) return 0u8;
+            proof.element_module <- contracts[head].type_module;
+            (proof.element_identity <- contracts[head].type_identity):void
+        } else {
+            if ((kind != builtin_u8() && kind != builtin_u64()) || module == 0u64 ||
+                selected[selection].shape != readonly_numeric_array()) return 0u8;
+            proof.element_module <- 0u64;
+            (proof.element_identity <- no_node()):void
+        };
         proof.type_module <- module;
         proof.type_identity <- identity;
-        proof.element_module <- contracts[head].type_module;
-        proof.element_identity <- contracts[head].type_identity;
-        return enum_type()
+        return kind
     };
     val declaration <- names[marker].declaration;
     ref element = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
@@ -3226,10 +3234,17 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
     };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
-        type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
-    val storage <- aggregate[type.identity];
+        type.kind != record_type()) return;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= used) return;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+    };
     if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
-        (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
+        (views[at] <- make PreparedArrayInspector {
+            inline_product <- type.defining_module != 0u64 || storage == CoDBitsAggregate
+        }):void
     }
 }
 

@@ -2080,6 +2080,12 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
         if ((inspect_assignment(nodes, revision, used, at, assignment) == PlaceTransfer &&
             ((names[at].kind == 0u8 &&
               indexed_field_destination(nodes, at, revision, assignment.destination, projection, indexed)) ||
+             ((case views[assignment.destination] of {
+                   IndexedArrayDestination { val transfer <- assignment; } -> transfer == at;
+                   _ -> false
+               }) &&
+              inspect_field_selection(nodes, revision, used, assignment.input, projection) &&
+              inspect_index_selection(nodes, revision, used, projection.receiver, indexed)) ||
              indexed_braced_transfer(nodes, at, revision, assignment, construction))) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&

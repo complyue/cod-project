@@ -3897,17 +3897,34 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
             !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
+        val indexed_output <- false;
+        if (contracts[past - 1u64].value_kind == record_type()) {
+            ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+            ref index = make IndexSites { target <- no_node(); index <- no_node() };
+            if (inspect_sequence_entry(nodes, revision, used, call.arguments, entry) != ArgumentSequence)
+                return operand_problem(report, at, invalid_operand_tree());
+            if (inspect_index_selection(nodes, revision, used, entry.item, index)) {
+                prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
+                    aggregate, cases, call.arguments, used, revision, record_type(), true);
+                (indexed_output <- true):void
+            }
+        };
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_type_module <- contracts[header].type_module;
         links[at].imported_type_identity <- contracts[header].type_identity;
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
         links[at].imported_numeric_fault <- contracts[header].source_numeric_fault;
-        if (contracts[header].array_slot_failures.out_of_memory) {
-            supplied[at] <- make CheckedArrayCall { allocates <- true };
-            if (required == no_node()) { (required <- at):void }
+        val allocates <- contracts[header].array_slot_failures.out_of_memory;
+        if (allocates) {
+            (supplied[at] <- make CheckedArrayCall { allocates <- true }):void
         } else {
-            (supplied[at] <- make CheckedWriterCall {}):void
+            if (indexed_output) {
+                (supplied[at] <- make ImportedProductWriter {}):void
+            } else {
+                (supplied[at] <- make CheckedWriterCall {}):void
+            }
         };
+        if ((allocates || indexed_output) && required == no_node()) { (required <- at):void };
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {
