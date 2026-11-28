@@ -1,8 +1,10 @@
 # CoD Regional Memory Vision and Implementation Tracker
 
-Design revision 42 · 2026-11-27
+Design revision 43 · 2026-11-28
 
 ## Design authority
+
+At r43 the [DBMR terminology decision](../CHANGELOG.md#h-dbmr-storage-technique-20261128) distinguishes the storage technique from a package’s nominal region interface. The r42 structural root rules, exact nominal identity, actual owner and intrinsic publication contract continue under D-13-NOMINAL-REGIONS/P-786/P-787.
 
 At r42 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to intrinsic structural region root declarations and projections. The r41 distinction between structural roots and nominal regions continues.
 
@@ -42,6 +44,12 @@ At r38 the [human decision](../CHANGELOG.md#h-actor-region-transport-and-chan-en
 **Graph-Grained Memory Management** is CoD’s vision for managing memory at the granularity of a graph of objects connected by direct pointers. Each such graph occupies one region. Programs allocate and update individual objects inside it. The region is the intrinsic unit of reclamation, whole-image relocation and ownership transfer. User programs may recycle typed slots and manage free lists or pools inside a live region; returning a slot does not return regional storage to the system. [Ownership boundary and validation](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
 
 A direct pointer is a traversable edge between objects in the same region. The regional representation can encode it as a relative offset, so moving the whole image preserves those edges without per-edge pointer repair. Remapping and transporting the bytes have their own costs. [Regional pointer representation](RegionalAndLexicalStorageRefactor.md)
+
+## DBMR as a storage technique
+
+**Disk-backed memory region (DBMR)** names a technique for keeping structured regional data on disk in a representation that can be opened and accessed in memory. For example, relative references let the same catalog graph open at different base addresses while preserving its shared nodes and cycles. In “open a DBMR,” the noun denotes a particular region image made with that technique. Different products, providers and CoD region types can use it. CoD’s intrinsic [DBMR modes](ConstructionAndAcquisition.md#dbmr-modes) specify one use of the technique, including the guarantees for publishing an immutable image.
+
+A `region type` declaration establishes the package’s nominal interface. Its provider chooses the backing. A database provider can keep a persistent index in a DBMR. A request-local index can use ordinary RAM and release it when the owner ends. In both cases CoD code needs the exact declared type and uses its methods. Implementation-private storage supplies no CoD root selectors. Persistence, writable reopening, transaction isolation and recovery depend on the operations and guarantees the provider actually offers. [Opaque nominal region types](#opaque-nominal-region-types)
 
 ## Structural region definitions and variable storage
 
