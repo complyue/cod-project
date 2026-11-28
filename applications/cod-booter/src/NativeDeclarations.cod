@@ -99,7 +99,7 @@ using "./ModuleExportStorage.cod" {
     SumInterfacePayload { NoSumInterface }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
-using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor };
+using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor, SumConstructorPosition };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind, CheckedFunction,
     CheckedProcedure };
 using "./ExceptionTypes.cod" { ExceptionType, resolve_exception_type };
@@ -1942,11 +1942,9 @@ func prepare_empty_sum_array_fill(nodes:const ExprNodes in N, names:const NameBi
     # initializer overloads, regardless of the argument count at this use.
     val arm <- names[syntax.requested].declaration;
     if (arm >= used) return false;
-    ref count = make UInt64 { 0u64 };
-    ref ordinal = make UInt64 { no_node() };
+    ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
     ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node() };
-    if (local_sum_constructor(nodes, names, work, sum, syntax.requested, used, revision, count,
-            ordinal) != arm || !inspect_sum_arm(nodes, revision, used, arm, sites) ||
+    if (local_sum_constructor(nodes, names, work, sum, syntax.requested, used, revision, position) != arm || !inspect_sum_arm(nodes, revision, used, arm, sites) ||
         sites.fields != no_node()) return false;
     if (case views[fill] of { NoSuppliedView -> false; _ -> true }) return false;
     views[fill] <- make EmptySumArrayFill { construction <- at; sum <- sum; arm <- arm };
@@ -2673,38 +2671,57 @@ func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings 
     if (kind != builtin_bool() && kind != builtin_u64() && kind != builtin_u8() && kind != enum_type())
         return false;
     if (inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return false;
+    return check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
+        clause.parameter_tail, signature, result, used, revision, false)
+}
+
+func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, tail:UInt64, last_owner:UInt64, result:UInt64, used:UInt64,
+    revision:UInt64, inspector:bool) -> bool
+    where {const owner N, const owner B, const owner E, const owner C, const owner A} {
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref bytes = make ArraySlotType {
         owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
     ref sum = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    val formal <- clause.parameter_tail;
-    val role <- signature;
+    val formal <- tail;
+    val role <- last_owner;
     val marker <- no_node();
     val annotation <- no_node();
     val parameter_kind <- 0u8;
     val array_kind <- 0u8;
     val storage <- UnprovedAggregate;
+    val first_ast <- false;
     for (unused in 0u64 .. used) {
         if (formal == no_node()) return role == result;
         if (inspect_sequence_entry(nodes, revision, used, formal, entry) != FormalSequence) return false;
         annotation <- independent_formal_type(nodes, formal, used, revision);
         parameter_kind <- if (annotation < used) { native_value_kind(names, selected, annotation) } else { 0u8 };
-        if (!source_call_scalar(parameter_kind) && parameter_kind != enum_type()) {
+        first_ast <- inspector && entry.previous == no_node();
+        if (first_ast || (!source_call_scalar(parameter_kind) && parameter_kind != enum_type())) {
             if (role == result ||
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || !clause.readonly)
                 return false;
             marker <- readonly_formal_marker(nodes, names, formal, role, used, revision);
             if (marker >= used) return false;
-            array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
-                marker, used, revision, bytes);
-            if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
-                !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
-                storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
-                    aggregate, marker, used, revision);
-                if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate &&
-                    !(describe_type(nodes, names, selected, marker, 0u64, revision, used, sum) &&
-                      checked_bits_sum(contracts, published, aggregate, sum))) return false
+            if (first_ast) {
+                if (!checked_sum_array_type(nodes, names, selected, contracts, published, aggregate,
+                    marker, used, revision)) return false
+            } else {
+                array_kind <- describe_slot_array(nodes, names, selected, contracts, published, aggregate,
+                    marker, used, revision, bytes);
+                if (array_kind != builtin_u8() && array_kind != enum_type() && array_kind != sum_type() &&
+                    !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
+                    storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
+                        aggregate, marker, used, revision);
+                    if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate &&
+                        (inspector || !(describe_type(nodes, names, selected, marker, 0u64, revision, used, sum) &&
+                          checked_bits_sum(contracts, published, aggregate, sum)))) return false
+                }
             };
             (role <- clause.previous):void
         };
@@ -3109,8 +3126,8 @@ func prepare_parser_writer(nodes:const ExprNodes in N, names:const NameBindings 
     }
 }
 
-# Bind the readonly AST array, independent operands and initialized output
-# before checking the body that supplies the scalar result.
+# A checked inspector receives an AST array and any additional readonly
+# arrays before its final initialized writable output.
 func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -3126,47 +3143,32 @@ func prepare_array_inspector(nodes:const ExprNodes in N, names:const NameBinding
     };
     val output_owner <- callable.signature;
     if (inspect_signature(nodes, revision, used, output_owner, clause) != OwnerSignatureClause || clause.readonly) return;
-    val input_owner <- clause.previous;
-    if (inspect_signature(nodes, revision, used, input_owner, clause) != OwnerSignatureClause || !clause.readonly ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+    val last_input_owner <- clause.previous;
+    ref result = make UInt64 { no_node() };
+    if (!find_signature_clause(nodes, revision, used, last_input_owner, ValueResultClause, result) ||
+        inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
         clause.annotation >= used) return;
-    val result <- native_value_kind(names, selected, clause.annotation);
-    if ((result != builtin_bool() && result != builtin_u8() && result != builtin_u64() && result != enum_type()) ||
+    val kind <- native_value_kind(names, selected, clause.annotation);
+    if ((kind != builtin_bool() && kind != builtin_u8() && kind != builtin_u64() && kind != enum_type()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
-    ref first = make UInt64 { no_node() };
-    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used)
-        return;
-    val marker <- readonly_formal_marker(nodes, names, first, input_owner, used, revision);
-    if (!checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision))
-        return;
-    val input <- work[first].next;
-    val output <- no_node();
-    val annotation <- no_node();
-    val kind <- 0u8;
-    val storage <- UnprovedAggregate;
+    val tail <- clause.parameter_tail;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (inspect_sequence_entry(nodes, revision, used, tail, entry) != FormalSequence ||
+        entry.previous == no_node() || last_input_owner == result) return;
+    val output <- reference_formal_marker(nodes, names, tail, output_owner, false, used, revision);
+    if (output >= used ||
+        !check_readonly_input_parameters(nodes, names, selected, contracts, published, aggregate,
+            entry.previous, last_input_owner, result, used, revision, true)) return;
+    if (names[output].kind == builtin_u64()) {
+        views[at] <- make PreparedArrayInspector { inline_product <- false };
+        return
+    };
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
-    for (unused in 0u64 .. used) {
-        if (input >= used) return;
-        if (work[input].next == no_node()) {
-            output <- reference_formal_marker(nodes, names, input, output_owner, false, used, revision);
-            if (output >= used) return;
-            if (names[output].kind == builtin_u64()) {
-                (views[at] <- make PreparedArrayInspector { inline_product <- false }):void;
-                return
-            };
-            if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
-                type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
-            storage <- aggregate[type.identity];
-            if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
-                (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
-            };
-            return
-        };
-        annotation <- independent_formal_type(nodes, input, used, revision);
-        if (annotation >= used) return;
-        kind <- native_value_kind(names, selected, annotation);
-        if (!source_call_scalar(kind) && kind != enum_type()) return;
-        (input <- work[input].next):void
+    if (!describe_type(nodes, names, selected, output, 0u64, revision, used, type) ||
+        type.kind != record_type() || type.defining_module != 0u64 || type.identity >= used) return;
+    val storage <- aggregate[type.identity];
+    if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) {
+        (views[at] <- make PreparedArrayInspector { inline_product <- storage == CoDBitsAggregate }):void
     }
 }
 

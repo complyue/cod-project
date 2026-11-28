@@ -196,9 +196,11 @@ export func describe_record_field(source:const SourceBytes in S, nodes:const Exp
         interface_count, name, used, revision, false, result, ordinal, readonly)
 }
 
+export data SumConstructorPosition { count:UInt64; ordinal:UInt64; }
+
 export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBindings in B,
     work:const NameWork in W, sum:UInt64, spelling:UInt64, used:UInt64, revision:UInt64,
-    count:UInt64 in C, ordinal:UInt64 in C) -> UInt64 where {const owner N, const owner B, const owner W, owner C} {
+    position:SumConstructorPosition in P) -> UInt64 where {const owner N, const owner B, const owner W, owner P} {
     ref shape = make DeclarationSites {
         name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false
@@ -215,10 +217,10 @@ export func local_sum_constructor(nodes:const ExprNodes in N, names:const NameBi
         if (!inspect_sum_arm(nodes, revision, used, arm, sites)) return no_node();
         if (arm == chosen) {
             selected_arm <- arm;
-            (ordinal <- index):void
+            (position.ordinal <- index):void
         };
         if (arm == shape.entries) {
-            count <- index + 1u64;
+            position.count <- index + 1u64;
             return selected_arm
         };
         arm <- work[arm].next

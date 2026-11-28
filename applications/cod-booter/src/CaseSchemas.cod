@@ -31,7 +31,7 @@ using "./NameResolution.cod" {
     owner_binding, local_binding, callable_binding, native_scalar, record_initializer_label, enclosing_callable, local_sum_value_type
 };
 using "./ModuleExports.cod" { SelectedExports, array_export, record_export, callable_export, ordinary_callable_shape };
-using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, remember_type, type_module, type_identity };
+using "./DeclarationTypes.cod" { DeclaredType, DeclaredExpressionResult, describe_type, describe_record_field, describe_record_member, local_sum_constructor, SumConstructorPosition, remember_type, type_module, type_identity };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
@@ -420,8 +420,8 @@ func sum_case_extent(nodes:const ExprNodes in N, work:const NameWork in W,
 
 func published_case_constructor(selected:const SelectedExports in E,
     interfaces:const ModuleInterfaces in I, published:UInt64, sum:const DeclaredType in T,
-    spelling:UInt64, count:UInt64 in C, ordinal:UInt64 in C) -> UInt64
-    where {const owner E, const owner I, const owner T, owner C} {
+    spelling:UInt64, position:SumConstructorPosition in P) -> UInt64
+    where {const owner E, const owner I, const owner T, owner P} {
     if (spelling >= intrinsic (len)(selected)) return no_node();
     val site <- selected[spelling].constructor_selection;
     if (site >= intrinsic (len)(selected)) return no_node();
@@ -431,8 +431,8 @@ func published_case_constructor(selected:const SelectedExports in E,
     if (chosen >= published) return no_node();
     for (entry in head + 1u64 .. head + 1u64 + interfaces[head].entry_count) {
         if (checked_sum_constructor(interfaces, published, head, entry) == chosen) {
-            count <- interfaces[head].entry_count;
-            ordinal <- entry - head - 1u64;
+            position.count <- interfaces[head].entry_count;
+            position.ordinal <- entry - head - 1u64;
             return chosen
         }
     };
@@ -623,8 +623,7 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
     ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
     ref arm = make CaseArmSites { pattern <- no_node(); guard <- no_node(); body <- no_node(); arrow <- 0u64 };
     ref pattern = make ConstructorCaseSites { constructor <- no_node(); receiver_tail <- no_node() };
-    ref ordinal = make UInt64 { no_node() };
-    ref extent = make UInt64 { 0u64 };
+    ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
     val spelling <- no_node();
     val receipts <- no_node();
     val selected_constructor <- no_node();
@@ -649,20 +648,18 @@ func prepare_case_arms(source:const SourceBytes in S, nodes:const ExprNodes in N
                     if (mode != NamedCaseMember) return case_problem(report, arm.pattern, 94u8);
                 };
                 selected_constructor <- if (module == 0u64) {
-                    local_sum_constructor(nodes, names, work, sum.identity, spelling, used, revision,
-                                           extent, ordinal)
+                    local_sum_constructor(nodes, names, work, sum.identity, spelling, used, revision, position)
                 } else {
-                    published_case_constructor(selected, interfaces, published, sum, spelling, extent,
-                                               ordinal)
+                    published_case_constructor(selected, interfaces, published, sum, spelling, position)
                 };
-                if (selected_constructor == no_node() || ordinal >= extent ||
-                    (count != 0u64 && count != extent))
+                if (selected_constructor == no_node() || position.ordinal >= position.count ||
+                    (count != 0u64 && count != position.count))
                     return case_problem(report, spelling, unselected_case_constructor());
-                count <- extent;
+                count <- position.count;
                 definition <- if (module == 0u64) { selected_constructor }
                               else { (interfaces[selected_constructor].declaration) };
                 remember_case_constructor(facts, arm.pattern, choice, subject + 1u64,
-                    module, definition, ordinal);
+                    module, definition, position.ordinal);
                 if (!prepare_case_fields(source, nodes, names, selected, work, spellings, spelling_used,
                     interfaces, published, aggregate, facts, choice, entry.item, arm.pattern, receipts, module,
                     selected_constructor, used, revision, report)) return false
@@ -1521,11 +1518,10 @@ func prepare_local_sum_write(nodes:const ExprNodes in N, names:const NameBinding
     if (sum >= used || sum >= intrinsic (len)(aggregate) ||
         aggregate[sum] != (CoDBitsAggregate:AggregateStorage))
         return case_problem(report, input, unproved_sum_subject());
-    ref count = make UInt64 { 0u64 };
-    ref ordinal = make UInt64 { no_node() };
+    ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
     ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
     # Registration has already rejected any visible initializer definition for an arm.
-    if (local_sum_constructor(nodes, names, work, sum, requested, used, revision, count, ordinal) != arm ||
+    if (local_sum_constructor(nodes, names, work, sum, requested, used, revision, position) != arm ||
         !inspect_sum_arm(nodes, revision, used, arm, sites))
         return case_problem(report, input, unselected_case_constructor());
     facts[input] <- make LocalSumConstruction { transfer <- transfer; sum <- sum; arm <- arm; fields <- sites.fields };
@@ -1594,12 +1590,11 @@ func local_bits_schema(nodes:const ExprNodes in N, names:const NameBindings in B
     -> bool where {const owner N, const owner B, const owner W, const owner T, owner R} {
     val chosen <- names[requested].declaration;
     if (expected.kind == sum_type()) {
-        ref count = make UInt64 { 0u64 };
-        ref ordinal = make UInt64 { no_node() };
+        ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
         ref alternative = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
         if (chosen >= used || work[chosen].declaring_sum != expected.identity ||
             local_sum_constructor(nodes, names, work, expected.identity, requested,
-                used, revision, count, ordinal) != chosen ||
+                used, revision, position) != chosen ||
             !inspect_sum_arm(nodes, revision, used, chosen, alternative)) return false;
         fields <- alternative.fields;
         return true
@@ -1623,9 +1618,8 @@ func published_bits_schema(names:const NameBindings in B, selected:const Selecte
         # The receiver's name binding has rejected visible constructor
         # initializers. Field count alone would not establish that.
         if (names[requested].kind != constructor_type() || names[requested].declaration != no_node()) return no_node();
-        ref count = make UInt64 { 0u64 };
-        ref ordinal = make UInt64 { no_node() };
-        return published_case_constructor(selected, interfaces, published, expected, requested, count, ordinal)
+        ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
+        return published_case_constructor(selected, interfaces, published, expected, requested, position)
     };
     if (expected.kind != record_type() || names[requested].kind != ordinary_selection()) return no_node();
     val declaration <- names[requested].declaration;

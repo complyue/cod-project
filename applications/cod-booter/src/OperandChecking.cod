@@ -3247,11 +3247,12 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
     if (header >= published || published > intrinsic (len)(contracts)) return no_node();
     val arity <- contracts[header].entry_count;
     val result <- contracts[header].result_kind;
+    val owner_count <- contracts[header].owner_count;
     if (arity < 2u64 || arity >= published - header || contracts[header].interface_kind != callable_binding() ||
         contracts[header].source_writer != ArrayInspector ||
         contracts[header].callable_kind != CheckedFunction || contracts[header].membership != FixedMethods ||
         contracts[header].native_function != no_node() || contracts[header].target_readonly != 0u8 ||
-        contracts[header].owner_count != 2u64 || contracts[header].owner_role != no_node() ||
+        owner_count < 2u64 || contracts[header].owner_role != no_node() ||
         contracts[header].has_here != 0u8 || contracts[header].failure_identity != no_node() ||
         contracts[header].failure_module != 0u64 || contracts[header].failure_checked != 0u8 ||
         contracts[header].array_read_completion == NoArrayRead) return no_node();
@@ -3266,19 +3267,20 @@ func checked_array_inspector_past(contracts:const ModuleInterfaces in I, publish
     if (!source_aggregate_formal(contracts, array, array_type(), 0u64, 1u8) ||
         !published_sum_array(contracts, published, contracts[array].type_module, contracts[array].type_identity))
         return no_node();
-    for (row in array + 1u64 .. output) {
-        if (!checked_source_scalar_parameter(contracts, published, row)) return no_node()
-    };
+    val output_role <- owner_count - 1u64;
+    ref sum_loan = make bool { false };
+    if (!checked_readonly_query_inputs(contracts, published, array, output, output_role, sum_loan) ||
+        sum_loan) return no_node();
     if (contracts[output].value_kind == builtin_u64()) {
         if (contracts[output].interface_kind == 0u8 && contracts[output].entry_count == 0u64 &&
-            contracts[output].field_mode == ReferenceFormal && contracts[output].owner_role == 1u64 &&
+            contracts[output].field_mode == ReferenceFormal && contracts[output].owner_role == output_role &&
             contracts[output].type_module == 0u64 && contracts[output].type_identity == 0u64 &&
             contracts[output].owner_readonly == 0u8 && contracts[output].target_readonly == 0u8 &&
             contracts[output].native_reception == 0u8 && contracts[output].native_passes_owner == 0u8 &&
             !contracts[output].source_allocates) return output + 1u64;
         return no_node()
     };
-    if (!source_aggregate_formal(contracts, output, record_type(), 1u64, 0u8)) return no_node();
+    if (!source_aggregate_formal(contracts, output, record_type(), output_role, 0u8)) return no_node();
     val storage <- checked_aggregate_storage(contracts, published, contracts[output].type_module,
         contracts[output].type_identity, record_type());
     return if (storage == CLayoutBitsRecord || storage == CoDBitsAggregate) { output + 1u64 } else { no_node() }
