@@ -113,7 +113,7 @@ using "./ModuleExports.cod" {
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
     CallableUseProofs, matches_object_call, checked_aggregate_storage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord, UnprovedAggregate },
-    FamilyMembership { FixedMethods }, InterfacePayload { DeferredTextReceiver, CheckedTextReceiver, CheckedTextWriter },
+    FamilyMembership { FixedMethods }, InterfacePayload { DeferredTextReceiver, CheckedTextReceiver, CheckedLocalTextRoutine, CheckedTextWriter },
     InterfaceCallableKind { NoCallableKind, CheckedFunction, CheckedProcedure },
     ExceptionSchema { CheckedExceptionSchema, UncheckedExceptionSchema },
 };
@@ -3001,7 +3001,7 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
         };
         expected <- links[argument].imported_kind;
         source_aggregate_loan <- source_only &&
-            (expected == source_array_loan() || expected == source_product_loan() ||
+            (expected == source_array_loan() || expected == source_product_loan() || expected == source_builder_loan() ||
                 (expected == source_sum_target() && links[at].imported_array_read_completion != NoArrayRead));
         if (expected == source_handle_loan() || source_aggregate_loan) {
             if (checked_ref_argument(nodes, argument)) return wrong_operand_type();
@@ -3141,6 +3141,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
     val product_loan <- false;
     val sum_loan <- false;
     val string_loan <- false;
+    val builder_loan <- false;
     val slot_signature <- contracts[header].array_slot_checked;
     val role <- no_node();
     val kind <- 0u8;
@@ -3151,22 +3152,26 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
         array_loan <- source_declared_signature && kind == array_type();
         product_loan <- source_declared_signature && kind == record_type();
         sum_loan <- source_declared_signature && kind == sum_type();
+        builder_loan <- source_declared_signature && kind == lexical_builder_type() &&
+            contracts[row].field_mode == ReferenceFormal;
         string_loan <- source_declared_signature && kind == builtin_string() &&
             contracts[row].field_mode == ReferenceFormal && contracts[row].target_readonly == 1u8 &&
             contracts[row].owner_readonly == 1u8;
         links[argument].imported_kind <- if (array_loan) { source_array_loan() } else {
             if (product_loan) { source_product_loan() } else {
                 if (sum_loan) { source_sum_target() } else {
+                    if (builder_loan) { source_builder_loan() } else {
                     if (source_handles || source_declared_signature) {
                         if (handles) { source_handle_loan() } else {
                             if (string_loan) { string_kind() } else { source_scalar_kind(kind) }
                         }
                     } else { kind }
+                    }
                 }
             }
         };
         links[argument].imported_ref_slot <- slot_signature && contracts[row].slot_target_invariant;
-        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles || string_loan ||
+        links[argument].imported_reception <- if (array_loan || product_loan || sum_loan || handles || string_loan || builder_loan ||
             (contracts[row].field_mode == ReferenceFormal &&
                 (slot_signature || (source_declared_signature && source_place_scalar(kind))))) {
             borrowed_ref()
@@ -3179,7 +3184,7 @@ func bind_imported_call(nodes:const ExprNodes in N, links:NameWork in L, contrac
             1u8
         } else { (contracts[row].native_passes_owner) };
         role <- contracts[row].owner_role;
-        if (handles || array_loan || product_loan || sum_loan ||
+        if (handles || array_loan || product_loan || sum_loan || builder_loan ||
             (source_declared_signature && kind == enum_type()) ||
             (!source_handles && !source_declared_signature &&
                 (kind == scalar_enum() || nominal_source_loan(kind)))) {
@@ -4271,7 +4276,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (source_only && header != no_node() && contracts[header].interface_kind == callable_binding() &&
-        (case contracts[header].payload of { CheckedTextReceiver -> true; _ -> false })) {
+        (case contracts[header].payload of { CheckedTextReceiver -> true; CheckedLocalTextRoutine -> true; _ -> false })) {
         val count <- contracts[header].entry_count;
         if (obligation || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
@@ -7432,6 +7437,12 @@ export func collect_text_outcomes(interfaces:const ModuleInterfaces in I, facts:
                     outcomes[at].invalid_slice <- invalid_slice;
                     outcomes[at].bounds <- bounds;
                     (outcomes[at].numeric_fault <- numeric_fault):void
+                };
+                CheckedLocalTextRoutine { val out_of_memory <-, val invalid_slice <-, val numeric_fault <-, val bounds <-, } -> {
+                    outcomes[at].out_of_memory <- out_of_memory;
+                    outcomes[at].invalid_slice <- invalid_slice;
+                    outcomes[at].numeric_fault <- numeric_fault;
+                    (outcomes[at].bounds <- bounds):void
                 };
                 CheckedTextWriter { val out_of_memory <-, } -> {
                     (outcomes[at].out_of_memory <- out_of_memory):void

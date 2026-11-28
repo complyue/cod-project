@@ -12,7 +12,7 @@ using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, publishe
 using "./NativeDeclarations.cod" {
     SuppliedViews, SuppliedView { ImportedSourceTextCall, ImportedTextWriterCall, BoundReferenceSymbol, PreparedTextInstallation },
 };
-using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver } };
+using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver, CheckedLocalTextRoutine } };
 using "./OperandChecking.cod" {
     OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver, preserves_text_installations,
 };
@@ -81,6 +81,7 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
                 CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, } -> {
                     include_text_need(needs, count, symbol_module, symbol_identity, no_node(), no_node())
                 };
+                CheckedLocalTextRoutine -> {};
                 _ -> { return false }
             }
         };
@@ -90,6 +91,7 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
         CheckedTextReceiver { val symbol_module <-, val symbol_identity <-, val receiver_module <-, val receiver_identity <-, } -> {
             include_text_need(needs, count, symbol_module, symbol_identity, receiver_module, receiver_identity)
         };
+        CheckedLocalTextRoutine -> {};
         _ -> { return false }
     };
     return true
@@ -426,7 +428,7 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
     ref count = make UInt64 { 0u64 };
     val problem <- collect_text_uses(nodes, names, links, views, interfaces, facts, demand, sites,
         uses, scopes, needs, count, root, used, revision, published);
-    if (problem == no_node() && count != 0u64) {
+    if (problem == no_node()) {
         ref supplies = make TextUseSupplies(used, make TextUseSupply {
             supply <- (Incoming:TextSupply); origin <- false
         });
@@ -466,6 +468,13 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
                     (contracts[at] <- make CheckedTextReceiver {
                         symbol_module <- routines[at].symbol_module; symbol_identity <- routines[at].symbol_identity;
                         receiver_module <- routines[at].receiver_module; receiver_identity <- routines[at].receiver_identity;
+                        out_of_memory <- exits[at].out_of_memory; invalid_slice <- exits[at].invalid_slice;
+                        numeric_fault <- exits[at].numeric_fault; bounds <- exits[at].bounds
+                    }):void
+                }
+            } else {
+                if (scopes[at].public_family && exits[at].available) {
+                    (contracts[at] <- make CheckedLocalTextRoutine {
                         out_of_memory <- exits[at].out_of_memory; invalid_slice <- exits[at].invalid_slice;
                         numeric_fault <- exits[at].numeric_fault; bounds <- exits[at].bounds
                     }):void

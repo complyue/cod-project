@@ -98,7 +98,7 @@ using "./ModuleExportStorage.cod" {
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
     array_length_family_interface, source_text_family_interface, text_writer_family_interface, ScopedRoutineContracts,
-    InterfacePayload { NoInterfacePayload, DeferredTextReceiver, CheckedTextReceiver, CheckedTextWriter }, constructor_type,
+    InterfacePayload { NoInterfacePayload, DeferredTextReceiver, CheckedTextReceiver, CheckedLocalTextRoutine, CheckedTextWriter }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor, SumConstructorPosition };
@@ -911,13 +911,16 @@ func describe_parameter(nodes:const ExprNodes in N, names:const NameBindings in 
         val const_role <- owner_constraint_syntax(nodes, role) == ReadonlyOwnerConstraint;
         val kind <- names[marker].kind;
         val scalar_place <- fixed_values && mode == ReferenceFormal && source_place_scalar(kind);
+        val builder <- fixed_values && mode == ReferenceFormal && is_lexical_builder(nodes, names, marker, revision, used);
         row.value_kind <- if (mode == HandleFormal) { c_handle_type() }
                           else {
+                              if (builder) { lexical_builder_type() } else {
                               if (text_type(kind) || scalar_place) { kind }
                               else { if (fixed_values && (kind == record_type() ||
                                   imported_kind(names, selected, marker) == record_export())) {
                                   record_type()
                               } else { array_type() } }
+                              }
                           };
         if (fixed_values && mode == ReferenceFormal &&
             (kind == sum_type() || imported_kind(names, selected, marker) == sum_export())) {
@@ -5784,7 +5787,8 @@ func stage_interface(nodes:const ExprNodes in N, names:const NameBindings in B,
         };
         if (indexed_owners &&
             (contracts[next].value_kind == c_handle_type() ||
-                text_type(contracts[next].value_kind) || contracts[next].value_kind == array_type() ||
+                text_type(contracts[next].value_kind) || contracts[next].value_kind == lexical_builder_type() ||
+                 contracts[next].value_kind == array_type() ||
                  contracts[next].value_kind == record_type() || contracts[next].value_kind == sum_type() ||
                  (source_place_scalar(contracts[next].value_kind) && contracts[next].field_mode == ReferenceFormal))) {
             if (inspect_signature(nodes, revision, used, contracts[next].owner_role, clause) != OwnerSignatureClause) return no_node();
@@ -5965,8 +5969,8 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     return past
 }
 
-# A singleton ordinary procedure can carry an incoming text requirement
-# with scalar inputs and initialized readonly aggregate loans.
+# A singleton ordinary procedure can carry checked scoped text behavior
+# with scalar inputs, initialized readonly loans and explicit builders.
 export func source_text_routine_signature(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in I,
     published:UInt64, aggregate:const AggregateFacts in A, definition:UInt64, used:UInt64, revision:UInt64)
@@ -5992,6 +5996,7 @@ export func source_text_routine_signature(nodes:const ExprNodes in N, names:cons
     val parameter <- start;
     val marker <- no_node();
     val role <- no_node();
+    val builder <- false;
     for (unused in 0u64 .. used) {
         if (parameter == no_node()) return true;
         marker <- independent_formal_type(nodes, parameter, used, revision);
@@ -6001,17 +6006,19 @@ export func source_text_routine_signature(nodes:const ExprNodes in N, names:cons
         } else {
             if (formal_variadic_at(nodes, revision, used, parameter) != no_node() ||
                 !typed_formal(nodes, revision, used, parameter, formal, binding) ||
-                formal.mode != ReferenceFormal || !binding.readonly || binding.target_type >= used ||
+                formal.mode != ReferenceFormal || binding.target_type >= used ||
                 binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return false;
             role <- names[binding.owner_name].declaration;
             if (role <= result || role > callable.signature ||
                 inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause ||
-                !clause.readonly) return false;
+                binding.readonly != clause.readonly) return false;
             marker <- binding.target_type;
-            if (names[marker].kind != builtin_string() && names[marker].kind != array_type() &&
-                imported_kind(names, selected, marker) != array_export() &&
-                (!describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
-                 !checked_bits_record(interfaces, published, aggregate, type))) return false
+            builder <- is_lexical_builder(nodes, names, marker, revision, used);
+            if (!builder && (!binding.readonly ||
+                (names[marker].kind != builtin_string() && names[marker].kind != array_type() &&
+                 imported_kind(names, selected, marker) != array_export() &&
+                 (!describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
+                  !checked_bits_record(interfaces, published, aggregate, type))))) return false
         };
         (parameter <- work[parameter].next):void
     };
@@ -6367,7 +6374,9 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             _ -> false
                         };
                         scoped_routine <- at < intrinsic (len)(routines) && (case routines[at] of {
-                            CheckedTextReceiver -> true; _ -> false
+                            CheckedTextReceiver -> true;
+                            CheckedLocalTextRoutine -> true;
+                            _ -> false
                         });
                         (count <- stage_interface(nodes, names, selected, work, contracts, count, defining_module,
                             at, at, kind, callback, array_read_completion, source_writer, scalar_source_body, scoped_routine,

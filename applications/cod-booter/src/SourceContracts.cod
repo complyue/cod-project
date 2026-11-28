@@ -15,7 +15,7 @@ using "./ParserStorage.cod" ExprPayload {
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, ReserveStorage, InitializerTransfer,
     ProtectedBlock, CatchClause, CatchHandler, CatchBinding,
     CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
-    HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal
+    HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal, BindSymbolEffect
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity, builder_append_export, text_size_export, text_byte_export, text_slice_export };
@@ -554,6 +554,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             # The ordinary operand and completion passes already check this
             # invoked scope. Its reached operations stay in the current body.
             ScopeSyntax -> facts[at].kind == void_result();
+            BindSymbolEffect -> facts[at].kind == void_result();
             BlockItem -> true;
             ArgumentItem -> true;
             ReturnVoid -> true;
@@ -828,9 +829,10 @@ export func finish_closed_source_functions(nodes:const ExprNodes in N, names:con
         available <- outcomes[at].available && !outcomes[at].text_storage;
         nonallocating <- available && !outcomes[at].allocates;
         if (demand[at].public_text_routine && demand[at].receipt_body && outcomes[at].available &&
-            !outcomes[at].allocates && !outcomes[at].open_scoped_exit) {
+            !outcomes[at].open_scoped_exit) {
             (routine_exits[at] <- make ScopedRoutineExit {
-                available <- true; out_of_memory <- outcomes[at].text_allocation; invalid_slice <- outcomes[at].invalid_slice;
+                available <- true; out_of_memory <- outcomes[at].text_allocation || outcomes[at].allocates;
+                invalid_slice <- outcomes[at].invalid_slice;
                 numeric_fault <- outcomes[at].numeric; bounds <- outcomes[at].bounds
             }):void
         };
