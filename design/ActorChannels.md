@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 4 · 2026-11-28
+Design and research revision: 5 · 2026-11-28
 
 ## Design authority
+
+At r5 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires an actual target pool for every go process and makes the pool a first-class ownership boundary. D-32-RESOURCE-POOLS/P-789 relates that boundary to both r4 launch forms and typed chan communication. The same-host shared-memory example examines feasibility. Pool construction, placement policy and endpoint syntax remain open for `e-wrks/cod`.
 
 At r4 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) extends the r3 ownership example to the named entry procedure and its consuming parameters. Both forms use the same dedicated thread and fresh-TLS boundary under D-10-ACTOR-CHAN/P-788.
 
@@ -36,9 +38,9 @@ the older execution and send-result candidates replaced by the new decisions.
 
 ## Confirmed basis
 
-A **go process** starts an Actor's execution on a dedicated OS thread. CoD provides
-`go entry_proc(...)`, with ownership specified by the entry procedure’s parameters, and a
-double-braced body with an explicit owner list. Each launch begins with
+A **go process** starts an Actor's execution in a target resource pool on a dedicated OS thread.
+The target is required for both a named entry procedure with explicit arguments and a
+double-braced body with an owner list. Each launch begins with
 fresh initial TLS. The launcher keeps its own active bindings. Several such executions can run in
 one OS process. **Chan** is the typed messaging facility. For example, a cluster coordinator can
 send work to an existing Actor on another machine, where local code can launch a go process to
@@ -69,6 +71,33 @@ delivery risk.
 | A deadline expires while an application awaits a reply | The application has not observed the required reply; execution and external effects may already have happened. |
 | A worker sends a result, refusal or cancellation response | This is an application protocol message, not a chan-generated receipt. |
 | A connection closes | A transport observation. Its relation to an Actor, chan, in-flight work and system-fault reporting must be defined explicitly. |
+
+## Resource pools and ownership handoff
+
+A **resource pool** is a first-class CoD object identifying the domain within which go processes can transfer resource ownership. A program should be able to pass a pool to a library and use that same pool for related work. Every go process launch targets a particular pool, even if it passes only scalars. A scheduling policy such as “use a subprocess” by itself does not identify a pool. A pool answers *where ownership can pass*. At any instant a particular holder still has the release obligation for each owned resource. Pool membership gives no general access to another member’s resources. A thread pool or subprocess pool supplies execution capacity. A region’s internal block pool supplies storage. Neither shared capacity nor shared storage establishes ownership-transfer authority. [Regional allocation policy](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
+
+Apply the same rule to an owning argument of a named entry procedure, a block’s explicit owner list, and an ownership-bearing message sent over a typed `chan`. Each receiving go process must be in the same actual pool for that handoff. Compare two independently created pools with identical configuration: the same-pool transfer is eligible, and the cross-pool transfer is invalid even if both workers share an OS process. Passing the same pool through a parameter or alias preserves its identity. Wrapping an owner in another message cannot change the boundary. Message type, ordinary owner/lifetime rules and the provider’s ability to transport that particular resource still apply.
+
+For example, a producer in pool `P` builds a partition, then sends its region to an indexing worker. One candidate static signature relates the owned partition and the destination end of the chan through a common pool parameter `P`. A generic producer can then use either a thread worker or a subprocess worker when the backing works for both. An endpoint leading to a different pool `Q` fails the ownership check even if its message schema is identical. For a shared queue, the guarantee must cover every eligible receiver of an owning message. The way to express that relation and recover evidence after a dynamic pool selection is still a design question.
+
+### A shared-memory region between local processes
+
+An ordinary structural `Partition` region can in principle use OS shared memory as its backing. Consider one partition whose nodes refer to each other through region-relative locators. The parent finishes its writes. A local subprocess maps the same backing at its own base address and resolves the same root, shared nodes and cycles. The handoff must publish the completed writes before the receiving entry or chan consumer can use the region. Linux shared-memory objects and descriptor passing provide the native pieces for such a transport. The source root schema can stay the same. [Regional graph representation](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph) · [POSIX shared memory on Linux](https://man7.org/linux/man-pages/man7/shm_overview.7.html) · [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html)
+
+Mapping the bytes and transferring the owner are separate events. After successful handoff the sender’s consumed binding and stale sender access paths cannot use the region, even if its native mapping still exists. The receiving side has the release obligation. A process-local native pointer or handle requires its own valid transport before the receiving program can use it. The mapping alone does not synchronize concurrent mutation or establish a lifetime for an external resource.
+
+**Design probes**
+
+| Case | Outcome or decision |
+| --- | --- |
+| Niladic entry or owner-free block with no target pool | Reject the launch. Having no ownership to check does not supply a target. |
+| Same pool, different OS processes on one host, relocatable shared backing | Permit the ownership path. Verify a different mapping base, preserved graph edges, visible completed writes and one release responsibility. |
+| Different pools, same address space, same region and message types | Reject the ownership path. Changing the backing or using a chan cannot authorize it. |
+| Same pool, subprocess receiver, opaque handle usable only in the sender process | Pool identity meets one condition. The handle still lacks a usable subprocess transport. |
+| Work is accepted into a queue and the receiving worker dies | The responsible queue or transport must account for the resource under the eventual failure contract. An ordinary chan send still gives no delivery receipt. |
+| Two pools need the same business data | A candidate is to send self-contained data and construct a fresh region owned in the destination pool. Whether to offer such an operation and how to spell it remain open. It would transfer no existing owner across the boundary. |
+
+One open placement question is whether a logical pool may span machines. Shared memory covers the local-host case. The network contract below already specifies whole-region delivery. A distributed-pool design would also have to establish common pool membership. Communication between distinct pools would have to respect their ownership boundary whichever transport they use. The placement syntax, pool startup and shutdown, queue acceptance and release after failure remain separate decisions. The booter and seed retain their existing scope.
 
 ## Regional transport over AKCP
 

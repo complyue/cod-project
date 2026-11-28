@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Model resource pools as ownership boundaries for go processes
+
+<a id="h-go-resource-pools-20261128"></a>
+**H-GO-RESOURCE-POOLS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) directs the production design toward first-class resource pools to express concurrency structurally and support static checks. Resource owners may pass within a pool and may not pass across pools. The user also prefers to exclude launches without a target pool, including owner-free entries. The user calls for typed `chan` communication between go processes and asks about shared-memory backing for an ordinary region passed to a subprocess. [D-32 r4→5](design/ActorChannels.md#resource-pools-and-ownership-handoff) and [D-10 r283→284](design/SymbolicDynamicScope.md#go-process-launch) record that direction and the technical feasibility case. The two [earlier entry forms](https://github.com/complyue/cod-project/blob/3a58434fc890f18b8865171aee40c4eb55e056bc/design/SymbolicDynamicScope.md#go-process-launch), [whole-region network delivery](https://github.com/complyue/cod-project/blob/3a58434fc890f18b8865171aee40c4eb55e056bc/design/ActorChannels.md#regional-transport-over-akcp), independent chan ends and bootstrap exclusion continue. The earlier targetless notation is superseded. `go on(p)` illustrates the as-yet unsettled spelling. Cross-host membership, optional data copying and queue/failure policy remain open. P-789 added, registry r1387→1388.
+
 ## 2026-11-28 — Pass owners as go process entry procedure arguments
 
 <a id="h-go-owning-parameters-20261128"></a>
