@@ -350,6 +350,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: symbolic procedure declaration checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 124)
         fputs(": error: scoped symbolic procedure checking is outside the current compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 169)
+        fputs(": error: scoped handler signature does not match the declared procedure symbol\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 18)
         fputs(": error: condition must have type bool\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 168)

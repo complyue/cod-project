@@ -18,7 +18,7 @@ using "./ParserStorage.cod" ExprPayload {
         CaseArm,
     LocalBinding, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction, BorrowHandleConstruction,
     BindSymbolEffect, InstallSymbolEffect, CheckedTypeAssertion, PredicateAssertion, ProtectedBlock, DeferredBlock, DeferredInvocation,
-    CallableDefinition,
+    CallableDefinition, ScopedProcedureDefinition,
 };
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" SequenceSyntax {
@@ -31,7 +31,10 @@ using "./ParserStorage.cod" DeclarationSyntax {
     EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration,
     LocalPublication, NominalSum, GenericProductDeclaration, ProcedureSymbolDeclaration,
 };
-using "./ParserStorage.cod" { ProcedureTypeSites, inspect_procedure_type, module_item_publication };
+using "./ParserStorage.cod" {
+    ProcedureTypeSites, inspect_procedure_type, module_item_publication,
+    ScopedProcedureSites, inspect_scoped_procedure, SignatureSyntax { ScopedProcedureHead },
+};
 using "./ParserStorage.cod" CallableSyntax {
     InvalidCallable, OtherCallableSyntax, ModuleCallable, ModuleCallablePromise, LexicalCallable,
         CProvider, CEntry,
@@ -282,7 +285,7 @@ export func applied_product_binding() -> UInt8 { return 42u8; }
 export func generic_constructor_binding() -> UInt8 { return 43u8; }
 export func generic_method_binding() -> UInt8 { return 44u8; }
 export func closed_product_binding() -> UInt8 { return 45u8; }
-func procedure_symbol_binding() -> UInt8 { return 46u8; }
+export func procedure_symbol_binding() -> UInt8 { return 46u8; }
 export func product_application_binding(kind:UInt8) -> bool {
     return kind == applied_product_binding() || kind == closed_product_binding()
 }
@@ -666,10 +669,6 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
             reject_name(state, name, dynamic_symbol_in_function());
             return;
         } else {};
-        if (kind == procedure_symbol_binding()) {
-            reject_name(state, name, unsupported_scoped_procedure());
-            return
-        };
     } else {
         if (kind == native_symbol_binding() || kind == reference_symbol_binding() || kind == procedure_symbol_binding()) {
             reject_name(state, name, expected_symbol_binding());
@@ -2195,6 +2194,10 @@ func resolve_effect(source:const SourceBytes in S, nodes:const ExprNodes in N, b
     };
     resolve_value(source, nodes, bindings, work, state, name.index, true);
     if (state.diagnostic != 0u8) return;
+    if (bindings[name.index].kind == procedure_symbol_binding()) {
+        reject_name(state, name.index, unsupported_scoped_procedure());
+        return
+    };
     if (installs) {
         resolve_effect_initializer(source, nodes, bindings, work, state, input.index);
         if (state.diagnostic == 0u8) {
@@ -2329,8 +2332,12 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 (CaseArm) -> { resolve_case_arm(source, nodes, bindings, work, state, at); return; };
                 (CallableDefinition { val lexical <- lexical, }) -> {
                     if (!lexical) { reject_name(state, at, invalid_module_tree()); return; };
-                    resolve_lexical_callable(source, nodes, bindings, work, state, at);
+                    resolve_nested_callable(source, nodes, bindings, work, state, at, false);
                     return;
+                };
+                (ScopedProcedureDefinition) -> {
+                    resolve_nested_callable(source, nodes, bindings, work, state, at, true);
+                    return
                 };
                 (ProtectedBlock) -> { resolve_try(source, nodes, bindings, work, state, at); return; };
                 (DeferredBlock { val body <- body, }) -> {
@@ -2454,14 +2461,21 @@ func resolve_expression(source:const SourceBytes in S, nodes:const ExprNodes in 
                 };
                 (SymbolReference) -> {
                     resolve_value(source, nodes, bindings, work, state, at, true);
+                    if (state.diagnostic == 0u8 && bindings[at].kind == procedure_symbol_binding()) {
+                        reject_name(state, at, unsupported_scoped_procedure())
+                    };
                     return;
                 };
                 (SymbolicInvocation { val target <- callee, val arguments <- arguments, }) -> {
-                    if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, target)) {
+                    if (!published_syntax_id(nodes, state.syntax_revision, state.syntax_used, target) ||
+                        name_syntax(nodes, state.syntax_used, target.index) != SymbolicName) {
                         reject_name(state, at, invalid_module_tree());
                         return;
                     };
-                    resolve_expression(source, nodes, bindings, work, state, target.index);
+                    bindings[target.index].scope <- state.scope_node;
+                    bindings[target.index].finalizer <- state.finalizer;
+                    work[target.index].native_installation <- state.native_installation;
+                    resolve_value(source, nodes, bindings, work, state, target.index, true);
                     if (state.diagnostic != 0u8) return;
                     resolve_expression_links(source, nodes, bindings, work, state, arguments, at);
                     return;
@@ -3623,14 +3637,33 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
     (state.used <- state.module_names):void;
 }
 
-func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                              work:NameWork in W, state:NameState in R, definition:UInt64) -> void
+func resolve_nested_callable(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:NameWork in W, state:NameState in R, definition:UInt64, scoped:bool) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val mark <- state.used;
-    declare_name(source, nodes, bindings, work, state, definition_name(nodes, state.syntax_revision, state.syntax_used, definition),
-                 definition, callable_binding(), duplicate_binding());
-    if (state.diagnostic != 0u8) return;
-    remember(bindings, definition, definition, callable_binding());
+    ref handler = make ScopedProcedureSites { head <- no_node(); signature <- no_node(); body <- no_node() };
+    ref header = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    if (scoped) {
+        if (!inspect_scoped_procedure(nodes, state.syntax_revision, state.syntax_used, definition, handler) ||
+            inspect_signature(nodes, state.syntax_revision, state.syntax_used, handler.head, header) != ScopedProcedureHead) {
+            reject_name(state, definition, invalid_module_tree());
+            return
+        };
+        resolve_value(source, nodes, bindings, work, state, header.name, true);
+        if (state.diagnostic != 0u8) return;
+        if (bindings[header.name].kind != procedure_symbol_binding()) {
+            reject_name(state, header.name, unsupported_scoped_procedure());
+            return
+        };
+    } else {
+        declare_name(source, nodes, bindings, work, state,
+            definition_name(nodes, state.syntax_revision, state.syntax_used, definition),
+            definition, callable_binding(), duplicate_binding());
+        if (state.diagnostic != 0u8) return;
+        remember(bindings, definition, definition, callable_binding());
+    };
 
     # The active declarations stay visible. Control destinations and new
     # declarations belong to the nested activation and never enter its caller.
@@ -3647,7 +3680,16 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         receiving_arm <- no_node(); diagnostic <- 0u8;
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
-    resolve_callable_body(source, nodes, bindings, work, body, definition);
+    if (scoped) {
+        register_constraints(source, nodes, bindings, work, body, handler.head);
+        if (body.diagnostic == 0u8) { resolve_header_types(source, nodes, bindings, work, body, handler.head) };
+        if (body.diagnostic == 0u8) {
+            resolve_formals(source, nodes, bindings, work, body, header.parameter_tail, OrdinaryParameters:FormalNameRole);
+        };
+        if (body.diagnostic == 0u8) { resolve_expression(source, nodes, bindings, work, body, handler.body) };
+    } else {
+        resolve_callable_body(source, nodes, bindings, work, body, definition);
+    };
     state.has_closed_application <- state.has_closed_application || body.has_closed_application;
     if (body.diagnostic != 0u8) {
         reject_name(state, body.failed_node, body.diagnostic);
