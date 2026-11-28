@@ -12,7 +12,7 @@ using "./ParserStorage.cod" ExprPayload {
     RangeHeader, RangeLoop, AnnotatedBinding, Call, EmptyCall, NamedConstruction, BracedInitializer, InitializerTransfer,
     ProtectedBlock, CatchClause, CatchHandler, CatchBinding,
     CaseExpression, CaseArm, ConstructorCasePattern, ReferenceCasePattern, CaseValueReceiver, CheckedTypeAssertion,
-    HereInvocation, HereSupply, HereReceiver, ContinueValue, Formal
+    HereInvocation, HereSupply, HereReceiver, ContinueValue, BreakVoid, Formal
 };
 using "./DeclarationDemand.cod" DeclarationDemands;
 using "./ModuleExports.cod" { index_out_of_bounds_identity, out_of_memory_identity };
@@ -346,10 +346,19 @@ func lexical_array_allocation(names:const NameBindings in B, facts:const Operand
     }
 }
 
+func completed_local_case_break(names:const NameBindings in B, sites:const CompletionSites in X, at:UInt64) -> bool
+    where {const owner B, const owner X} {
+    val target <- names[at].declaration;
+    return target < intrinsic (len)(sites) && names[at].scope == names[target].scope &&
+        names[at].finalizer == names[target].finalizer &&
+        !can_continue(sites, at) && sites[target].case_break != 0u8
+}
+
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
-    facts:const OperandFacts in F, views:const SuppliedViews in V, cases:const ConstructorCaseFacts in C,
+    facts:const OperandFacts in F, views:const SuppliedViews in V, sites:const CompletionSites in X,
+    cases:const ConstructorCaseFacts in C,
     at:UInt64, callee:UInt64, stops_before_entry:bool, checked_call:bool) -> bool
-    where {const owner N, const owner B, const owner F, const owner V, const owner C} {
+    where {const owner N, const owner B, const owner F, const owner V, const owner X, const owner C} {
     if (at < intrinsic (len)(cases) &&
         (case cases[at] of {
             LexicalProductReference -> true;
@@ -412,6 +421,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             Formal -> true;
             HereReceiver -> true;
             ContinueValue -> true;
+            BreakVoid -> completed_local_case_break(names, sites, at);
             Call -> callee != no_node() || stops_before_entry || checked_call ||
                 checked_literal_call(views, at) || prepared_array_length_call(views, at);
             EmptyCall -> callee != no_node() || checked_literal_call(views, at);
@@ -477,7 +487,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                  (work[at].imported_array_read_completion != NoArrayRead ||
                   prepared_synchronous_here(views, work[at].active, at))));
             if ((callee != no_node() && (!ordinary || callee >= used || callee != demand[at].callee)) ||
-                !checked_function_operation(nodes, names, facts, views, cases, at, callee, stops_before_entry,
+                !checked_function_operation(nodes, names, facts, views, sites, cases, at, callee, stops_before_entry,
                     checked_call)) {
                 (local[definition].available <- false):void
             } else {

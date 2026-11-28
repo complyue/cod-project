@@ -457,7 +457,9 @@ Both source commands check `ModuleFrontend.bind_selected_module_recovering` and 
 
 Both source commands check `NativeDeclarations.prepare_module_calls` through the same completed workspace route. It borrows the readonly syntax, name, selection, interface and aggregate tables and writes the initialized name-work table, supplied-view table and diagnostic record. Inside it, the statement call to `check_selected_here` prepares the mixed table and report loans using their completed formal bindings while the omitted result remains unknown. Ordinary body completion establishes that result separately.
 
-In the complete `ModuleGraph.cod` source check, both commands pass the `bind_graph_names` calls through `prepare_module_calls`. They stop in `prepare_graph_source_operands` at the imported `CaseSchemas.prepare_constructor_cases` signature. Both commands accept standalone `ModuleCompiler.cod`. Completion of the actual `@followDependency` body remains open.
+The workspace contracts for `CaseSchemas.prepare_constructor_cases` and `DeclarationTypes.check_declared_expressions` also carry an initialized writable `UInt64` place for the first case site. The importer checks the scalar target and its owner alongside the table and diagnostic loans. The scalar place and diagnostic record can borrow from the same owner. The case contract uses the completed local control-transfer facts for the bare case break in `remember_case_constructor`.
+
+On unchanged `ModuleGraph.cod`, both source commands check `prepare_module_calls`, `prepare_constructor_cases` and `check_declared_expressions`. The first remaining diagnostic is at the call to `NativeDiagnostics.report_graph_rejection` in `compile_graph_unit`. Its imported signature combines a writable diagnostic handle and run table, readonly source and path tables, and a nominal `CompilerStatus` result. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 

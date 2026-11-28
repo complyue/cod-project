@@ -3569,6 +3569,7 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val access <- 0u8;
     val readonly_array <- false;
     val writable_record <- false;
+    val scalar_loan <- false;
     val report_writer <- result == builtin_void() && count > 2u64 && owners == 2u64 &&
         !contracts[header].array_slot_failures.out_of_memory;
     for (row in header + 1u64 .. past) {
@@ -3576,16 +3577,21 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
             role <- contracts[row].owner_role;
             kind <- contracts[row].value_kind;
             access <- contracts[row].target_readonly;
-            if (role >= owners || access > 1u8 || !source_aggregate_formal(contracts, row, kind, role, access))
-                return no_node();
-            if (kind == array_type()) {
-                if (!published_workspace_array(contracts, published, row)) return no_node();
-                report_writer <- report_writer && access == 1u8 && !readonly_array;
-                (readonly_array <- true):void
+            if (role >= owners || access > 1u8) return no_node();
+            if (kind == builtin_u64() && checked_inspector_scalar_place(contracts[row], role)) {
+                if (result != builtin_bool() || scalar_loan) return no_node();
+                (scalar_loan <- true):void
             } else {
-                if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
-                report_writer <- report_writer && access == 0u8 && !writable_record;
-                (writable_record <- true):void
+                if (!source_aggregate_formal(contracts, row, kind, role, access)) return no_node();
+                if (kind == array_type()) {
+                    if (!published_workspace_array(contracts, published, row)) return no_node();
+                    report_writer <- report_writer && access == 1u8 && !readonly_array;
+                    (readonly_array <- true):void
+                } else {
+                    if (kind != record_type() || !published_bits_record(contracts, published, row)) return no_node();
+                    report_writer <- report_writer && access == 0u8 && !writable_record;
+                    (writable_record <- true):void
+                }
             }
         }
     };
