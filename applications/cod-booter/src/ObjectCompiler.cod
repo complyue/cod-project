@@ -99,17 +99,30 @@ proc measure_primitives(primitives:ABIPrimitiveLayouts in L) -> UInt64 throws Pr
     return measure_provider_primitives(target, primitives);
 }
 
-proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
-                     interfaces:const ModuleInterfaces in G, visits_used:UInt64, keys_used:UInt64,
-                     spellings_used:UInt64, interfaces_used:UInt64, handle directory:Path in P,
-                     handle diagnostic:DiagnosticDestination in D)
-    -> CompilerStatus where {const owner G, const owner P, owner D} {
+proc finish_provider_pair(here publish() -> UInt64, here report(code:UInt32) -> void) -> CompilerStatus {
+    val published <- publish();
+    if (published == 0u64) return Complete;
+    report(if (published == 4u64) { 4u32 } else { 3u32 });
+    return Rejected
+}
+
+proc publish_rendered_providers(here report(code:UInt32) -> void, handle directory:Path in P,
+                                 header:const String in H, stubs:const String in S) -> CompilerStatus
+    where {const owner P, const owner H, const owner S} {
+    return finish_provider_pair(report) { continue publish_provider_pair(directory, header, stubs); };
+}
+
+proc render_providers(here report(code:UInt32) -> void,
+                      visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
+                      interfaces:const ModuleInterfaces in G, visits_used:UInt64, keys_used:UInt64,
+                      spellings_used:UInt64, interfaces_used:UInt64, handle directory:Path in P)
+    -> CompilerStatus where {const owner G, const owner P} {
     try {
         ref prefix = make ProviderPrefixes {
             modules <- visits_used; keys <- keys_used; spellings <- spellings_used; interfaces <- interfaces_used;
         };
         val malformed <- provider_boundary_error(interfaces, spellings, prefix);
-        if (malformed != 0u32) { report_provider_error(diagnostic, malformed); return Rejected; };
+        if (malformed != 0u32) { report(malformed); return Rejected; };
         ref primitives = make ABIPrimitiveLayouts(5u64, make ABIPrimitiveLayout { size <- 0u64; alignment <- 0u64; });
         val alignment <- if (provider_record_layout_needed(interfaces, interfaces_used)) {
             measure_primitives(primitives)
@@ -117,20 +130,26 @@ proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spel
         ref header = make StringBuilder();
         ref stubs = make StringBuilder();
         if (!render_provider_pair(header, stubs, primitives, alignment, visits, keys, spellings, interfaces, prefix)) {
-            report_provider_error(diagnostic, 2u32);
+            report(2u32);
             return Rejected;
         };
-        val published <- publish_provider_pair(directory, make String(header), make String(stubs));
-        if (published == 0u64) return Complete;
-        report_provider_error(diagnostic, if (published == 4u64) { 4u32 } else { 3u32 });
-        return Rejected;
+        return publish_rendered_providers(report, directory, make String(header), make String(stubs));
     } catch (error:const ProviderLayoutException) {
-        report_provider_error(diagnostic, if (error.status == 4u8) { 4u32 } else { 2u32 });
+        report(if (error.status == 4u8) { 4u32 } else { 2u32 });
         return Rejected;
     } catch (error:const OutOfMemoryError) {
-        report_provider_error(diagnostic, 4u32);
+        report(4u32);
         return Rejected;
     }
+}
+
+proc write_providers(visits:const Visits in G, keys:const SourceBytes in G, spellings:const SourceBytes in G,
+                     interfaces:const ModuleInterfaces in G, visits_used:UInt64, keys_used:UInt64,
+                     spellings_used:UInt64, interfaces_used:UInt64, handle directory:Path in P,
+                     handle diagnostic:DiagnosticDestination in D)
+    -> CompilerStatus where {const owner G, const owner P, owner D} {
+    return render_providers(visits, keys, spellings, interfaces, visits_used, keys_used, spellings_used,
+        interfaces_used, directory) (code) => { report_provider_error(diagnostic, code); continue; };
 }
 
 func fresh_graph() -> own region :GraphRoot {
