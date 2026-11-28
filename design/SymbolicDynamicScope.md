@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 280 · Recorded: 2026-11-27 · Phase: language/application co-design.
+Design revision: 281 · Recorded: 2026-11-27 · Phase: language/application co-design.
 
 ## Design authority
+
+At r281 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to labeled here protocols and receiving headers. D-10-SEMICOLON-UX/P-570–P-572 continues to govern expression and statement boundaries.
 
 At r280 [D-10-ARGUMENTS](DesignAuthorityRegistry.md#d-10-arguments) incorporates the [confirmed ordering for untyped numeric arguments](NumericLiterals.md#dispatch-before-literal-typing) in public signature selection. The r279 rules for argument binding, omitted parameters and prepared-value dispatch continue.
 
@@ -281,7 +283,7 @@ The unqualified symbol accepts a **function value**. The owner-qualified symbol 
 | Builtin `u64` | `val symbol @level:u64;` | `symbol @level:u64;` |
 | `Approval`, a local name for the bits enum `Verdict` | `val symbol @verdict:Approval;` | `symbol @verdict:Approval;` |
 
-For the second row, `PublishedBits.cod` declares `export enum Verdict:u8 { Pending = 0u8; Approved = 1u8; }`. The type name/identity alias `Approval` retains that enum’s defining identity and bits classification. With either declaration the following consumer prints 0, 1, then 0.
+For the second row, `PublishedBits.cod` declares `export enum Verdict:u8 { Pending = 0u8, Approved = 1u8 }`. The type name/identity alias `Approval` retains that enum’s defining identity and bits classification. With either declaration the following consumer prints 0, 1, then 0.
 
 ```cod
 using "./PublishedBits.cod" { Verdict as Approval {..} }
@@ -308,7 +310,7 @@ Run the following program twice, changing only the first declaration to the othe
 ```cod
 val symbol @level:u64;
 using "std:exceptions" Exception;
-data ProbeExit <: Exception { code:u64; }
+data ProbeExit <: Exception { code:u64 }
 symbol @read:proc() -> u64;
 proc @read() -> u64 { return @level }
 
@@ -685,7 +687,7 @@ Here a `Refrigerated` shipment carries a `cold_fee:u64` field. The public argume
 `item` applies to every call. The name `cold` is local to the method that introduces it.
 
 ```cod
-enum Service:u8 { Standard; Express; }
+enum Service:u8 { Standard, Express }
 
 func surcharge(item:const Shipment in S, service:Service) -> u64 where {const owner S} of {
     (cold:const Refrigerated in S, Express) => cold.cold_fee + 10u64;
@@ -1100,7 +1102,7 @@ H-534 defines the exemption narrowly: an inheritance relation already establishe
 type Exception;
 type Error <: Exception;
 type disjoint Error, Exception;   # Existing Error → Exception remains admitted.
-data MyError <: Error { code:u64; }  # Also an Exception through that ancestry.
+data MyError <: Error { code:u64 }  # Also an Exception through that ancestry.
 ```
 
 The retained frozen type graph already represents the admitted endpoint ancestry. There is no requirement to copy every path, snapshot each whole module graph, grandfather arbitrary old common conformers or keep a separate per-constraint exemption-path catalogue. Constraint origin and ordinary declaration/relationship evidence are still needed for authoring, publication and diagnostics; that is distinct from duplicating ancestor paths. A candidate new relation must not be installed and then used as the proof of its own exemption. During module composition, retain the selected source-world meaning rather than treating every relation in a newly combined graph as previously admitted.
@@ -1113,10 +1115,10 @@ H-535 confirms the general rule: a subtype cannot independently declare two type
 type A;
 type B <: A;
 type disjoint A, B;
-data X <: A { code:u64; }
+data X <: A { code:u64 }
 data X <: B;                  # Reject: a second independent listed parent.
 
-data Y <: B { code:u64; }     # Accept: A is inherited through existing B → A.
+data Y <: B { code:u64 }     # Accept: A is inherited through existing B → A.
 data Y <: A;                  # Accept with warning: Y → B → A already exists.
 ```
 
@@ -1132,7 +1134,7 @@ H-530 refines H-529's treatment of redundant paths: when the source and target a
 type Resource;
 type Reader <: Resource;
 type disjoint Reader, Resource;
-data File <: Reader { id:u64; }
+data File <: Reader { id:u64 }
 data File <: Resource;           # Accept with warning: File → Reader → Resource.
 ```
 
@@ -1451,8 +1453,8 @@ In this design example, both concrete types conform to Entity, and the source fo
 
 ```cod
 type Entity;
-data Node <: Entity { count:u64; }
-data Edge <: Entity { weight:u64; }
+data Node <: Entity { count:u64 }
+data Edge <: Entity { weight:u64 }
 
 proc node_count(x:Entity in O) -> u64 where {owner O} {
     ref n = x : Node in O;
@@ -1566,7 +1568,7 @@ func increment(n:u64) -> u64 {
 }
 ```
 
-**Design the grammar to minimize mandatory semicolons.** Prefer existing delimiters or a deterministic expression boundary when they distinguish the intended forms. When reviewing a proposed mandatory separator, identify the two readings it separates and whether the surrounding syntax already decides between them. Particular productions, including receiving lists and bodyless declarations, keep their specified grammar until their omission cases are settled. A semicolon delimits an expression. Result consumption and explicit discard follow the ordinary typing rules. [Callable results](CallableResultInference.md#results-of-proc-func-and-here-bodies)
+**Design the grammar to minimize mandatory semicolons.** Prefer existing delimiters or a deterministic expression boundary when they distinguish the intended forms. When reviewing a proposed mandatory separator, identify the two readings it separates and whether the surrounding syntax already decides between them. Field, enum member and receiving lists use the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers). Bodyless declarations follow their own terminator rules. A semicolon delimits an expression. Result consumption and explicit discard follow the ordinary typing rules. [Callable results](CallableResultInference.md#results-of-proc-func-and-here-bodies)
 
 The parser uses one interpretation independent of overload resolution or runtime results. A valid but misleading spelling can warrant a warning that explains the chosen parse and suggests a clearer spelling. Routine omission needs no warning. Detailed warning analysis follows the [compiler-stage policy](../applications/cod-booter/README.md#diagnostics-by-compiler-stage).
 
@@ -2456,7 +2458,7 @@ A container can model a choice among zero or more answers by offering each candi
 For example, a container of two station IDs can offer both through its call operator. The two definitions below are alternative spellings of one traversal. They use the [functor receiver head](DomainLanguageDesign.md#functor-receivers-and-callback-arguments).
 
 ```cod
-data Stops { first:u64; second:u64; }
+data Stops { first:u64, second:u64 }
 
 func (const Stops in O).(())() yields u64 where {const owner O} {
     yield(self.first);

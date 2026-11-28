@@ -159,8 +159,8 @@ H-524 provides the semantic root relation; H-525 requires source acceptance to h
 # Illustrative standard abstract roots and user data headers.
 type Exception;
 type Error <: Exception;
-data CacheUnavailable <: Error { code:u64; }       # Unchecked.
-data RecordRejected <: Exception { code:u64; }     # Checked.
+data CacheUnavailable <: Error { code:u64 }       # Unchecked.
+data RecordRejected <: Exception { code:u64 }     # Checked.
 ```
 
 These headers use existing nominal abstraction and explicit data conformance; they do not add concrete-layout inheritance or establish the construction/owner protocol for arbitrary user exception payloads. User-defined Error types are the intended supported extension point. Source implementation, payload/trace/cause ownership and abstract-root constructibility remain within their separate contracts. Error-derived exceptions remain exceptions: root catches accept them, while Error catches accept only the unchecked branch. Both follow source-order matching and the standard-wrapper transparency rule. RethrownError and UnhandledDeferError belong to the Error branch; RethrownException belongs to the checked branch. Existing concrete built-in classifications do not change.
@@ -229,8 +229,8 @@ Here SomeEx must resolve to an admitted constructible exception type; spelling a
 **Field initialization at a throw site.** The braced form is a statement. The named type must be a constructible exception type. An explicit `from cause` goes immediately before the field block. Evaluate the cause once, apply catch-local tip selection, and reserve the target in that same region. With no cause, acquire a fresh region. Then evaluate the fields once in written order using ordinary data initialization. The braces introduce no callable or catch binding. An empty block still requires a complete object. Use `<-` for bits and `=` for reference binding. A nested ordinary `make` may use the proved destination owner of a reference field. A reference to a different, shorter-lived owner cannot serve as a graph transfer. To import such state, use an explicit graph transfer with a valid destination. The owner of the exception itself cannot be specified by the caller.
 
 ```cod
-data RetryState { upload_id:u64; part:u64; }
-data PartWriteFailed <: Exception { ref retry:RetryState; }
+data RetryState { upload_id:u64, part:u64 }
+data PartWriteFailed <: Exception { ref retry:RetryState }
 
 proc fail_part(id:u64, part_no:u64) throws PartWriteFailed {
     throw PartWriteFailed {
@@ -264,7 +264,7 @@ placement ::= in region (bytes -> capacity) | from cause
 Brackets in the grammar mark optional syntax. Choose an ordinary constructor argument list or a complete field initializer. `()` selects an admitted niladic constructor. `{}` uses ordinary field initialization and must produce a complete object. A bare `make exception T` supplies neither. Resolve T using ordinary type lookup and specialization. It must denote a constructible exception subtype. The allocator's `capacity` label is distinct from a constructor parameter or a field with that name.
 
 ```cod
-data SaveException <: Exception { job_id:u64; }
+data SaveException <: Exception { job_id:u64 }
 
 func diagnostic(id:u64, budget:u64) -> exception :SaveException {
     return make exception SaveException in region (budget -> capacity) {
@@ -286,8 +286,8 @@ Omitting `from` leaves the cause null, including inside a catch. Existing-owner 
 Use one optional placement clause. With neither clause, acquire a fresh region using the image default. `in region (...)` acquires a fresh region with the given budget. The `from cause` clause constructs the new exception in the selected cause's existing region, retains that cause through the readonly link and returns the owning holder normally. Both clauses together reject in either order. Cause selection uses the usual catch-local tip rule.
 
 ```cod
-data WriteException <: Exception { job_id:u64; }
-data SaveException <: Exception { job_id:u64; }
+data WriteException <: Exception { job_id:u64 }
+data SaveException <: Exception { job_id:u64 }
 
 func translate(exception original:WriteException) -> exception :SaveException {
     return make exception SaveException from original {
@@ -379,10 +379,10 @@ The named constructor's semantic type determines matching and checkedness. A che
 
 The exception holder uses ordinary region ownership for the complete lifetime. Write `exception e:T` in a declaration or parameter, `-> exception :T` for an owning result, and `catch (e:T)` to receive the same kind of holder. The explicit spelling `own exception e:T` denotes the same holder. A catch also has its existing incoming-tip context. A nonconsuming helper declares `ref x:const T in O` or its writable counterpart. A fresh, cause-less construction establishes a distinct logical region on each execution. Its backing and layout can be optimized subject to ordinary owner identity, observable failure and lifetime rules.
 
-**What the holder contains.** The semantic pair is an owned region `er` and a non-null locator for the selected `T` in that region. `in e` identifies `er`. The concrete exception and its regional business payload live in er. Creation-site trace retention follows the separate OOM diagnostic contract. For a structural root sketch use `region ExceptionStorage { ref root:Exception; }`. `Exception` is an abstract, non-bits type. An inline `val root:Exception` cannot hold every concrete exception's fields under the [ordinary root rules](ConstructionAndAcquisition.md#region-construction-and-named-root-initializers). The implementation allocates the concrete subtype and binds a root reference to it. These are internal operations. Application code does not receive a rebindable root, an independently consumable region handle or general permission to construct an exception with `make T in er`. A holder transfer keeps the selected locator and its actual owner together.
+**What the holder contains.** The semantic pair is an owned region `er` and a non-null locator for the selected `T` in that region. `in e` identifies `er`. The concrete exception and its regional business payload live in er. Creation-site trace retention follows the separate OOM diagnostic contract. For a structural root sketch use `region ExceptionStorage { ref root:Exception }`. `Exception` is an abstract, non-bits type. An inline `val root:Exception` cannot hold every concrete exception's fields under the [ordinary root rules](ConstructionAndAcquisition.md#region-construction-and-named-root-initializers). The implementation allocates the concrete subtype and binds a root reference to it. These are internal operations. Application code does not receive a rebindable root, an independently consumable region handle or general permission to construct an exception with `make T in er`. A holder transfer keeps the selected locator and its actual owner together.
 
 ```cod
-data SaveError <: Error { job_id:u64; }
+data SaveError <: Error { job_id:u64 }
 
 func diagnostic(id:u64) -> exception :SaveError {
     return make exception SaveError { job_id <- id; };
@@ -488,7 +488,7 @@ The placement clause is `in region (bytes -> capacity)`. It requests a fresh exc
 # QuotaError's constructor itself has a parameter named capacity.
 throw QuotaError(requested -> capacity) in region (50000000u64 -> capacity);
 
-data SaveError <: Error { job_id:u64; }
+data SaveError <: Error { job_id:u64 }
 proc fail_job(id:u64, diagnostic_bytes:u64) {
     throw SaveError in region (diagnostic_bytes -> capacity) { job_id <- id; };
 }
@@ -588,9 +588,9 @@ The H-EXCEPTION-FACTORY-20261118 factory illustrates the normal result handoff. 
 
 ```cod
 data UploadInterrupted <: Exception {
-    upload_id:u64;
-    ref receipts:ReceiptSet;
-    ptr plan:RetryPlan;
+    upload_id:u64,
+    ref receipts:ReceiptSet,
+    ptr plan:RetryPlan,
 }
 
 proc send_job(id:u64) throws UploadInterrupted {

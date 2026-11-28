@@ -211,7 +211,7 @@ Exporting a nominal data type also publishes the `(())` family visible on that t
 
 ```cod
 # model.cod
-data Threshold { minimum:u64; }
+data Threshold { minimum:u64 }
 export Threshold;
 
 # checks.cod
@@ -248,7 +248,7 @@ Selecting a symbol with `symbol from` retains its declared type information and 
 # vocabulary.cod exports ticket, its declared type Ticket and Ticket's id method.
 symbol from "./vocabulary.cod" @ticket;
 # Ticket and id are implicitly available; no TLS value was installed.
-data Ticket { code:u64; };
+data Ticket { code:u64 };
 # This local Ticket shadows the implicit type name.
 # The declared type of @ticket is still vocabulary.cod's original type identity.
 ```
@@ -486,8 +486,8 @@ Write `export` immediately before a named, publishable module-local definition. 
 export array SourceBytes[u64]:u8;
 
 export data SourcePosition {
-    line:u64;
-    column:u64;
+    line:u64,
+    column:u64,
 }
 
 using "./SourceStorage.cod" { SourceBytes, SourceLines, SourcePosition }

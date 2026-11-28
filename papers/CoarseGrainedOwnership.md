@@ -79,7 +79,7 @@ Releasing an owner also has a backing-policy dimension. An allocator may cache a
 Multi-owner tracking also protects the deliberate choice to retire a revision. In the following small instance the editor copies the old revision number and selects a fresh view after replacement. The existing revision remains readable while the next one is being constructed. [Occupied-owner replacement](../design/RegionalOwnership.md#replacing-an-occupied-region-owner)
 
 ```cod
-region Revision { number:u64; }
+region Revision { number:u64 }
 
 proc advance() -> u64 {
     own region r:Revision <- make region Revision(4096u64 -> capacity) {

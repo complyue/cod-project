@@ -122,7 +122,7 @@ Target constness is decisive. `ref x:const T in O` is readonly; `const ref x:T i
 For example, this constructor helper has the required owner access; lexical Node placement still depends on the separately reviewed ADT layout contract:
 
 ```text
-data Node { value:u64; ptr next:Node; }
+data Node { value:u64, ptr next:Node }
 proc prepend(ptr head:Node in O, n:u64)
     -> ref Node in O where {owner O} {
     return make Node in O { value <- n; next = head; };
@@ -201,7 +201,7 @@ Acceptance covers aliases versus equal payloads, named val storage versus indepe
 Illustrative CoD, with root already referring to a live object in r:
 
 ```text
-data Node { ptr next:Node; }
+data Node { ptr next:Node }
 
 ptr cursor:Node in r = root.next;
 # root.next is a relative edge in r.
@@ -396,7 +396,7 @@ H-478 selects **one nominal ADT** across its eligible regional and lexical place
 The seed can return the selected whole view in this example from an admitted lexical allocation.
 
 ```text
-data Node { value:u64; ptr next:Node; }
+data Node { value:u64, ptr next:Node }
 proc next_of(n:Node in O) -> ptr Node in O where {owner O} {
     return n.next;
 }
@@ -442,7 +442,7 @@ H-478 changes placement eligibility, not the bits predicate. Adding ptr/ref fiel
 ### Construction, growth and field provenance
 
 ```cod
-data Node { value:u64; ptr next:Node; }
+data Node { value:u64, ptr next:Node }
 ref local = make Node in here { value <- 1u64; next = null; };
 ref regional = make Node in r { value <- 2u64; next = null; };
 # null receives its owner from the containing field's declared contract.
@@ -458,7 +458,7 @@ Lexical backing growth preserves all existing object/field locators and logical 
 Under the current regional encoding, assigning an object's address to its first pointer field stores zero displacement, which reads as null (H-146/H-479). H-480 leaves this quirk to users: place a nonzero-sized unused field before that pointer when a self-link is needed, for example:
 
 ```cod
-data Link { padding:u8; ptr next:Link; }
+data Link { padding:u8, ptr next:Link }
 ```
 
 Keep this note and workaround; do not add special compiler analysis, a dedicated acceptance program or encoding-repair work for it. Existing implementation checks are unchanged. Other design and implementation proceed normally.
@@ -568,7 +568,7 @@ Nullable cycles can be assembled without exposing an incomplete non-null referen
 
 ```text
 # r is an existing live non-const owner; these are design examples.
-data Link { ptr next:Link; }
+data Link { ptr next:Link }
 ref a = make Link in r { next = null; };
 ref b = make Link in r { next = a; };
 a.next = b;
@@ -577,7 +577,7 @@ a.next = b;
 A separate source requirement arises if the graph type promises non-null edges:
 
 ```text
-data RingNode { ref next:RingNode; }
+data RingNode { ref next:RingNode }
 # Desired completed graph: a.next is b && b.next is a.
 # With no pre-existing RingNode, serial construction has no valid first target.
 ```

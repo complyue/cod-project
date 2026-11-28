@@ -1,12 +1,14 @@
 # Domain language design: discussion and decision tracker
 
-Discussion revision: 238
+Discussion revision: 239
 
 Recorded: 2026-11-27
 
 Phase: coordinated language/SNN design, implementation planning and validation.
 
 ## Design authority
+
+At r239 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) qualifies [field and receiver lists](#comma-separated-fields-and-receivers) under D-07/D-10/D-22, P-515–P-517 and P-570–P-572. The r238 type identities and prior constructor, label, transfer, scope and layout rules continue.
 
 At r238 the [type family decision](../CHANGELOG.md#h-type-families-and-static-mixin-params-20261127) names the identity introduced by a generic ADT declaration. The r237 member identity, canonical argument order, module selection and construction rules continue under D-07/D-15, P-18/P-208/P-229. [Static module parameters for mixin](ModuleWorlds.md#static-module-parameters-for-mixin) are the preferred future direction for type-level programming.
 
@@ -210,6 +212,25 @@ The sixteen topics contain confirmed local propositions and open implementation/
 
 **Decision evidence:** one domain definition, one business program with a result-dependent branch, an invalid construction that is rejected, and the exact boundary between value, type and kind representations.
 
+#### Comma-separated fields and receivers
+
+A comma separates adjacent entries in the following lists. A nonempty list permits one final comma before its closing delimiter. The last entry also completes at the delimiter itself. A leading comma, an empty interior entry, a doubled trailing comma, or a missing comma between entries is a syntax error. A semicolon is invalid both between entries and immediately before the closing delimiter. A newline has the same effect as a space. Each construct retains its existing minimum number of entries. For example, an empty receiving spec is valid and an empty enum is invalid.
+
+| List | Example |
+| --- | --- |
+| Product fields, including generic products and CoD `data "C"` records | `data SourceSpan { first:UInt64, past:UInt64 }` |
+| Positional or labeled sum payload fields | `data Limits = Both { Int64, Int64 } \| Bounds { low:Int64, high:Int64 }` |
+| Intrinsic structural region roots | `region State { count:UInt64, ptr next:Node }` |
+| Enum members | `enum Mode:UInt8 { Read = 1, Write = 2, }` |
+| Structural result fields and labeled protocol offers or feedback | `{ count:UInt64, ready:bool }` |
+| Positional or labeled reception, including case, standalone, here and generator headers | `Both { val lo, _ }` or `Bounds { val lo <- low, val hi <- high }` |
+
+The same entry and trailing-comma rule applies to positional make by init and named return lists. A named return already uses commas, as in `return { n -> count, ok -> ready }`. An omitted source label in a labeled receiving item ends at the comma or the closing delimiter. In `{ val count <-, val ready <- } := inspect()`, each receiver selects its same-named field. The comma introduces no evaluation, new scope or sequencing guarantee. Each production preserves its field order, access and evaluation rules. [Receiving specifications](ConstructionAndAcquisition.md#receiving-specifications)
+
+Executable blocks keep ordinary statement boundaries. For example, `make Bounds in r { high <- 9; low <- 3 }` runs two field writes. The same distinction applies to ctor bodies, exception initialization and case arm bodies. The vertical bar still separates sum alternatives. A semicolon after a closing delimiter belongs to the enclosing production. [Statement boundaries](SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux)
+
+Both bootstrap readers and their internal CoD inputs switch together. Migrate bundled modules, booter declarations and patterns, active inputs and source generators by grammatical role in one cutover. Both readers reject the retired separator in these lists. Verify the real seed-to-booter build with the converted sources, valid and malformed lists through each supported reader, later independent diagnostics and preservation of prior outputs on rejection.
+
 #### Abstract types and data declarations
 
 H-209 separates declarations by purpose: `type` declares an abstract type; `data` declares a concrete product/sum representation. H-210 uses `<:` to declare subtype relationships. Both are type definitions with nominal module-defined identities; data is not a value declaration, and an abstract type is not a symbolic dynamic variable.
@@ -220,8 +241,8 @@ Illustrative product and abstract declaration headers follow. Abstract declarati
 type RegionStore;
 type NodeStore <: RegionStore;
 
-data ArenaRoot <: NodeStore { used:u64; limit:u64; }
-data PoolRoot  <: NodeStore { head:u32; count:u32; }
+data ArenaRoot <: NodeStore { used:u64, limit:u64 }
+data PoolRoot  <: NodeStore { head:u32, count:u32 }
 ```
 
 The abstract NodeStore <: RegionStore edge is nominal and inherits methods. Data-to-abstract <: explicitly declares interface conformance under H-218; it is required rather than informational. Neither relationship implies shared fields or offsets. The illustrative names/headers specify no allocator behavior and are not executable fixtures. Type aliases preserve the original nominal identity, independently of whether a conformance declaration is visible in the receiving module.
@@ -402,8 +423,8 @@ For a sum, `Maybe[UInt64]` is a member type of `Maybe`. `Just` and `Nothing` are
 A generic product declares its type parameters in square brackets after its name. In a declared type, brackets after a nominal type name supply its ordered type arguments. This applies to fields, lexical bindings, parameters and results, including nested applications. A construction head can supply those arguments before its ordinary initializer and optional placement.
 
 ```cod
-data Link[T] { item:T; ptr next:Link[T] }
-data Pair[A, B] { first:A; second:B }
+data Link[T] { item:T, ptr next:Link[T] }
+data Pair[A, B] { first:A, second:B }
 
 # r is a live writable owner.
 ref link:Link[UInt64] in r = make Link[UInt64] in r { item <- 7; next = null }
@@ -423,7 +444,7 @@ Each alternative of a nominal sum has a directly visible data constructor name. 
 
 ```cod
 data Receipt =
-    Accepted { id:u64; ptr prior:Receipt; }
+    Accepted { id:u64, ptr prior:Receipt }
   | Skipped  {};
 
 func Accepted(raw:u64) -> ref Receipt in O where {owner O} {
@@ -451,7 +472,7 @@ Each sum alternative declares its own payload form. Types listed in braces decla
 
 ```cod
 data Maybe[T] = Nothing {} | Just { T }
-data Limits = Both { Int64, Int64 } | Bounds { low:Int64; high:Int64 }
+data Limits = Both { Int64, Int64 } | Bounds { low:Int64, high:Int64 }
 
 ref n:Maybe[Int64] in r = make Nothing in r
 ref j:Maybe[Int64] in r = make Just in r { 7 }
@@ -478,10 +499,10 @@ For a fieldless alternative with no ctor overload in the selected family, `make 
 
 #### Sum object construction and reference storage
 
-For a nominal sum, the operand naming the object in `make` must select a data constructor. With the declaration below, `Node` is the type accepted by variables, parameters and reference fields. `Link` and `End` select layouts for construction. Reject `make Node in graph`, `make Node() in graph` and `make Node in graph { ... }` even when the receiving type or some field names are known. A product such as `data Pair { left:u64; right:u64; }` retains its existing `make Pair` spelling: the product name also identifies its sole constructor. Scalar allocation and intrinsic resource construction retain their own forms.
+For a nominal sum, the operand naming the object in `make` must select a data constructor. With the declaration below, `Node` is the type accepted by variables, parameters and reference fields. `Link` and `End` select layouts for construction. Reject `make Node in graph`, `make Node() in graph` and `make Node in graph { ... }` even when the receiving type or some field names are known. A product such as `data Pair { left:u64, right:u64 }` retains its existing `make Pair` spelling: the product name also identifies its sole constructor. Scalar allocation and intrinsic resource construction retain their own forms.
 
 ```cod
-data Node = Link { key:u64; ref next:Node; } | End {};
+data Node = Link { key:u64, ref next:Node } | End {};
 
 # No Link initializer overloads in this world. graph is a writable region.
 ptr a:Node in graph = make Link in graph;
@@ -585,7 +606,7 @@ Using the Receipt declaration above, suppose `latest` is writable storage indepe
 proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
     return case r of {
         (null) -> { 0u64 };
-        Accepted { val n <- id; latest <- id; } | audit(n) -> n;
+        Accepted { val n <- id, latest <- id } | audit(n) -> n;
         Accepted -> latest;
         _ -> 0u64
     };
@@ -598,7 +619,7 @@ proc classify(ptr r:Receipt in O, latest:u64 in O) -> u64 where {owner O} {
 
 A constructor mismatch in the example skips both reception and `audit`. If Accepted carries id 7 and `audit(7u64)` logs a rejection and returns false, reception has already written 7 to `latest`. The log and the write persist. The next Accepted arm can read the current outer slot. A guard or receiving operation that raises propagates the failure with its ordinary checked obligations. The compiler must preserve the observable order and frequency of attempted operations. A programmer who wants a write conditional on the guard puts the write in the body.
 
-**Fields and live references.** `(Accepted)` tests only the tag. `(Accepted { val n <- id; ptr previous = prior; })` also fetches the id bits and binds the independent nullable reference slot to the selected prior target in its actual owner. A null prior is a valid received value. Omitted fields need no payload read. A readiness proof for the tag alone cannot authorize reading unfinished fields. A branch-local ref to an inline field needs the containing target and the field’s active alternative to remain valid at each use. A saved independent reference to another object retains that object’s own lifetime requirements. A guard may rebind an outer slot or call a procedure; use normal flow invalidation if it changes a necessary fact. The match supplies no snapshot of a graph. Further discrimination of a field can already be written as a nested case. The baseline uses an inner case for nested matching. It specifies no recursively nested field-pattern shorthand.
+**Fields and live references.** `(Accepted)` tests only the tag. `(Accepted { val n <- id, ptr previous = prior })` also fetches the id bits and binds the independent nullable reference slot to the selected prior target in its actual owner. A null prior is a valid received value. Omitted fields need no payload read. A readiness proof for the tag alone cannot authorize reading unfinished fields. A branch-local ref to an inline field needs the containing target and the field’s active alternative to remain valid at each use. A saved independent reference to another object retains that object’s own lifetime requirements. A guard may rebind an outer slot or call a procedure; use normal flow invalidation if it changes a necessary fact. The match supplies no snapshot of a graph. Further discrimination of a field can already be written as a nested case. The baseline uses an inner case for nested matching. It specifies no recursively nested field-pattern shorthand.
 
 **Types, assertions and coverage.** Typed heads such as `(ref n:Node in O)` test a present target’s membership under the existing nominal/conformance rules, then bind it with the proven owner and access. A null or nonmember can proceed to the next arm. A receiver annotation inside a constructor’s field spec has its ordinary declaration/receiving meaning. Readiness, owner, readonly or lifetime violations are static errors. For a value subject, `(val n:u8)` can match an actual u8. It performs no narrowing conversion on a u64. For scalar alternatives, built-in Boolean and fixed-width integer literals use typed value matching. Numeric pattern extensions preserve unit and fraction type identity and the independent D-16 conversion rules.
 
@@ -620,7 +641,7 @@ func fee(expedited:bool) -> u64 {
 
 func receipt_id(r:const Receipt in O) -> u64 where {const owner O} {
     return case r of {
-        (Accepted { val n <- id; }) -> { n };
+        (Accepted { val n <- id }) -> { n };
         (Skipped) -> { 0u64 };
     };
 }
@@ -635,7 +656,7 @@ Where completion cannot be proved, require a final unguarded wildcard arm. Its h
 ```cod
 func checked_id(ptr r:const Receipt in O) -> u64 where {const owner O} {
     return case r of {
-        (Accepted { val n <- id; }) -> { n };
+        (Accepted { val n <- id }) -> { n };
         (Skipped) -> { 0u64 };
         () -> throw;
     };
@@ -651,7 +672,7 @@ Here the explicit fallback handles null. It has the same meaning inside a lexica
 case receipt of {
     (null) -> { note_missing(); fallthrough; };
     count_attempt();
-    (Accepted { val n <- id; }) | can_ship(n) -> { ship(n); };
+    (Accepted { val n <- id }) | can_ship(n) -> { ship(n); };
     log_fallback();
     () -> { manual_review(); };
 };
@@ -1194,7 +1215,7 @@ The native source prototype reports selected implementation contexts alongside a
 
 #### Definition doclets
 
-A triple-quoted token in leading documentation position attaches to the next named definition in the same declaration list. Put it directly before the definition, including its `export` or other declaration prefixes. Comments and whitespace, including blank lines, may intervene. A semicolon or an unrelated item ends this association. Line placement alone cannot turn a return operand into documentation. Use grammar position to decide attachment for a declaration, method overload, data constructor or named field. A closing delimiter ends the current list. A doclet cannot drift across that boundary or past a malformed declaration onto its next valid sibling. A triple-quoted operand, initializer or callable result remains a [runtime text literal](Utf8Strings.md#multiline-string-literals).
+A triple-quoted token in leading documentation position attaches to the next named definition in the same declaration list. Put it directly before the definition, including its `export` or other declaration prefixes. Comments and whitespace, including blank lines, may intervene. An intervening statement separator or unrelated item ends this association. In a field or enum list, put the next member’s doclet after the separating comma and immediately before that member. Line placement alone cannot turn a return operand into documentation. Use grammar position to decide attachment for a declaration, method overload, data constructor or named field. A closing delimiter ends the current list. A doclet cannot drift across that boundary or past a malformed declaration onto its next valid sibling. A triple-quoted operand, initializer or callable result remains a [runtime text literal](Utf8Strings.md#multiline-string-literals).
 
 ```cod
 """Checks whether a row contains a node. See [AstSlot](AstSlot)."""

@@ -1,8 +1,10 @@
 # Typed enums
 
-Design revision: 8 · 2026-11-25
+Design revision: 9 · 2026-11-27
 
 ## Design authority
+
+At r9 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to the nonempty enum body. P-658/P-659 continue member order, implicit codes, aliases, backing values and membership checks.
 
 At r8 the [guide’s ASCII vocabulary example](../docs/IdiomaticCoD.md#ascii-members-in-a-byte-scanner) uses the [preferred constant spelling and default selection](../CHANGELOG.md#k-ascii-vocabulary-20261125). Read a default member by name and a non-default member in an expression with its enum type. The r7 value and membership rules continue.
 
@@ -20,22 +22,22 @@ The [short case arm decision](../CHANGELOG.md#h-short-case-arms-20261123) qualif
 
 ```cod
 export enum NativeError:u8 {
-    Complete = 0;
-    Rejected = 1;
-    OldRejected = Rejected;
-    FormUnsupported;
-    OpenFailed;
-    LoweringFailed;
-    FinishFailed;
-    ScratchFailed;
-    SourceOpenFailed;
+    Complete = 0,
+    Rejected = 1,
+    OldRejected = Rejected,
+    FormUnsupported,
+    OpenFailed,
+    LoweringFailed,
+    FinishFailed,
+    ScratchFailed,
+    SourceOpenFailed,
 }
 ```
 
 This declares eight distinct values with codes 0 through 7. `OldRejected` is a **name/identity alias** for `Rejected`. Either spelling produces the same nominal value and backing code. A different enum with the same backing type and codes has a different type identity. A name ending in `Error` has no bearing on the exception hierarchy.
 
 - An enum declaration has a name, an explicit fixed-width integer backing type and at least one value. Use a supported signed or unsigned integral bits type. The first native workload requires `u8`. Recognize `enum` contextually at a declaration head, preserving ordinary identifiers in other positions.
-- A canonical member can specify an integer literal representable in the backing type, including a negative literal where admissible. With no explicit code, the first canonical member gets zero and each subsequent one gets the previous canonical member’s code plus one. Compute that successor exactly, then check the backing range and uniqueness. For example, `A = 2; B = 1; C;` rejects because C would also be 2. Explicit gaps and out-of-order explicit codes are valid. Overflow rejects at declaration time.
+- A canonical member can specify an integer literal representable in the backing type, including a negative literal where admissible. With no explicit code, the first canonical member gets zero and each subsequent one gets the previous canonical member’s code plus one. Compute that successor exactly, then check the backing range and uniqueness. For example, `A = 2, B = 1, C` rejects because C would also be 2. Explicit gaps and out-of-order explicit codes are valid. Overflow rejects at declaration time.
 - The RHS of a name/identity alias must name an earlier member of this declaration. A chain resolves to one canonical member. It consumes no code and leaves the next automatic number unchanged. Reject duplicate spellings, independently declared equal codes, self/forward/cyclic references and names from another enum. A full enum can still add another spelling for an existing value.
 - The first declaring name identifies the canonical member in declaration metadata. Runtime values do not remember which spelling supplied them. Adding a spelling preserves codes and coverage. Removing a spelling can break source imports. Adding a distinct member can invalidate an exhaustive case. Published codes that must survive reordering should be explicit. These rules supply no default textual format, serialization policy or cross-version binary guarantee.
 
@@ -94,7 +96,7 @@ In an expression `name:E`, first resolve the visible type E and use ordinary loo
 
 In either member-pattern spelling, `OldRejected -> expr` or `(OldRejected) -> { expr }`, the static enum type of the subject supplies the member table. The token names a constant pattern; it introduces no variable and reads no shadowing local. A misspelling rejects. In `OldRejected | retryable() -> retry()`, the member test precedes the guard. If the guard declines, scanning continues. Names inside the guard and body use ordinary expression lookup. A member has no variant payload to receive. `isa` remains a type test. [Case semantics](DomainLanguageDesign.md#case-expressions-and-branch-local-variables) govern subject evaluation, source-order effects, guards, fallthrough and result completion. The explicit wildcard `_ -> throw;` raises `UnexpectedCaseError` when reached.
 
-Coverage counts distinct canonical members of the complete declaration, independently of the selected names. For `enum Decision:u8 { Yes; OldYes = Yes; No; }`, unguarded completing arms for OldYes and No cover the entire domain. Arms for Yes and OldYes leave No uncovered. A guard that can decline or a matching arm that always falls through supplies no independent proof of completion. Repeated spellings may still have different guards or lead to later observable work. A void case may be partial. Value cases follow the existing static completion/fallback rule. A nullable subject also needs the usual null handling. Coverage must respect possible changes to a borrowed subject during matching.
+Coverage counts distinct canonical members of the complete declaration, independently of the selected names. For `enum Decision:u8 { Yes, OldYes = Yes, No }`, unguarded completing arms for OldYes and No cover the entire domain. Arms for Yes and OldYes leave No uncovered. A guard that can decline or a matching arm that always falls through supplies no independent proof of completion. Repeated spellings may still have different guards or lead to later observable work. A void case may be partial. Value cases follow the existing static completion/fallback rule. A nullable subject also needs the usual null handling. Coverage must respect possible changes to a borrowed subject during matching.
 
 ## Enum members in method heads
 

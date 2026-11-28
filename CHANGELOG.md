@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-27 — Separate field and receiver entries with commas
+
+<a id="h-comma-field-and-receive-lists-20261127"></a>
+**H-COMMA-FIELD-AND-RECEIVE-LISTS-20261127.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirmed the list-versus-block distinction, the affected forms, one optional trailing comma, and a single internal cutover without a compatibility period. [D-07 r238→239](design/DomainLanguageDesign.md#comma-separated-fields-and-receivers), [D-10 r280→281](design/SymbolicDynamicScope.md#semicolon-omission-and-syntax-ux) and [D-22 r76→77](design/ConstructionAndAcquisition.md#receiving-specifications) supersede the [semicolon-terminated receiving item](https://github.com/complyue/cod-project/blob/1990037033799e3a98b4c1b8afd16d3f21761bdb/design/ConstructionAndAcquisition.md#receiving-specifications) and the corresponding field and member separators. Typed enums r8→9, D-13 r41→42 and the idiomatics guideline r5→6 and guide r21→22 apply the rule. Other affected design, paper and booter examples carry the spelling change. Field order, selector meaning, executable initialization, layout and evaluation are continued under P-515–P-517/P-570–P-572/P-658–P-659. Registry r1381→1382.
+
 ## 2026-11-27 — Apply vocabulary identity to static mixins
 
 <a id="k-mixin-vocabulary-type-identity-20261127"></a>

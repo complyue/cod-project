@@ -274,7 +274,7 @@ The first generated boundary serves the indexed source, scratch and LLVM operati
 handle type PathOwner;
 handle type Path in PathOwner;
 handle type SourceRevision;
-data SourceOpenException <: Exception { os_error:u64; }
+data SourceOpenException <: Exception { os_error:u64 }
 
 func "C" SourceRevision(handle path:Path in A) throws SourceOpenException
     where {const owner A};
@@ -299,7 +299,7 @@ proc "C" compile_cli(handle path:Path in A, output:const String in A) -> u8
 
 **Constructor outcome.** Successful `make own handle SourceRevision(path)` publishes one lexical owner. On acquisition failure, the C provider saves any error data needed by the declared exception and releases each resource it has already acquired exactly once, in dependency-safe order. After rollback the generated boundary raises the constructor’s declared CoD exception. The failed construction publishes no handle or loan and schedules no destructor for the unpublished owner. A checked failure must be caught or covered by the caller’s `throws` contract. In the example, the catch chooses the ordinary CLI status.
 
-For `SourceRevision`, derive the typed C failure interface in the generated provider stub from the checked `throws SourceOpenException` and `data SourceOpenException <: Exception { os_error:u64; }`. The handwritten provider preserves `os_error` before cleanup can change the OS error state, releases the acquired prefix in dependency-safe order, and returns the preserved value through that interface. The generated adapter then performs the equivalent of `throw SourceOpenException { os_error <- code; };`. The raised failure owns its CoD storage. The caller receives an ordinary typed catch and reads `e.os_error`.
+For `SourceRevision`, derive the typed C failure interface in the generated provider stub from the checked `throws SourceOpenException` and `data SourceOpenException <: Exception { os_error:u64 }`. The handwritten provider preserves `os_error` before cleanup can change the OS error state, releases the acquired prefix in dependency-safe order, and returns the preserved value through that interface. The generated adapter then performs the equivalent of `throw SourceOpenException { os_error <- code; };`. The raised failure owns its CoD storage. The caller receives an ordinary typed catch and reads `e.os_error`.
 
 Acceptance checks equivalent generated contracts from the seed and booter, failure after partial acquisition, exact rollback before the catch, and delivery of the original OS error even when cleanup changes the OS error state. Failed acquisition publishes no handle or loan and schedules no destructor. The generated transport is private to the two compilers. See [exception construction and ownership](../../../design/ExceptionControl.md#make-exception-expressions).
 

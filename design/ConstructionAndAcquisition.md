@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 76 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 77 · Recorded: 2026-11-27 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r77 the [comma-list decision](../CHANGELOG.md#h-comma-field-and-receive-lists-20261127) applies the [field and receiver list grammar](DomainLanguageDesign.md#comma-separated-fields-and-receivers) to structural schemas, standalone reception and the related here, case and generator forms. P-515–P-517 continue label lookup, owner, overlap and successful delivery. Labeled make by init retains its executable field writes.
 
 At r76 the [construction terminology decision](../CHANGELOG.md#h-make-by-ctor-and-init-20261127) names the two ordinary ADT construction forms [make by ctor and make by init](#make-by-ctor-and-make-by-init). D-22-RESERVATION and P-502 continue the r75 selection, placement, failure and readiness rules.
 
@@ -64,7 +66,7 @@ At r69 [D-22-REGIONAL-REF-INIT](DesignAuthorityRegistry.md#d-22-regional-ref-ini
 
 - **Receiving-overlap boundary:** [H-576](../CHANGELOG.md#h-576)/[H-593](../CHANGELOG.md#h-593), [D-22-RECEIVE-OVERLAP](DesignAuthorityRegistry.md#d-22-receive-overlap)/P-518–P-520, selects author-responsibility UB for cross-entry write/borrowed-read overlap and write/write overlap. Use the same warning/opt-in-error diagnostic direction; costly analysis may be deferred. The rationale serves C-65/C-72/C-73 and charter §§3.3/4.3/6.3/8/12 through explicit author reasoning, straightforward sequential workarounds and compiler scheduling freedom. Preserve defined-program effects, distinct-slot reference sharing, ordinary sequential writes, owner/access/init and D-16. Scope/examples/acceptance below and [K-RECEIVING-CORE-20261117](../CHANGELOG.md#k-receiving-core-20261117) bound this change; no analysis algorithm, full receiving mechanism or ABI is qualified.
 
-- **Receiving-specification assessment:** [H-574](../CHANGELOG.md#h-574)/[H-575](../CHANGELOG.md#h-575), [D-22-RECEIVE-SCOPE](DesignAuthorityRegistry.md#d-22-receive-scope)/P-515–P-517, covers r37’s normalized source form: `{ val count <-; ref selected = node; existing <- field; } := producer();`. H-575 requires a declarative receiving specification and excludes arbitrary expressions, rather than an executable receiving block. H-574 supplies explicit item operations and same-name selector omission; H-573 supplies existing-variable/renaming and temporary-scope goals. Candidate C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 preserves readable routing intent and ordinary place/result/lifetime responsibilities. Preserve D-23’s operations/pre-RHS destination selection, H-571 private completion, D-16 and D-18's existing qualification boundaries. H-576 separately settles the borrowed-read conflict boundary; the bounded grammar/scope below is selected under H-592 delegation; H-593 supplies the write/write UB boundary; diagnostic precision and full proof/ABI qualification remain pending; acceptance below and [K-RECEIVING-SPEC-20261117](../CHANGELOG.md#k-receiving-spec-20261117) bound this assessment.
+- **Receiving-specification assessment:** [H-574](../CHANGELOG.md#h-574)/[H-575](../CHANGELOG.md#h-575), [D-22-RECEIVE-SCOPE](DesignAuthorityRegistry.md#d-22-receive-scope)/P-515–P-517, covers r37’s normalized source form: `{ val count <-, ref selected = node, existing <- field } := producer();`. H-575 requires a declarative receiving specification and excludes arbitrary expressions, rather than an executable receiving block. H-574 supplies explicit item operations and same-name selector omission; H-573 supplies existing-variable/renaming and temporary-scope goals. Candidate C-65/C-72/C-73 → charter §§3.3/4.3/6.3/8/12 preserves readable routing intent and ordinary place/result/lifetime responsibilities. Preserve D-23’s operations/pre-RHS destination selection, H-571 private completion, D-16 and D-18's existing qualification boundaries. H-576 separately settles the borrowed-read conflict boundary; the bounded grammar/scope below is selected under H-592 delegation; H-593 supplies the write/write UB boundary; diagnostic precision and full proof/ABI qualification remain pending; acceptance below and [K-RECEIVING-SPEC-20261117](../CHANGELOG.md#k-receiving-spec-20261117) bound this assessment.
 
 - **Return-only structural result assessment:** [H-572](../CHANGELOG.md#h-572), D-22-ANON-DATA/P-509–P-511, covers r29’s preferred proposal: `-> { ... }` describes a named product of return contracts, received as independent lexical variables without a source-visible group object. Product-only/return-only use and independent component owners are the human’s proposed scope, not a full type/ABI/proof approval. The candidate C-10/C-65/C-72/C-73 rationale serves charter §§2/3.2–3.3/4.3/6.3/8/12 through readable composition using existing result modes and lifetime rules. Preserve H-571 syntax/completion, ordinary nominal ADT same-owner fields, D-16 and the separate D-18 value-input review. Supported uses, exclusions, acceptance and unresolved interfaces are below; [K-STRUCTURAL-RESULTS-20261117](../CHANGELOG.md#k-structural-results-20261117) records this assessment.
 
@@ -130,13 +132,13 @@ H-572 proposes a **structural result type**, restricted to callable results and 
 ```cod
 # Proposed result-type use; Node and each owner follow ordinary contracts.
 proc inspect(left:Node in A, right:Node in B)
-    -> { count:u64; ref first:Node in A; ref second:Node in B; }
+    -> { count:u64, ref first:Node in A, ref second:Node in B }
     where {owner A, owner B} {
     return { 2u64 -> count, left -> first, right -> second };
 }
 # Proposed receiving items; total, first and second already exist.
 # Their declared contracts admit these outputs, whose actual owners are a and b.
-{ total <- count; first =; second =; } := inspect(left, right);
+{ total <- count, first =, second = } := inspect(left, right);
 ```
 
 The proposed receiving items update three existing lexical variables without introducing field-name bindings. Each ref/ptr retains its own statically proved target owner; the group has no target owner, storage identity, address, referent or user-visible cleanup resource. The actual receiver slots have their ordinary lexical owners, independently of their referents. Therefore different result components can name different owners without a stored cross-owner ADT edge or an owner union for any individual reference. Borrowed callee-local storage still cannot escape, and caller-provided result storage cannot repair such an escape.
@@ -163,24 +165,24 @@ The return-only restriction concerns program values; compiler/type metadata may 
 
 ### Schema identity and callable result projection
 
-H-591 accepts projection as an ordinary consequence of structural results and partial reception. Schema identity uses the same unique label set and the same resolved component contracts, independent of declaration order. Thus `{ count:u64; ready:bool; }` and `{ ready:bool; count:u64; }` describe the same result schema. Written producer expressions still evaluate once in source order; canonicalizing type metadata never reorders effects.
+H-591 accepts projection as an ordinary consequence of structural results and partial reception. Schema identity uses the same unique label set and the same resolved component contracts, independent of declaration order. Thus `{ count:u64, ready:bool }` and `{ ready:bool, count:u64 }` describe the same result schema. Written producer expressions still evaluate once in source order; canonicalizing type metadata never reorders effects.
 
 Compatibility is directional. A callable producing schema S may satisfy an expected result schema R when every label required by R occurs in S and its complete result contract is compatible under the existing rules. Extra S outputs are discarded using ordinary partial-result cleanup. S and R need not be identical. Missing labels or incompatible type/mode/access/owner/initialization/ownership contracts reject; the projection itself introduces no conversion or permission.
 
 ```cod
-func inspect() -> { count:u64; ready:bool; } {
+func inspect() -> { count:u64, ready:bool } {
     return { 7u64 -> count, true -> ready };
 }
 
-proc read_count(f:func() -> { count:u64; }) -> u64 {
-    { val count <-; } := f();
+proc read_count(f:func() -> { count:u64 }) -> u64 {
+    { val count <- } := f();
     return count;
 }
 
 read_count(inspect);  # Accept; returns 7u64.
 ```
 
-The same result compatibility applies to ordinary direct forwarding with an independently established destination contract, such as a callable declared to return `{ count:u64; }` executing `return inspect();`. Preserve the forwarding callable's own pending completion and cleanup before delivery. Construction by `return { ... };` still supplies exactly the fields of its established schema: an unexpected label in that explicit construction is an error, not an instruction to silently drop a possibly misspelled field.
+The same result compatibility applies to ordinary direct forwarding with an independently established destination contract, such as a callable declared to return `{ count:u64 }` executing `return inspect();`. Preserve the forwarding callable's own pending completion and cleanup before delivery. Construction by `return { ... };` still supplies exactly the fields of its established schema: an unexpected label in that explicit construction is an error, not an instruction to silently drop a possibly misspelled field.
 
 Projection selects results, not execution: it does not skip the producer, extra-field expressions, their effects, declared failures or required cleanup. Discarded callable/owning components receive ordinary complete-value cleanup, with failures and partial-preparation/abandonment handled under the existing completion rules. Every retained borrower requires the ordinary proof that its actual owner remains live for the required lifetime; omission is not a separate rejection criterion. Apply the result-bound-owner rule below and account for ordinary release of omitted owning outputs. Projection cannot extend a lifetime, retain an omitted owner implicitly or place a callable in a region. Optimizations must preserve those observable obligations.
 
@@ -196,11 +198,11 @@ H-594 allows a structural result contract to name an owned-region output as the 
 
 ```cod
 proc build() -> {
-    arena:own region:Graph;
-    ref root:Node in arena;
+    arena:own region:Graph,
+    ref root:Node in arena,
 };
 
-{ own region storage:Graph <- arena; ref start = root; } := build();
+{ own region storage:Graph <- arena, ref start = root } := build();
 ```
 
 Here `arena` denotes the actual region returned by this invocation. It does not denote the lexical storage of the owning handle, the nominal root type Graph or a union of possible owners. The producer must prove that root's selected target belongs to that region. An admissible existing owned region may be returned; the declaration does not require fresh allocation. Receiver renaming preserves the same actual owner dependency, so start depends on the region held by storage, not on the spelling arena.
@@ -213,11 +215,11 @@ Independent value reception illustrates why the criterion is lifetime rather tha
 
 ```cod
 proc make_number() -> {
-    arena:own region:Number;
-    ref value:u64 in arena;
+    arena:own region:Number,
+    ref value:u64 in arena,
 };
 
-{ val n <- value; } := make_number();
+{ val n <- value } := make_number();
 ```
 
 An admitted reception reads value while its temporary result owner is still live; n then holds independent bits. Ordinary omitted-output cleanup releases arena after the required read and before leaving the receiving operation. This creates no lasting owner dependency for n. The temporary lifetime and access/readiness proof must actually hold; neither the receiving-overlap UB rule nor a physical optimization can excuse an invalid owner. Retaining a reference instead of transferring its bits requires the longer reference lifetime proof. Keeping only arena or discarding all outputs also follows ordinary component cleanup, without a special owning-result restriction.
@@ -302,7 +304,7 @@ init ref var n:Node in O
 Here ref describes the reference binding, var makes n a declared place alias of the caller-selected reference slot, and init supplies the initialization contract. This is distinct from plain init ref n, which does not implicitly alias the caller's reference slot. The target owner O and the owner of that reference slot remain separate evidence. No hidden allocation, capture, ownership transfer or lifetime extension follows.
 
 ```cod
-data Node { value:u64; ptr next:Node; }
+data Node { value:u64, ptr next:Node }
 
 proc create(init ref var n:Node in O) where {owner O} {
     n = make Node in O { value <- 1u64; next = null; };
@@ -405,10 +407,10 @@ H-574/H-575 supplies a **receiving specification**, normalized below under H-592
 ```cod
 # count and selected are new; total and cursor already exist.
 {
-    val count <-;
-    ref selected = node;
-    total <- count;
-    cursor = node;
+    val count <-,
+    ref selected = node,
+    total <- count,
+    cursor = node,
 } := inspect();
 ```
 
@@ -416,41 +418,42 @@ Every specification entry requires an explicit `=` or `<-`. A declaration keywor
 
 | Receiving item | Meaning |
 | --- | --- |
-| `val count <-;` | Introduce count from result field count using ordinary val initialization. |
-| `val total:u64 <- count;` | Introduce typed total from differently named field count. |
-| `count <-;` | Apply ordinary `<-` to existing count using field count. |
-| `total <- count;` | Write existing total from field count. |
-| `ref selected = node;` | Introduce selected using ordinary ref initialization from field node. |
-| `selected = node;` | Apply ordinary `=` to the existing reference slot selected. |
-| `selected =;` | Rebind existing selected from field selected. |
-| `selected <- count;` | Write through existing selected to its scalar target using count. |
-| `func action = callback;` | Initialize the lexical function holder from a compatible function-valued result field. |
-| `action <- callback;` | Replace the value in an existing writable function holder under its function contract. |
+| `val count <-` | Introduce count from result field count using ordinary val initialization. |
+| `val total:u64 <- count` | Introduce typed total from differently named field count. |
+| `count <-` | Apply ordinary `<-` to existing count using field count. |
+| `total <- count` | Write existing total from field count. |
+| `ref selected = node` | Introduce selected using ordinary ref initialization from field node. |
+| `selected = node` | Apply ordinary `=` to the existing reference slot selected. |
+| `selected =` | Rebind existing selected from field selected. |
+| `selected <- count` | Write through existing selected to its scalar target using count. |
+| `func action = callback` | Initialize the lexical function holder from a compatible function-valued result field. |
+| `action <- callback` | Replace the value in an existing writable function holder under its function contract. |
 
 The bounded standalone grammar is:
 
 ```text
-receiving_statement := "{" receiving_item* "}" ":=" producer ";"
-                     | "{{" receiving_item* "}}" ":=" producer ";"
-receiving_item      := receiver_head ("=" | "<-") field_label? ";"
+receiving_statement := "{" receiving_list? "}" ":=" producer statement_end
+                     | "{{" receiving_list? "}}" ":=" producer statement_end
+receiving_list      := receiving_item ("," receiving_item)* ","?
+receiving_item      := receiver_head ("=" | "<-") field_label?
 receiver_head       := ordinary_declaration_head | existing_simple_name
 ```
 
-An ordinary declaration head contains its existing kind/type/owner/access syntax, without an initializer; otherwise the name must already resolve to an admissible destination. An unknown bare name does not implicitly declare a variable. The semicolon terminates each item. An empty specification discards every component of an independently established structural result, preserving all production effects and required cleanup; it does not introduce an empty structural type or relax producer checking.
+An ordinary declaration head contains its existing kind/type/owner/access syntax, without an initializer; otherwise the name must already resolve to an admissible destination. An unknown bare name does not implicitly declare a variable. A comma separates entries. The closing delimiter completes the last item, optionally after a trailing comma. Here `statement_end` denotes the existing termination rule for the enclosing statement. An empty specification discards every component of an independently established structural result, preserving all production effects and required cleanup; it does not introduce an empty structural type or relax producer checking.
 
 Type/owner/access annotations retain their ordinary declaration meanings. A new scalar ref initialized from an independent value may use D-23’s permitted lexical materialization; an existing ref rebound with `=` cannot obtain that permission merely by appearing in a receiving group. A new `val` declaration with `=` or a new `ref` declaration with `<-` still rejects. Preserve independently admitted ptr shorthand rather than inventing a universal ref/ptr declaration rule. Numerical compatibility and D-16 validity remain unchanged; neither labels nor type inference provide a new conversion.
 
-For example, when count is a val scalar output, `{ r <- count; } := inspect();` can write an existing writable scalar referent. `{ r = count; } := inspect();` rejects for an ordinary existing ref because the field supplies no storage target. `{ ref r = count; } := inspect();` is instead a new declaration and may materialize the returned scalar under its existing rules. Explicit operators therefore remove the need to choose an implicit slot-versus-target policy from the alias or field type.
+For example, when count is a val scalar output, `{ r <- count } := inspect();` can write an existing writable scalar referent. `{ r = count } := inspect();` rejects for an ordinary existing ref because the field supplies no storage target. `{ ref r = count } := inspect();` is instead a new declaration and may materialize the returned scalar under its existing rules. Explicit operators therefore remove the need to choose an implicit slot-versus-target policy from the alias or field type.
 
 Reference rebinding keeps the destination’s fixed target owner and permitted access. Bits transfer may cross owners without retaining a source reference. A `const ref` slot cannot be rebound but may still support `<-` through a writable target; `ref r:const T` may support admissible rebinding but cannot write the readonly target. Ptr binding can retain null under the fixed-owner contract; payload operations still require valid non-null/readable storage or the already admitted checked operation. Complete callable and owning operations retain their separate preparation, consumption and cleanup rules rather than becoming generic bits copying.
 
-**Selectors and lexical lookup.** The bounded specification uses simple receiver names and simple source-field labels. New-receiver annotations use ordinary declaration/type syntax; they do not introduce arbitrary runtime expressions. An explicit selector is one source-field label. An omitted selector uses the lhs name, so `count <-;` selects field count and `selected =;` selects field selected. Empty-rhs assignment remains invalid outside this grammar. Unknown fields reject even if a caller variable has that name. Missing receiving entries are allowed; missing required fields of a structural result construction are not. Existing-region selection leaves omitted stored roots untouched. A receiving subset supplies no overload-selection or return-type-inference evidence.
+**Selectors and lexical lookup.** The bounded specification uses simple receiver names and simple source-field labels. New-receiver annotations use ordinary declaration/type syntax; they do not introduce arbitrary runtime expressions. An explicit selector is one source-field label. An omitted selector uses the lhs name. In `{ count <-, selected = }`, the comma ends the first item and the closing brace ends the second. They select the fields `count` and `selected`, respectively. Empty-rhs assignment remains invalid outside this grammar. Unknown fields reject even if a caller variable has that name. Missing receiving entries are allowed; missing required fields of a structural result construction are not. Existing-region selection leaves omitted stored roots untouched. A receiving subset supplies no overload-selection or return-type-inference evidence.
 
 No entry may contain arithmetic, a call, indexing, a computed field selector, a nested assignment or control flow. For an independently admissible addressable field/element, the caller can first declare an ordinary place alias outside the spec, then name that alias as an existing receiver. That preserves the ordinary one-time place selection and owner dependency without adding an expression evaluator to the specification. Type/owner annotations and omitted inferred types retain their ordinary static checking; this restriction grants no new type-query effects.
 
-All existing receiver names and the producer expression resolve in the preceding caller environment. A new receiver introduces a binding only under successful reception; it is not an input to another specification entry or to the producer. In `{ val count <-; total <- count; } := inspect();`, the second count selects the same output field, not the new local value. Duplicate new declarations and a new/existing receiver-name collision within one specification reject; do not guess whether a bare name denotes a new binding or an outer variable. Reusing an output selector is distinct from conflicting writes to a destination, whose policy remains separately scoped. Ordinary shadowing outside that ambiguity remains unchanged.
+All existing receiver names and the producer expression resolve in the preceding caller environment. A new receiver introduces a binding only under successful reception; it is not an input to another specification entry or to the producer. In `{ val count <-, total <- count } := inspect();`, the second count selects the same output field, not the new local value. Duplicate new declarations and a new/existing receiver-name collision within one specification reject; do not guess whether a bare name denotes a new binding or an outer variable. Reusing an output selector is distinct from conflicting writes to a destination, whose policy remains separately scoped. Ordinary shadowing outside that ambiguity remains unchanged.
 
-Consequently, `{ ref chosen = cell; chosen <- count; } := inspect();` cannot use the newly declared chosen as the second destination. That would describe a program which follows one result to determine another destination. Write separate ordinary code after reception if that dependency is intended. The lhs itself declares only destinations and operations, not statements to execute after the call.
+Consequently, `{ ref chosen = cell, chosen <- count } := inspect();` cannot use the newly declared chosen as the second destination. That would describe a program which follows one result to determine another destination. Write separate ordinary code after reception if that dependency is intended. The lhs itself declares only destinations and operations, not statements to execute after the call.
 
 Single braces do not add a full lexical scope. Successful new bindings remain in the enclosing scope; existing-only specifications introduce no auxiliary field names at all. Double braces implement H-573’s temporary-scope goal using the same restricted specification:
 
@@ -458,7 +461,7 @@ Single braces do not add a full lexical scope. Successful new bindings remain in
 # Temporary declaration: count ends with this operation's explicit full scope.
 # A captured ref preserves its selected live target.
 ref total:u64 = 0u64;
-{{ val count <-; total <- count; }} := inspect();
+{{ val count <-, total <- count }} := inspect();
 # The target update remains; a val total would instead be updated only locally.
 ```
 
@@ -470,7 +473,7 @@ This syntax adds no arbitrary executable statements, callbacks or explicit defer
 
 H-595 also admits an independently typed intrinsic structural region as the source of the same receiving specification. Nominal regions have no roots to receive. [D-13 named roots](GraphGrainedMemoryManagement.md#named-root-access-and-receiving-specifications) defines the selected source fields. Existing destination selection precedes RHS evaluation as usual; evaluate the region expression once, then use its actual owner/layout/access and field readiness. New receivers do not become inputs, and ordinary partial/reordered/repeated selectors, temporary scopes and overlap rules continue.
 
-A callable structural result supplies prepared component results; an existing region supplies addressable stored fields. This difference determines ordinary operation and cleanup behavior. `{ ref n = count; } := state;` borrows the regional bits place, whereas a callable's independent val result may materialize a new lexical target under D-23. `{ ptr p = next; } := state;` creates an independent local reference binding to the selected target, not a declared place alias of the regional slot. Use ordinary `state.next = target` or standalone `var link -> state.next` to update that slot. Receiving introduces no extra item operator or source-place alias form.
+A callable structural result supplies prepared component results; an existing region supplies addressable stored fields. This difference determines ordinary operation and cleanup behavior. `{ ref n = count } := state;` borrows the regional bits place, whereas a callable's independent val result may materialize a new lexical target under D-23. `{ ptr p = next } := state;` creates an independent local reference binding to the selected target, not a declared place alias of the regional slot. Use ordinary `state.next = target` or standalone `var link -> state.next` to update that slot. Receiving introduces no extra item operator or source-place alias form.
 
 Reading an existing region for reception does not consume its owning holder. Unselected roots remain untouched, including unread payloads; there are no omitted-component cleanup actions for those stored fields. An empty spec evaluates its region source but selects no roots. Any temporary owned region produced by that expression still has ordinary temporary cleanup: a retained reference must not outlive it, while independently received bits can. This is not structural-result projection or a new whole-region transfer operation. A callable returning a structural result with an arena component is still governed by its result schema; do not automatically flatten that component's roots.
 
@@ -482,26 +485,26 @@ A specification expresses destination relationships, while the compiler chooses 
 
 **Preserved ordinary boundaries:** existing receivers use D-23’s destination selection before the producer. For `=`, retain the selected binding slot; for `<-`, retain the selected payload target. A pre-existing named place alias retains its earlier selected place. Necessary target/null/lifetime checks follow the ordinary operation, and owner-plus-locator resolution survives permitted backing growth. New receiver storage follows its ordinary declaration/initialization contract; a specification does not turn a new binding into a readable forward reference or add allocation rollback.
 
-Execute the producer exactly once and finish its required cleanup/final return selection before successful receiving updates. An admitted producer-side rebind of r does not change the target already selected by `{ r <- count; } := inspect();`. A source-level equivalent optimization may eliminate materialized temporaries or use registers/forwarded private destinations, but it may not write a public receiver early when the producer could observe that write. Independent val outputs retain their prepared bits; borrowed outputs retain selected targets/owners/access, not frozen payloads. The spec grants no hidden lifetime extension or source-variable reread.
+Execute the producer exactly once and finish its required cleanup/final return selection before successful receiving updates. An admitted producer-side rebind of r does not change the target already selected by `{ r <- count } := inspect();`. A source-level equivalent optimization may eliminate materialized temporaries or use registers/forwarded private destinations, but it may not write a public receiver early when the producer could observe that write. Independent val outputs retain their prepared bits; borrowed outputs retain selected targets/owners/access, not frozen payloads. The spec grants no hidden lifetime extension or source-variable reread.
 
 <a id="borrowed-read-overlap-and-diagnostics"></a>
 ### Receiving overlap and diagnostics
 
 H-593 additionally makes **cross-entry write/write overlap undefined behavior**, including when every returned component is an independent val snapshot. Distinct receiving entries must not write overlapping semantic destination storage. This covers payload writes, reference-slot writes and otherwise admitted overlapping subobjects; reference rebinding writes its slot, not the selected referent. Accidental equality of the written values does not create an exception. Compiler-created temporaries or storage reuse cannot manufacture a source-level conflict.
 
-For `{ a <- first; b <- second; } := pair();`, where pair returns independent 1 and 2 and a/b select the same target, there is no promised final 1, 2 or other result. To require ordered writes, receive into distinct ordinary values and then execute `a <- first; b <- second;` as separate statements. Those sequential operations retain their ordinary semantics even when a and b share a target.
+For `{ a <- first, b <- second } := pair();`, where pair returns independent 1 and 2 and a/b select the same target, there is no promised final 1, 2 or other result. To require ordered writes, receive into distinct ordinary values and then execute `a <- first; b <- second;` as separate statements. Those sequential operations retain their ordinary semantics even when a and b share a target.
 
 H-576 makes **cross-entry receiving write / borrowed-read overlap undefined behavior**, under the program author’s responsibility. For distinct spec entries i and j, a receiving write by i must not overlap storage whose payload j reads through a returned borrowed reference. The rule concerns the semantic storage selected by the source program, including otherwise admitted overlapping subobjects; compiler-created temporary reuse cannot manufacture a violation. Neither receiver spelling nor a promise of readonly access proves target disjointness.
 
 ```cod
 proc views(a:u64 in O, b:u64 in O)
-    -> { ref first:u64 in O; ref second:u64 in O; }
+    -> { ref first:u64 in O, ref second:u64 in O }
     where {owner O} {
     return { a -> first, b -> second };
 }
 val a:u64 <- 1u64;
 val b:u64 <- 2u64;
-{ a <- second; b <- first; } := views(a, b);
+{ a <- second, b <- first } := views(a, b);
 # Undefined: each receiving write overlaps the other entry's borrowed read.
 ```
 
@@ -632,7 +635,7 @@ scalar type and allocation permission and initialize the target before making th
 available for reading. The author can write the initializer without a nested `make`.
 
 ```cod
-data StockCounter { ref remaining:u64; }
+data StockCounter { ref remaining:u64 }
 
 ref first = make StockCounter in r { remaining = 12u64; }
 ref shared = make StockCounter in r { remaining = first.remaining; }
@@ -657,7 +660,7 @@ and `<-` writes through the selected target. An inline `val` field holds its pay
 ### Initializing a regional scalar ptr field
 
 ```cod
-data CreditPolicy { ptr limit:u64; }
+data CreditPolicy { ptr limit:u64 }
 
 ref blocked = make CreditPolicy in r { limit = 0u64; }
 ref uncapped = make CreditPolicy in r { limit = null; }
@@ -679,8 +682,8 @@ writes use the existing `=` and `<-` rules.
 ### Sum instances and independent bits
 
 ```cod
-data Decision = Backorder {} | ShipFrom { warehouse:u64; };
-data Plan = Done {} | Again { ref next:Plan; };
+data Decision = Backorder {} | ShipFrom { warehouse:u64 };
+data Plan = Done {} | Again { ref next:Plan };
 
 ref shipped:Decision = make ShipFrom { warehouse <- 2u64; };
 ref end:Plan = make Done {};
@@ -697,8 +700,8 @@ For a fresh sum instance, select its dctor with `make`. An explicit receiving ow
 H-596 requires individual root initializers; H-597 accepts a construction-local owner name, and H-598/H-599 admits initialization through helpers in a free initialization block. A named structural region schema fixes the root labels, storage kinds and full component contracts; construction supplies their initial contents in the new region. The bounded form uses `make region`, with allocator arguments separate from the initialization block:
 
 ```cod
-data Node { value:u64; }
-region State { count:u64; ref head:Node; ptr optional:Node; }
+data Node { value:u64 }
+region State { count:u64, ref head:Node, ptr optional:Node }
 
 own region state:State <- make region State(4096u64 -> capacity) {
     count <- 1u64;
@@ -782,7 +785,7 @@ Test the [selected alternative and its visible initializer family](DomainLanguag
 A ptr may retain a reserved target's identity under the existing initialization-flow rules. Fresh allocation supplies non-nullness, not readable payload. Projection of a known field destination, reference-identity assignment and `is` observations require their own owner/layout/reference-slot facts but need not read the target payload. Ordinary readable-ref uses, payload copies, captures or calls cannot erase outstanding initialization restrictions.
 
 ```cod
-data Node { value:u64; ref next:Node; }
+data Node { value:u64, ref next:Node }
 # r is an existing live writable owner; design acceptance, not compiler coverage.
 ptr a:Node in r = make Node in r;
 ptr b:Node in r = make Node in r;
@@ -804,7 +807,7 @@ Acceptance covers bare reservation versus empty/nonempty initializer blocks, non
 A bare `ref a:Node` declares a binding slot. Executing `a = make Link in graph` reserves one target in the selected live owner, fixes its alternative and binds its non-null identity. At that point the ref is **not init**. Before reservation the slot cannot supply even an identity. The group does its allocations and calls in written order.
 
 ```cod
-data Node = Link { key:u64; ref next:Node; } | End {};
+data Node = Link { key:u64, ref next:Node } | End {};
 
 func Link(k:u64, not init ref peer:Node in O) where {owner O} {
     assert k != 0u64;
@@ -930,7 +933,7 @@ Joint initialization is not recursive data binding. Ordinary proc/func groups do
 If a group fails, its incomplete bindings are not made available as successfully initialized results. Allocations already made in an existing live region remain governed by that region, and earlier valid writes/effects remain. An initializer can publish a fully initialized target into pre-existing same-owner state; a subsequent failure does not reclaim that target behind the surviving reference. Merely allocated or partly initialized targets still cannot be exposed as readable valid objects.
 
 ```text
-data Holder { ptr saved:u64; }
+data Holder { ptr saved:u64 }
 proc publish(x:u64 in r, holder:Holder in r) -> u64 where {owner r} {
     holder.saved = x;
     return 0u64;
@@ -1006,7 +1009,7 @@ A published DBMR is immutable through CoD. Any number of processes may open it r
 The construction basename is a hint within the fixed publication filesystem. It never opens, truncates, reserves or creates the hinted public entry. Two builders can supply the same hint and work independently. Readonly opening and publication use ordinary owner and access checks. `publish` takes the entire private owner at call entry, after argument evaluation and conversion. If computing the filename throws before entry, the caller retains the owner unless argument evaluation itself transferred it. Every use of an earlier borrow must be covered by a still-live owner. On success or an ordinary publication failure the caller has spent the owner. Releasing an unpublished owner merely discards the build.
 
 ```cod
-region Catalog { count:u64; }
+region Catalog { count:u64 }
 
 own region a:Catalog <- make region Catalog(4096u64 -> capacity) { count <- 3u64; };
 publish(a, "versions/v1.dbmr");

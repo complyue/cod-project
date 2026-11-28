@@ -190,7 +190,7 @@ A new intrinsic is warranted only for an operation that genuinely needs compiler
 
 ## Failure, cleanup and acceptance
 
-The library defines its own nominal `export data Utf8WriteError <: Error { code:u64; }` with the ordinary `Error` identity from `std:exceptions`. A terminal UTF-8 output failure raises that type. Calls to `writeUtf8`, `emit`, the streaming hooks and the collecting adapters can propagate it without a catch or a `throws` clause. A formatter usually cannot recover from losing its destination. The application boundary that knows how to abandon a report, handle a closed pipe or fail an export can catch the concrete error there. A higher-level operation promising durable publication can translate it into its own checked failure under its normal contract.
+The library defines its own nominal `export data Utf8WriteError <: Error { code:u64 }` with the ordinary `Error` identity from `std:exceptions`. A terminal UTF-8 output failure raises that type. Calls to `writeUtf8`, `emit`, the streaming hooks and the collecting adapters can propagate it without a catch or a `throws` clause. A formatter usually cannot recover from losing its destination. The application boundary that knows how to abandon a report, handle a closed pipe or fail an export can catch the concrete error there. A higher-level operation promising durable publication can translate it into its own checked failure under its normal contract.
 
 ```cod
 using "string.cod" Utf8WriteError;

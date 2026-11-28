@@ -47,7 +47,7 @@ The `|>` operator composes the two processors. In processor position the stage d
 A processor can be an ordinary data instance. For an invoice report, a policy gives a base price and the maximum discount in basis points. The constructor derives the lowest qualifying whole-cent amount, rounding up so an accepted invoice cannot exceed the permitted discount. That business calculation runs once. Traversal only needs a comparison.
 
 ```cod
-data InvoiceFloor { cents:u64; }
+data InvoiceFloor { cents:u64 }
 
 func InvoiceFloor(base_cents:u32, discount_bps:u16) {
     assert discount_bps <= 10000u16;
@@ -207,16 +207,16 @@ Frames uses pipes to answer a data-quality question about its occupational surve
 
 ```cod
 func unscored_incomes(here rows() yields {
-    has_prestige:bool; has_income:bool; income:u64;
+    has_prestige:bool, has_income:bool, income:u64,
 }) yields u64 {
-    for { val has_prestige <-; val has_income <-; val income <-; } := rows() {
+    for { val has_prestige <-, val has_income <-, val income <- } := rows() {
         if (not has_prestige && has_income) { yield(income); }
     }
 }
 
-{ count <-; mean <-; } := count_and_mean(unscored_incomes(survey_rows(path)));
+{ count <-, mean <- } := count_and_mean(unscored_incomes(survey_rows(path)));
 # Equivalent proposed pipe spelling for the producer argument.
-{ count <-; mean <-; } := count_and_mean(survey_rows(path) !> unscored_incomes());
+{ count <-, mean <- } := count_and_mean(survey_rows(path) !> unscored_incomes());
 ```
 
 Each line is an alternative call. The adapter above supplies presence bits and an unused scalar payload for a missing income. Any file, database or test producer supplying that schema can drive the stage. The terminal needs one count and one running sum. To reproduce the Haskell example on an empty selection, its floating-point mean is NaN. A reporting API promising a defined mean only for positive counts can expose that distinction explicitly. The loop and fold are low-cost library work once the input contract is available. Schema inference from a sample CSV is a separate Frames feature.
@@ -247,9 +247,9 @@ One synchronous pass and bounded working memory suffice for this fixed set of co
 The `streaming` library provides `mergeOn` for two sorted inputs. It keeps both records on equal keys, with the left one first. Consider replaying billing and refund journals using the same ordering key. The journal interpretation is a CoD application of the documented operation. It needs an event sequence suitable for audit and can emit the first events without reading two complete files into memory. Here the event ID is the value the audit sink needs. [Streaming.Prelude merge operations](https://hackage-content.haskell.org/package/streaming-0.2.4.0/docs/Streaming-Prelude.html#v:mergeOn)
 
 ```cod
-proc audit_order(here left() yields { tick:u64; entry:u64; },
+proc audit_order(here left() yields { tick:u64, entry:u64 },
                  right:JournalCursor in R) yields u64 where {owner R} {
-    for { val tick <-; val entry <-; } := left() {
+    for { val tick <-, val entry <- } := left() {
         for val id <- before(right, tick) { yield(id); }
         yield(entry);
     }
@@ -358,7 +358,7 @@ The composite contract covers initialized local bindings and repeated valid use.
 A library can choose an operator result that is an ordinary nominal ADT with a call-operator method. For example, an invoice policy library wants a reusable snapshot of a price floor and a row limit. Only two scalar fields need to survive. The call operator takes a fresh source for each execution, filters by the stored floor and counts accepted rows in invocation-local storage.
 
 ```cod
-data InvoiceRule { minimum:u64; maximum_rows:u64; }
+data InvoiceRule { minimum:u64, maximum_rows:u64 }
 
 func InvoiceRule(cents:u64, limit:u64) {
     minimum <- cents;
