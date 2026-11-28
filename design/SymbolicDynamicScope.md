@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 283 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 284 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r284 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires a target resource pool for both r283 entry forms and applies the same ownership boundary to launch and owning chan messages. D-10-ACTOR-CHAN/P-788 continues the entry and effects rules. D-32-RESOURCE-POOLS/P-789 records the pool and placement questions.
 
 At r283 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) admits owning region and handle parameters on the named entry procedure in a `go` launch. D-10-ACTOR-CHAN/P-788 continues the r282 effects boundary and applies the existing consuming-call rules to successful child entry.
 
@@ -2410,16 +2412,18 @@ A candidate regional message carries a user-defined root, inputs and a typed des
 
 ### Go process launch
 
-`go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. CoD specifies one new OS thread per successful launch. [Go language specification](https://go.dev/ref/spec#Go_statements)
+`go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. Every launch requires an actual target resource pool, including a niladic entry with no owners to hand off. An expression with no target pool cannot launch a go process. The established local execution uses one dedicated OS thread and fresh initial TLS. Pool worker reuse and subprocess placement are design questions. [Go language specification](https://go.dev/ref/spec#Go_statements)
 
-Both launch forms can transfer ownership to the child. In `go entry_proc(...)`, *entry procedure* names the role of the ordinary named procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
+Both entry forms can transfer ownership to the child. The examples use the **proposed spelling** `go on(p)` to select the target pool. The pool can be passed to a library as an argument. In the named form, *entry procedure* names the role of the ordinary procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
+
+The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. The same rule applies to a subsequent owning chan send. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
 
 ```cod
 proc build_index(own region part:Partition, own handle sink:IndexOutput, id:UInt64) -> void {
     index_partition(part, sink, id)
 }
 
-go build_index(r, h, partition_id)
+go on(p) build_index(r, h, partition_id)
 ```
 
 On successful launch, the child receives the actual region as `part`, the actual handle as `sink`, and the scalar value as `id`. The launcher can no longer use `r` or `h`. The call uses ordinary argument spelling. A borrow alone cannot supply an owning parameter.
@@ -2427,7 +2431,7 @@ On successful launch, the child receives the actual region as `part`, the actual
 The block form names its incoming owners directly. The same handoff can be written as follows.
 
 ```cod
-go { own region r <-, own handle h <- } {{
+go on(p) { own region r <-, own handle h <- } {{
     index_region(r, h)
 }}
 ```
@@ -2436,7 +2440,7 @@ In either form the child takes over the existing release responsibility for each
 
 **The effects boundary is at `go`.** The new thread starts with its initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
 
-For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go build_index(r, h, n)`. The entry receives 7 as its third argument. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the block form.
+For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go on(p) build_index(r, h, n)`. The entry receives 7 as its third argument. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the block form.
 
 If preparing a later actual argument fails, the procedure body is never entered and the call has not consumed its earlier owning arguments. Transfers already performed by argument expressions retain their effects. [Consuming calls](ExceptionControl.md#e4--consuming-calls-and-results)
 

@@ -265,7 +265,7 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 状态：已启动预研；基础执行与消息语义已确定，具体接口和生命周期继续讨论。
 
-CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。生产语言用 `go` 启动 go process，每次在一个新的专属 OS 线程上执行。两种入口都能移交所有权。`go entry_proc(...)` 按入口过程签名中的 `own region`、`own handle` 形参接收实参的所有权；双花括号正文则用显式列表接收。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
+CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。每次 `go` 都必须有目标资源池，即使入口不带参数。不指定目标池的启动不成立。现有本机执行采用专属 OS 线程。两种入口都能移交所有权：以候选拼法 `go on(p) entry_proc(...)` 为例，按入口过程签名中的 `own region`、`own handle` 形参接收实参的所有权；双花括号正文则用显式列表接收。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
 
 基础发送采用 UDP 式语义，不保证接收、不提供回执。应用按需建立可靠流、重试和业务结算协议。
 当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
@@ -278,6 +278,8 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 [预研与源码依据](../design/ActorChannels.md)
 
 跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 region。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
+
+并行任务用一等资源池表达所有权边界。同一个实际池中的 go process 可在启动时或通过类型化 `chan` 移交资源所有权；即使在同一地址空间，不同池也不能互相移交所有权。同机子进程可以把可重定位的普通 region 映射到不同基址，实际映射与 CoD 所有权移交分别处理。待检验的选择包括池身份怎样进入静态签名、一个池是否可跨机器，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
 发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)
 
