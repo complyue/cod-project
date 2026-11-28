@@ -1414,11 +1414,12 @@ class BodyExtraction {
       }
     }
 
-    enum class CallSite { value, statement, region_binding, exception_source };
+    enum class CallSite { value, statement, region_binding, exception_source, deferred };
 
     std::optional<CheckedOperation> call(const Expression &expr, CallSite site = CallSite::value) {
       const bool region_receiver = site == CallSite::region_binding;
       const bool intermediate_statement = site == CallSite::statement;
+      const bool deferred = site == CallSite::deferred;
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
         confirm_intrinsic(expr, expr.text);
@@ -1460,16 +1461,16 @@ class BodyExtraction {
       auto method_id = selected->methods.size() == 1 ? selected->methods.front() :
           select_overload(expr, *selected, operands);
       const auto &definition = extraction_.declarations_.method(method_id);
-      expect(definition.result.owns_region() == region_receiver, expr.at,
+      expect(deferred || definition.result.owns_region() == region_receiver, expr.at,
              "an owning region result requires a direct owning declaration");
       if (definition.result.owns_exception()) {
-        expect((site == CallSite::exception_source || intermediate_statement) && !definition.source->c_linkage &&
+        expect((site == CallSite::exception_source || intermediate_statement || deferred) && !definition.source->c_linkage &&
                selected->methods.size() == 1 && nominal_exception(*definition.result.type),
                expr.at, "seed needs a direct nominal owning exception result with an owning or discarded destination");
       }
       if (form_.kind == Form::Kind::function && definition.source->kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
-      const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
+      const bool allow_omitted_void = (intermediate_statement || deferred) && body_.instance.result.type &&
           !region_receiver && !expr.has_here_body();
       const auto application = [](const Type &type) { return type.kind == Type::product_application; };
       if (!definition.type_parameters.empty() || std::ranges::any_of(definition.parameters, application) ||
@@ -1869,7 +1870,7 @@ class BodyExtraction {
                "seed needs a borrowed handle declaration with an inferred owner");
         const auto &initial = operand(expr, 0);
         const auto owner = native_loan(initial, marker, expr.children.front()->at);
-        op.place = declare(expr.at, expr.text, initial.type, true, initial.read_only, true, owner).place;
+        op.place = declare(expr.at, expr.text, initial.type, true, initial.read_only, expr.fixed_binding, owner).place;
       }
       return op;
     }
@@ -2104,6 +2105,18 @@ class BodyExtraction {
       op.view = true;
       op.owners = target.owners;
       if (expr.kind == Kind::rebind) {
+        if (target.type.kind == Type::native_handle) {
+          expect(ungrouped_expression(*expr.children.front()).kind == Kind::name && target.place &&
+                 !target.reborrows_native_owner && !target.fixed_binding, expr.at,
+                 "seed needs a mutable lexical borrowed handle binding");
+          expect(source->type == target.type && single_owner(*source, input.at) == single_owner(target, expr.at) &&
+                 (target.read_only || !source->read_only), input.at,
+                 "borrowed handle rebinding must preserve nominal type, actual owner and target access");
+          op.rebind_native_handle = true;
+          op.place = target.place;
+          op.read_only = target.read_only;
+          return op;
+        }
         const auto &destination = body_.instance.operations.at(&ungrouped_expression(*expr.children.front()));
         if (destination.operand_type.kind == Type::product && destination.product_field) {
           const auto &field = declarations().schemas.at(destination.operand_type.identity)
@@ -2608,17 +2621,26 @@ class BodyExtraction {
       case Kind::try_scope: return try_statement(expr);
       case Kind::deferred: {
         expect(method_ && body_.instance.result.type && !in_iteration_ && !in_deferred_block_ &&
-               expr.children.size() == 1 && expr.children.front()->kind == Kind::block,
-               expr.at, "seed needs a non-repeated plain deferred block in a declared callable");
+               expr.children.size() == 1 && expr.binding.empty(),
+               expr.at, "seed needs a non-repeated defer without attached handlers in a declared callable");
         const auto &body = *expr.children.front();
-        auto supplied = supplied_;
-        in_deferred_block_ = true;
-        // Bind lexical places now. The emitter reads their current values after
-        // this registration has been popped from the owning invocation's drain.
-        extract(body, true);
-        in_deferred_block_ = false;
-        supplied_ = std::move(supplied);
-        ++body_.instance.deferred_blocks;
+        if (body.kind == Kind::block) {
+          auto supplied = supplied_;
+          in_deferred_block_ = true;
+          extract(body, true);
+          in_deferred_block_ = false;
+          supplied_ = std::move(supplied);
+        } else {
+          expect(body.kind == Kind::call, body.at, "seed needs a direct deferred call");
+          require_executable_expression(body);
+          if (auto invocation = call(body, CallSite::deferred)) {
+            expect(invocation->callee || invocation->invokes_here ||
+                   (invocation->native_call && !declarations().native_operations.at(*invocation->native_call).has_here()),
+                   body.at, "seed needs a fixed CoD, here or ordinary C provider invocation for defer");
+            remember(body, std::move(*invocation));
+          }
+        }
+        ++body_.instance.deferred_actions;
         return op;
       }
       case Kind::rebind: case Kind::transfer: return assign(expr);

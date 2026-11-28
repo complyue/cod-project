@@ -353,7 +353,7 @@ struct CheckedInstance {
   ResultContract result;
   std::map<const Expression *, CheckedOperation> operations;
   bool complete = false;
-  size_t deferred_blocks = 0;
+  size_t deferred_actions = 0;
   std::vector<CheckedStorage> storage;
   std::vector<CheckedBinding> bindings;
   CheckedFrame frame;

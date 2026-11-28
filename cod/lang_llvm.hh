@@ -957,54 +957,65 @@ class LLVMEmission {
     for (unsigned word = 0; word < 2; ++word) b_.CreateStore(resource, b_.CreateStructGEP(pair, view, word));
     return view;
   }
+  llvm::Value *snapshot_native_handle(llvm::Value *address) {
+    auto *pair = native_handle_pair();
+    auto *saved = slot(pair, "argument.handle");
+    b_.CreateStore(b_.CreateLoad(pair, address), saved);
+    return saved;
+  }
   llvm::Value *native_scalar_argument(const Expression &operand, const Type &type) {
     auto *value = emit_expression(operand);
     if (!reachable()) return nullptr;
     auto *converted = convert(value, checked_.at(&operand).type, type);
     return type == Type::boolean ? b_.CreateZExt(converted, c_scalar_type(type)) : converted;
   }
-  llvm::Value *emit_native_call(const Expression &expr) {
-    {
-      const size_t id = *checked_.at(&expr).native_call;
-      const auto &native = program_->native_operations.at(id);
-      std::vector<llvm::Value *> arguments;
-      std::vector<llvm::Type *> types;
-      for (size_t i = 0; i < native.inputs.size(); ++i) {
-        const auto &input = native.inputs[i];
-        const auto &operand = *expr.children[i];
-        llvm::Value *argument;
-        if (input.owner) {
-          argument = emit_expression(operand, Projection::target);
-          if (!reachable()) return nullptr;
-        } else {
-          argument = native_scalar_argument(operand, input.type);
-          if (!reachable()) return nullptr;
-        }
-        if (input.type.kind == Type::array)
-          argument = native_array_loan(checked_address(argument, operand, operand.at), input.type);
-        arguments.push_back(argument);
-        types.push_back(argument->getType());
-      }
-      llvm::AllocaInst *value = nullptr;
-      const auto &result = *native.contract.result.type;
-      if (result != Type::void_type) {
-        value = slot(c_scalar_type(result), "native.call.value");
-        arguments.push_back(value);
-        types.push_back(b_.getPtrTy());
-      }
-      auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(), types), arguments);
-      for (size_t i = 0; i < native.inputs.size(); ++i)
-        if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
-      auto *ready = block("native.call.success"), *invalid = block("native.call.invalid");
-      b_.CreateCondBr(b_.CreateICmpEQ(status, b_.getInt32(static_cast<unsigned>(NativeStatus::ok))), ready, invalid);
-      b_.SetInsertPoint(invalid);
-      fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
-      b_.SetInsertPoint(ready);
-      if (!value) return empty_scalar();
-      auto *native_result = load(value);
-      if (result == Type::boolean) return pack(b_.CreateTrunc(native_result, b_.getInt1Ty()), result);
-      return pack(native_result, result);
+  std::vector<llvm::Value *> prepare_native_provider(const Expression &expr, bool delayed = false) {
+    const auto &native = program_->native_operations.at(*checked_.at(&expr).native_call);
+    std::vector<llvm::Value *> arguments;
+    for (size_t i = 0; i < native.inputs.size(); ++i) {
+      const auto &input = native.inputs[i];
+      const auto &operand = *expr.children[i];
+      auto *argument = input.owner ? emit_expression(operand, Projection::target) : native_scalar_argument(operand, input.type);
+      if (!reachable()) return {};
+      if (input.type.kind == Type::array)
+        argument = native_array_loan(checked_address(argument, operand, operand.at), input.type);
+      else if (input.type.kind == Type::c_type_marker && (delayed || i + 1 < native.inputs.size()))
+        argument = snapshot_native_handle(argument);
+      arguments.push_back(argument);
     }
+    return arguments;
+  }
+  static std::vector<llvm::Type *> argument_types(std::span<llvm::Value *const> arguments) {
+    std::vector<llvm::Type *> types;
+    types.reserve(arguments.size());
+    for (auto *argument : arguments) types.push_back(argument->getType());
+    return types;
+  }
+  llvm::Value *invoke_native_provider(const Expression &expr, std::vector<llvm::Value *> arguments, bool discard = false) {
+    const auto &native = program_->native_operations.at(*checked_.at(&expr).native_call);
+    llvm::AllocaInst *value = nullptr;
+    const auto &result = *native.contract.result.type;
+    if (result != Type::void_type) {
+      value = slot(c_scalar_type(result), "native.call.value");
+      arguments.push_back(value);
+    }
+    const auto types = argument_types(arguments);
+    auto *status = b_.CreateCall(runtime(native_operation_name(native) + "_call", b_.getInt32Ty(), types), arguments);
+    for (size_t i = 0; i < native.inputs.size(); ++i)
+      if (types[i] == b_.getInt8Ty()) status->addParamAttr(i, llvm::Attribute::ZExt);
+    auto *ready = block("native.call.success"), *invalid = block("native.call.invalid");
+    b_.CreateCondBr(b_.CreateICmpEQ(status, b_.getInt32(static_cast<unsigned>(NativeStatus::ok))), ready, invalid);
+    b_.SetInsertPoint(invalid);
+    fail_path(ExceptionCategory::system, expr.at, b_.CreateGlobalString(location_text(expr.at) + ": invalid native provider status"));
+    b_.SetInsertPoint(ready);
+    if (discard || !value) return empty_scalar();
+    auto *native_result = load(value);
+    if (result == Type::boolean) return pack(b_.CreateTrunc(native_result, b_.getInt1Ty()), result);
+    return pack(native_result, result);
+  }
+  llvm::Value *emit_native_call(const Expression &expr) {
+    auto arguments = prepare_native_provider(expr);
+    return reachable() ? invoke_native_provider(expr, std::move(arguments)) : nullptr;
   }
   llvm::Function *native_here_bridge(const CheckedNativeOperation &native, llvm::StructType *frame) {
     const auto name = native_operation_name(native) + "_bridge";
@@ -1094,9 +1105,13 @@ class LLVMEmission {
       return propagate(completed);
     }
   }
-  llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
-                           std::vector<llvm::Value *> *here_sites = nullptr,
-                           std::span<llvm::Value *const> current_owners = {}, llvm::Value *exception_result = nullptr) {
+  struct PreparedNativeCall {
+    std::vector<llvm::Value *> arguments;
+    llvm::AllocaInst *value_destination;
+  };
+  PreparedNativeCall prepare_native_call(const Expression &expr, size_t method, std::vector<llvm::Value *> prepared,
+                                         std::vector<llvm::Value *> *here_sites,
+                                         std::span<llvm::Value *const> current_owners, llvm::Value *exception_result) {
     const auto &layout = call_layouts_.at(method);
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
     llvm::AllocaInst *destination = nullptr;
@@ -1151,11 +1166,22 @@ class LLVMEmission {
     }
     for (size_t slot = 0; slot < layout.lexical_here; ++slot)
       prepared.push_back(here_arguments_.at(invocation.scope_here.at(slot)));
-    if (!target || prepared.size() != layout.parameter_count() || target->arg_size() != layout.parameter_count())
+    if (prepared.size() != layout.parameter_count())
       throw std::logic_error("native call disagrees with its parameter roles");
-    llvm::Value *result = b_.CreateCall(target, prepared);
-    if (destination) {
-      auto *value = layout.aggregate_destination ? pack_address(destination) : load(destination);
+    return {std::move(prepared), destination};
+  }
+  llvm::CallInst *invoke_prepared_native(llvm::Function *target, const std::vector<llvm::Value *> &arguments) {
+    if (!target || target->arg_size() != arguments.size())
+      throw std::logic_error("native call disagrees with its prepared parameter roles");
+    return b_.CreateCall(target, arguments);
+  }
+  llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> arguments,
+                           std::vector<llvm::Value *> *here_sites = nullptr,
+                           std::span<llvm::Value *const> current_owners = {}, llvm::Value *exception_result = nullptr) {
+    const auto prepared = prepare_native_call(expr, method, std::move(arguments), here_sites, current_owners, exception_result);
+    llvm::Value *result = invoke_prepared_native(target, prepared.arguments);
+    if (auto *destination = prepared.value_destination) {
+      auto *value = call_layouts_.at(method).aggregate_destination ? pack_address(destination) : load(destination);
       result = b_.CreateInsertValue(result, value, 0);
     }
     return result;
@@ -1178,21 +1204,28 @@ class LLVMEmission {
     b_.CreateStore(right_value, left); b_.CreateStore(left_value, right);
     return outcome(empty_scalar(), integer(0), integer(0), null_pointer());
   }
+  struct PreparedHereInvocation {
+    llvm::Value *entry;
+    std::vector<llvm::Value *> arguments;
+  };
+  PreparedHereInvocation prepare_here_invocation(const Expression &expr, std::vector<llvm::Value *> prepared) {
+    const auto &fact = checked_.at(&expr);
+    auto *descriptor = here_arguments_.at(*fact.invokes_here);
+    for (const auto input : here_owner_inputs(fact.operand_type))
+      prepared.push_back(selected_owner(fact.argument(expr, input)));
+    prepared.push_back(b_.CreateExtractValue(descriptor, 1));
+    return {b_.CreateExtractValue(descriptor, 0), std::move(prepared)};
+  }
+  llvm::Value *invoke_prepared_here(llvm::Value *entry, std::span<llvm::Value *const> arguments) {
+    auto *signature = llvm::FunctionType::get(outcome_, argument_types(arguments), false);
+    return b_.CreateCall(signature, entry, llvm::ArrayRef(arguments.data(), arguments.size()));
+  }
   llvm::Value *invoke(const Expression &expr, const std::vector<llvm::Value *> &arguments,
                       std::vector<llvm::Value *> *here_sites = nullptr, std::span<llvm::Value *const> current_owners = {}) {
     const auto &fact = checked_.at(&expr);
     if (fact.invokes_here) {
-      auto *argument = here_arguments_.at(*fact.invokes_here);
-      auto prepared = arguments;
-      std::vector<llvm::Type *> parameters(arguments.size(), scalar_);
-      for (const auto input : here_owner_inputs(fact.operand_type)) {
-        prepared.push_back(selected_owner(fact.argument(expr, input)));
-        parameters.push_back(b_.getPtrTy());
-      }
-      prepared.push_back(b_.CreateExtractValue(argument, 1));
-      auto *entry = b_.CreateExtractValue(argument, 0);
-      parameters.push_back(b_.getPtrTy());
-      return b_.CreateCall(llvm::FunctionType::get(outcome_, parameters, false), entry, prepared);
+      const auto prepared = prepare_here_invocation(expr, arguments);
+      return invoke_prepared_here(prepared.entry, prepared.arguments);
     }
     if (fact.builtin == BuiltinOperation::reference_swap) return swap_builtin(arguments, BuiltinOperation::reference_swap);
     if (fact.builtin == BuiltinOperation::identity) {
@@ -1288,7 +1321,9 @@ class LLVMEmission {
     }
     if (only_native_effects) return;
     if (expr.kind == K::deferred && checked_.operations->contains(&expr)) {
-      scope.actions.push_back({&expr, cleanup_header_, {}, slot(cleanup_header_, "defer.block.record")});
+      if (expr.children.front()->kind == K::block)
+        scope.actions.push_back({&expr, cleanup_header_, {}, slot(cleanup_header_, "defer.block.record")});
+      else scope.actions.push_back({&expr, nullptr});
       return;
     }
     if (expr.kind == K::region_binding) {
@@ -1311,6 +1346,61 @@ class LLVMEmission {
   void prepare_cleanup_record(Scope &scope, llvm::Value *record, size_t action) {
     b_.CreateStore(load(scope.head), b_.CreateStructGEP(cleanup_header_, record, 0));
     b_.CreateStore(integer(action), b_.CreateStructGEP(cleanup_header_, record, 1));
+  }
+  void prepare_deferred_call(const Expression &expr, CleanupAction &action) {
+    const auto &fact = checked_.at(&expr);
+    std::vector<llvm::Value *> saved;
+    if (fact.native_call) saved = prepare_native_provider(expr, true);
+    else {
+      std::vector<llvm::Value *> current_owners;
+      auto arguments = prepare_arguments(expr, nullptr, &current_owners, true);
+      if (!reachable()) return;
+      if (fact.invokes_here) {
+        auto prepared = prepare_here_invocation(expr, std::move(arguments));
+        saved = std::move(prepared.arguments);
+        saved.insert(saved.begin(), prepared.entry);
+      } else {
+        const auto method = program_->instances.at(*fact.callee).method;
+        auto *destination = fact.owns_exception_result ? slot(b_.getPtrTy(), "defer.exception.result") : nullptr;
+        saved = prepare_native_call(expr, method, std::move(arguments), nullptr, current_owners, destination).arguments;
+      }
+    }
+    if (!reachable()) return;
+    auto fields = argument_types(saved);
+    fields.insert(fields.begin(), cleanup_header_);
+    action.layout = llvm::StructType::get(context_, fields);
+    action.activation_record = slot(action.layout, "defer.call.record");
+    for (size_t i = 0; i < saved.size(); ++i)
+      b_.CreateStore(saved[i], b_.CreateStructGEP(action.layout, action.activation_record, i + 1));
+  }
+  void invoke_deferred_call(const Expression &expr, const CleanupAction &action, llvm::Value *record) {
+    const auto &fact = checked_.at(&expr);
+    std::vector<llvm::Value *> saved;
+    for (unsigned i = 1; i < action.layout->getNumElements(); ++i)
+      saved.push_back(b_.CreateLoad(action.layout->getElementType(i), b_.CreateStructGEP(action.layout, record, i)));
+    if (fact.native_call) {
+      invoke_native_provider(expr, std::move(saved), true);
+      return;
+    }
+    if (fact.invokes_here) {
+      propagate(invoke_prepared_here(saved.front(), std::span(saved).subspan(1)));
+      return;
+    }
+    const auto method = program_->instances.at(*fact.callee).method;
+    const auto &layout = call_layouts_.at(method);
+    std::vector<llvm::Value *> here_sites;
+    for (size_t i = 0; i < fact.here_arguments.size(); ++i) {
+      const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&fact.here_arguments[i]);
+      if (literal && here_entries_.at(literal->instance).group)
+        here_sites.push_back(b_.CreateExtractValue(saved.at(layout.here_index() + i), 1));
+    }
+    llvm::Value *result = invoke_prepared_native(methods_.at(method), saved);
+    if (!here_sites.empty()) result = consume_here_transfer(result, here_sites);
+    auto *value = propagate(result);
+    if (layout.exception_result)
+      release_failure_owner(b_, take_pointer(b_, saved.at(layout.exception_result_index())));
+    else if (fact.type.kind == Type::region && fact.type.owned)
+      b_.CreateCall(runtime("cod_lang_region_release", b_.getVoidTy(), {b_.getPtrTy()}), {view_address(value)});
   }
   struct DeferredOutcomes {
     llvm::AllocaInst *failures, *count, *fatal;
@@ -1508,15 +1598,15 @@ class LLVMEmission {
     b_.CreateBr(check);
     b_.SetInsertPoint(done);
   }
-  void drain(Scope &scope, const Location &at, size_t deferred_blocks = 0) {
+  void drain(Scope &scope, const Location &at, size_t deferred_actions = 0) {
     b_.SetInsertPoint(scope.cleanup);
     if (scope.actions.empty()) return;
     std::optional<DeferredOutcomes> failures;
     auto *next = scope.cleanup;
-    if (deferred_blocks) {
+    if (deferred_actions) {
       // A non-repeated registration contributes at most one escaping failure.
       // Reserve the slots up front so appending after OOM cannot allocate.
-      failures.emplace(slot(llvm::ArrayType::get(outcome_, deferred_blocks), "defer.failures"),
+      failures.emplace(slot(llvm::ArrayType::get(outcome_, deferred_actions), "defer.failures"),
                        slot(b_.getInt64Ty(), "defer.failure.count"), slot(outcome_, "defer.fatal"));
       b_.CreateStore(integer(0), failures->count);
       b_.CreateStore(llvm::Constant::getNullValue(outcome_), failures->fatal);
@@ -1535,11 +1625,15 @@ class LLVMEmission {
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
       if (descriptor.action->kind == Expression::Kind::deferred) {
-        auto *run = block("defer.block");
+        if (!descriptor.activation_record) continue; // Preparation cannot reach registration.
+        const auto &body = *descriptor.action->children.front();
+        auto *run = block("defer.invoke");
         dispatch->addCase(integer(i), run);
         b_.SetInsertPoint(run);
-        complete_cleanup([&] { emit_expression(*descriptor.action->children.front(), Projection::value, true); },
-                         &failures.value());
+        complete_cleanup([&] {
+          if (body.kind == Expression::Kind::block) emit_expression(body, Projection::value, true);
+          else invoke_deferred_call(body, descriptor, record);
+        }, &failures.value());
         b_.CreateBr(next);
         continue;
       }
@@ -1657,7 +1751,7 @@ class LLVMEmission {
     return load(result);
   }
   void call_scope(const std::vector<const Expression *> &expressions, const Location &at,
-                  size_t deferred_blocks,
+                  size_t deferred_actions,
                   llvm::Value *requires_return = nullptr, const Type *feedback = nullptr,
                   llvm::Value *returns_void_at_end = nullptr) {
     auto *outer_native = native_effect_scope_;
@@ -1699,7 +1793,7 @@ class LLVMEmission {
       b_.CreateBr(draining);
       scope.cleanup = draining;
     }
-    drain(scope, at, deferred_blocks); restore_effects(effects);
+    drain(scope, at, deferred_actions); restore_effects(effects);
     if (lexical_allocations_) {
       auto *head = load(lexical_allocations_);
       auto *release_storage = block("storage.release"), *done = block("storage.released");
@@ -2196,7 +2290,7 @@ class LLVMEmission {
     return from == to || from == Type::never ? value : convert_value(value, from, to);
   }
   llvm::Value *prepare_argument(const Expression &expr, size_t index,
-                                std::vector<llvm::Value *> *current_owners = nullptr) {
+                                std::vector<llvm::Value *> *current_owners = nullptr, bool save_selection = false) {
     const auto &call = checked_.at(&expr);
     const auto &child = call.argument(expr, index);
     if (const auto symbol = call.arguments.at(index).current_reference_symbol) {
@@ -2236,16 +2330,17 @@ class LLVMEmission {
     if ((argument.mode == ArgumentMode::borrowed_read && !call.destination_arguments) ||
         (expr.kind == Expression::Kind::transfer && index == 0))
       value = checked_address(value, child, child.at);
+    if (save_selection && argument.mode == ArgumentMode::borrowed_handle) value = snapshot_native_handle(value);
     return pack_view(value, child);
   }
   std::vector<llvm::Value *> prepare_arguments(const Expression &expr, llvm::Value *first_place = nullptr,
-                                               std::vector<llvm::Value *> *current_owners = nullptr) {
+                                               std::vector<llvm::Value *> *current_owners = nullptr, bool delayed = false) {
     const auto &fact = checked_.at(&expr);
     std::vector<llvm::Value *> arguments(fact.argument_count(expr));
     for (size_t written = 0; written < arguments.size(); ++written) {
       const auto i = fact.argument_order.empty() ? written : fact.argument_order.at(written);
       if (first_place && i == 0) arguments[i] = pack_view(first_place, fact.argument(expr, i));
-      else arguments[i] = prepare_argument(expr, i, current_owners);
+      else arguments[i] = prepare_argument(expr, i, current_owners, delayed || written + 1 < arguments.size());
       if (!reachable()) return {};
     }
     check_destination_arguments(expr, arguments);
@@ -3078,7 +3173,7 @@ class LLVMEmission {
         if (!reachable()) return nullptr;
         auto *selection = b_.CreateLoad(native_handle_pair(), source);
         b_.CreateStore(selection, destination);
-        return empty_scalar();
+        return read ? (discard ? empty_scalar() : pack_view(destination, expr)) : destination;
       }
       if (projection == Projection::slot) throw std::logic_error("assignment result has no binding slot");
       const auto assignment = [&](bool policy) -> llvm::Value * {
@@ -3368,7 +3463,12 @@ class LLVMEmission {
     case K::deferred: {
       auto &scope = *scope_;
       const auto action = std::ranges::find(scope.actions, &expr, &CleanupAction::action);
-      if (action == scope.actions.end()) throw std::logic_error("uncollected deferred block");
+      if (action == scope.actions.end()) throw std::logic_error("uncollected deferred action");
+      const auto &body = *expr.children.front();
+      if (body.kind != K::block) {
+        prepare_deferred_call(body, *action);
+        if (!reachable()) return nullptr;
+      }
       auto *record = action->activation_record;
       prepare_cleanup_record(scope, record, std::distance(scope.actions.begin(), action));
       b_.CreateStore(record, scope.head);
@@ -3604,7 +3704,7 @@ class LLVMEmission {
     llvm::Value *returns_void_at_end = nullptr;
     if (!method.regional_initializer && method.source->returns_void_at_end(Type::void_type))
       returns_void_at_end = requires_return ? b_.CreateNot(requires_return) : b_.getTrue();
-    call_scope({method.source->body.get()}, method.source->at, layout.deferred_blocks, requires_return,
+    call_scope({method.source->body.get()}, method.source->at, layout.deferred_actions, requires_return,
         call.here_group ? &*layout.result.type : nullptr, returns_void_at_end);
     control_ = nullptr;
     b_.SetInsertPoint(finish_);
@@ -3800,7 +3900,7 @@ public:
     });
     protected_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) { return method.here_group && method.instance.has_value(); });
     owned_failures_ = program.exception_types.size() > exception_categories.size() ||
-        std::ranges::any_of(program.instances, [](const auto &instance) { return instance.deferred_blocks != 0; });
+        std::ranges::any_of(program.instances, [](const auto &instance) { return instance.deferred_actions != 0; });
     case_scope_outcomes_ = std::ranges::any_of(program.methods, [](const auto &method) {
       return method.source->case_scan_scope && method.instance.has_value();
     });
