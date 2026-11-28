@@ -1,5 +1,5 @@
 using "./Deque.cod" { deque, push_back, pop_back };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction, LocalSumConstruction, LexicalProductReference, LexicalSumReference, LexicalSumRebind } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { BitsConstruction, LexicalProductReference, LexicalSumReference, LexicalSumRebind } };
 using "./ParserStorage.cod" {
     CallableSites, inspect_callable, is_scope_block, inspect_invocation, DirectCallSites,
     InvocationSyntax { OrdinaryInvocation }, CallableSyntax { ModuleCallable }, LocalMode { ValueLocal, ReferenceLocal }
@@ -352,7 +352,6 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
     if (at < intrinsic (len)(cases) &&
         (case cases[at] of {
             LexicalProductReference -> true;
-            LocalSumConstruction -> facts[at].allocation_owner == no_node();
             LexicalSumReference -> true;
             LexicalSumRebind -> true;
             _ -> false

@@ -69,7 +69,6 @@ export data ConstructorCaseFact =
     CaseProductField { receiver:UInt64; field:UInt64; ordinal:UInt64; record:DeclaredType; value_type:DeclaredType; } |
     CaseSumReceipt { receipt:UInt64; arm:UInt64; value_type:DeclaredType; } |
     CaseSumProjection { receiver:UInt64; field:UInt64; receipt:UInt64; arm:UInt64; record:DeclaredType; value_type:DeclaredType; } |
-    LocalSumConstruction { transfer:UInt64; sum:UInt64; arm:UInt64; fields:UInt64; } |
     SumValueResult { value_type:DeclaredType; } |
     IndexedAggregateLoan {
         consumer:UInt64; array:UInt64; index:UInt64; owner_site:UInt64; array_module:UInt64; array_type:UInt64;
@@ -1507,28 +1506,6 @@ func indexed_braced_transfer(nodes:const ExprNodes in N, at:UInt64, revision:UIn
         construction.placement == no_node() && construction.queried_operand == no_node()
 }
 
-func prepare_local_sum_write(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
-    transfer:UInt64, input:UInt64, requested:UInt64, used:UInt64, revision:UInt64,
-    report:DeclaredExpressionResult in R) -> bool
-    where {const owner N, const owner B, const owner W, const owner A, owner F, owner R} {
-    val arm <- names[requested].declaration;
-    if (arm >= used || names[transfer].kind != 0u8)
-        return case_problem(report, input, unproved_sum_subject());
-    val sum <- work[arm].declaring_sum;
-    if (sum >= used || sum >= intrinsic (len)(aggregate) ||
-        aggregate[sum] != (CoDBitsAggregate:AggregateStorage))
-        return case_problem(report, input, unproved_sum_subject());
-    ref position = make SumConstructorPosition { count <- 0u64; ordinal <- no_node() };
-    ref sites = make SumArmSites { previous <- no_node(); name <- no_node(); fields <- no_node() };
-    # Registration has already rejected any visible initializer definition for an arm.
-    if (local_sum_constructor(nodes, names, work, sum, requested, used, revision, position) != arm ||
-        !inspect_sum_arm(nodes, revision, used, arm, sites))
-        return case_problem(report, input, unselected_case_constructor());
-    facts[input] <- make LocalSumConstruction { transfer <- transfer; sum <- sum; arm <- arm; fields <- sites.fields };
-    return true
-}
-
 func unsupported_bits_construction() -> UInt8 { return 149u8 }
 func wrong_construction_type() -> UInt8 { return 150u8 }
 func unknown_inline_field() -> UInt8 { return 151u8 }
@@ -1796,6 +1773,25 @@ func prepare_lexical_sum_rebind(nodes:const ExprNodes in N, names:const NameBind
         };
         _ -> case_problem(report, destination, unsupported_bits_construction())
     }
+}
+
+# The slot path already has its own destination preparation. Give its RHS the
+# same construction plan as the other indexed and nested aggregate inputs.
+func prepare_slot_sum_input(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    transfer:UInt64, input:UInt64, arm:UInt64, used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R)
+    -> bool where {const owner N, const owner B, const owner E, const owner W, const owner G,
+        const owner A, owner F, owner R} {
+    if (arm >= used || names[transfer].kind != 0u8)
+        return case_problem(report, input, unproved_sum_subject());
+    val sum <- work[arm].declaring_sum;
+    if (sum >= used || sum >= intrinsic (len)(aggregate) ||
+        aggregate[sum] != (CoDBitsAggregate:AggregateStorage))
+        return case_problem(report, input, unproved_sum_subject());
+    ref type = make DeclaredType { kind <- sum_type(); defining_module <- 0u64; identity <- sum };
+    return prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+        input, transfer, type, used, revision, report)
 }
 
 func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2227,8 +2223,9 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             if (names[construction.requested].kind == constructor_type() &&
                 names[construction.requested].declaration != no_node() &&
                 !work[assignment.input].repeated_indexed_initializer) {
-                if (!prepare_local_sum_write(nodes, names, work, aggregate, facts, at, assignment.input,
-                    construction.requested, used, revision, report)) return false;
+                if (!prepare_slot_sum_input(nodes, names, selected, work, interfaces, published, aggregate,
+                    facts, at, assignment.input, names[construction.requested].declaration,
+                    used, revision, report)) return false;
                 if (first == no_node()) { (first <- at):void }
             } else {
                 if (names[construction.requested].kind == record_type() ||
