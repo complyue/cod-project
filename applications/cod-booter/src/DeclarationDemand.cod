@@ -285,6 +285,7 @@ array TextBodyDemands[UInt64]:TextBodyDemand;
 func text_call_profile(views:const SuppliedViews in V, at:UInt64) -> bool where {const owner V} {
     return at < intrinsic (len)(views) && (case views[at] of {
         ImportedSourceTextCall -> true;
+        ImportedTextWriterCall -> true;
         _ -> false
     })
 }
@@ -323,8 +324,8 @@ export func published_local_family(nodes:const ExprNodes in N, names:const NameB
     return no_node()
 }
 
-# Demand the ordinary callers that can receive a pending incoming
-# requirement. Only already-bound direct family edges participate here.
+# Demand the ordinary callers of prepared text calls so published routines
+# can describe their completion. Only bound direct family edges participate.
 func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L, views:const SuppliedViews in V,
     interfaces:const ModuleInterfaces in I, published:UInt64, aggregate:const AggregateFacts in A,

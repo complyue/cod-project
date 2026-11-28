@@ -2,11 +2,14 @@ using "./Deque.cod" { deque, push_back, pop_back };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, published_syntax_id, CallableSites, inspect_callable, ungrouped,
     LogicalSites, inspect_logical, LogicalSyntax { LogicalAnd, LogicalOr, LogicalNot, OtherLogicalSyntax },
-    RhsEvaluation { ConditionalRhs, SkipsRhs }, boolean_literal, BooleanSyntax { OtherBooleanSyntax },
+    RhsEvaluation { ConditionalRhs, SkipsRhs }, boolean_literal, BooleanSyntax { LiteralFalse, LiteralTrue, OtherBooleanSyntax },
+    block_tail, is_scope_block, first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { BlockSequence },
+    ConditionalSites, inspect_conditional, AssignmentSites, inspect_assignment, AssignmentSyntax { PlaceTransfer },
+    name_syntax, NameSyntax { OrdinaryName },
 };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable };
 using "./ParserStorage.cod" AstSlot { Occupied };
-using "./ParserStorage.cod" ExprPayload { BindSymbolEffect };
+using "./ParserStorage.cod" ExprPayload { BindSymbolEffect, DiscardedExpression };
 using "./NameResolution.cod" { NameBindings, NameWork, callable_binding };
 using "./DeclarationDemand.cod" { DeclarationDemands, needs_body_check, published_local_family };
 using "./NativeDeclarations.cod" {
@@ -14,9 +17,9 @@ using "./NativeDeclarations.cod" {
 };
 using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver, CheckedLocalTextRoutine } };
 using "./OperandChecking.cod" {
-    OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver, preserves_text_installations,
+    OperandFacts, OperandCheckResult, scalar_kind, scalar_bool, void_result, source_builder_loan, check_owner_access, unproved_text_receiver, preserves_text_installations,
 };
-using "./CompletionChecking.cod" { CompletionSites, invocation_reached, skipped_operand };
+using "./CompletionChecking.cod" { CompletionSites, can_continue, invocation_reached, skipped_operand };
 
 data TextNeed {
     symbol_module:UInt64, symbol_identity:UInt64, receiver_module:UInt64, receiver_identity:UInt64,
@@ -101,7 +104,8 @@ func record_text_call_prefix(nodes:const ExprNodes in N, facts:const OperandFact
     sites:const CompletionSites in X, uses:TextUses in U,
     at:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner F, const owner X, owner U} {
-    if (sites[at].event == skipped_operand() || boolean_literal(nodes, used, at) != OtherBooleanSyntax) return true;
+    if (sites[at].event == skipped_operand() || boolean_literal(nodes, used, at) != OtherBooleanSyntax ||
+        (facts[at].kind == scalar_bool() && name_syntax(nodes, used, at) == OrdinaryName)) return true;
     if ((facts[at].call_definition == no_node() && facts[at].text_method == no_node()) ||
         !invocation_reached(nodes, sites, at, used, revision) ||
         !preserves_text_installations(nodes, facts, used, revision, at)) return false;
@@ -114,28 +118,28 @@ func record_text_call_prefix(nodes:const ExprNodes in N, facts:const OperandFact
 # runs. An unrepresented operand withholds the prefix from later siblings.
 func record_text_installation_uses(nodes:const ExprNodes in N, facts:const OperandFacts in F,
     sites:const CompletionSites in X, uses:TextUses in U,
-    expression:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> void
+    expression:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner F, const owner X, owner U} {
     val at <- ungrouped(nodes, revision, used, expression);
-    if (at >= used || sites[at].event == skipped_operand()) return;
+    if (at >= used) return false;
+    if (sites[at].event == skipped_operand()) return true;
     ref logical = make LogicalSites {
         left_operand <- no_node(); right_operand <- no_node(); right_evaluation <- ConditionalRhs
     };
     val mode <- inspect_logical(nodes, revision, used, at, logical);
     if (mode != LogicalAnd && mode != LogicalOr && mode != LogicalNot) {
-        record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision):void;
-        return
+        return record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision)
     };
     ref later = make deque[UInt64]();
     for (unused in 0u64 .. used) {
-        if (at >= used) return;
+        if (at >= used) return false;
         if (mode == LogicalAnd || mode == LogicalOr || mode == LogicalNot) {
             if (logical.right_evaluation != SkipsRhs) { push_back(later, logical.right_operand) };
             (at <- logical.left_operand):void
         } else {
-            if (!record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision)) return;
+            if (!record_text_call_prefix(nodes, facts, sites, uses, at, prefix, used, revision)) return false;
             case pop_back(later) of {
-                (null) -> { return };
+                (null) -> { return true };
                 (ref next:UInt64 in here) -> { (at <- next):void };
             }
         };
@@ -143,6 +147,101 @@ func record_text_installation_uses(nodes:const ExprNodes in N, facts:const Opera
         mode <- if (at < used && sites[at].event != skipped_operand()) {
             inspect_logical(nodes, revision, used, at, logical)
         } else { (OtherLogicalSyntax:LogicalSyntax) }
+    };
+    return false
+}
+
+# The checked RHS runs before a bare lexical store. Only a builtin
+# scalar store carries the same prefix on to the following statement.
+func record_text_statement(nodes:const ExprNodes in N, facts:const OperandFacts in F,
+    sites:const CompletionSites in X, uses:TextUses in U,
+    item:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner F, const owner X, owner U} {
+    if (sites[item].event == skipped_operand()) return true;
+    val expression <- ungrouped(nodes, revision, used, item);
+    if (expression >= used) return false;
+    case nodes[expression] of {
+        Occupied { val syntax <- node, } -> {
+            case syntax.payload of {
+                DiscardedExpression { val inner <- operand, } -> {
+                    if (!published_syntax_id(nodes, revision, expression, inner)) return false;
+                    (expression <- ungrouped(nodes, revision, used, inner.index)):void
+                };
+                _ -> {}
+            }
+        };
+        _ -> { return false }
+    };
+    if (expression >= used) return false;
+    ref transfer = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
+    val store_preserves <- true;
+    if (inspect_assignment(nodes, revision, used, expression, transfer) == PlaceTransfer &&
+        name_syntax(nodes, used, transfer.destination) == OrdinaryName) {
+        store_preserves <- facts[expression].call_definition == no_node() && scalar_kind(facts[transfer.destination].kind);
+        (expression <- transfer.input):void
+    };
+    return record_text_installation_uses(nodes, facts, sites, uses, expression, prefix, used, revision) &&
+        store_preserves && can_continue(sites, item)
+}
+
+func record_text_arm(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:const OperandFacts in F, sites:const CompletionSites in X, uses:TextUses in U,
+    arm:UInt64, scope:UInt64, prefix:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, owner U} {
+    if (sites[arm].event == skipped_operand()) return true;
+    if (names[arm].scope != scope || is_scope_block(nodes, arm)) return false;
+    ref tail = make UInt64 { no_node() };
+    if (!block_tail(nodes, revision, used, arm, tail)) return false;
+    ref first = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, tail, BlockSequence, first)) return false;
+    val at <- first;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    for (step in 0u64 .. used) {
+        if (at == no_node()) return tail == no_node();
+        if (inspect_sequence_entry(nodes, revision, used, at, entry) != BlockSequence ||
+            names[entry.item].scope != scope ||
+            !record_text_statement(nodes, facts, sites, uses, entry.item, prefix, used, revision)) return false;
+        if (at == tail) return true;
+        (at <- links[at].next):void
+    };
+    return false
+}
+
+# Follow the bound list from a checked installation. Each reached arm
+# gets the incoming prefix independently. A successor at the join needs
+# preservation through every possible arm.
+func record_text_successors(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+    facts:const OperandFacts in F, sites:const CompletionSites in X, uses:TextUses in U,
+    prefix:UInt64, operation:UInt64, used:UInt64, revision:UInt64) -> void
+    where {const owner N, const owner B, const owner L, const owner F, const owner X, owner U} {
+    if (facts[operation].kind != void_result() || sites[operation].event == skipped_operand() ||
+        !can_continue(sites, operation)) return;
+    val scope <- names[operation].scope;
+    val at <- links[prefix].next;
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref branch = make ConditionalSites { test <- no_node(); consequent <- no_node(); alternative <- no_node() };
+    val test <- no_node();
+    val yes <- false;
+    val no <- false;
+    for (step in 0u64 .. used) {
+        if (at >= used || inspect_sequence_entry(nodes, revision, used, at, entry) != BlockSequence ||
+            names[entry.item].scope != scope) return;
+        if (sites[entry.item].event != skipped_operand()) {
+            if (inspect_conditional(nodes, revision, used, entry.item, branch)) {
+                if (!record_text_installation_uses(nodes, facts, sites, uses, branch.test, prefix, used, revision) ||
+                    !can_continue(sites, branch.test)) return;
+                test <- ungrouped(nodes, revision, used, branch.test);
+                if (test >= used) return;
+                yes <- boolean_literal(nodes, used, test) == LiteralFalse ||
+                    record_text_arm(nodes, names, links, facts, sites, uses, branch.consequent, scope, prefix, used, revision);
+                no <- boolean_literal(nodes, used, test) == LiteralTrue ||
+                    record_text_arm(nodes, names, links, facts, sites, uses, branch.alternative, scope, prefix, used, revision);
+                if (!yes || !no || !can_continue(sites, entry.item)) return
+            } else {
+                if (!record_text_statement(nodes, facts, sites, uses, entry.item, prefix, used, revision)) return
+            }
+        };
+        (at <- links[at].next):void
     }
 }
 
@@ -209,9 +308,11 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
                 uses[at].later_selected <- scopes[method].selected_uses;
                 (scopes[method].selected_uses <- at):void
             };
-            if (links[at].text_installation_prefix < used) {
-                record_text_installation_uses(nodes, facts, sites, uses, at,
-                    links[at].text_installation_prefix, used, revision)
+            case views[at] of {
+                PreparedTextInstallation { val operation <-, } -> {
+                    record_text_successors(nodes, names, links, facts, sites, uses, at, operation, used, revision)
+                };
+                _ -> {}
             }
         }
     };
@@ -394,8 +495,11 @@ func collect_outstanding_text_need(scopes:const TextScopes in S, supplies:const 
 func first_scoped_text_use(views:const SuppliedViews in V, facts:const OperandFacts in F, used:UInt64)
     -> UInt64 where {const owner V, const owner F} {
     for (at in 0u64 .. used) {
-        if (facts[at].text_method != no_node() && (case views[at] of { ImportedSourceTextCall -> true; _ -> false }))
-            return at
+        if (facts[at].text_method != no_node() && (case views[at] of {
+            ImportedSourceTextCall -> true;
+            ImportedTextWriterCall -> true;
+            _ -> false
+        })) return at
     };
     return no_node()
 }

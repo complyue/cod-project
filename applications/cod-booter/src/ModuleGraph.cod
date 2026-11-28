@@ -1582,7 +1582,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             next <- no_node(); next_method <- no_node();
             imported_interface <- no_node(); imported_type_module <- 0u64; imported_type_identity <-
                 0u64;
-            imported_function <- no_node(); imported_owner_argument <- no_node(); text_installation_prefix <- no_node(); imported_failure <- 0u64;
+            imported_function <- no_node(); imported_owner_argument <- no_node(); imported_failure <- 0u64;
             imported_failure_module <- 0u64;
             imported_kind <- 0u8; imported_callable_kind <- NoCallableKind;
             imported_array_read_completion <- NoArrayRead; imported_numeric_fault <- false;

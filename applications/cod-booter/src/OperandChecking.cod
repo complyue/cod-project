@@ -4619,32 +4619,6 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     return true
 }
 
-# The prefix for a direct statement includes its RHS through an explicit
-# discard or a transfer into a bare lexical place. An arbitrary expression
-# can evaluate more work before the call and gets no such prefix.
-func direct_text_statement(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, item:UInt64) -> UInt64
-    where {const owner N} {
-    val operand <- ungrouped(nodes, revision, used, item);
-    if (operand >= used) return no_node();
-    ref inner = make UInt64 { no_node() };
-    if (case nodes[operand] of {
-        Occupied { val syntax <- node, } -> case syntax.payload of {
-            DiscardedExpression { val child <- operand, } -> {
-                if (!published_syntax_id(nodes, revision, operand, child)) return no_node();
-                inner <- child.index;
-                true
-            };
-            _ -> false
-        };
-        _ -> false
-    }) { (operand <- ungrouped(nodes, revision, used, inner)):void };
-    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
-    if (inspect_assignment(nodes, revision, used, operand, assignment) == PlaceTransfer &&
-        name_syntax(nodes, used, assignment.destination) == OrdinaryName)
-        return ungrouped(nodes, revision, used, assignment.input);
-    return operand
-}
-
 # Calls use this receipt only after ordinary operand preparation has
 # established the types and access at the written argument sites.
 export func preserves_text_installations(nodes:const ExprNodes in N, facts:const OperandFacts in F,
@@ -4675,10 +4649,10 @@ export func preserves_text_installations(nodes:const ExprNodes in N, facts:const
     return false
 }
 
-# Record the preceding lexical installation as a candidate. The checked
-# operands determine whether the call can use it.
-func prepare_text_installation(nodes:const ExprNodes in N, views:SuppliedViews in V, links:NameWork in L,
-    at:UInt64, used:UInt64, revision:UInt64) -> void where {const owner N, owner V, owner L} {
+# Bind installation candidates to their original block entries. The checked
+# completion and operand rows determine their reached uses.
+func prepare_text_installation(nodes:const ExprNodes in N, views:SuppliedViews in V,
+    at:UInt64, used:UInt64, revision:UInt64) -> void where {const owner N, owner V} {
     if (!(case nodes[at] of {
         Occupied { val syntax <- node, } -> case syntax.payload of { BlockItem -> true; _ -> false };
         _ -> false
@@ -4702,13 +4676,6 @@ func prepare_text_installation(nodes:const ExprNodes in N, views:SuppliedViews i
         };
         _ -> {}
     };
-    if (entry.previous != no_node() &&
-        (case views[entry.previous] of { PreparedTextInstallation -> true; _ -> false })) {
-        val call <- direct_text_statement(nodes, revision, used, operation);
-        if (call < at) {
-            (links[call].text_installation_prefix <- entry.previous):void
-        }
-    };
     return
 }
 
@@ -4725,7 +4692,7 @@ export func prepare_imported_calls(nodes:const ExprNodes in N, names:const NameB
     required <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     for (at in 0u64 .. used) {
-        if (source_only) { prepare_text_installation(nodes, supplied, links, at, used, revision) };
+        if (source_only) { prepare_text_installation(nodes, supplied, at, used, revision) };
         if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady &&
             !prepare_imported_call(nodes, names, selected, links, contracts, interface_count,
                 catalog, views, supplied, aggregate, cases, visits, visit_count, used, revision, source_only, required, at, call, report)) return false
