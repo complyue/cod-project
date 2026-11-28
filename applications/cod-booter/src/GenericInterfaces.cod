@@ -261,3 +261,13 @@ export func stage_generic_interfaces(nodes:const ExprNodes in N, names:const Nam
     };
     return writer.next
 }
+
+# Extract a closed demand as an ordered type expression. Layout completion
+# consumes this prefix without access to the syntax or name binder.
+export func stage_closed_type(nodes:const ExprNodes in N, names:const NameBindings in B, selected:const SelectedExports in E,
+    work:const NameWork in L, interfaces:ModuleInterfaces in I, revision:UInt64, used:UInt64, module:UInt64,
+    start:UInt64, site:UInt64) -> UInt64 where {const owner N, const owner B, const owner E, const owner L, owner I} {
+    ref writer = make RecipeWriter { revision <- revision; used <- used; module <- module; next <- start; exhausted <- false };
+    if (!append_type_recipe(nodes, names, selected, work, interfaces, writer, site)) return no_node();
+    return writer.next
+}

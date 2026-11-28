@@ -81,6 +81,7 @@ export data ModuleBindingResult {
     related_first:UInt64;
     symbol_binder:UInt64;
     requires_operand_checks:bool;
+    first_closed_application:UInt64;
 }
 
 export func module_read_failed() -> UInt8 { return 1u8; }
@@ -423,10 +424,6 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
                 return false
             }
         };
-        if (at == names.first_closed_application) {
-            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
-            return false
-        };
         if (!result.requires_operand_checks && case_pattern(nodes, used, at) == ReferenceCaseTarget) {
             scope <- enclosing_callable(nodes, bindings, bindings[at].scope);
             if (scope >= used || !uninstantiated_method(bindings[scope].kind)) {
@@ -482,6 +479,8 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             };
         };
     };
+    result.first_closed_application <- names.first_closed_application;
+    if (result.first_closed_application != no_node()) return true;
     if (!emit_object || first_extended_declaration(nodes, work, result.frontend.tree, false) != no_node() ||
         uses_native_boundary(nodes, result.frontend.tree.used)) {
         ref declarations = make NativeDeclarationResult { diagnostic <- 0u8; node <- no_node(); };

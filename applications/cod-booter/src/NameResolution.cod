@@ -835,6 +835,10 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
             remember(bindings, name, declaration, ordinary_selection())
         }
     };
+    if (state.generic_method == no_node() && bindings[state.scope_node].kind != generic_product_binding() &&
+        state.first_closed_application == no_node()) {
+        (state.first_closed_application <- at):void
+    };
     val argument <- no_node();
     if (!first_sequence_entry(nodes, revision, at, tail, TypeSequence, argument)) {
         reject_name(state, at, invalid_module_tree());
@@ -860,10 +864,6 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
     if (state.generic_method != no_node()) {
         if (bindings[state.generic_method].kind == callable_binding()) {
             (bindings[state.generic_method].kind <- generic_method_binding()):void
-        }
-    } else {
-        if (bindings[state.scope_node].kind != generic_product_binding() && state.first_closed_application == no_node()) {
-            (state.first_closed_application <- at):void
         }
     }
 }

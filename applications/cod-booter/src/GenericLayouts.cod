@@ -1,0 +1,302 @@
+using "./ParserStorage.cod" { no_node, FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal } };
+using "./NameResolution.cod" { native_scalar, record_type };
+using "./ModuleExportStorage.cod" {
+    ModuleInterfaces, find_interface, generic_product_interface, generic_callable_interface, enum_type, sum_type,
+    InterfacePayload { GenericProduct, GenericCallable, RecipeParameter, RecipeField, RecipeBuiltin, RecipeNominal,
+        RecipeTypeParameter, RecipeApplication, RecipeFormal, RecipeOwner, RecipeResult },
+    RecipeResultMode { ReferenceRecipe },
+    AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord },
+};
+
+# Concrete product IDs index Products. Ordinary nominal IDs retain their defining declaration.
+enum TypeCategory:UInt8 { UnknownType; ScalarType; BitsNominal; ConcreteProductType; }
+data TypeKey { category:TypeCategory; scalar_kind:UInt8; module:UInt64; identity:UInt64; }
+array TypeKeys[UInt64]:TypeKey;
+
+data Product {
+    module:UInt64;
+    declaration:UInt64;
+    arguments:UInt64;
+    arity:UInt64;
+    complete:bool;
+    bits:bool;
+    constructor:UInt64;
+}
+array Products[UInt64]:Product;
+data Layouts {
+    const ref products:Products;
+    const ref operands:TypeKeys;
+    product_count:UInt64;
+    argument_count:UInt64;
+    exhausted:bool;
+}
+data TypeCursor { next:UInt64; past:UInt64; parameters:UInt64; substitution:UInt64; }
+data RecipeRanges {
+    local_count:UInt64;
+    imported_count:UInt64;
+    module:UInt64;
+}
+
+export enum GenericLayoutStatus:UInt8 { LayoutReady; UnrepresentedLayout; LayoutWorkspaceExhausted; }
+
+func same_type(left:const TypeKey in L, right:const TypeKey in R) -> bool
+    where {const owner L, const owner R} {
+    return left.category == right.category && left.scalar_kind == right.scalar_kind && left.module == right.module && left.identity == right.identity
+}
+
+func read_nominal(imported:const ModuleInterfaces in G, published:UInt64, module:UInt64, declaration:UInt64,
+    result:TypeKey in R) -> bool where {const owner G, owner R} {
+    val row <- find_interface(imported, published, module, declaration);
+    if (row == no_node()) return false;
+    val kind <- imported[row].interface_kind;
+    if (kind != enum_type() && kind != sum_type() && kind != record_type()) return false;
+    if (kind != enum_type() && imported[row].aggregate_storage != CoDBitsAggregate &&
+        imported[row].aggregate_storage != CLayoutBitsRecord) return false;
+    result.category <- (BitsNominal:TypeCategory);
+    result.scalar_kind <- 0u8;
+    result.module <- module;
+    (result.identity <- declaration):void;
+    return true
+}
+
+func equal_arguments(layouts:const Layouts in W, first:UInt64, second:UInt64, count:UInt64) -> bool
+    where {const owner W} {
+    for (ordinal in 0u64 .. count) {
+        if (!same_type(layouts.operands[first + ordinal], layouts.operands[second + ordinal])) return false
+    };
+    return true
+}
+
+func fill_product(rows:const ModuleInterfaces in I, published:UInt64, local:const ModuleInterfaces in L,
+    imported:const ModuleInterfaces in G, ranges:const RecipeRanges in C,
+    layouts:Layouts in W, product:UInt64, depth:UInt64) -> bool
+    where {const owner I, const owner L, const owner G, const owner C, owner W} {
+    val module <- layouts.products[product].module;
+    val declaration <- layouts.products[product].declaration;
+    val header <- find_interface(rows, published, module, declaration);
+    if (header == no_node() || rows[header].interface_kind != generic_product_interface()) return false;
+    val arity <- layouts.products[product].arity;
+    val past <- header + 1u64 + rows[header].entry_count;
+    case rows[header].payload of {
+        GenericProduct { val parameters <-; val constructor <-; } -> {
+            if (parameters != arity || parameters > rows[header].entry_count) return false;
+            (layouts.products[product].constructor <- constructor):void
+        };
+        _ -> { return false }
+    };
+    val parameter <- header + 1u64;
+    for (ordinal in 0u64 .. arity) {
+        if (!(case rows[parameter + ordinal].payload of { RecipeParameter -> true; _ -> false })) return false
+    };
+    ref cursor = make TypeCursor {
+        next <- parameter + arity; past <- past; parameters <- parameter;
+        substitution <- product
+    };
+    ref field_type = make TypeKey { category <- (UnknownType:TypeCategory); scalar_kind <- 0u8; module <- 0u64; identity <- no_node() };
+    val recipe <- no_node();
+    for (remaining in cursor.next .. past) {
+        if (cursor.next == past) {
+            (layouts.products[product].complete <- true):void;
+            return true
+        };
+        recipe <- cursor.next;
+        cursor.next <- recipe + 1u64;
+        case rows[recipe].payload of {
+            RecipeField { val mode <-; } -> {
+                if (!read_type(rows, local, imported, ranges, layouts, cursor, field_type, depth + 1u64)) return false;
+                if (mode == ValueFormal || mode == ExplicitValueFormal) {
+                    if (field_type.category == (ConcreteProductType:TypeCategory) &&
+                        (!layouts.products[field_type.identity].complete || !layouts.products[field_type.identity].bits)) return false
+                } else {
+                    if (mode != ReferenceFormal && mode != PointerFormal) return false;
+                    (layouts.products[product].bits <- false):void
+                }
+            };
+            _ -> { return false }
+        }
+    };
+    if (cursor.next != past) return false;
+    (layouts.products[product].complete <- true):void;
+    return true
+}
+
+func complete_application(local:const ModuleInterfaces in L, imported:const ModuleInterfaces in G,
+    ranges:const RecipeRanges in C, layouts:Layouts in W, module:UInt64, declaration:UInt64,
+    arguments:UInt64, arity:UInt64, depth:UInt64) -> UInt64 where {const owner L, const owner G, const owner C, owner W} {
+    for (candidate in 0u64 .. layouts.product_count) {
+        if (layouts.products[candidate].module == module && layouts.products[candidate].declaration == declaration) {
+            if (layouts.products[candidate].arity == arity &&
+                equal_arguments(layouts, layouts.products[candidate].arguments, arguments, arity)) return candidate;
+            # An active definition with a different substitution would expand the type graph.
+            if (!layouts.products[candidate].complete) return no_node();
+        }
+    };
+    val product <- layouts.product_count;
+    if (product >= intrinsic (len)(layouts.products)) {
+        (layouts.exhausted <- true):void;
+        return no_node()
+    };
+    layouts.products[product].module <- module;
+    layouts.products[product].declaration <- declaration;
+    layouts.products[product].arguments <- arguments;
+    layouts.products[product].arity <- arity;
+    layouts.product_count <- product + 1u64;
+    val complete <- if (module == ranges.module) {
+        fill_product(local, ranges.local_count, local, imported, ranges, layouts, product, depth)
+    } else {
+        fill_product(imported, ranges.imported_count, local, imported, ranges, layouts, product, depth)
+    };
+    return if (complete) { product } else { no_node() }
+}
+
+func read_type(rows:const ModuleInterfaces in I, local:const ModuleInterfaces in L,
+    imported:const ModuleInterfaces in G, ranges:const RecipeRanges in C, layouts:Layouts in W,
+    cursor:TypeCursor in U, result:TypeKey in R, depth:UInt64) -> bool
+    where {const owner I, const owner L, const owner G, const owner C, owner W, owner U, owner R} {
+    if (depth >= 128u64 || cursor.next >= cursor.past) return false;
+    val row <- cursor.next;
+    cursor.next <- row + 1u64;
+    val product <- no_node();
+    val first <- no_node();
+    case rows[row].payload of {
+        RecipeBuiltin { val kind <-; } -> {
+            if (!native_scalar(kind)) return false;
+            result.category <- (ScalarType:TypeCategory);
+            result.module <- 0u64;
+            result.scalar_kind <- kind;
+            (result.identity <- 0u64):void;
+            return true
+        };
+        RecipeNominal { val defining_module <-; val declaration <-; } -> {
+            return read_nominal(imported, ranges.imported_count, defining_module, declaration, result)
+        };
+        RecipeTypeParameter { val binder <-; } -> {
+            product <- cursor.substitution;
+            if (product >= layouts.product_count) return false;
+            for (ordinal in 0u64 .. layouts.products[product].arity) {
+                if (rows[cursor.parameters + ordinal].declaration == binder) {
+                    (result <- layouts.operands[layouts.products[product].arguments + ordinal]):void;
+                    return true
+                }
+            };
+            return false
+        };
+        RecipeApplication { val defining_module <-; val declaration <-; val arguments <-; } -> {
+            first <- layouts.argument_count;
+            if (arguments == 0u64 || arguments > intrinsic (len)(layouts.operands) - first) {
+                (layouts.exhausted <- arguments != 0u64):void;
+                return false
+            };
+            layouts.argument_count <- first + arguments;
+            for (ordinal in 0u64 .. arguments) {
+                if (!read_type(rows, local, imported, ranges, layouts, cursor, layouts.operands[first + ordinal], depth + 1u64)) return false
+            };
+            product <- complete_application(local, imported, ranges, layouts, defining_module, declaration, first, arguments, depth);
+            if (product == no_node()) return false;
+            result.category <- (ConcreteProductType:TypeCategory);
+            result.scalar_kind <- 0u8;
+            result.module <- ranges.module;
+            (result.identity <- product):void;
+            return true
+        };
+        _ -> { return false }
+    }
+}
+
+func matches_constructor_result(rows:const ModuleInterfaces in I, first:UInt64, past:UInt64,
+    result:UInt64, product:const Product in P) -> bool where {const owner I, const owner P} {
+    if (result >= past || product.arity >= past - result) return false;
+    if (!(case rows[result].payload of {
+        RecipeApplication { val defining_module <-; val declaration <-; val arguments <-; } ->
+            defining_module == product.module && declaration == product.declaration && arguments == product.arity;
+        _ -> false
+    })) return false;
+    val ordinal <- 0u64;
+    val binder <- no_node();
+    for (site in first .. past) {
+        if (case rows[site].payload of { RecipeParameter -> true; _ -> false }) {
+            if (ordinal >= product.arity) return false;
+            binder <- rows[site].declaration;
+            if (!(case rows[result + 1u64 + ordinal].payload of {
+                RecipeTypeParameter { val parameter <- binder; } -> parameter == binder;
+                _ -> false
+            })) return false;
+            (ordinal <- ordinal + 1u64):void
+        }
+    };
+    return ordinal == product.arity
+}
+
+# Read a fixed constructor signature only after the member table is complete.
+# A family with no constructor still has a usable concrete type.
+func matches_niladic_constructor(rows:const ModuleInterfaces in I, published:UInt64,
+    product:const Product in P) -> bool where {const owner I, const owner P} {
+    val head <- find_interface(rows, published, product.module, product.constructor);
+    if (head == no_node() || rows[head].interface_kind != generic_callable_interface()) return false;
+    if (!(case rows[head].payload of {
+        GenericCallable { val parameters <-; val constructor_of <-; val function_form <-; } ->
+            function_form && constructor_of == product.declaration && parameters == product.arity;
+        _ -> false
+    })) return false;
+    val first <- head + 1u64;
+    val past <- first + rows[head].entry_count;
+    val owner_role <- no_node();
+    for (site in first .. past) {
+        case rows[site].payload of {
+            RecipeFormal -> { return false };
+            RecipeResult { val mode <-; val owner <- owner_role; val readonly <-; } -> {
+                if (owner_role != no_node() || mode != ReferenceRecipe || readonly || owner == no_node() ||
+                    !matches_constructor_result(rows, first, past, site + 1u64, product)) return false;
+                (owner_role <- owner):void
+            };
+            _ -> {}
+        }
+    };
+    for (site in first .. past) {
+        if (rows[site].declaration == owner_role) {
+            return case rows[site].payload of { RecipeOwner { val readonly <-; } -> !readonly; _ -> false }
+        }
+    };
+    return false
+}
+
+# The completion pass has no access to syntax or the binder. It reserves
+# identities for reference fields and publishes only a closed result.
+export func complete_generic_layout(local:const ModuleInterfaces in L, local_count:UInt64, term_past:UInt64,
+    imported:const ModuleInterfaces in G, imported_count:UInt64, module:UInt64,
+    constructor:UInt64 in R) -> GenericLayoutStatus where {const owner L, const owner G, owner R} {
+    (constructor <- no_node()):void;
+    if (local_count >= term_past || term_past > intrinsic (len)(local) ||
+        imported_count > intrinsic (len)(imported)) return (UnrepresentedLayout:GenericLayoutStatus);
+    if (term_past > no_node() - imported_count) return (LayoutWorkspaceExhausted:GenericLayoutStatus);
+    val capacity <- term_past + imported_count;
+    ref products = make Products(capacity, make Product {
+        module <- 0u64; declaration <- no_node(); arguments <- no_node(); arity <- 0u64;
+        constructor <- no_node(); complete <- false; bits <- true
+    });
+    const ref unknown = make TypeKey { category <- (UnknownType:TypeCategory); scalar_kind <- 0u8; module <- 0u64; identity <- no_node() };
+    ref operands = make TypeKeys(capacity, unknown);
+    ref layouts = make Layouts {
+        products = products; operands = operands;
+        product_count <- 0u64; argument_count <- 0u64; exhausted <- false
+    };
+    const ref ranges = make RecipeRanges {
+        local_count <- local_count;
+        imported_count <- imported_count; module <- module
+    };
+    ref cursor = make TypeCursor { next <- local_count; past <- term_past; parameters <- no_node(); substitution <- no_node() };
+    ref result = make TypeKey { category <- (UnknownType:TypeCategory); scalar_kind <- 0u8; module <- 0u64; identity <- no_node() };
+    if (!read_type(local, local, imported, ranges, layouts, cursor, result, 0u64) ||
+        cursor.next != term_past || result.category != (ConcreteProductType:TypeCategory) || !layouts.products[result.identity].complete) {
+        return if (layouts.exhausted) { LayoutWorkspaceExhausted:GenericLayoutStatus } else { UnrepresentedLayout:GenericLayoutStatus }
+    };
+    val product <- result.identity;
+    if (layouts.products[product].constructor != no_node()) {
+        val matches <- if (layouts.products[product].module == module) {
+            matches_niladic_constructor(local, local_count, layouts.products[product])
+        } else { matches_niladic_constructor(imported, imported_count, layouts.products[product]) };
+        if (!matches) return (UnrepresentedLayout:GenericLayoutStatus);
+        (constructor <- layouts.products[product].constructor):void
+    };
+    return (LayoutReady:GenericLayoutStatus)
+}
