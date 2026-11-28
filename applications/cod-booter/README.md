@@ -429,7 +429,11 @@ The source checker accepts a workspace record with fixed reference fields for na
 
 `ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`.
 
-The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The `ModuleGraph.cod` source closure now checks `InitializationReadiness.cod` and reaches the imported `extract_initialization_flow` call in `InitializationChecking.cod`.
+The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts.
+
+Both source commands check `InitializationChecking.cod`, including its imports of command extraction, control completion, readiness completion and diagnostic selection. The checked workspace signatures include writable Boolean array loans. The control helpers can return the `UInt64` index of a discovered state or flag record while updating their initialized workspace. Their readonly flag-history loan can use the same actual owner as the writable state tables. The extractor still rejects a demanded tag with no reset before the later phases consume the linked operation graph.
+
+The two source commands reach the symbolic procedure declaration `@followDependency` in `ModuleGraph.cod` and report it as outside the current profile. The provider command preserves the previous C source and header on that rejection.
 
 ### Readonly queries
 

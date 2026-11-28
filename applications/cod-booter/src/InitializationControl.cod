@@ -68,8 +68,8 @@ func append_flag(flags:InitializationFlags in F, result:InitializationControlRes
     return next
 }
 
-func existing_state(states:const InitializationStates in F, flags:const InitializationFlags in F,
-                    head:UInt64, used:UInt64, history:UInt64) -> UInt64 where {const owner F} {
+func existing_state(states:const InitializationStates in F, flags:const InitializationFlags in H,
+                    head:UInt64, used:UInt64, history:UInt64) -> UInt64 where {const owner F, const owner H} {
     val state <- head;
     for (unused in 0u64 .. used) {
         if (state == no_node()) return no_node();
@@ -79,9 +79,9 @@ func existing_state(states:const InitializationStates in F, flags:const Initiali
     return no_node()
 }
 
-func state_for(states:InitializationStates in F, flags:const InitializationFlags in F,
+func state_for(states:InitializationStates in F, flags:const InitializationFlags in H,
                heads:InitializationIndices in F, result:InitializationControlResult in F,
-               operation:UInt64, history:UInt64) -> UInt64 where {owner F} {
+               operation:UInt64, history:UInt64) -> UInt64 where {owner F, const owner H} {
     val existing <- existing_state(states, flags, heads[operation], result.states, history);
     if (existing != no_node()) return existing;
     val next <- result.states;

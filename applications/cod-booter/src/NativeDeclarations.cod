@@ -3314,8 +3314,11 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
     if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
-        clause.annotation >= used || (names[clause.annotation].kind != builtin_bool() &&
-            names[clause.annotation].kind != builtin_void()) ||
+        clause.annotation >= used) return;
+    val result_kind <- names[clause.annotation].kind;
+    val published_result <- result_kind == builtin_bool() || result_kind == builtin_void();
+    # Local workspace helpers can return the index they just discovered.
+    if ((!published_result && result_kind != builtin_u64()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first)) return;
@@ -3334,6 +3337,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     val readonly_arrays <- 0u64;
     val writable_records <- 0u64;
     val writable_enum_array <- false;
+    val writable_flag_array <- false;
     val writable_record_array <- false;
     val writable_sum_array <- false;
     val readonly_bytes <- false;
@@ -3353,7 +3357,9 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
             # Schema completion writes an enum table. Enum selection updates
             # binding and work tables among readonly schema inputs. Native
             # declaration checking also writes aggregate and supplied views.
-            publication_signature <- (reads_record && readonly_arrays != 0u64 &&
+            # Initialization phases fill ready command, graph and flag tables
+            # through ordinary loans. Each table was checked independently.
+            publication_signature <- published_result && ((reads_record && readonly_arrays != 0u64 &&
                 ((writable_arrays == 0u64 && writable_records == 1u64) ||
                  (writable_arrays == 1u64 && writable_record_array && writable_records == 0u64))) ||
                 (reads_record && writable_arrays == 2u64 && writable_records != 0u64 &&
@@ -3361,14 +3367,15 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 (!reads_record && writable_records == 1u64 &&
                     ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||
                      (writable_arrays == 2u64 && writable_record_array && readonly_arrays == 5u64 && readonly_bytes) ||
-                     (writable_arrays == 4u64 && readonly_arrays >= 3u64))) ||
+                     (writable_arrays == 4u64 && readonly_arrays >= 2u64))) ||
+                (writable_flag_array && readonly_arrays != 0u64) ||
                 (!value_parameters && !reads_record && readonly_arrays == 1u64 && readonly_bytes &&
                     writable_records == 1u64 && writable_record_array &&
                     (writable_arrays == 1u64 || (writable_arrays == 2u64 && writable_sum_array))) ||
                 (writable_arrays == 1u64 && writable_record_array &&
                     readonly_arrays == 0u64 && writable_records == 0u64 && !reads_record &&
                     first < used && preceding < used && work[first].next == preceding &&
-                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64()));
+                    independent_scalar_formal(nodes, names, preceding, used, revision, builtin_u64())));
             if (publication_signature || (writable_arrays != 0u64 && (writable_records != 0u64 || writable_arrays >= 3u64))) {
                 (views[at] <- make PreparedWorkspaceLoans { publication_signature <- publication_signature }):void
             };
@@ -3397,6 +3404,7 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                     writable_record_array <- writable_record_array || element == record_type();
                     writable_sum_array <- writable_sum_array || element == sum_type();
                     writable_enum_array <- writable_enum_array || element == enum_type();
+                    writable_flag_array <- writable_flag_array || element == builtin_bool();
                     adjacent_arrays <- previous_writable != no_node() && previous_writable == preceding;
                     previous_writable <- formal;
                     (writable_arrays <- writable_arrays + 1u64):void
