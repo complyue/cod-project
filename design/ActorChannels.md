@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 5 · 2026-11-28
+Design and research revision: 6 · 2026-11-28
 
 ## Design authority
+
+At r6 the [region and packet decision](../CHANGELOG.md#h-region-locality-and-packet-chans-20261128) distinguishes ordinary region handoff from packet delivery. D-32-RESOURCE-POOLS/P-789 covers local and pool-bound ordinary regions. D-32-REGION-TRANSPORT/P-711 continues whole-packet validation and adds swarm-independent typed chan delivery. The source spellings below are proposals.
 
 At r5 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires an actual target pool for every go process and makes the pool a first-class ownership boundary. D-32-RESOURCE-POOLS/P-789 relates that boundary to both r4 launch forms and typed chan communication. The same-host shared-memory example examines feasibility. Pool construction, placement policy and endpoint syntax remain open for `e-wrks/cod`.
 
@@ -76,9 +78,29 @@ delivery risk.
 
 A **resource pool** is a first-class CoD object identifying the domain within which go processes can transfer resource ownership. A program should be able to pass a pool to a library and use that same pool for related work. Every go process launch targets a particular pool, even if it passes only scalars. A scheduling policy such as “use a subprocess” by itself does not identify a pool. A pool answers *where ownership can pass*. At any instant a particular holder still has the release obligation for each owned resource. Pool membership gives no general access to another member’s resources. A thread pool or subprocess pool supplies execution capacity. A region’s internal block pool supplies storage. Neither shared capacity nor shared storage establishes ownership-transfer authority. [Regional allocation policy](RegionalOwnership.md#intrinsic-region-ownership-versus-intra-region-library-policy)
 
-Apply the same rule to an owning argument of a named entry procedure, a block’s explicit owner list, and an ownership-bearing message sent over a typed `chan`. Each receiving go process must be in the same actual pool for that handoff. Compare two independently created pools with identical configuration: the same-pool transfer is eligible, and the cross-pool transfer is invalid even if both workers share an OS process. Passing the same pool through a parameter or alias preserves its identity. Wrapping an owner in another message cannot change the boundary. Message type, ordinary owner/lifetime rules and the provider’s ability to transport that particular resource still apply.
+Apply the same actual-pool check when a pool-bound resource passes through an owning argument of a named entry procedure, a block’s explicit owner list, or an owning message sent over a typed `chan`. Each receiving go process must be in the same actual pool for that handoff. Compare two independently created pools with identical configuration: the same-pool transfer is eligible, and the cross-pool transfer is invalid even if both workers share an OS process. Passing the same pool through a parameter or alias preserves its identity. Wrapping an owner in another message cannot change the boundary. Message type, ordinary owner/lifetime rules and the provider’s ability to transport that particular resource still apply.
 
-For example, a producer in pool `P` builds a partition, then sends its region to an indexing worker. One candidate static signature relates the owned partition and the destination end of the chan through a common pool parameter `P`. A generic producer can then use either a thread worker or a subprocess worker when the backing works for both. An endpoint leading to a different pool `Q` fails the ownership check even if its message schema is identical. For a shared queue, the guarantee must cover every eligible receiver of an owning message. The way to express that relation and recover evidence after a dynamic pool selection is still a design question.
+For example, a producer in pool `P` builds a partition associated with `P`, then sends its region to an indexing worker. One candidate static signature relates the owned partition and the destination end of the chan through a common pool parameter `P`. A generic producer can then use either a thread worker or a subprocess worker when the backing works for both. An endpoint leading to a different pool `Q` fails the ownership check even if its message schema is identical. For a shared queue, the guarantee must cover every eligible receiver of an owning message. The way to express that relation and recover evidence after a dynamic pool selection is still a design question.
+
+### Process-local regions, pool-bound regions and packets
+
+| Region | Association at construction | How another go process can receive it |
+| --- | --- | --- |
+| Ordinary region for local work | Omit the pool. This also applies inside a go process launched in a pool. | The owner stays within that go process. Ordinary calls there can borrow the region or take and return ownership. |
+| Pool-bound ordinary region | Select one actual pool. The constructing holder has the release obligation. | An owning launch or typed chan handoff can pass it to another member of that same pool, subject to the resource’s transport requirements. |
+| Packet region | A packet is always independent of any pool. | Send the packet through a typed `chan`. Endpoints may belong to go processes in different pools. The receiver can use the whole packet after validation. |
+
+For example, a coordinator in one pool sends a packet of keys to a worker in another. The worker interprets those keys using its own index. The packet needs no pool identity at construction, in transit or on receipt. An index region bound to the coordinator’s pool cannot cross that boundary inside the packet. The [packet contract](DomainLanguageDesign.md#dl-04) governs the delivered representation and its compatibility. The [chan contract](#confirmed-basis) governs send feedback.
+
+**Candidate source spelling.** `swarm s` would declare a first-class resource pool with its own identity. At an ordinary region construction, `within s` would select that identity. Compare these constructions in a producer already participating in `s`:
+
+```cod
+own region scratch <- make region Partition(bytes -> capacity) { count <- 0 }
+own region batch <- make region within s Partition(bytes -> capacity) { count <- 0 }
+go on(s) build_index(batch)
+```
+
+Assume `Partition` has a single `count` root and the entry procedure takes its owner. Passing `scratch` at the same launch would fail, even if both threads use the same address space. Passing `batch` to a distinct pool would also fail. In the candidate grammar, `within` qualifies the creation of the whole region. A nested `make Node in r { ... }` still places an object in its actual owner `r`. Both `swarm` and `within` can be contextual. The declaration and construction spellings, who may originate a region for a newly declared pool, and the source form for creating a packet remain open.
 
 ### A shared-memory region between local processes
 
@@ -95,13 +117,13 @@ Mapping the bytes and transferring the owner are separate events. After successf
 | Different pools, same address space, same region and message types | Reject the ownership path. Changing the backing or using a chan cannot authorize it. |
 | Same pool, subprocess receiver, opaque handle usable only in the sender process | Pool identity meets one condition. The handle still lacks a usable subprocess transport. |
 | Work is accepted into a queue and the receiving worker dies | The responsible queue or transport must account for the resource under the eventual failure contract. An ordinary chan send still gives no delivery receipt. |
-| Two pools need the same business data | A candidate is to send self-contained data and construct a fresh region owned in the destination pool. Whether to offer such an operation and how to spell it remain open. It would transfer no existing owner across the boundary. |
+| Two pools need the same business data | Send a self-contained packet over a typed chan. The receiver may use the packet or construct its own ordinary region from the data. The sender’s pool-bound resource stays in its pool. |
 
-One open placement question is whether a logical pool may span machines. Shared memory covers the local-host case. The network contract below already specifies whole-region delivery. A distributed-pool design would also have to establish common pool membership. Communication between distinct pools would have to respect their ownership boundary whichever transport they use. The placement syntax, pool startup and shutdown, queue acceptance and release after failure remain separate decisions. The booter and seed retain their existing scope.
+One open placement question is whether a logical pool may span machines. Shared memory covers the local-host case. A distributed pool would need to establish common membership for pool-bound resource handoff. The network path for packets works independently of that placement decision. The placement syntax, pool startup and shutdown, queue acceptance and release after failure remain separate decisions. The booter and seed retain their existing scope.
 
 ## Regional transport over AKCP
 
-The network transfer unit visible to the receiving Actor is one whole region. A sender may submit a
+The network transfer unit visible to the receiving Actor is one whole packet region. Typed chan delivery works within a pool or across pools. A sender may submit a
 region of any finite length that the peers can represent and have resources to handle. The carrier
 can make progress across many UDP datagrams, AKCP records and repair windows. Bytes can arrive,
 be repaired or become permanently unavailable while a region is in progress. The runtime may
@@ -423,7 +445,7 @@ process. Native foreign entry must preserve the Actor's context and live owners.
 
 ### Exclusive regional handoff remains a candidate
 
-Exclusive whole-region handoff is a useful first candidate for a regional message. In one address
+For a packet carried by a typed chan, exclusive whole-region handoff is a candidate implementation of the local transport. Packet delivery has the same pool-independent contract at either endpoint. In one address
 space a system owner can change without repairing internal graph edges. Remote transfer still has
 byte transport, validation, compatibility and lifetime costs. Local release responsibility and
 business-level execution identity are separate: releasing each local region exactly once does not

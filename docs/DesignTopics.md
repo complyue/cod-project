@@ -277,9 +277,9 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 多个 worker 汇流、资源征召、任务结算与取消。
 [预研与源码依据](../design/ActorChannels.md)
 
-跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 region。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
+跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 packet region。packet region 始终不关联资源池，经类型化 `chan` 传递，两端可以属于不同的池。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
 
-并行任务用一等资源池表达所有权边界。同一个实际池中的 go process 可在启动时或通过类型化 `chan` 移交资源所有权；即使在同一地址空间，不同池也不能互相移交所有权。同机子进程可以把可重定位的普通 region 映射到不同基址，实际映射与 CoD 所有权移交分别处理。待检验的选择包括池身份怎样进入静态签名、一个池是否可跨机器，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
+普通 region 在 `make` 时省略池，就只在当前 go process 内使用。需要在 go process 之间移交的普通 region 在创建时关联一个实际资源池。只有同池才能在启动时或通过类型化 `chan` 移交这类资源的所有权。同机子进程可以把可重定位的普通 region 映射到不同基址，实际映射与 CoD 所有权移交分别处理。待检验的选择包括池身份怎样进入静态签名、一个池是否可跨机器，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
 发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)
 

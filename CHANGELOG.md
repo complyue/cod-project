@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Distinguish local regions, pool-bound handoff and packet delivery
+
+<a id="h-region-locality-and-packet-chans-20261128"></a>
+**H-REGION-LOCALITY-AND-PACKET-CHANS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) confirms that ordinary regions may remain local to a go process and omit the pool at construction. Packet regions have no swarm association and travel through typed chans. [D-32 r5→6](design/ActorChannels.md#process-local-regions-pool-bound-regions-and-packets) qualifies the [prior pool decision](https://github.com/complyue/cod-project/blob/48212f57f84a2973993eb648b83f4e6fdf7e3b9a/design/ActorChannels.md#resource-pools-and-ownership-handoff). P-789 continues the target on every launch and same-pool handoff of pool-bound resources. P-711 continues whole-packet delivery and validation when endpoints belong to different pools. D-10 r284→285 and D-22 r78→79 apply the distinction at launch and construction. The user proposes `swarm s` and `make region within s ...` for discussion. Source spellings, initial pool participation and send-side fault ownership remain open. Registry r1388→1389.
+
 ## 2026-11-28 — Model resource pools as ownership boundaries for go processes
 
 <a id="h-go-resource-pools-20261128"></a>

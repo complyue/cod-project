@@ -1,8 +1,10 @@
 # CoD construction, bits ADTs and region acquisition
 
-Design revision: 78 · Recorded: 2026-11-28 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
+Design revision: 79 · Recorded: 2026-11-28 · Status: DBMR design confirmed (modes, publication and image completion); logical result destinations, named return/receiving forms and result-bound owners confirmed; bounded structural-result and receiving source rules selected; remaining conflicts/extensions and full proofs under review; whole-document approval pending; implementation incomplete.
 
 ## Design authority
+
+At r79 the [region locality decision](../CHANGELOG.md#h-region-locality-and-packet-chans-20261128) preserves ordinary region construction for go-process-local work. P-789 records when an ordinary region needs an explicit pool. Packet regions have their own chan transport.
 
 At r78 the [terminology clarification](../CHANGELOG.md#h-dbmr-storage-technique-20261128) scopes the DBMR modes below to CoD’s intrinsic provider. The confirmed publication and image-completion requirements continue.
 
@@ -698,6 +700,8 @@ Both declarations construct an instance in the current full scope. The assignmen
 For a fresh sum instance, select its dctor with `make`. An explicit receiving owner, as in `ref answer:Decision in archive = make Backorder {};`, supplies the allocation destination. Testing `answer isa Backorder` only inspects the active alternative. A constructor overload may use its destination owner even when its fields contain only bits. A bare dctor call has no independent value-construction contract in the current language. First-class aggregate value expressions and result transport have their own design scope. [Sum construction](DomainLanguageDesign.md#sum-object-construction-and-reference-storage)
 
 ## Region construction and named root initializers
+
+An ordinary region can be constructed for use entirely within the current go process by omitting the pool. Association with a particular pool permits eligible handoffs of an ordinary region. A packet region has no pool association and travels through a typed `chan`. The pool selection spelling for ordinary regions is under discussion. [Construction and handoff examples](ActorChannels.md#process-local-regions-pool-bound-regions-and-packets)
 
 H-596 requires individual root initializers; H-597 accepts a construction-local owner name, and H-598/H-599 admits initialization through helpers in a free initialization block. A named structural region schema fixes the root labels, storage kinds and full component contracts; construction supplies their initial contents in the new region. The bounded form uses `make region`, with allocator arguments separate from the initialization block:
 
