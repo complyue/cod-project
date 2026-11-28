@@ -26,7 +26,8 @@ using "./NativeDeclarations.cod" {
     prepared_byte_function, prepared_array_construction, prepared_array_signature, readonly_reader_needs_body, prepared_product_writer, prepared_scalar_predicate, prepared_scalar_function, prepared_aggregate_writer, prepared_readonly_query, prepared_parser_writer, prepared_workspace_writer, prepared_array_inspector
 };
 using "./ModuleExports.cod" SelectedExports;
-using "./ModuleExportStorage.cod" { sum_type, enum_type };
+using "./ModuleExportStorage.cod" { ModuleInterfaces, sum_type, enum_type };
+using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, ArrayFieldRecordFormal, InlineProductField, BitsConstruction, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
@@ -326,9 +327,11 @@ export func published_local_family(nodes:const ExprNodes in N, names:const NameB
 # requirement. Only already-bound direct family edges participate here.
 func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, links:const NameWork in L, views:const SuppliedViews in V,
+    interfaces:const ModuleInterfaces in I, published:UInt64, aggregate:const AggregateFacts in A,
     demand:DeclarationDemands in D, root:UInt64, used:UInt64, revision:UInt64,
     body_count:UInt64 in Q, receipt_count:UInt64 in R) -> UInt64
-    where {const owner N, const owner B, const owner E, const owner L, const owner V, owner D, owner Q, owner R} {
+    where {const owner N, const owner B, const owner E, const owner L, const owner V, const owner I, const owner A,
+        owner D, owner Q, owner R} {
     val first <- first_text_use(views, used);
     if (first == no_node()) return no_node();
     if (used > 9223372036854775807u64) return first;
@@ -340,7 +343,8 @@ func require_text_callers(nodes:const ExprNodes in N, names:const NameBindings i
     val scope <- no_node();
     for (at in 0u64 .. used) {
         callee <- published_local_family(nodes, names, at, used, revision);
-        if (callee < used && source_text_routine_signature(nodes, names, selected, links, callee, used, revision)) {
+        if (callee < used && source_text_routine_signature(nodes, names, selected, links,
+            interfaces, published, aggregate, callee, used, revision)) {
             (demand[callee].public_text_routine <- true):void
         };
         scope <- demand[at].scope;
@@ -387,10 +391,11 @@ export func discover_declaration_demand(
     nodes:const ExprNodes in N, names:const NameBindings in B,
     links:const NameWork in W, selected:const SelectedExports in E,
     fields:const CaughtFieldUses in F, views:const SuppliedViews in V,
+    interfaces:const ModuleInterfaces in I, published:UInt64, aggregate:const AggregateFacts in A,
     cases:const ConstructorCaseFacts in C, demand:DeclarationDemands in D,
     root:UInt64, used:UInt64, revision:UInt64, problem:UInt64 in P) -> bool
     where {const owner N, const owner B, const owner W, const owner E, const owner F, const owner V,
-           const owner C, owner D, owner P} {
+           const owner I, const owner A, const owner C, owner D, owner P} {
     if (used > intrinsic (len)(nodes) || used > intrinsic (len)(names) ||
         used > intrinsic (len)(links) || used > intrinsic (len)(demand)) return false;
     ref tail = make UInt64 { no_node() };
@@ -619,7 +624,8 @@ export func discover_declaration_demand(
             };
         };
     };
-    val text_problem <- require_text_callers(nodes, names, selected, links, views, demand, root, used, revision, count, receipt_count);
+    val text_problem <- require_text_callers(nodes, names, selected, links, views, interfaces, published, aggregate,
+        demand, root, used, revision, count, receipt_count);
     if (text_problem != no_node()) { problem <- text_problem; return false };
     # Reached bodies can forward a loan or determine allocation operands.
     # Check them before accepting the receiving body's contract.

@@ -762,7 +762,8 @@ proc check_graph_exception_body(source:const SourceBytes in S, nodes:const ExprN
         }
     };
     if (!executable && !discover_declaration_demand(
-        nodes, names, work, selected, fields, views, cases, demand, result.frontend.tree.root,
+        nodes, names, work, selected, fields, views, interfaces, interface_count, aggregate_facts,
+        cases, demand, result.frontend.tree.root,
         used, revision, operands.node)) {
         binding_diagnostic(nodes, result, module_operands_failed(), 1u8, operands.node);
         return false

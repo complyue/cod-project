@@ -11,7 +11,7 @@ using "./NativeDeclarations.cod" {
 };
 using "./ModuleExportStorage.cod" { ModuleInterfaces, ScopedRoutineExits, ScopedRoutineContracts, InterfacePayload { CheckedTextReceiver } };
 using "./OperandChecking.cod" {
-    OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver,
+    OperandFacts, OperandCheckResult, void_result, source_builder_loan, check_owner_access, unproved_text_receiver, preserves_text_installations,
 };
 using "./CompletionChecking.cod" { CompletionSites, invocation_reached, skipped_operand };
 
@@ -23,7 +23,7 @@ array SeenInterfaces[UInt64]:bool;
 enum TextSupply:UInt8 { Incoming, Supplied, Unproved, }
 
 data TextUse {
-    caller:UInt64, later_family:UInt64, later_selected:UInt64,
+    caller:UInt64, later_family:UInt64, later_selected:UInt64, installation_prefix:UInt64,
     imported_first:UInt64, imported_past:UInt64, imported_selected:UInt64, installation_name:UInt64, later_installation:UInt64,
 }
 array TextUses[UInt64]:TextUse;
@@ -94,11 +94,11 @@ func collect_imported_needs(interfaces:const ModuleInterfaces in I, needs:TextNe
 
 # Freeze the entered local call edges, complete imported interface ranges,
 # and every installation that could hide an incoming selection.
-func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B,
+func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
     views:const SuppliedViews in V, interfaces:const ModuleInterfaces in I, facts:const OperandFacts in F,
     demand:const DeclarationDemands in D, sites:const CompletionSites in X, uses:TextUses in U, scopes:TextScopes in S,
     needs:TextNeeds in K, count:UInt64 in C, root:UInt64, used:UInt64, revision:UInt64, published:UInt64)
-    -> UInt64 where {const owner N, const owner B, const owner V, const owner I, const owner F, const owner D,
+    -> UInt64 where {const owner N, const owner B, const owner L, const owner V, const owner I, const owner F, const owner D,
         const owner X, owner U, owner S, owner K, owner C} {
     ref seen = make SeenInterfaces(published, false);
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
@@ -153,16 +153,20 @@ func collect_text_uses(nodes:const ExprNodes in N, names:const NameBindings in B
                 scopes[family].family_uses <- at;
                 uses[at].later_selected <- scopes[method].selected_uses;
                 (scopes[method].selected_uses <- at):void
+            };
+            if (uses[at].caller != no_node() && links[at].text_installation_prefix < used &&
+                preserves_text_installations(nodes, facts, used, revision, at)) {
+                (uses[at].installation_prefix <- links[at].text_installation_prefix):void
             }
         }
     };
     return no_node()
 }
 
-func installation_input(names:const NameBindings in B, links:const NameWork in L, views:const SuppliedViews in V,
-    facts:const OperandFacts in F, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64)
-    -> UInt64 where {const owner B, const owner L, const owner V, const owner F, const owner K} {
-    val previous <- links[at].text_installation_prefix;
+func installation_input(names:const NameBindings in B, views:const SuppliedViews in V,
+    facts:const OperandFacts in F, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64, prefix:UInt64)
+    -> UInt64 where {const owner B, const owner V, const owner F, const owner K} {
+    val previous <- prefix;
     for (unused in 0u64 .. used) {
         if (previous >= used) return no_node();
         case views[previous] of {
@@ -178,14 +182,14 @@ func installation_input(names:const NameBindings in B, links:const NameWork in L
     return no_node()
 }
 
-func use_text_supply(nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
+func use_text_supply(nodes:const ExprNodes in N, names:const NameBindings in B,
     views:const SuppliedViews in V, facts:const OperandFacts in F, sites:const CompletionSites in X, scopes:const TextScopes in S,
     uses:const TextUses in U, required:const TextNeed in K, module:UInt64, at:UInt64, used:UInt64)
-    -> TextSupply where {const owner N, const owner B, const owner L, const owner V, const owner F, const owner X,
+    -> TextSupply where {const owner N, const owner B, const owner V, const owner F, const owner X,
         const owner S, const owner U, const owner K} {
     if (sites[at].registration != no_node() || sites[at].in_delayed_body != 0u8 || sites[at].in_supplied_body)
         return (Unproved:TextSupply);
-    val input <- installation_input(names, links, views, facts, required, module, at, used);
+    val input <- installation_input(names, views, facts, required, module, at, used, uses[at].installation_prefix);
     if (input != no_node()) {
         if (required.receiver_identity != no_node() &&
             (local_symbol_module(facts[input].identity_module, module) != required.receiver_module ||
@@ -354,7 +358,7 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
         return false
     };
     ref uses = make TextUses(used, make TextUse {
-        caller <- no_node(); later_family <- no_node();
+        caller <- no_node(); later_family <- no_node(); installation_prefix <- no_node();
         later_selected <- no_node(); imported_first <- no_node(); imported_past <- no_node();
         imported_selected <- no_node(); installation_name <- no_node(); later_installation <- no_node()
     });
@@ -365,7 +369,7 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
         symbol_module <- no_node(); symbol_identity <- no_node(); receiver_module <- no_node(); receiver_identity <- no_node()
     });
     ref count = make UInt64 { 0u64 };
-    val problem <- collect_text_uses(nodes, names, views, interfaces, facts, demand, sites,
+    val problem <- collect_text_uses(nodes, names, links, views, interfaces, facts, demand, sites,
         uses, scopes, needs, count, root, used, revision, published);
     if (problem == no_node() && count != 0u64) {
         ref supplies = make TextUseSupplies(used, make TextUseSupply {
@@ -386,7 +390,7 @@ export func check_scoped_text_requirements(nodes:const ExprNodes in N, names:con
                 rows[at].reached <- false;
                 supplies[at].origin <- false;
                 if (uses[at].caller < used) {
-                    supplies[at].supply <- use_text_supply(nodes, names, links, views, facts, sites, scopes, uses,
+                    supplies[at].supply <- use_text_supply(nodes, names, views, facts, sites, scopes, uses,
                         needs[key], module, at, used);
                     if (uses[at].imported_first < published) {
                         (supplies[at].origin <- imported_needs(interfaces, uses[at], needs[key])):void

@@ -3024,8 +3024,8 @@ func readonly_array_writer_input(nodes:const ExprNodes in N, names:const NameBin
         checked_bits_record(contracts, published, aggregate, type)
 }
 
-# A fixed product writer has one initialized writable report. Alongside
-# the ordinary report-first form, a scalar can precede a final report.
+# A fixed product writer borrows one initialized writable product. A
+# result-bearing writer starts with that loan and takes scalar operands.
 func prepare_published_product_writer(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
@@ -3042,7 +3042,9 @@ func prepare_published_product_writer(nodes:const ExprNodes in N, names:const Na
     val role <- callable.signature;
     if (inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause || clause.readonly ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
-        clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
+        clause.annotation >= used) return;
+    val result <- names[clause.annotation].kind;
+    if ((result != builtin_void() && result != builtin_u64()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) || first >= used) return;
@@ -3050,6 +3052,7 @@ func prepare_published_product_writer(nodes:const ExprNodes in N, names:const Na
     if (marker < used) {
         if (work[first].next == no_node() || !independent_scalar_tail(nodes, names, work, work[first].next, used, revision)) return
     } else {
+        if (result != builtin_void()) return;
         val output <- work[first].next;
         if (output >= used || work[output].next != no_node() ||
             !independent_scalar_formal(nodes, names, first, used, revision, builtin_u64())) return;
@@ -5961,12 +5964,12 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     return past
 }
 
-# The incoming contract is independently completed. This profile admits only a
-# singleton ordinary procedure with an explicit result and fixed scalar or
-# readonly array formals, with at most one readonly owner role.
+# A singleton ordinary procedure can carry an incoming text requirement
+# with scalar inputs and initialized readonly aggregate loans.
 export func source_text_routine_signature(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, work:const NameWork in W, definition:UInt64,
-    used:UInt64, revision:UInt64) -> bool where {const owner N, const owner B, const owner E, const owner W} {
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in I,
+    published:UInt64, aggregate:const AggregateFacts in A, definition:UInt64, used:UInt64, revision:UInt64)
+    -> bool where {const owner N, const owner B, const owner E, const owner W, const owner I, const owner A} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (names[definition].declaration != definition || work[definition].next_method != no_node() ||
         inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
@@ -5974,31 +5977,39 @@ export func source_text_routine_signature(nodes:const ExprNodes in N, names:cons
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
-    val signature <- callable.signature;
-    val borrowed <- inspect_signature(nodes, revision, used, signature, clause) == OwnerSignatureClause;
-    if (borrowed && !clause.readonly) return false;
-    val result <- if (borrowed) { (clause.previous) } else { signature };
+    val result <- owner_result_site(nodes, callable.signature, used, revision);
     if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause || clause.annotation >= used ||
         (names[clause.annotation].kind != builtin_bool() && names[clause.annotation].kind != builtin_void()) ||
         inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return false;
     ref start = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, start)) return false;
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    ref binding = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val parameter <- start;
-    val scalar_type <- no_node();
-    val array_marker <- no_node();
-    val array_seen <- false;
+    val marker <- no_node();
+    val role <- no_node();
     for (unused in 0u64 .. used) {
-        if (parameter == no_node()) return borrowed == array_seen;
-        scalar_type <- independent_formal_type(nodes, parameter, used, revision);
-        if (scalar_type < used) {
-            if (names[scalar_type].kind != builtin_u8() && names[scalar_type].kind != builtin_u64() &&
-                names[scalar_type].kind != builtin_bool()) return false;
+        if (parameter == no_node()) return true;
+        marker <- independent_formal_type(nodes, parameter, used, revision);
+        if (marker < used) {
+            if (names[marker].kind != builtin_u8() && names[marker].kind != builtin_u64() &&
+                names[marker].kind != builtin_bool()) return false;
         } else {
-            if (!borrowed) return false;
-            array_marker <- readonly_formal_marker(nodes, names, parameter, signature, used, revision);
-            if (array_marker >= used || (names[array_marker].kind != array_type() &&
-                imported_kind(names, selected, array_marker) != array_export())) return false;
-            (array_seen <- true):void
+            if (formal_variadic_at(nodes, revision, used, parameter) != no_node() ||
+                !typed_formal(nodes, revision, used, parameter, formal, binding) ||
+                formal.mode != ReferenceFormal || !binding.readonly || binding.target_type >= used ||
+                binding.owner_name >= used || names[binding.owner_name].kind != owner_binding()) return false;
+            role <- names[binding.owner_name].declaration;
+            if (role <= result || role > callable.signature ||
+                inspect_signature(nodes, revision, used, role, clause) != OwnerSignatureClause ||
+                !clause.readonly) return false;
+            marker <- binding.target_type;
+            if (names[marker].kind != array_type() && imported_kind(names, selected, marker) != array_export() &&
+                (!describe_type(nodes, names, selected, marker, 0u64, revision, used, type) ||
+                 !checked_bits_record(interfaces, published, aggregate, type))) return false
         };
         (parameter <- work[parameter].next):void
     };
