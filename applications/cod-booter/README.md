@@ -397,7 +397,7 @@ Both source commands also check the `LiteralRange` case in `CompletionChecking.o
 
 The two source commands check the writable loan of `sites[definition].array_failures` in `CompletionChecking.check_escaping_failure_paths`. The checker carries the selected formal's writable access requirement through the inline fields to the indexed receiver. It checks the backing and index first, then the selected field's nominal identity, access and owner. Two selected fields can supply the same formal owner role when their actual owner agrees. A later operand failure prevents entry with earlier effects intact. Both source commands accept all of `CompletionChecking.cod`.
 
-A lexical named array can use a braced product fill with nested sum construction. Name binding preserves the written constructor selection, and the completed array and field schemas establish the exact nominal types and required initializers. Length and fill prepare in order and exactly once, including for a zero-length array.
+A named array can use a braced product fill with nested sum construction in a lexical scope or under an explicit writable owner role. Name binding preserves the written constructor selection, and the completed array and field schemas establish the exact nominal types and required initializers. Length and fill prepare in order and exactly once, including for a zero-length array. Both source commands check the `reserve_interfaces` reduction with its original imported `ModuleInterfaces` type, regional allocation, prefix copy and final rebind.
 
 The source checker can use the completed schema for an ordinary writable local product formal with nested inline fields. The formal and its projections keep the actual owner, access and nominal identity. Compatible flat products use the existing word layout. Direct forwarding checks the exact nominal product at the receiving formal. Source checking uses the new projection facts where an existing obligation demands the body. An isolated source check exercises `ModuleFrontend.binding_diagnostic` with explicit body demand, and a linked seed probe verifies its writes to stage, diagnostic code and nested source spans.
 
@@ -437,7 +437,7 @@ The declaration and provider commands bind private fixed-arity symbolic procedur
 
 Both source commands bind an anonymous handler in a private lexical frame and compare its named input and result types with the completed declaration of the selected local symbol. A missing lexical name, a parameter used outside the handler, and a mismatched signature have located diagnostics. A matching signature still reaches the scoped procedure limit before publication. Checking the handler's execution, required effects, and activation is a separate step. Exporting a procedure symbol and emitting it through the object command also retain their profile limits.
 
-In the complete `ModuleGraph.cod` source check, name binding reaches the imported `NoInterfacePayload` construction in the regional `reserve_interfaces` fill before it can finish binding the handler.
+In the complete `ModuleGraph.cod` source check, the regional `reserve_interfaces` fill and the local `@followDependency` handler bind successfully. The handler reaches the scoped procedure limit for execution and effects.
 
 ### Readonly queries
 
