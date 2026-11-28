@@ -35,6 +35,7 @@ export data NativeUnitRow {
 export array NativeUnitRows[UInt64]:NativeUnitRow;
 
 export data NativePlan {
+    here_outcomes:bool,
     used:UInt64,
     functions:UInt64,
     function_base:UInt64,
@@ -100,6 +101,8 @@ export func copy_completion() -> UInt8 { return 38u8; }
 
 # Store this unit's byte offset as an artifact-wide failure site.
 export func source_site() -> UInt8 { return 39u8; }
+export func here_entry() -> UInt8 { return 40u8; }
+export func invoke_here() -> UInt8 { return 41u8; }
 
 # Invocations publish three consecutive completion words at their category
 # operand: category, source site, live transfer target. A zero target denotes
@@ -109,9 +112,10 @@ export func pending_category() -> UInt64 { return 1u64; }
 export func pending_site() -> UInt64 { return 2u64; }
 export func call_category() -> UInt64 { return 3u64; }
 export func call_site() -> UInt64 { return 4u64; }
-# Slot 5 holds the transfer target written by an invocation.
+export func call_target() -> UInt64 { return 5u64; }
 export func arithmetic_fault() -> UInt64 { return 6u64; }
-export func slot(node:UInt64) -> UInt64 { return node + 7u64; }
+export func pending_target() -> UInt64 { return 7u64; }
+export func slot(node:UInt64) -> UInt64 { return node + 8u64; }
 
 # Before native verification, storage operations and binding facts can carry
 # the relevant construction or declaration index plus one in c and source node in d.

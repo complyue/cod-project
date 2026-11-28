@@ -691,6 +691,7 @@ proc compile_graph_unit(source:const SourceBytes in S, lines:const SourceLines i
         };
     };
     ref plan = make NativePlan {
+        here_outcomes <- false;
         used <- 0u64; functions <- 0u64; function_base <- 0u64; labels <- 0u64; slots <- 0u64; diagnostic <- 0u8; node <- no_node();
         initialization_notes <- false; initialization_obligations <- false;
     };

@@ -1,0 +1,200 @@
+using "./ParserInput.cod" ParseResult;
+using "./ParserStorage.cod" {
+    ExprNodes, no_node, is_here_formal, direct_invocation, DirectCallSites,
+    CallableSites, inspect_callable, first_sequence_entry,
+    HereSites, inspect_here_invocation, inspect_here_actual,
+    name_syntax, completion_syntax,
+    DirectInvocationSyntax { DirectInvocationReady },
+    CallableSyntax { ModuleCallable },
+    HereSyntax { HereReady },
+    SequenceSyntax { ArgumentSequence, HereReceiverSequence },
+    NameSyntax { OrdinaryName },
+    CompletionSyntax { ReturnCompletion },
+};
+using "./NameResolution.cod" {
+    NameBindings, NameWork, local_binding, formal_binding, loop_index, here_receiver_binding,
+};
+using "./NativeDeclarations.cod" {
+    SuppliedViews, HereContract, inspect_here_contract, signature_formals,
+    SuppliedView { OrdinaryHereCall, OrdinaryHereArgument, OrdinaryHereInvocation,
+        OrdinaryHereBody, OrdinaryHereWrapper, OrdinaryHereReceiver },
+};
+using "./OperandChecking.cod" { OperandFacts, scalar_kind, independent_value, local_place };
+using "./CompletionChecking.cod" CompletionSites;
+
+export data HereObjectOperation =
+    OrdinaryObjectSite {} |
+    HereLaunch { definition:UInt64, written:UInt64, formal_order:UInt64, trailing:UInt64, } |
+    HereEnter { callee:UInt64, formal:UInt64, offers:UInt64, } |
+    HereOperand { value:UInt64, formal:UInt64, } |
+    HereOutline { body:UInt64, first_offer:UInt64, offers:UInt64, full_scope:bool, result:UInt8, } |
+    HereWrappedLaunch { call:UInt64, } |
+    HereCaptureUse { place:UInt64, offset:UInt64, };
+export data HereObjectSite {
+    operation:HereObjectOperation,
+    next:UInt64,
+    first_capture:UInt64,
+    captures:UInt64,
+}
+export array HereObjectSites[UInt64]:HereObjectSite;
+
+export func has_here_formals(nodes:const ExprNodes in N, used:UInt64) -> bool where {const owner N} {
+    for (at in 0u64 .. used) {
+        if (is_here_formal(nodes, used, at)) return true
+    };
+    return false
+}
+
+func chain_length(links:const NameWork in L, first:UInt64, used:UInt64) -> UInt64 where {const owner L} {
+    val next <- first;
+    for (count in 0u64 .. used) {
+        if (next == no_node()) return count;
+        next <- links[next].next;
+    };
+    return used
+}
+
+func bind_written_actuals(views:const SuppliedViews in V, links:const NameWork in L,
+    map:HereArgumentMap in M, here:HereObjectSites in H, first:UInt64, used:UInt64) -> bool
+    where {const owner V, const owner L, owner M, owner H} {
+    val argument <- first;
+    for (unused in 0u64 .. used) {
+        if (argument == no_node()) return true;
+        case views[argument] of {
+            OrdinaryHereArgument { val formal <- formal, val input <- operand, } -> {
+                if (formal >= used) return false;
+                map[formal] <- argument;
+                (here[argument].operation <- make HereOperand { value <- input; formal <- formal }):void;
+            };
+            _ -> { return false }
+        };
+        argument <- links[argument].next;
+    };
+    return false
+}
+
+func formal_order(links:const NameWork in L, map:HereArgumentMap in M, here:HereObjectSites in H,
+    first:UInt64, used:UInt64) -> UInt64 where {const owner L, owner M, owner H} {
+    val formal <- first;
+    val head <- no_node();
+    val previous <- no_node();
+    val actual <- no_node();
+    for (unused in 0u64 .. used) {
+        if (formal == no_node()) return head;
+        actual <- map[formal];
+        if (actual >= used) return no_node();
+        if (previous == no_node()) { head <- actual } else { (here[previous].next <- actual):void };
+        map[formal] <- no_node();
+        previous <- actual;
+        formal <- links[formal].next;
+    };
+    return no_node()
+}
+
+array HereArgumentMap[UInt64]:UInt64;
+
+export func collect_here_objects(nodes:const ExprNodes in N, tree:const ParseResult in T,
+    names:const NameBindings in B, links:const NameWork in L, facts:const OperandFacts in F,
+    completes:const CompletionSites in S, views:const SuppliedViews in V,
+    here:HereObjectSites in H) -> UInt64
+    where {const owner N, const owner T, const owner B, const owner L, const owner F, const owner S,
+           const owner V, owner H} {
+    val used <- tree.used;
+    val revision <- tree.revision;
+    ref here_syntax = make HereSites { call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false };
+    ref direct = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    ref contract = make HereContract { first_parameter <- no_node(); result_kind <- 0u8; result_module <- 0u64; result_identity <- 0u64 };
+    ref first = make UInt64 { no_node() };
+    val order <- no_node();
+    val outline <- no_node();
+    val binding <- 0u8;
+    val place <- no_node();
+    val offset <- no_node();
+    val trailing <- no_node();
+    ref trailing_sites = make HereArgumentMap(used, no_node());
+
+    for (at in 0u64 .. used) {
+        case views[at] of {
+            OrdinaryHereWrapper -> {
+                if (inspect_here_invocation(nodes, revision, used, at, here_syntax) != HereReady) return at;
+                trailing_sites[here_syntax.call] <- here_syntax.supplied;
+                (here[at].operation <- make HereWrappedLaunch { call <- here_syntax.call }):void;
+            };
+            OrdinaryHereBody { val parameter <- formal, } -> {
+                if (completes[at].supplied_body != no_node() ||
+                    !inspect_here_actual(nodes, revision, used, at, here_syntax) ||
+                    (!here_syntax.full_scope && (completes[at].in_delayed_body != 0u8 ||
+                                                completes[at].replacing_try != no_node())) ||
+                    !inspect_here_contract(views, parameter, contract) ||
+                    !first_sequence_entry(nodes, revision, used, here_syntax.receivers, HereReceiverSequence, first))
+                    return at;
+                (here[at].operation <- make HereOutline {
+                    body <- here_syntax.body; first_offer <- first; offers <- chain_length(links, first, used);
+                    full_scope <- here_syntax.full_scope; result <- contract.result_kind
+                }):void
+            };
+            _ -> {}
+        };
+    };
+    ref mapping = make HereArgumentMap(used, no_node());
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    ref parameters = make UInt64 { no_node() };
+    ref head = make UInt64 { no_node() };
+    for (at in 0u64 .. used) {
+        case views[at] of {
+            OrdinaryHereCall { val definition <- definition, } -> {
+                if (direct_invocation(nodes, revision, used, at, direct) != DirectInvocationReady ||
+                    inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
+                    !signature_formals(nodes, revision, used, callable.signature, head, parameters) ||
+                    !first_sequence_entry(nodes, revision, used, direct.arguments, ArgumentSequence, first))
+                    return at;
+                trailing <- trailing_sites[at];
+                if (trailing != no_node()) { (parameters <- links[parameters].next):void };
+                if (completes[at].registration != no_node() ||
+                    !bind_written_actuals(views, links, mapping, here, first, used)) return at;
+                order <- formal_order(links, mapping, here, parameters, used);
+                if (parameters != no_node() && order == no_node()) return at;
+                (here[at].operation <- make HereLaunch {
+                    definition <- definition; written <- first; formal_order <- order; trailing <- trailing
+                }):void
+            };
+            OrdinaryHereInvocation { val parameter <- formal, } -> {
+                if (completes[at].registration != no_node() ||
+                    direct_invocation(nodes, revision, used, at, direct) != DirectInvocationReady ||
+                    !first_sequence_entry(nodes, revision, used, direct.arguments, ArgumentSequence, first))
+                    return at;
+                (here[at].operation <- make HereEnter { callee <- direct.callee; formal <- parameter; offers <- first }):void
+            };
+            _ -> {}
+        };
+        # A local replacement return requires a dedicated resume edge when
+        # cleanup is carrying another activation's suspended completion.
+        if ((completes[at].in_delayed_body != 0u8 || completes[at].replacing_try != no_node()) &&
+            completion_syntax(nodes, at) == ReturnCompletion) return at;
+        outline <- completes[at].supplied_body;
+        if (outline != no_node()) {
+            if (name_syntax(nodes, used, at) == OrdinaryName) {
+                binding <- names[at].kind;
+                if (binding == local_binding() || binding == formal_binding() ||
+                    binding == loop_index() || binding == here_receiver_binding()) {
+                    place <- names[at].declaration;
+                    if (place >= used) return at;
+                    if (completes[place].supplied_body != outline &&
+                        !(case views[place] of { OrdinaryHereReceiver -> true; _ -> false })) {
+                        if (names[place].guarded_local != 0u8 || facts[place].reservation != no_node() ||
+                            (!is_here_formal(nodes, used, place) &&
+                             (!scalar_kind(facts[place].kind) ||
+                              (facts[place].reception != independent_value() && facts[place].reception != local_place()))))
+                            return at;
+                        offset <- 3u64 + here[outline].captures;
+                        here[at].operation <- make HereCaptureUse { place <- place; offset <- offset };
+                        here[at].next <- here[outline].first_capture;
+                        here[outline].first_capture <- at;
+                        (here[outline].captures <- here[outline].captures + 1u64):void;
+                    };
+                };
+            };
+        };
+    };
+    return no_node()
+}

@@ -84,7 +84,6 @@ static const char *unsupported_source_form(uint32_t code) {
     case 65: return "selection of an imported here signature";
     case 71: return "unproved native here feedback type";
     case 74: return "array length query";
-    case 76: return "ordinary here parameter lowering";
     case 108: return "lexical callable definition lowering";
     case 152: return "generic type instantiation";
     case 153: return "nullable pointer result checking";

@@ -223,7 +223,7 @@ func typed_formal(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:U
     return typed_parameter(nodes, revision, used, at, false, formal, binding)
 }
 
-func signature_formals(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, signature:UInt64,
+export func signature_formals(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, signature:UInt64,
                        head:UInt64 in H, first:UInt64 in F) -> bool where {const owner N, owner H, owner F} {
     ref sites = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false;
