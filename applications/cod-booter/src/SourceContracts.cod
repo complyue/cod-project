@@ -25,7 +25,7 @@ using "./NativeDeclarations.cod" {
     prepared_parser_writer, prepared_workspace_writer, source_call_allocates, prepared_array_inspector, prepared_array_length_call, checked_literal_call, checked_source_array_call, checked_scalar_call, readonly_indexed_byte_reader
 };
 using "./CompletionChecking.cod" { can_miss_return, possible_failure, definite_failure, skipped_operand, invocation_reached };
-using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits, immutable_text_kind };
+using "./OperandChecking.cod" { declared_scalar, scalar_u8, scalar_u64, completed_lexical_bits_target, allocated_source_array, borrowed_ref, void_result, never_result, independent_sum_bits, immutable_text_kind, source_builder_loan, present_target };
 using "./ParserStorage.cod" {
     ExprNodes, no_node, boolean_literal, inspect_group, inspect_logical, LogicalSites,
     BooleanSyntax { LiteralFalse, LiteralTrue },
@@ -492,6 +492,22 @@ func lexical_array_allocation(names:const NameBindings in B, facts:const Operand
     }
 }
 
+# Operand checking has already selected the lexical acquisition and its
+# actual owner. A reference binding uses its completed target, not a second
+# allocation. Keep text acquisitions out of non-text source summaries.
+func lexical_text_acquisition(nodes:const ExprNodes in N, facts:const OperandFacts in F, at:UInt64, scope:UInt64)
+    -> bool where {const owner N, const owner F} {
+    if (scope == no_node() || facts[at].allocation_owner != scope || facts[at].owner != scope ||
+        facts[at].reception != borrowed_ref() || facts[at].target_presence != present_target()) return false;
+    val kind <- facts[at].kind;
+    if (kind != source_builder_loan() &&
+        (!immutable_text_kind(kind) || facts[at].target_readonly == 0u8)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { NamedConstruction -> true; _ -> false };
+        _ -> false
+    }
+}
+
 func completed_local_case_break(names:const NameBindings in B, sites:const CompletionSites in X, at:UInt64) -> bool
     where {const owner B, const owner X} {
     val target <- names[at].declaration;
@@ -503,7 +519,7 @@ func completed_local_case_break(names:const NameBindings in B, sites:const Compl
 func checked_function_operation(nodes:const ExprNodes in N, names:const NameBindings in B,
     facts:const OperandFacts in F, views:const SuppliedViews in V, sites:const CompletionSites in X,
     cases:const ConstructorCaseFacts in C,
-    at:UInt64, callee:UInt64, stops_before_entry:bool, checked_call:bool) -> bool
+    at:UInt64, callee:UInt64, stops_before_entry:bool, checked_call:bool, text_acquisition:bool) -> bool
     where {const owner N, const owner B, const owner F, const owner V, const owner X, const owner C} {
     if (at < intrinsic (len)(cases) &&
         (case cases[at] of {
@@ -529,7 +545,7 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             FieldSelection -> true;
             IndexSelection -> facts[at].checks_array_bounds || facts[at].kind == never_result();
             ArrayLength -> true;
-            NamedConstruction -> lexical_array_allocation(names, facts, views, at) ||
+            NamedConstruction -> text_acquisition || lexical_array_allocation(names, facts, views, at) ||
                 (facts[at].kind == independent_sum_bits() &&
                  (case views[at] of { EmptySumArrayFill -> true; _ -> false })) ||
                 (facts[at].allocation_owner == no_node() &&
@@ -561,7 +577,11 @@ func checked_function_operation(nodes:const ExprNodes in N, names:const NameBind
             ReturnValue -> true;
             LocalBinding { val mode <-, val initializer <-, } -> mode == ValueLocal ||
                 (mode == ReferenceLocal && (completed_lexical_bits_target(facts, at, names[at].scope) ||
-                    (initializer.index < at && lexical_array_allocation(names, facts, views, initializer.index))));
+                    (initializer.index < at &&
+                        (lexical_array_allocation(names, facts, views, initializer.index) ||
+                         (facts[at].owner == names[at].scope && facts[at].reception == borrowed_ref() &&
+                          facts[at].target_presence == present_target() &&
+                          lexical_text_acquisition(nodes, facts, initializer.index, names[at].scope))))));
             AnnotatedBinding -> true;
             RangeHeader -> true;
             RangeLoop -> true;
@@ -624,6 +644,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
     val imported_text <- false;
     val intrinsic_kind <- 0u8;
     val text_operation <- false;
+    val text_acquisition <- false;
     val entered <- false;
     for (at in 0u64 .. used) {
         definition <- demand[at].scope;
@@ -638,6 +659,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
             intrinsic_kind <- facts[at].text_intrinsic;
             text_operation <- imported_text || intrinsic_kind == text_size_export() ||
                 intrinsic_kind == text_byte_export() || intrinsic_kind == text_slice_export();
+            text_acquisition <- lexical_text_acquisition(nodes, facts, at, names[at].scope);
             entered <- ordinary && invocation_reached(nodes, sites, at, used, revision);
             checked_call <- ordinary && (text_operation || imported_effects ||
                 prepared_native_function(views, at, revision) ||
@@ -646,13 +668,13 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                   prepared_synchronous_here(views, work[at].active, at))));
             if ((callee != no_node() && (!ordinary || callee >= used || callee != demand[at].callee)) ||
                 !checked_function_operation(nodes, names, facts, views, sites, cases, at, callee, stops_before_entry,
-                    checked_call)) {
+                    checked_call, text_acquisition)) {
                 (local[definition].available <- false):void
             } else {
-                if (case nodes[at] of {
+                if (text_acquisition || (case nodes[at] of {
                     Occupied { val syntax <- node, } -> case syntax.payload of { TextLiteral -> true; _ -> false };
                     Vacant -> false
-                }) { (local[definition].text_storage <- true):void };
+                })) { (local[definition].text_storage <- true):void };
                 if (entered && text_operation) {
                     local[definition].text_storage <- true;
                     if (imported_text) {
@@ -686,7 +708,7 @@ func collect_function_operations(nodes:const ExprNodes in N, names:const NameBin
                         sites[at].destination == definition) {
                         (local[definition].bounds <- true):void
                     } else {
-                        if (entered && text_operation && sites[at].category_module == 0u64 &&
+                        if (((entered && text_operation) || text_acquisition) && sites[at].category_module == 0u64 &&
                             sites[at].category == out_of_memory_identity()) {
                             (local[definition].text_allocation <- true):void
                         } else {
