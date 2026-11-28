@@ -1,8 +1,10 @@
 # Callable storage and direct lexical access
 
-Design revision: 19 · 2026-11-24 · Confirmed source contract
+Design revision: 20 · 2026-11-28 · Confirmed source contract
 
 ## Design authority
+
+At r20 [D-18-HERE-PARAM](DesignAuthorityRegistry.md#d-18-here-param) applies the existing lexical handoff and brace rules to [inline here arguments](SymbolicDynamicScope.md#inline-here-arguments) in any slot. P-617/P-618 continue from r19 because preparation and forwarding preserve the same supplier and control destinations. [User decision and acceptance](../CHANGELOG.md#h-inline-here-actuals-20261128)
 
 [D-18-FUNCTOR-VALUE](DesignAuthorityRegistry.md#d-18-functor-value) r19 defines [function value and functor value](#function-value-and-functor-value). The [project user’s terminology and assignment decision](../CHANGELOG.md#h-functor-value-distinction-20261124), P-721/P-722, requires distinct types and preserves the receiver’s actual owner and access. Check both directions of assignment, symbol installation and owner-qualified reception. Synchronous here use, regional storage eligibility and native representation have their own contracts.
 
@@ -128,7 +130,7 @@ Mainline's native probe returns a lexical bridge containing a saved procedure-va
 
 The shared rule concerns who owns the executing code. Handoff alone does not rewind dynamic bindings to the time the literal was supplied. A permitted `behave` uses the currently installed binding; `perform` applies the selected handler’s own replay rule. [Generator effect boundary](RangedForAndGenerators.md#callable-kind-and-supplied-body-effects) · [Full scopes](ExceptionControl.md#full-scopes-as-immediate-ordinary-calls)
 
-A single **here callable** formal describes the parameter modes, result and checked failures of a synchronous call. The receiver can invoke the body locally or pass it directly to a compatible here parameter of another func in a nested synchronous call. The parameter binds a scoped `here` value. Write `here body(...) -> T` in the declaration and attach the body directly after the call. No second keyword is needed. Both lexical kinds use the same formal and the usual trailing-block syntax.
+A single **here callable** formal describes the parameter modes, result and checked failures of a synchronous call. The receiver can invoke the body locally or pass it directly to a compatible here parameter of another func in a nested synchronous call. The parameter binds a scoped `here` value. Declare `here body(...) -> T`. A caller can write the body inline in the matching argument slot or attach a trailing body for slot one. No second keyword is needed. Both lexical kinds use the same formal and the usual trailing-block syntax.
 
 ```cod
 func retry_once(here body() -> void throws RetryableException)
@@ -187,7 +189,7 @@ proc send_order() throws RetryableException {
 }
 ```
 
-One here formal accepts either spelling. Forwarding the formal preserves the supplied spelling’s control behavior. No overload or parameter modifier is needed to select it. A catch *inside* the supplied group gets its usual opportunity. An exception escaping the group reaches the lexical caller at the supplying call expression, after unwinding the receivers. Catches around `attempt()` in retry_once or in a forwarding helper cannot intercept it, even when the exception originated in a callee of the group. The receiver can still catch exceptions from its own work. For static checking, account for escaping group failures at the supplying call in addition to the receiver’s fixed throws obligations. A receiver catch cannot discharge the supplier’s obligation. The double-brace form still checks its body against the expected callback throws contract.
+Each `here` formal accepts either brace form at its [inline argument site](SymbolicDynamicScope.md#inline-here-arguments). The first slot can also receive a trailing body. Forwarding either value preserves the supplied spelling’s control behavior. No overload or parameter modifier is needed to select it. A catch *inside* the supplied group gets its usual opportunity. An exception escaping the group reaches the lexical caller at the supplying call expression, after unwinding the receivers. Catches around `attempt()` in retry_once or in a forwarding helper cannot intercept it, even when the exception originated in a callee of the group. The receiver can still catch exceptions from its own work. For static checking, account for escaping group failures at the supplying call in addition to the receiver’s fixed throws obligations. A receiver catch cannot discharge the supplier’s obligation. The double-brace form still checks its body against the expected callback throws contract.
 
 ```cod
 func visit(here step() -> void) {

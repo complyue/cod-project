@@ -1,8 +1,10 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 289 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 290 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
+
+At r290 the [inline here argument decision](../CHANGELOG.md#h-inline-here-actuals-20261128) extends D-10-TRAILING-CALLBACK to explicit positional and named arguments. P-567–P-569 retain first-slot trailing binding, independent signature selection and written preparation order. [Brace and forwarding semantics](CallableStorageAndHereAccess.md#single-brace-bodies-for-a-here-callable) continue under D-18.
 
 At r289 the [entry-check clarification](../CHANGELOG.md#k-family-effect-entry-check-20261128) separates collection of each visible family’s incoming requirements from their use at an entry. P-738/P-739 continue family-wide admission, local supply and handler capture.
 
@@ -1636,9 +1638,31 @@ invoke() {{ return 9u64; }};               # Niladic shorthand, result 9.
 
 The callback is the **first declared parameter**, as in [Julia's do-notation](https://docs.julialang.org/en/v1/manual/functions/#Do-Block-Syntax-for-Function-Arguments). CoD retains its own return, lexical access and lifetime rules. Bind the trailing callable to that first slot before binding the written argument list. Positional arguments then start at the second declared slot and follow the [ordinary argument rules](#named-arguments-defaults-and-complete-binding). The trailing body explicitly supplies that first here parameter. With a generator its declared name is `yield`. With `here pred(...)` it supplies `pred`. This identifies a parameter role during selection. A written label resolves against the actual declared name. The standalone argument `-> yield` requests a declared default for that name. A trailing body supplies a callback, even when that parameter has no default. The example's mapping is `apply(callback, 7u64)`; this describes parameter destinations, not a new evaluation order.
 
-There is no search for a callback parameter later in the signature. A candidate without a first here parameter, with a duplicate value or default request for that parameter, or with another missing required argument is inapplicable. Multiple compatible here candidates still need a unique best match. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. The bounded form supplies one trailing callback; use explicit named callable arguments for other callbacks.
+There is no search for a callback parameter later in the signature. A candidate without a first here parameter, with a duplicate value or default request for that parameter, or with another missing required argument is inapplicable. Multiple compatible here candidates still need a unique best match. A declared default on the first parameter is suppressed by this explicitly supplied callback. Defaults on remaining omitted slots retain their existing rules. Calls without a trailing block keep ordinary positional binding. A call may have one trailing body. Any `here` slot can also receive a forwarded callback or an inline literal in the written argument list.
 
-**Header and expected type.** `(x, index) => { ... }` binds fresh positional parameters of an ordered signature. `(x, index) => {{ ... }}` uses the same header with local callback return. Ordinary annotations can be written in either header. A niladic body may omit the parameter list and arrow. Header parsing uses the closing parenthesis and arrow. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header. For a generator-compatible single-brace here call, the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) accepts the same fresh controls, existing destinations and labelled projections as the corresponding for loop.
+#### Inline here arguments
+
+Write `(parameters) => { ... }` or `(parameters) => {{ ... }}` directly as a call argument. An inline niladic literal uses `() =>`. Ordinary positional or named binding selects its slot. Write the label after the entire literal, as in `() => {{ return 7 }} -> second`. Several slots in one call may each receive their own literal. A trailing body still binds slot one before the written operands are mapped. Supplying that slot twice is a binding error.
+
+```cod
+proc use_second(here first() -> UInt64, here second() -> UInt64) -> UInt64 {
+    return second()
+}
+
+proc outward(here f() -> UInt64) -> UInt64 {
+    return 100 + use_second(f, () => { return 7 })
+}
+
+proc local(here f() -> UInt64) -> UInt64 {
+    return 100 + use_second(f, () => {{ return 7 }})
+}
+```
+
+`outward` returns 7. Its single-brace `return` leaves the callable containing the literal. `local` returns 107 because the double-brace `return` delivers 7 to `second()` and the addition runs. Writing `continue 7` in the single-brace body also delivers 7 to that invocation. An unused literal executes no body. Through forwarding, each supplied value retains its own captures, lexical permissions, cleanup and control destinations. In particular a single-brace `break` targets the call to which that actual was supplied.
+
+Recognize the parenthesized header and `=>` at the start of an argument. Resolve the expected `here` contract independently of the body’s returns and effects. Diagnose a literal bound to a non-`here` parameter or an unresolved contract at its supplying site. This syntax introduces a synchronous argument to the call. Bare grouped expressions, explicit full scopes and the established trailing niladic shorthand keep their grammar.
+
+**Header and expected type.** `(x, index) => { ... }` binds fresh positional parameters of an ordered signature. `(x, index) => {{ ... }}` uses the same header with local callback return. Ordinary annotations can be written in either header. A trailing niladic body may omit the parameter list and arrow. Header parsing uses the closing parenthesis and arrow. The independently selected expected callable signature supplies each parameter's type, val/ref/ptr/init/place mode, owner/access constraints, func/proc kind, result contract and failure requirements. This is contextual declaration checking, not type assertion or a new operation on the callback's parameters. Any explicit ordinary parameter annotations must satisfy that contract; they cannot erase owner/access/init obligations. No default expressions are authored by this anonymous header. For a generator-compatible single-brace here call, the [shared receiving header](RangedForAndGenerators.md#one-receiving-header-for-both-call-forms) accepts the same fresh controls, existing destinations and labelled projections as the corresponding for loop.
 
 The selected callable **parameter type** supplies the callback's `throws` contract. Every checked obligation that escapes the callback body must be covered by it. The body may handle additional failures locally or use fewer than the signature permits. An outer catch around the call, or the receiving procedure's own `throws`, cannot grant the callback a larger interface. The procedure that invokes the callback handles or declares the callback signature's checked obligations as for any ordinary call.
 
@@ -1662,7 +1686,7 @@ The initial shorthand covers a single established fixed-arity callback signature
 
 **Selection and evaluation.** Bind/check the candidate declaration shapes and independently available written-argument evidence before checking the callback body against one established expected signature. Header arity is syntactic evidence, but do not trial-check its return expressions, outer-slot uses or effects to choose between incompatible expected signatures. If that information leaves ambiguity, reject and require an explicit callable contract or named adapter. Body checking cannot retroactively repair overload selection. A literal written in a func retains func permissions. A proc-authored here body may do procedural work.
 
-At runtime evaluate the callee and written value arguments in their existing order, associate the trailing here body with the supplying activation at its written position, then prepare caller-context defaults and enter the callee. The body runs only on invocation. It may run repeatedly or be forwarded synchronously. Deferred use must still fit the original activation and all required owner lifetimes.
+At runtime evaluate the callee and prepare the written arguments in source order, associating each inline or trailing body with its supplying activation at its written position. Then prepare caller-context defaults and enter the callee. The body runs only on invocation. It may run repeatedly or be forwarded synchronously. Deferred use must still fit the original activation and all required owner lifetimes.
 
 Every return belonging to a double-brace callback is local. Each invocation has its own locals, cleanup, owner and return state. Ordinary callback-call propagation and catches apply. A successful local value tail or explicit value return supplies the required callback result. Both brace forms access the live enclosing slots with their actual owners.
 
