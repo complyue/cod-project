@@ -198,6 +198,8 @@ struct CheckedOperation {
   std::vector<CheckedArgument> arguments;
   // Checked operand sources can differ from the children of the source call.
   std::optional<std::vector<const Expression *>> argument_sources;
+  // When labels reorder the formals, evaluate these ordinals in written order.
+  std::vector<size_t> argument_order;
   std::vector<size_t> scope_owners;
   size_t argument_count(const Expression &expr) const {
     return argument_sources ? argument_sources->size() : expr.children.size();
@@ -212,7 +214,9 @@ struct CheckedOperation {
     std::vector<size_t> lexical_here;
     auto operator<=>(const SuppliedHere &) const = default;
   };
-  std::optional<SuppliedHere> supplied_here;
+  struct ForwardedHere { size_t input; };
+  using HereArgument = std::variant<SuppliedHere, ForwardedHere>;
+  std::vector<HereArgument> here_arguments;
   std::optional<size_t> invokes_here;
   std::vector<size_t> scope_here;
   std::optional<HereExit> here_exit;

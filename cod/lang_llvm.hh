@@ -1013,16 +1013,13 @@ class LLVMEmission {
     return bridge;
   }
   llvm::Value *emit_native_here(const Expression &expr) {
-    using Call = std::pair<size_t, std::optional<CheckedOperation::SuppliedHere>>;
     const auto &fact = checked_.at(&expr);
     {
-      const Call selected = Call{*fact.native_call, fact.supplied_here};
-      const auto &[id, supplied] = selected;
+      const auto &body = std::get<CheckedOperation::SuppliedHere>(fact.here_arguments.at(0));
       const auto &operand = *expr.children.front();
       auto *borrow = emit_expression(operand, Projection::target);
       if (!reachable()) return nullptr;
-      const auto &body = supplied.value();
-      const auto &native = program_->native_operations.at(id);
+      const auto &native = program_->native_operations.at(*fact.native_call);
       auto *callback = prepare_here(body, expr.at);
       auto *frame = llvm::StructType::get(context_, {here_, b_.getPtrTy(), outcome_});
       auto *state = slot(frame, "native.here.context");
@@ -1102,12 +1099,16 @@ class LLVMEmission {
       if (!exception_result_destination_) throw std::logic_error("owning call without its checked exception result destination");
       prepared.push_back(exception_result_destination_);
     }
-    if (size_t(invocation.supplied_here.has_value()) != layout.here_formals)
-      throw std::logic_error("native call disagrees with its here parameter roles");
-    if (invocation.supplied_here) {
-      auto *argument = prepare_here(*invocation.supplied_here, expr.at);
-      if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
-      prepared.push_back(argument);
+    if (invocation.here_arguments.size() != layout.here_formals)
+      throw std::logic_error("call disagrees with its here parameter roles");
+    for (const auto &input : invocation.here_arguments) {
+      if (const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&input)) {
+        auto *argument = prepare_here(*literal, expr.at);
+        if (here_site) b_.CreateStore(b_.CreateExtractValue(argument, 1), here_site);
+        prepared.push_back(argument);
+      } else {
+        prepared.push_back(here_arguments_.at(std::get<CheckedOperation::ForwardedHere>(input).input));
+      }
     }
     for (size_t slot = 0; slot < layout.lexical_here; ++slot)
       prepared.push_back(here_arguments_.at(invocation.scope_here.at(slot)));
@@ -1244,6 +1245,10 @@ class LLVMEmission {
       }
     }
     if (only_native_effects) return;
+    if (expr.kind == K::deferred && checked_.operations->contains(&expr)) {
+      scope.actions.push_back({&expr, cleanup_header_, {}, slot(cleanup_header_, "defer.here.record")});
+      return;
+    }
     if (expr.kind == K::region_binding) {
       auto *layout = llvm::StructType::get(context_, {cleanup_header_, b_.getPtrTy()});
       scope.actions.push_back({&expr, layout, {}, slot(layout, "region.cleanup"), {}, true});
@@ -1318,6 +1323,14 @@ class LLVMEmission {
     auto *dispatch = b_.CreateSwitch(action, invalid, scope.actions.size());
     for (size_t i = 0; i < scope.actions.size(); ++i) {
       const auto &descriptor = scope.actions[i];
+      if (descriptor.action->kind == Expression::Kind::deferred) {
+        auto *run = block("defer.here");
+        dispatch->addCase(integer(i), run);
+        b_.SetInsertPoint(run);
+        complete_cleanup([&] { emit_expression(*descriptor.action->children.front()); });
+        b_.CreateBr(scope.cleanup);
+        continue;
+      }
       if (descriptor.region_release) {
         auto *destroy = block("region.release");
         dispatch->addCase(integer(i), destroy);
@@ -2005,7 +2018,8 @@ class LLVMEmission {
                                                std::vector<llvm::Value *> *current_owners = nullptr) {
     const auto &fact = checked_.at(&expr);
     std::vector<llvm::Value *> arguments(fact.argument_count(expr));
-    for (size_t i = 0; i < arguments.size(); ++i) {
+    for (size_t written = 0; written < arguments.size(); ++written) {
+      const auto i = fact.argument_order.empty() ? written : fact.argument_order.at(written);
       if (first_place && i == 0) arguments[i] = pack_view(first_place, fact.argument(expr, i));
       else arguments[i] = prepare_argument(expr, i, current_owners);
       if (!reachable()) return {};
@@ -2704,9 +2718,12 @@ class LLVMEmission {
       const auto arguments = prepare_arguments(expr, nullptr, &current_owners);
       if (!reachable()) return nullptr;
       llvm::AllocaInst *here_site = nullptr;
-      if (fact.supplied_here && program_->methods[program_->instances[fact.supplied_here->instance].method].here_group) {
-        here_site = slot(b_.getPtrTy(), "here.call.destination");
-        b_.CreateStore(null_pointer(), here_site);
+      if (!fact.here_arguments.empty()) {
+        const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&fact.here_arguments.front());
+        if (literal && program_->methods[program_->instances[literal->instance].method].here_group) {
+          here_site = slot(b_.getPtrTy(), "here.call.destination");
+          b_.CreateStore(null_pointer(), here_site);
+        }
       }
       auto *result = invoke(expr, arguments, here_site, current_owners);
       if (here_site) result = consume_here_transfer(result, load(here_site));
@@ -3124,6 +3141,15 @@ class LLVMEmission {
       return nullptr;
     }
     case K::try_scope: return emit_finally(expr, projection, discard);
+    case K::deferred: {
+      auto &scope = *scope_;
+      const auto action = std::ranges::find(scope.actions, &expr, &CleanupAction::action);
+      if (action == scope.actions.end()) throw std::logic_error("uncollected here cleanup");
+      auto *record = action->activation_record;
+      prepare_cleanup_record(scope, record, std::distance(scope.actions.begin(), action));
+      b_.CreateStore(record, scope.head);
+      return empty_scalar();
+    }
     default: throw std::logic_error("unchecked expression reached LLVM emission");
     }
   }
@@ -3585,10 +3611,11 @@ public:
           if (operation.publishes_effect)
             used_symbols.insert(target.scoped_replay_bindings.begin(), target.scoped_replay_bindings.end());
         }
-        if (operation.supplied_here) {
-          here_instances.insert(operation.supplied_here->instance);
-          retain_method(program.instances[operation.supplied_here->instance].method);
-        }
+        for (const auto &input : operation.here_arguments)
+          if (const auto *literal = std::get_if<CheckedOperation::SuppliedHere>(&input)) {
+            here_instances.insert(literal->instance);
+            retain_method(program.instances[literal->instance].method);
+          }
         const bool installation = expr->kind == Expression::Kind::effect || expr->kind == Expression::Kind::procedure_effect;
         if (operation.symbol && (expr->kind == Expression::Kind::symbol || (installation && operation.publishes_effect) ||
             program.symbols[*operation.symbol].live_scope))
