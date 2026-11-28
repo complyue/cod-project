@@ -8,7 +8,7 @@ using "./ModuleExportStorage.cod" {
 };
 using "./GenericTypes.cod" { Products, TypeKeys, TypeKey, TypeCategory { BitsNominal, ScalarType }, matches_member_application };
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
-using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, reference_symbol_shape };
+using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, reference_symbol_shape, prepared_text_writer };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -2515,7 +2515,7 @@ func prior_value_signature(nodes:const ExprNodes in N, links:const NameWork in L
 }
 
 func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, facts:const OperandFacts in F,
-                        family:UInt64, used:UInt64, revision:UInt64, report:OperandCheckResult in R) -> bool
+                        family:UInt64, used:UInt64, revision:UInt64, text_writer:bool, report:OperandCheckResult in R) -> bool
     where {const owner N, const owner L, const owner F, owner R} {
     val function_form <- is_function(nodes, family);
     val method <- family;
@@ -2525,7 +2525,7 @@ func check_value_family(nodes:const ExprNodes in N, links:const NameWork in L, f
         if (method == no_node()) return true;
         if (is_function(nodes, method) != function_form ||
             !callable_formals(nodes, revision, used, method, false, formals) ||
-            !supported_value_method(nodes, links, facts, method, formals, used, revision))
+            (!text_writer && !supported_value_method(nodes, links, facts, method, formals, used, revision)))
             return operand_problem(report, method, unsupported_value_family());
         issue <- prior_value_signature(nodes, links, facts, family, method, formals, used, revision);
         if (issue != 0u8) return operand_problem(report, method, issue);
@@ -2551,7 +2551,8 @@ func value_applicability(nodes:const ExprNodes in N, links:const NameWork in L, 
         actual <- ordinary_argument_value(nodes, used, revision, argument);
         if (actual == no_node() || binds_local_storage(nodes, actual) || checked_ref_argument(nodes, argument))
             return (InapplicableValue:ValueApplicability);
-        if (!same_operand_type(facts, actual, formal) && !supplies_enum_backing(facts, actual, facts[formal].kind)) {
+        if (!same_operand_type(facts, actual, formal) && !supplies_enum_backing(facts, actual, facts[formal].kind) &&
+            !(facts[actual].kind == c_string_kind() && facts[formal].kind == string_kind())) {
             # Do not drop a candidate whose whole-type numeric adaptation
             # could matter to selection but is outside this executable slice.
             if ((facts[actual].kind != scalar_u8() || facts[formal].kind != scalar_u64()) &&
@@ -2711,8 +2712,26 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
     ref argument = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, arguments, ArgumentSequence, argument))
         return invalid_operand_tree();
+    val text_writer <- source_only && prepared_text_writer(views, definition);
+    if (text_writer) {
+        if (!is_function(nodes, definition) && is_function(nodes, enclosing_callable(nodes, names, names[at].scope)))
+            return procedure_call_in_function();
+        if (argument >= at) return wrong_argument_count();
+        val next <- links[argument].next;
+        if (next >= at || links[next].next != no_node()) return wrong_argument_count();
+        val target <- ordinary_argument_value(nodes, used, revision, argument);
+        val piece <- ordinary_argument_value(nodes, used, revision, next);
+        if (target >= argument || piece >= next) return invalid_operand_tree();
+        if (checked_ref_argument(nodes, argument) || checked_ref_argument(nodes, next))
+            return unsupported_value_family();
+        if (facts[target].kind == never_result() || facts[piece].kind == never_result()) {
+            set_result(facts, at, never_result());
+            return 0u8
+        }
+    };
     if (links[definition].next_method != no_node()) {
-        if (source_only || transfer_name(source, nodes, definition_name(nodes, revision, used, definition)))
+        if ((source_only && !text_writer) ||
+            transfer_name(source, nodes, definition_name(nodes, revision, used, definition)))
             return unsupported_transfer_signature();
         val issue <- select_value_method(nodes, links, facts, definition, argument, used, revision, definition);
         if (issue != 0u8) return issue
@@ -8211,15 +8230,17 @@ export func check_module_operands(source:const SourceBytes in S, nodes:const Exp
             }
         };
     };
+    val text_writer <- false;
     for (at in 0u64 .. tree.used) {
         if (needs_signature_check(demand, at) && inspect_callable(nodes, tree.revision, tree.used,
             at, callable) == ModuleCallable && links[at].next_method != no_node()) {
-            if (source_only || transfer_name(source, nodes, definition_name(nodes, tree.revision, tree.used, at))) {
+            text_writer <- source_only && prepared_text_writer(views, at);
+            if ((source_only && !text_writer) ||
+                transfer_name(source, nodes, definition_name(nodes, tree.revision, tree.used, at))) {
                 (report.diagnostic <- check_transfer_signatures(nodes, links, facts, at, tree.used, tree.revision)):void
             } else {
                 if (names[at].declaration == at &&
-                    !check_value_family(nodes, links, facts, at, tree.used, tree.revision, report)) return false;
-
+                    !check_value_family(nodes, links, facts, at, tree.used, tree.revision, text_writer, report)) return false
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
         };

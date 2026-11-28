@@ -1254,6 +1254,9 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                            views:const SuppliedViews in H, demand:const DeclarationDemands in D, reached:ReachedFailures in W,
                            used:UInt64, revision:UInt64, category:UInt64, array_summary:bool) -> UInt64
     where {const owner N, const owner B, const owner L, const owner F, const owner X, const owner H, const owner D, owner W} {
+    # This non-array allocation pass follows only the checked builder
+    # append origin and ordinary local calls.
+    val builder_summary <- !array_summary && category == out_of_memory_identity();
     val count <- 0u64;
     val definition <- no_node();
     val form <- InvalidCallable;
@@ -1273,16 +1276,17 @@ func collect_failure_roots(nodes:const ExprNodes in N, names:const NameBindings 
                 (count <- enqueue_failure(reached, at, count)):void;
             } else {};
             event <- sites[at].event;
-            routed <- array_summary && (event == possible_failure() || event == definite_failure());
-            if ((routed || is_failure_statement(nodes, at)) && sites[at].category_module == 0u64 &&
-                sites[at].category == category) {
+            routed <- (array_summary || (builder_summary && facts[at].text_intrinsic == builder_append_export())) &&
+                (event == possible_failure() || event == definite_failure());
+            if ((routed || (!builder_summary && is_failure_statement(nodes, at))) &&
+                sites[at].category_module == 0u64 && sites[at].category == category) {
                 definition <- enclosing_callable(nodes, names, names[at].scope);
                 form <- inspect_callable(nodes, revision, used, definition, callable);
                 if (sites[at].destination == definition && (form == ModuleCallable || form == LexicalCallable)) {
                     (count <- enqueue_failure(reached, definition, count)):void;
                 } else {};
             } else {};
-            imported <- links[at].imported_interface != no_node() &&
+            imported <- !builder_summary && links[at].imported_interface != no_node() &&
                 (if (array_summary) {
                     invocation_reached(nodes, sites, at, used, revision) &&
                         (imported_array_escapes(views, at, category) ||
@@ -1460,6 +1464,7 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         prepare_context(nodes, facts, sites, site, tree.used, tree.revision);
     };
     val slot_bodies <- false;
+    val builder_append <- false;
     val definition <- no_node();
     val reader_result <- 0u8;
     for (at in 0u64 .. tree.used) {
@@ -1472,6 +1477,8 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
                     demand, sites, at, tree.used, tree.revision)
             };
             if (report.diagnostic != 0u8) { report.node <- at; return false; };
+            builder_append <- builder_append || (facts[at].text_intrinsic == builder_append_export() &&
+                sites[at].event == possible_failure());
             definition <- if (at < intrinsic (len)(demand)) { (demand[at].scope) } else { no_node() };
             if (definition < tree.used && definition != at &&
                 sites[definition].array_read_completion != NoArrayRead) {
@@ -1494,6 +1501,8 @@ export func check_module_completion(nodes:const ExprNodes in N, tree:const Parse
         tree.used, tree.revision, missing_return_identity(), false) &&
         check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report, tree.used,
             tree.revision, unexpected_case_identity(), false) &&
+        (!builder_append || check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,
+            tree.used, tree.revision, out_of_memory_identity(), false)) &&
         (!slot_bodies || (mark_slot_summary_dependencies(nodes, facts, demand, sites,
             tree.used, tree.revision, report) &&
             check_escaping_failure_paths(nodes, names, links, facts, sites, views, demand, report,

@@ -1560,6 +1560,7 @@ export data SuppliedView =
     PreparedArrayLengthMethod { type_module:UInt64, type_identity:UInt64, } |
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
     ImportedSourceTextCall { family:UInt64, past:UInt64, } |
+    PreparedTextWriterMethod {} |
     PreparedAcquisitionFailure { nominal:ExceptionType, };
 export array SuppliedViews[UInt64]:SuppliedView;
 
@@ -5215,6 +5216,71 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
     return prepare_forwarded_feedback(nodes, names, selected, work, views, used, revision, true, report);
 }
 
+func text_writer_signature(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    signature:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner W} {
+    ref clause = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    if (inspect_signature(nodes, revision, used, signature, clause) != OwnerSignatureClause || !clause.readonly)
+        return false;
+    val output_owner <- clause.previous;
+    if (inspect_signature(nodes, revision, used, output_owner, clause) != OwnerSignatureClause || clause.readonly ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != ValueResultClause ||
+        clause.annotation >= used || names[clause.annotation].kind != builtin_void() ||
+        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead)
+        return false;
+    ref output = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, output) ||
+        output >= used) return false;
+    val piece <- work[output].next;
+    if (piece >= used || work[piece].next != no_node()) return false;
+    val target <- reference_formal_marker(nodes, names, output, output_owner, false, used, revision);
+    val input <- readonly_formal_marker(nodes, names, piece, signature, used, revision);
+    return target < used && input < used && is_lexical_builder(nodes, names, target, revision, used) &&
+        (names[input].kind == builtin_string() || is_lexical_builder(nodes, names, input, revision, used))
+}
+
+export func prepared_text_writer(views:const SuppliedViews in V, at:UInt64) -> bool where {const owner V} {
+    return at < intrinsic (len)(views) && (case views[at] of { PreparedTextWriterMethod -> true; _ -> false })
+}
+
+func text_writer_method_count(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    views:const SuppliedViews in V, head:UInt64, used:UInt64, revision:UInt64) -> UInt64
+    where {const owner N, const owner B, const owner W, const owner V} {
+    if (names[head].kind != callable_binding() || names[head].declaration != head) return 0u64;
+    ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
+    val method <- head;
+    val count <- 0u64;
+    val function_form <- is_function(nodes, head);
+    for (unused in 0u64 .. used) {
+        if (method == no_node()) return count;
+        if (method >= used || names[method].declaration != head ||
+            !(case views[method] of { NoSuppliedView -> true; _ -> false }) ||
+            inspect_callable(nodes, revision, used, method, callable) != ModuleCallable ||
+            callable.body == no_node() || callable.function_form != function_form ||
+            !text_writer_signature(nodes, names, work, callable.signature, used, revision)) return 0u64;
+        method <- work[method].next_method;
+        (count <- count + 1u64):void
+    };
+    return 0u64
+}
+
+# Finish the whole fixed family before any of its signatures can enter
+# ordinary source selection. Only the signatures belong to this pass.
+func prepare_text_writer_family(nodes:const ExprNodes in N, names:const NameBindings in B, work:const NameWork in W,
+    views:SuppliedViews in V, head:UInt64, used:UInt64, revision:UInt64) -> bool
+    where {const owner N, const owner B, const owner W, owner V} {
+    val count <- text_writer_method_count(nodes, names, work, views, head, used, revision);
+    if (count == 0u64) return false;
+    val method <- head;
+    for (unused in 0u64 .. count) {
+        views[method] <- make PreparedTextWriterMethod {};
+        (method <- work[method].next_method):void
+    };
+    return true
+}
+
 export func check_module_interfaces(
     nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, interface_count:UInt64,
@@ -5236,8 +5302,9 @@ export func check_module_interfaces(
     val constructor <- no_node();
     val valid <- false;
     for (at in 0u64 .. used) {
-        if (first_required == no_node() && prepared_source_here_relay(views, at) != no_node()) {
-            (first_required <- at):void
+        if (prepare_text_writer_family(nodes, names, work, views, at, used, revision) ||
+            prepared_source_here_relay(views, at) != no_node()) {
+            if (first_required == no_node()) { (first_required <- at):void }
         };
         mode <- inspect_handle_construction(nodes, revision, used, at, acquired);
         if (mode == OwnHandleMake || mode == BorrowHandleMake) {

@@ -1149,6 +1149,14 @@ A direct source-preserving selection, including a rename, validates the publishe
 
 The source commands check the catalog-selected `append_utf8` operation used by `string.cod`. It borrows the writable builder under its allocation-capable owner, followed by the immutable text or builder piece. The operation has a normal void result and can raise the standard allocation failure after operand preparation.
 
+### Checking local text writers
+
+The source checker completes the fixed signatures for the local `append` and `writeUtf8` families in `string.cod` before checking their bodies. In this profile every member takes a writable builder under its allocation-capable owner and a readonly text or builder piece under its own const owner. The members have the same callable kind and an explicit void result. An unrepresented member withholds this local selection path. Duplicate signatures reject at the definition.
+
+At a local call, read the completed formal and operand facts, select a member, and apply the normal ordered loans and owner checks. A failed operand produces no entered call. The allocation failure from the catalog append propagates over the frozen **selected** call edges. A reached catch can handle it before it reaches the caller. For deferred use under this source profile, the existing delayed-failure check reports an unsupported escaping append failure. An unused family member's failure contributes no selected-call completion.
+
+The real writer bodies pass both source commands. The dynamic `@sout` operand and the completed family-wide binding requirements still have to be represented before the source checker can admit an entered imported `emit` call.
+
 ### Target layout for provider rows
 
 Acquire one owning native layout handle for a provider render that needs row layout. Readonly loans select that handle’s immutable target data. Use the current native target selection and ensure target registration is available on the provider command path. Declaration checking alone needs no layout acquisition. The service can create a target machine to obtain its data layout, then release the machine. Keep the layout and any LLVM context used for queries live until their last use. Dispose of diagnostics and partial acquisitions before reporting a checked acquisition failure. Release a successfully acquired handle once through ordinary CoD cleanup. This operation needs no IR module, builder, assembly printer or output file.
