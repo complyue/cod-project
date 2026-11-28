@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 7 · 2026-11-28
+Design and research revision: 8 · 2026-11-28
 
 ## Design authority
+
+At r8 the [provider handoff direction](../CHANGELOG.md#h-swarm-provider-handoff-20261128) assigns inter-worker ownership transfer to the swarm provider interface. The provider declares which transfers it supports. P-789 continues same-swarm authority and the independent chan rule. The declaration model below is a proposal for static checking and dynamic worker selection.
 
 At r7 the [swarm and chan decision](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) admits thread pools, local process pools and dynamically recruited cross-machine process pools. D-32-RESOURCE-POOLS/P-789 limits swarm-region handoff to its swarm. D-32-REGION-TRANSPORT/P-711 admits only ordinary regions as chan payloads. This supersedes the r5–r6 same-pool chan example.
 
@@ -83,6 +85,22 @@ A **swarm** is a first-class resource pool. Every `go` launch names a target swa
 A producer can hand a **swarm region** to an indexing worker through an owning entry parameter or the block’s owner list. The producer, resource and worker must satisfy the same actual swarm requirement. The selected worker must also be able to use and release that resource. For example, shared memory can support a handoff to a local subprocess. Recruiting a remote worker into the same swarm establishes membership, but the local mapping cannot give that worker access to the bytes.
 
 A typed `chan` carries **only ordinary regions**. A packet is an ordinary region used as a message and has no swarm association. The same rule applies when sender and receiver belong to the very same swarm, even when both are threads in one OS process. A swarm region is ineligible as a chan payload, including inside a wrapper.
+
+### Declaring a swarm provider’s handoff operations
+
+The **swarm provider** exposes the operations that transfer ownership between its workers and declares which transfers it supports. Both owning launch forms use this interface. The resource’s own contract still determines who can use and release it. Ordinary synchronous owner passing within one go process continues to use the ordinary call rules. Typed chan sends have their own message contract.
+
+**Proposed declaration model.** Publish a finite table of handoff signatures alongside the provider interface. Each supported row names the owned resource, any required backing or capability, the directed placement of its current holder and intended recipient, and the operation implementing the handoff. An explicit unsupported row can document a known restriction. Only an applicable supported row supplies transfer authority. A provider that lacks a row for a new resource type acquires no permission by default. Conflicting declarations for the same case should be diagnosed when the interface is formed. These sample rows use descriptive names in place of a proposed CoD grammar:
+
+| Provider | Resource and required evidence | Route from current holder to recipient | Declaration |
+| --- | --- | --- | --- |
+| LocalWorkers | Swarm region with relocatable shared-memory backing | Distinct processes on the same host | Supported by `handoff_shared_region` |
+| LocalWorkers | Exact nominal `IndexFile` handle with a transferable descriptor | Distinct processes on the same host | Supported by `pass_index_file` |
+| ClusterWorkers | Same `IndexFile` and descriptor | Processes on different hosts | Unsupported |
+
+Swarm identity, the resource’s actual owner, and the provider declaration answer separate questions. Two regions with the same roots can have different backing. A matching structural schema proves no shared-memory capability. For a nominal resource, an equally shaped type from another declaration cannot satisfy a row naming the original type. On success the selected operation makes the resource usable at the recipient with one release responsibility. Its declaration alone cannot guarantee successful execution. [Nominal resource identity](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) · [Owning inputs at launch](SymbolicDynamicScope.md#go-process-launch)
+
+For a statically known route the compiler can check the row directly. For a dynamically recruited worker, one option is to constrain placement to workers whose declared operations cover **all** owning arguments together. For example, worker A can take only the region and worker B only the handle. Neither can run an entry requiring both. A later recruit that supports both can qualify. A provider choosing the worker at runtime would need to keep that selection valid through handoff, including if the worker disappears. Absence of any declared route differs from a supported route temporarily having no live worker. Whether admission waits or fails, and who holds each resource on a failure after admission, remain design questions.
 
 ### Process-local regions, pool-bound regions and packets
 

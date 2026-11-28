@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Declare inter-worker ownership handoffs on the swarm provider
+
+<a id="h-swarm-provider-handoff-20261128"></a>
+**H-SWARM-PROVIDER-HANDOFF-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) directs that resource ownership handoff be modeled as a swarm provider operation with an explicit, formal means of declaring supported and unsupported transfers. [D-32 r7→8](design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations) continues [same-swarm authority and ordinary-region-only chans](https://github.com/complyue/cod-project/blob/9bf0bf9ebfa2c3bd1ea1b85648594ce036918cfd/design/ActorChannels.md#resource-pools-and-ownership-handoff) under P-789/P-711. The declaration table, policy for missing or conflicting rows and worker-selection example are proposals. Source grammar, evidence for runtime placement and ownership on failure remain open. Registry r1390→1391.
+
 ## 2026-11-28 — Define swarm implementations and restrict chan payloads to ordinary regions
 
 <a id="h-swarm-implementations-and-chan-payloads-20261128"></a>
