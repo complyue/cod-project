@@ -455,7 +455,9 @@ Both source commands check `resolve_enum_selections`, `resolve_sum_selections` a
 
 Both source commands check `ModuleFrontend.bind_selected_module_recovering` and its direct source-preserving imports. Its completed workspace contract covers the readonly source, syntax, checked selections and published interfaces, the five initialized writable tables, and the independent binding report and recovery records. Each loan carries its own exact nominal type and access even when several roles map to one actual owner. The defining body and its reached dependencies establish the Boolean result and completion facts before publication.
 
-In the complete `ModuleGraph.cod` source check, both commands pass `bind_selected_module_recovering` and `prepare_enum_assertions` in `bind_graph_names`. They stop at the imported `NativeDeclarations.prepare_module_calls` signature. Both commands accept standalone `ModuleCompiler.cod`. Completion of the actual `@followDependency` body remains open.
+Both source commands check `NativeDeclarations.prepare_module_calls` through the same completed workspace route. It borrows the readonly syntax, name, selection, interface and aggregate tables and writes the initialized name-work table, supplied-view table and diagnostic record. Inside it, the statement call to `check_selected_here` prepares the mixed table and report loans using their completed formal bindings while the omitted result remains unknown. Ordinary body completion establishes that result separately.
+
+In the complete `ModuleGraph.cod` source check, both commands pass the `bind_graph_names` calls through `prepare_module_calls`. They stop in `prepare_graph_source_operands` at the imported `CaseSchemas.prepare_constructor_cases` signature. Both commands accept standalone `ModuleCompiler.cod`. Completion of the actual `@followDependency` body remains open.
 
 ### Readonly queries
 

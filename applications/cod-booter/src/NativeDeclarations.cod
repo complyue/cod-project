@@ -3304,13 +3304,19 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
     ref clause = make SignatureSites {
         previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
     };
-    if (inspect_signature(nodes, revision, used, result, clause) != ValueResultClause ||
-        clause.annotation >= used) return;
-    val result_kind <- names[clause.annotation].kind;
+    val result_form <- inspect_signature(nodes, revision, used, result, clause);
+    val result_kind <- 0u8;
+    if (result_form == ValueResultClause) {
+        if (clause.annotation >= used) return;
+        result_kind <- names[clause.annotation].kind;
+        if ((result_kind != builtin_bool() && result_kind != builtin_void() && result_kind != builtin_u64()) ||
+            inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
+    } else {
+        # A statement call can prepare local workspace loans using the head.
+        # An omitted result remains unknown here and qualifies no publication.
+        if (result_form != SignatureHead) return;
+    };
     val published_result <- result_kind == builtin_bool() || result_kind == builtin_void();
-    # Local workspace helpers can return the index they just discovered.
-    if ((!published_result && result_kind != builtin_u64()) ||
-        inspect_signature(nodes, revision, used, clause.previous, clause) != SignatureHead) return;
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first)) return;
     ref shape = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
@@ -3372,7 +3378,8 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 (adjacent_arrays || (writable_record_array && readonly_bytes))) ||
                 (!reads_record && writable_records == 1u64 &&
                     ((writable_arrays == 1u64 && writable_enum_array && readonly_arrays >= 4u64) ||
-                     (writable_arrays == 2u64 && writable_record_array && readonly_arrays == 5u64 && readonly_bytes) ||
+                     (writable_arrays == 2u64 && writable_record_array && readonly_arrays == 5u64 &&
+                        (readonly_bytes || (result_kind == builtin_bool() && writable_sum_array))) ||
                      (writable_arrays == 4u64 && readonly_arrays >= 2u64))) ||
                 (writable_flag_array && readonly_arrays != 0u64) ||
                 (!value_parameters && !reads_record && readonly_arrays == 1u64 && readonly_bytes &&
