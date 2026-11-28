@@ -54,7 +54,7 @@ using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, Readonly
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
     IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength, NameReference,
-    ComparisonExpression, Conjunction, Disjunction, Negation
+    ComparisonExpression, Conjunction, Disjunction, Negation, Conditional, ArithmeticExpression
 };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
 using "./ParserStorage.cod" ModuleSelectionMode { UseResource, ImportResource, ReexportResource };
@@ -2253,7 +2253,7 @@ func prepare_scalar_predicate(nodes:const ExprNodes in N, names:const NameBindin
     }
 }
 
-func guarded_scalar_returns(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
+func scalar_return_body(nodes:const ExprNodes in N, body:UInt64, used:UInt64, revision:UInt64)
     -> bool where {const owner N} {
     val tail <- no_node();
     val result <- no_node();
@@ -2263,8 +2263,19 @@ func guarded_scalar_returns(nodes:const ExprNodes in N, body:UInt64, used:UInt64
     if (!block_tail(nodes, revision, used, body, tail) ||
         inspect_sequence_entry(nodes, revision, used, tail, item) != BlockSequence ||
         completion_syntax(nodes, item.item) != ReturnCompletion ||
-        !completion_operand(nodes, revision, used, item.item, result) || result >= item.item ||
-        item.previous == no_node()) return false;
+        !completion_operand(nodes, revision, used, item.item, result) || result >= item.item) return false;
+    if (item.previous == no_node()) {
+        val operand <- ungrouped(nodes, revision, used, result);
+        if (operand >= used) return false;
+        return case nodes[operand] of {
+            Occupied { val syntax <- node, } -> case syntax.payload of {
+                Conditional -> true;
+                ArithmeticExpression -> true;
+                _ -> false
+            };
+            Vacant -> false
+        }
+    };
     for (unused in 0u64 .. used) {
         if (inspect_sequence_entry(nodes, revision, used, item.previous, item) != BlockSequence ||
             !inspect_conditional(nodes, revision, used, item.item, branch) ||
@@ -2283,8 +2294,8 @@ func guarded_scalar_returns(nodes:const ExprNodes in N, body:UInt64, used:UInt64
     return false
 }
 
-# Demand the ordinary checker for an independent scalar function with
-# guarded early returns and a final return. The shape supplies no exit proof.
+# Demand the ordinary checker for eligible scalar return bodies.
+# The shape supplies no exit proof.
 func prepare_scalar_function(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, work:const NameWork in W, views:SuppliedViews in V,
     definition:UInt64, used:UInt64, revision:UInt64)
@@ -2302,7 +2313,7 @@ func prepare_scalar_function(nodes:const ExprNodes in N, names:const NameBinding
     val result_kind <- names[signature.annotation].kind;
     if ((result_kind != builtin_u64() && result_kind != builtin_u8() && result_kind != builtin_bool()) ||
         inspect_signature(nodes, revision, used, signature.previous, signature) != SignatureHead ||
-        !guarded_scalar_returns(nodes, callable.body, used, revision)) return;
+        !scalar_return_body(nodes, callable.body, used, revision)) return;
     val formal <- no_node();
     val type <- no_node();
     val kind <- 0u8;

@@ -766,9 +766,9 @@ func lower_case_arm(nodes:const ExprNodes in N, names:const NameBindings in B, l
     val discriminator <- slot(subject);
     if (loads_target) {
         if (test_presence) {
-            val present <- new_block(plan);
-            command(code, plan, branch_on_flow_flag(), state.case_present_flag, 0u64, next, present);
-            position(code, plan, state, present);
+            val load_block <- new_block(plan);
+            command(code, plan, branch_on_flow_flag(), state.case_present_flag, 0u64, next, load_block);
+            position(code, plan, state, load_block);
         } else {};
         # Read the current bits through the saved address only on a present path.
         discriminator <- slot(arm);

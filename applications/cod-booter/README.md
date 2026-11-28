@@ -243,7 +243,7 @@ Both source commands also check lexical references initialized by an unplaced br
 
 ### Array growth and reference-slot calls
 
-Both source commands can consume a completed direct import of a single ordinary function with independent `UInt64` inputs and result, a guarded early return and a final return. The defining module checks the body and publishes the fixed signature with its possible arithmetic failure. The caller checks the ordered arguments and uses the reported completion at the written call, including under a rename. The contract keeps fatal arithmetic distinct from bounds failure. A possible arithmetic failure still requires a supported immediate cleanup route.
+Both source commands can consume a completed direct import of an admitted fixed scalar function. The body can use guarded early returns and a final return, or a single return of a conditional or arithmetic expression. The defining module checks the body and publishes the fixed signature with its possible arithmetic failure. This covers `NativeCommands.reservation_tag` and `NativeCommands.slot`. The caller checks the ordered arguments and uses the reported completion at the written call, including under a rename. The contract keeps fatal arithmetic distinct from bounds failure. A possible arithmetic failure still requires a supported immediate cleanup route.
 
 The declaration and C provider commands check `reserve_keys` with its original `SourceBytes` type and `growth_capacity` helper. Within the same module, a `ref var` formal can forward the caller's initialized writable slot. An ordinary reference formal lends its own local slot. Rebinding requires the same nominal array and actual owner, and construction separately requires a writable allocator role. Fixed slots, readonly targets and temporary arrays cannot supply a writable reference slot.
 
@@ -425,7 +425,7 @@ The source checker accepts a workspace record with fixed reference fields for na
 
 `ModuleWorkspace.cod` owns source scratch planning for the module graph. The scanner counts non-EOF tokens, and the module planner allows additional nodes for grouped selection. `Compiler.cod` re-exports the shared expression scratch plan and planner for its standalone expression helpers. Both source commands accept `ModuleWorkspace.cod`.
 
-The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The `ModuleGraph.cod` closure now reaches a duplicate local binding in `ModuleLowering.cod`.
+The two source commands check the imported exception payload schema helpers. The first fills an initialized product that describes the selected local or published payload layout. The second reads that description and fills an initialized array of field descriptors. Each loan retains its exact nominal type, access and owner, and caller checking uses the published signature and completed body facts. The first remaining stop in the `ModuleGraph.cod` source closure is construction of the imported Boolean array `InitializationTags` in `InitializationReadiness.cod`.
 
 ### Readonly queries
 
