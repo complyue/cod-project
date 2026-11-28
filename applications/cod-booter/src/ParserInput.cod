@@ -183,7 +183,7 @@ func parse_named_type_at(source:const SourceBytes in S, tokens:const Tokens in T
     return result.diagnostic == 0u8
 }
 
-func append_type_item(nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64) -> void
+func append_type_item(nodes:ExprNodes in A, result:ParseResult in R, previous:UInt64, count:UInt64) -> void
     where {owner A, owner R} {
     val item <- result.root;
     ref link = make NoLink {};
@@ -195,6 +195,7 @@ func append_type_item(nodes:ExprNodes in A, result:ParseResult in R, previous:UI
         make TypeListItem {
             previous <- link;
             item <- make NodeId { revision <- result.revision; index <- item };
+            count <- count;
         })
 }
 
@@ -206,13 +207,13 @@ func parse_type_list(source:const SourceBytes in S, tokens:const Tokens in T, no
     result.next <- result.next + 1u64;
     val previous <- no_node();
     val delimiter <- 0u8;
-    for (unused in result.next .. past) {
+    for (ordinal in 0u64 .. past - result.next) {
         if (parameters) {
             if (!parse_module_name(source, tokens, nodes, result, past)) return false
         } else {
             if (!parse_named_type_at(source, tokens, nodes, result, past, depth)) return false
         };
-        append_type_item(nodes, result, previous);
+        append_type_item(nodes, result, previous, ordinal + 1u64);
         if (result.diagnostic != 0u8) return false;
         delimiter <- punct_at(source, tokens, result.next, past);
         if (delimiter == RIGHT_BRACKET) {

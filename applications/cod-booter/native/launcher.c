@@ -88,6 +88,8 @@ static const char *unsupported_source_form(uint32_t code) {
     case 108: return "lexical callable definition lowering";
     case 152: return "generic type instantiation";
     case 153: return "nullable pointer result checking";
+    case 157: return "generic product constructor binding";
+    case 158: return "generic product export";
     default: return NULL;
     }
 }
@@ -161,6 +163,12 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: native handle binding is unproved on this path\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 13)
         fputs(": error: this module declaration is outside the supported compiler profile\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 154)
+        fputs(": error: a type application requires a generic product name\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 155)
+        fputs(": error: wrong number of generic type arguments\n", stderr);
+    else if (diagnostic->stage == 3 && diagnostic->code == 156)
+        fputs(": error: generic product name requires type arguments\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 129)
         fputs(": error: a variadic method must be the only method in its callable family\n", stderr);
     else if (diagnostic->stage == 3 && diagnostic->code == 130)

@@ -30,7 +30,8 @@ using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, ModuleCallablePromise };
 using "./ParserStorage.cod" DeclarationSyntax {
-    NominalRecord, EnumTypeDeclaration, TypeSynonymDeclaration, LocalPublication, NativeSymbolDeclaration, ReferenceSymbolDeclaration
+    NominalRecord, EnumTypeDeclaration, TypeSynonymDeclaration, GenericProductDeclaration, LocalPublication,
+    NativeSymbolDeclaration, ReferenceSymbolDeclaration
 };
 using "./ParserStorage.cod" AstSlot { Vacant };
 using "./ParserStorage.cod" { name_syntax, NameSyntax { SymbolicName } };
@@ -656,7 +657,7 @@ func library_declaration(nodes:const ExprNodes in N, tree:const ParseResult in T
         index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
     };
     val shape <- inspect_declaration(nodes, tree.revision, tree.used, at, declaration);
-    return shape == NominalRecord || shape == EnumTypeDeclaration ||
+    return shape == NominalRecord || shape == GenericProductDeclaration || shape == EnumTypeDeclaration ||
         shape == TypeSynonymDeclaration || shape == LocalPublication;
 }
 

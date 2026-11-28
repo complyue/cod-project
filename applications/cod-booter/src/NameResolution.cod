@@ -23,12 +23,13 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" SequenceSyntax {
     OtherSequenceSyntax, InvalidSequence, ModuleSequence, BlockSequence, ArgumentSequence, HereReceiverSequence, FormalSequence, ClauseSequence, EnumSequence, SumSequence,
-    CaseReceiverSequence,
+    CaseReceiverSequence, TypeSequence,
 };
 using "./ParserStorage.cod" { inspect_reference_case, CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, ReferenceCaseTarget } };
 using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
-    EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration, LocalPublication, NominalSum,
+    EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration,
+    LocalPublication, NominalSum, GenericProductDeclaration,
 };
 using "./ParserStorage.cod" CallableSyntax {
     InvalidCallable, OtherCallableSyntax, ModuleCallable, ModuleCallablePromise, LexicalCallable,
@@ -36,7 +37,7 @@ using "./ParserStorage.cod" CallableSyntax {
 };
 using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ValueResultClause, BorrowedResultClause, ExceptionResultClause, ThrowsSignatureClause,
-    TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax,
+    TypeSignatureClause, OwnerSignatureClause, InvalidSignature, OtherSignatureSyntax, PointerResultClause,
 };
 using "./ParserStorage.cod" BindingSyntax { InvalidBindingSyntax, TypedBinding };
 using "./ParserStorage.cod" FormalMode { ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal,
@@ -84,6 +85,7 @@ using "./ParserStorage.cod" {
     LogicalSites, inspect_logical,
     ungrouped,
     local_resource_name, inspect_default_set, BulkSelectionSites, inspect_bulk_selection,
+    TypeApplicationSites, GenericProductSites, inspect_type_application, inspect_generic_product, type_list_count,
 };
 using "./ParserInput.cod" ParseResult;
 using "./ParserStorage.cod" PublicView { DefaultPublic };
@@ -268,6 +270,8 @@ export func lexical_builder_type() -> UInt8 { return 33u8; }
 export func record_initializer_label() -> UInt8 { return 36u8; }
 func type_parameter_binding() -> UInt8 { return 34u8; }
 func type_synonym_binding() -> UInt8 { return 37u8; }
+export func generic_product_binding() -> UInt8 { return 41u8; }
+export func applied_product_binding() -> UInt8 { return 42u8; }
 
 export func builtin_type_kind(kind:UInt8) -> bool {
     return native_scalar(kind) || text_type(kind) || kind == builtin_void()
@@ -346,6 +350,13 @@ export func expected_value_binding() -> UInt8 { return 14u8; }
 export func protected_symbol_name() -> UInt8 { return 142u8 }
 func cyclic_type_synonym() -> UInt8 { return 146u8 }
 func unsupported_signed_literal() -> UInt8 { return 144u8 }
+export func unsupported_generic_type() -> UInt8 { return 152u8; }
+export func unsupported_pointer_result() -> UInt8 { return 153u8; }
+func expected_generic_product() -> UInt8 { return 154u8; }
+func wrong_type_argument_count() -> UInt8 { return 155u8; }
+func missing_type_arguments() -> UInt8 { return 156u8; }
+export func unsupported_generic_constructor() -> UInt8 { return 157u8; }
+export func unsupported_generic_export() -> UInt8 { return 158u8; }
 
 func reject_name(state:NameState in R, node:UInt64, diagnostic:UInt8) -> void where {owner R} {
     state.diagnostic <- diagnostic;
@@ -607,7 +618,7 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     };
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
-    if (nominal_type_kind(kind) || builtin_type_kind(kind) ||
+    if (nominal_type_kind(kind) || builtin_type_kind(kind) || kind == generic_product_binding() ||
         (kind == ordinary_selection() && work[declaration].module_kind == scalar_type_export())) {
         reject_name(state, name, expected_value_binding());
         return;
@@ -762,9 +773,84 @@ func scoped_type_parameter(source:const SourceBytes in S, nodes:const ExprNodes 
     return no_node();
 }
 
+func resolve_template_application(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+    work:const NameWork in W, state:NameState in R, at:UInt64, name:UInt64, tail:UInt64) -> void
+    where {const owner S, const owner N, owner B, const owner W, owner R} {
+    val revision <- state.syntax_revision;
+    val used <- state.syntax_used;
+    # A template parameter shadows a module-level product.
+    if (lookup(source, nodes, work, name, state.module_names, state.first) != no_node() ||
+        builtin_type_name(source, nodes, name) != 0u8) {
+        reject_name(state, name, expected_generic_product());
+        return
+    };
+    val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
+    if (found == no_node()) {
+        val code <- if (work[name].module_selection != no_node()) { expected_generic_product() } else { unresolved_name() };
+        reject_name(state, name, code);
+        return
+    };
+    if (bindings[found].kind != generic_product_binding()) {
+        reject_name(state, name, expected_generic_product());
+        return
+    };
+    val declaration <- bindings[found].declaration;
+    ref product = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
+    if (!inspect_generic_product(nodes, revision, used, declaration, product)) {
+        reject_name(state, name, invalid_module_tree());
+        return
+    };
+    val count <- type_list_count(nodes, tail);
+    if (count != type_list_count(nodes, product.parameters)) {
+        reject_name(state, at, wrong_type_argument_count());
+        return
+    };
+    val argument <- no_node();
+    if (!first_sequence_entry(nodes, revision, at, tail, TypeSequence, argument)) {
+        reject_name(state, at, invalid_module_tree());
+        return
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    for (ordinal in 0u64 .. count) {
+        if (inspect_sequence_entry(nodes, revision, at, argument, entry) != TypeSequence) {
+            reject_name(state, at, invalid_module_tree());
+            return
+        };
+        resolve_type_name(source, nodes, bindings, work, state, entry.item);
+        if (state.diagnostic != 0u8) return;
+        argument <- work[argument].next;
+    };
+    if (argument != no_node()) {
+        reject_name(state, at, invalid_module_tree());
+        return
+    };
+    remember(bindings, name, declaration, generic_product_binding());
+    # Keep the defining template and the written arguments in this revision.
+    # Concrete type identities belong to layout completion.
+    remember(bindings, at, declaration, applied_product_binding())
+}
+
 func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                         work:const NameWork in W, state:NameState in R, name:UInt64) -> void
     where {const owner S, const owner N, owner B, const owner W, owner R} {
+    val template_scope <- bindings[state.scope_node].kind == generic_product_binding();
+    if (name_syntax(nodes, state.syntax_used, name) != OrdinaryName) {
+        ref application = make TypeApplicationSites { name <- no_node(); arguments <- no_node() };
+        if (inspect_type_application(nodes, state.syntax_revision, state.syntax_used, name, application)) {
+            if (template_scope) {
+                resolve_template_application(source, nodes, bindings, work, state, name,
+                    application.name, application.arguments)
+            } else { reject_name(state, name, unsupported_generic_type()) };
+            return
+        }
+    };
+    if (template_scope) {
+        val binder <- lookup(source, nodes, work, name, state.module_names, state.first);
+        if (binder != no_node()) {
+            remember(bindings, name, bindings[binder].declaration, type_parameter_binding());
+            return
+        }
+    };
     val parameter <- scoped_type_parameter(source, nodes, bindings, state.scope_node, name, state.syntax_revision, state.syntax_used);
     if (parameter != no_node()) {
         remember(bindings, name, parameter, type_parameter_binding());
@@ -786,6 +872,10 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     val kind <- bindings[found].kind;
     if (kind == ordinary_selection() && work[declaration].module_scalar != 0u8) {
         remember(bindings, name, declaration, work[declaration].module_scalar);
+        return
+    };
+    if (kind == generic_product_binding()) {
+        reject_name(state, name, missing_type_arguments());
         return
     };
     if (kind != ordinary_selection() && !nominal_type_kind(kind) && !builtin_type_kind(kind)) {
@@ -2487,6 +2577,9 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         kind <- declaration_binding_kind(declaration_shape);
         if (kind != 0u8) {
             declare_module_name(source, nodes, bindings, work, state, declaration.name, form, kind);
+            if (kind == generic_product_binding()) {
+                remember(bindings, form, form, kind)
+            }
         };
         if (declaration_shape == NominalSum && state.diagnostic == 0u8) {
             register_constructors(source, nodes, bindings, work, state, form, declaration.entries);
@@ -2503,6 +2596,7 @@ func declaration_binding_kind(shape:DeclarationSyntax) -> UInt8 {
     return case shape of {
         (HandleTypeDeclaration) -> { c_handle_type() };
         (NominalRecord) -> { record_type() };
+        GenericProductDeclaration -> generic_product_binding();
         (NativeRecord) -> { record_type() };
         (ArrayTypeDeclaration) -> { array_type() };
         (EnumTypeDeclaration) -> { enum_type() };
@@ -2853,82 +2947,88 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
             name <- signature_name(nodes, state.syntax_revision, state.syntax_used, sites.signature);
             if (name == no_node()) { reject_name(state, form, invalid_module_tree()); return; };
             found <- lookup(source, nodes, work, name, 0u64, state.used);
-            if ((found != no_node() && bindings[found].kind == constructor_type()) ||
-                (found == no_node() && selected[name].constructor_selection != no_node())) {
-                reject_name(state, form, unsupported_constructor_initializer());
-                return;
-            };
-            variadic <- variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
-                form) != no_node();
-            if (found != no_node() && bindings[found].kind == ordinary_selection() &&
-                (extensible_selection(nodes, selected, bindings[found].declaration,
-                    state.syntax_revision, state.syntax_used) ||
-                 (bindings[found].module_use == (SelectedValue:ModuleNameUse) &&
-                  permits_module_family_extension(selections, selected_used, work[found].module_selection,
-                      state.syntax_revision)))) {
-                family <- bindings[found].declaration;
-                inherited <- if (bindings[found].module_use == (SelectedValue:ModuleNameUse)) {
-                    checked_selection_membership(selections, selected_used, work[found].module_selection,
-                        state.syntax_revision, interfaces, published)
-                } else { selected_family_membership(selected, family, interfaces, published) };
-                if (inherited == (VariadicMethod:FamilyMembership) ||
-                    (variadic && inherited == (FixedMethods:FamilyMembership))) {
-                    reject_name(state, form, conflicting_variadic_family());
-                    return
-                }
-            };
-            if (found != no_node() && bindings[found].kind == callable_binding()) {
-                family <- bindings[found].declaration;
-                if (variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
-                    form) != no_node() ||
-                    variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
-                        family) != no_node()) {
-                    reject_name(state, form, conflicting_variadic_family());
-                    return
-                }
-            };
-            candidate <- work[name].module_selection;
-            if (found == no_node() && state.module_candidates && candidate != no_node()) {
-                if (!allow_families || !permits_module_family_extension(selections, selected_used,
-                    candidate, state.syntax_revision)) {
-                    reject_name(state, name, unproved_module_binding());
-                    return
-                };
-                inherited <- checked_selection_membership(selections, selected_used, candidate,
-                    state.syntax_revision, interfaces, published);
-                if (inherited == (VariadicMethod:FamilyMembership) ||
-                    (variadic && inherited == (FixedMethods:FamilyMembership))) {
-                    reject_name(state, form, conflicting_variadic_family());
-                    return
-                };
-                if (!select_on_lexical_miss(bindings, work, state, name,
-                    (SelectedValue:ModuleNameUse), false)) {
-                    reject_name(state, name, invalid_module_tree());
-                    return
-                };
-                work[state.used].active <- name;
-                (state.used <- state.used + 1u64):void
+            if (found != no_node() && bindings[found].kind == generic_product_binding()) {
+                # This is a candidate for the template's ctor family. Leave
+                # the product's type name visible until ctor binding exists.
+                remember(bindings, form, bindings[found].declaration, generic_product_binding());
             } else {
-                if (found != no_node() && bindings[found].kind == callable_binding()) {
+                if ((found != no_node() && bindings[found].kind == constructor_type()) ||
+                    (found == no_node() && selected[name].constructor_selection != no_node())) {
+                    reject_name(state, form, unsupported_constructor_initializer());
+                    return;
+                };
+                variadic <- variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                    form) != no_node();
+                if (found != no_node() && bindings[found].kind == ordinary_selection() &&
+                    (extensible_selection(nodes, selected, bindings[found].declaration,
+                        state.syntax_revision, state.syntax_used) ||
+                     (bindings[found].module_use == (SelectedValue:ModuleNameUse) &&
+                      permits_module_family_extension(selections, selected_used, work[found].module_selection,
+                          state.syntax_revision)))) {
                     family <- bindings[found].declaration;
-                    work[form].next_method <- work[family].next_method;
-                    work[family].next_method <- form;
-                    remember(bindings, name, family, callable_binding());
-                } else {
-                    if (allow_families && found != no_node() && bindings[found].kind == ordinary_selection() &&
-                        (extensible_selection(nodes, selected, bindings[found].declaration,
-                            state.syntax_revision, state.syntax_used) ||
-                         (bindings[found].module_use == (SelectedValue:ModuleNameUse) &&
-                          permits_module_family_extension(selections, selected_used,
-                              work[found].module_selection, state.syntax_revision)))) {
-                        remember(bindings, name, bindings[found].declaration, ordinary_selection());
-                    } else {
-                        declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+                    inherited <- if (bindings[found].module_use == (SelectedValue:ModuleNameUse)) {
+                        checked_selection_membership(selections, selected_used, work[found].module_selection,
+                            state.syntax_revision, interfaces, published)
+                    } else { selected_family_membership(selected, family, interfaces, published) };
+                    if (inherited == (VariadicMethod:FamilyMembership) ||
+                        (variadic && inherited == (FixedMethods:FamilyMembership))) {
+                        reject_name(state, form, conflicting_variadic_family());
+                        return
                     }
                 };
+                if (found != no_node() && bindings[found].kind == callable_binding()) {
+                    family <- bindings[found].declaration;
+                    if (variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                        form) != no_node() ||
+                        variadic_method_formal(nodes, state.syntax_revision, state.syntax_used,
+                            family) != no_node()) {
+                        reject_name(state, form, conflicting_variadic_family());
+                        return
+                    }
+                };
+                candidate <- work[name].module_selection;
+                if (found == no_node() && state.module_candidates && candidate != no_node()) {
+                    if (!allow_families || !permits_module_family_extension(selections, selected_used,
+                        candidate, state.syntax_revision)) {
+                        reject_name(state, name, unproved_module_binding());
+                        return
+                    };
+                    inherited <- checked_selection_membership(selections, selected_used, candidate,
+                        state.syntax_revision, interfaces, published);
+                    if (inherited == (VariadicMethod:FamilyMembership) ||
+                        (variadic && inherited == (FixedMethods:FamilyMembership))) {
+                        reject_name(state, form, conflicting_variadic_family());
+                        return
+                    };
+                    if (!select_on_lexical_miss(bindings, work, state, name,
+                        (SelectedValue:ModuleNameUse), false)) {
+                        reject_name(state, name, invalid_module_tree());
+                        return
+                    };
+                    work[state.used].active <- name;
+                    (state.used <- state.used + 1u64):void
+                } else {
+                    if (found != no_node() && bindings[found].kind == callable_binding()) {
+                        family <- bindings[found].declaration;
+                        work[form].next_method <- work[family].next_method;
+                        work[family].next_method <- form;
+                        remember(bindings, name, family, callable_binding());
+                    } else {
+                        if (allow_families && found != no_node() && bindings[found].kind == ordinary_selection() &&
+                            (extensible_selection(nodes, selected, bindings[found].declaration,
+                                state.syntax_revision, state.syntax_used) ||
+                             (bindings[found].module_use == (SelectedValue:ModuleNameUse) &&
+                              permits_module_family_extension(selections, selected_used,
+                                  work[found].module_selection, state.syntax_revision)))) {
+                            remember(bindings, name, bindings[found].declaration, ordinary_selection());
+                        } else {
+                            declare_name(source, nodes, bindings, work, state, name, form, callable_binding(), unproved_module_binding());
+                        }
+                    };
+                };
+                if (state.diagnostic != 0u8) return;
+                remember(bindings, form, bindings[name].declaration, callable_binding());
             };
-            if (state.diagnostic != 0u8) return;
-            remember(bindings, form, bindings[name].declaration, callable_binding());
         };
         item <- work[item].next;
     };
@@ -2966,7 +3066,10 @@ func register_c_callable(source:const SourceBytes in S, nodes:const ExprNodes in
     ref result = make UInt64 { no_node() };
     if (name == no_node() ||
         !find_signature_clause(nodes, state.syntax_revision, state.syntax_used, signature, ValueResultClause, result)) {
-        reject_name(state, form, invalid_module_tree());
+        if (find_signature_clause(nodes, state.syntax_revision, state.syntax_used, signature, PointerResultClause, result) &&
+            result != no_node()) {
+            reject_name(state, result, unsupported_pointer_result())
+        } else { reject_name(state, form, invalid_module_tree()) };
         return;
     };
     if (provider && result == no_node()) {
@@ -3065,6 +3168,10 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
     for (unused in 0u64 .. state.syntax_used) {
         if (clause == no_node()) return;
         shape <- inspect_signature(nodes, state.syntax_revision, state.syntax_used, clause, signature);
+        if (shape == PointerResultClause) {
+            reject_name(state, clause, unsupported_pointer_result());
+            return
+        };
         if (shape == ValueResultClause || shape == BorrowedResultClause ||
             shape == ThrowsSignatureClause || shape == ExceptionResultClause) {
             resolve_type_annotation(source, nodes, bindings, work, state, signature.annotation, state.used);
@@ -3276,6 +3383,10 @@ func check_owner_inputs(nodes:const ExprNodes in N, bindings:const NameBindings 
 func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                            work:NameWork in W, state:NameState in R, definition:UInt64) -> void
     where {const owner S, const owner N, owner B, owner W, owner R} {
+    if (bindings[definition].kind == generic_product_binding()) {
+        reject_name(state, definition, unsupported_generic_constructor());
+        return
+    };
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val mode <- inspect_callable(nodes, state.syntax_revision, state.syntax_used, definition, callable);
     ref head = make UInt64 { no_node() };
@@ -3563,6 +3674,40 @@ func resolve_plain_product(source:const SourceBytes in S, nodes:const ExprNodes 
     return false
 }
 
+func bind_generic_product_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:NameWork in W, state:NameState in R, form:UInt64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val revision <- state.syntax_revision;
+    val used <- state.syntax_used;
+    ref product = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
+    val parameter <- no_node();
+    if (!inspect_generic_product(nodes, revision, used, form, product) ||
+        !first_sequence_entry(nodes, revision, form, product.parameters, TypeSequence, parameter)) {
+        reject_name(state, form, invalid_module_tree());
+        return
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    val count <- type_list_count(nodes, product.parameters);
+    for (ordinal in 0u64 .. count) {
+        if (inspect_sequence_entry(nodes, revision, form, parameter, entry) != TypeSequence ||
+            name_syntax(nodes, form, entry.item) != OrdinaryName) {
+            reject_name(state, form, invalid_module_tree());
+            return
+        };
+        declare_name(source, nodes, bindings, work, state, entry.item, parameter,
+            type_parameter_binding(), duplicate_binding());
+        if (state.diagnostic != 0u8) return;
+        parameter <- work[parameter].next
+    };
+    if (parameter != no_node()) {
+        reject_name(state, form, invalid_module_tree());
+        return
+    };
+    state.first <- state.used;
+    state.scope_node <- form;
+    resolve_formals(source, nodes, bindings, work, state, product.fields, AggregateFields:FormalNameRole)
+}
+
 func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
                            work:NameWork in W, state:NameState in R, first:UInt64,
                            selections:const CheckedSelections in C, selected_used:UInt64,
@@ -3579,6 +3724,7 @@ func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes i
     val recovered <- false;
     val plain <- false;
     const val floor <- state.first;
+    val enclosing <- state.scope_node;
     for (unused in 0u64 .. state.syntax_used) {
         if (item == no_node()) return;
         if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, item, entry) != ModuleSequence) {
@@ -3590,6 +3736,13 @@ func resolve_module_types(source:const SourceBytes in S, nodes:const ExprNodes i
         if (recovery.maximum != 0u64 && recovery.count >= recovery.maximum) {
             if (plain) { recovery.incomplete <- true; return }
         } else {
+            if (shape == GenericProductDeclaration) {
+                bind_generic_product_fields(source, nodes, bindings, work, state, entry.item);
+                state.used <- state.module_names;
+                state.first <- floor;
+                state.scope_node <- enclosing;
+                if (state.diagnostic != 0u8) return
+            };
             if (shape == NominalRecord || shape == NativeRecord || shape == AbstractTypeDeclaration) {
                 if (declaration.parent_type != no_node()) {
                     resolve_type_name(source, nodes, bindings, work, state, declaration.parent_type);
@@ -3642,6 +3795,10 @@ func resolve_publication(source:const SourceBytes in S, nodes:const ExprNodes in
     if (symbolic != symbol_binding(bindings[found].kind)) {
         reject_name(state, name, expected_symbol_binding());
         return;
+    };
+    if (bindings[found].kind == generic_product_binding()) {
+        reject_name(state, name, unsupported_generic_export());
+        return
     };
     remember(bindings, name, bindings[found].declaration, bindings[found].kind);
 }

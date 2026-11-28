@@ -40,7 +40,7 @@ export data ExprPayload =
       IntegerLiteral { magnitude:UInt64; width:UInt64; }
     | NameReference {}
     | AppliedType { name:NodeId; arguments:NodeId; }
-    | TypeListItem { previous:NodeLink; item:NodeId; }
+    | TypeListItem { previous:NodeLink; item:NodeId; count:UInt64; }
     | ParseReport { diagnostic:UInt8; }
     | ErrorReport { role:SyntaxRole; report:NodeId; }
     | BooleanLiteral { truth:bool; }
@@ -1743,6 +1743,7 @@ export enum DeclarationSyntax:UInt8 {
     NominalSum;
     NamedRegion;
     ValueSymbolDeclaration;
+    GenericProductDeclaration;
 }
 
 export data DeclarationSites {
@@ -1754,6 +1755,67 @@ export data DeclarationSites {
     owner_name:UInt64;
     readonly:bool;
     nullable:bool;
+}
+
+export data TypeApplicationSites { name:UInt64; arguments:UInt64; }
+export data GenericProductSites { name:UInt64; parameters:UInt64; fields:UInt64; }
+
+export func type_list_count(nodes:const ExprNodes in N, at:UInt64) -> UInt64 where {const owner N} {
+    if (at >= intrinsic (len)(nodes)) return 0u64;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            TypeListItem { val count <-; } -> count;
+            _ -> 0u64
+        };
+        Vacant -> 0u64
+    }
+}
+
+export func inspect_type_application(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+    sites:TypeApplicationSites in S) -> bool where {const owner N, owner S} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            AppliedType { val name <-; val arguments <-; } -> {
+                if (!published_syntax_id(nodes, revision, at, name) ||
+                    name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
+                    !published_syntax_id(nodes, revision, at, arguments) ||
+                    type_list_count(nodes, arguments.index) == 0u64) return false;
+                sites.name <- name.index;
+                sites.arguments <- arguments.index;
+                true
+            };
+            _ -> false
+        };
+        Vacant -> false
+    }
+}
+
+func read_generic_product(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
+    name:const NodeId in I, parameters:const NodeId in P, fields:const NodeLink in F,
+    sites:GenericProductSites in S) -> bool
+    where {const owner N, const owner I, const owner P, const owner F, owner S} {
+    if (!published_syntax_id(nodes, revision, at, name) ||
+        name_syntax(nodes, at, name.index) != (OrdinaryName:NameSyntax) ||
+        !published_syntax_id(nodes, revision, at, parameters) ||
+        type_list_count(nodes, parameters.index) == 0u64 ||
+        !optional_syntax_link(nodes, revision, at, fields, sites.fields)) return false;
+    sites.name <- name.index;
+    sites.parameters <- parameters.index;
+    return true
+}
+
+export func inspect_generic_product(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, at:UInt64,
+    sites:GenericProductSites in S) -> bool where {const owner N, owner S} {
+    if (at >= used || at >= intrinsic (len)(nodes)) return false;
+    return case nodes[at] of {
+        Occupied { val syntax <- node; } -> case syntax.payload of {
+            GenericRecordDefinition { val name <-; val parameters <-; val fields <-; } ->
+                read_generic_product(nodes, revision, at, name, parameters, fields, sites);
+            _ -> false
+        };
+        Vacant -> false
+    }
 }
 
 export data SumArmSites {
@@ -1870,6 +1932,12 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
                     if (!nominal_heading(nodes, revision, at, heading, sites) ||
                         !optional_syntax_link(nodes, revision, at, fields, sites.entries)) return InvalidDeclaration:DeclarationSyntax;
                     return if (native) { NativeRecord:DeclarationSyntax } else { NominalRecord:DeclarationSyntax };
+                };
+                (GenericRecordDefinition { val name <-; val fields <-; }) -> {
+                    if (!declaration_name(nodes, revision, at, name, false, sites) ||
+                        !optional_syntax_link(nodes, revision, at, fields, sites.entries))
+                        return InvalidDeclaration:DeclarationSyntax;
+                    GenericProductDeclaration:DeclarationSyntax
                 };
                 (SumDefinition { val heading <- heading; val tail <- last_arm; }) -> {
                     if (!nominal_heading(nodes, revision, at, heading, sites) ||

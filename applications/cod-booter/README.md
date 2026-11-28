@@ -411,7 +411,7 @@ The source commands check `check_module_operands` with the parsed revision and r
 
 Typed reference case arms accept ready borrowed `UInt64`, `UInt8` and `bool` targets of the exact written type. The arm binds the address and owner saved when the case evaluates its subject. Only a present target supplies the binding, which is visible in that arm's guard and body. A readonly target requires a readonly reception. If a guard changes the original ref slot, later arms still use the saved selection. Both source commands and linked objects exercise this profile.
 
-The reader accepts the generic product heads and type applications used in `Deque.cod`, including nested type arguments, applied construction heads, and owner-qualified `ptr` results. The syntax tree retains argument order and source spans in the parsed revision. The public commands report a located profile limit for generic instantiation and nullable result checking. The `ModuleGraph.cod` source closure reaches the instantiation limit at the declaration of `Link[T]`.
+The reader accepts the generic product heads and type applications used in `Deque.cod`, including nested type arguments, applied construction heads, and owner-qualified `ptr` results. The binder resolves template parameters and field types in their defining revision, including forward references and recursive pointer fields. A private template with no concrete use needs no runtime code. The public commands report located limits on concrete instantiation, generic exports and constructors, and nullable pointer result checking. The `ModuleGraph.cod` source closure reaches the constructor limit at `func deque()` in `Deque.cod`.
 
 ### Readonly queries
 
