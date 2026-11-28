@@ -84,7 +84,7 @@ export data ConstructorCaseFact =
     } |
     LexicalSumRebind { destination:UInt64, construction:UInt64, owner_site:UInt64, } |
     FreshSumInvocation { definition:UInt64, } |
-    ProductLoanInvocation { definition:UInt64, } |
+    AggregateLoanInvocation { definition:UInt64, } |
     ImportedFreshSumInvocation {} |
     FreshSumArgument { invocation:UInt64, formal:UInt64, construction:UInt64, lexical_owner:UInt64, } |
     BitsConstruction {
@@ -1476,11 +1476,12 @@ func prepare_received_fields(source:const SourceBytes in S, nodes:const ExprNode
                 record.defining_module <- type.defining_module;
                 record.identity <- type.identity;
                 ordinal <- no_node();
+                writable <- case facts[site] of { WritableFieldUse -> true; _ -> false };
                 if (describe_record_member(source, nodes, names, selected, work, spellings, spelling_used,
                     interfaces, published, selection.field, used, revision, true, type, ordinal, readonly) &&
                     ordinal != no_node() && (native_scalar(type.kind) || type.kind == enum_type() ||
-                        (type.kind == record_type() && case_bits_type(type, aggregate, interfaces, published)))) {
-                    writable <- case facts[site] of { WritableFieldUse -> true; _ -> false };
+                        ((type.kind == record_type() || (writable && type.kind == sum_type())) &&
+                         case_bits_type(type, aggregate, interfaces, published)))) {
                     demands_body <- case facts[origin] of {
                         WritableLocalProductFormal -> false;
                         InlineProductField { val demand_on_use <-, } -> demand_on_use;
@@ -1587,12 +1588,23 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
         if (!function_form) {
             if ((case facts[formal] of { InlineProductFormal { val readonly <-, } -> readonly; _ -> false }) &&
                 prepared_readonly_product_actual(names, facts, entry.item)) {
-                facts[call] <- make ProductLoanInvocation { definition <- definition };
+                facts[call] <- make AggregateLoanInvocation { definition <- definition };
                 if (first == no_node()) { (first <- call):void };
                 return true
             };
         } else {
             case facts[formal] of {
+                CaseSumFormal { val bound <- definition, val readonly <-, } -> {
+                    if (bound == definition && !readonly && entry.item < argument &&
+                        !checked_ref_argument(nodes, argument) &&
+                        inspect_field_selection(nodes, revision, used, entry.item, field)) {
+                        facts[entry.item] <- make WritableFieldUse {};
+                        if (case facts[call] of { NoConstructorCase -> true; _ -> false }) {
+                            (facts[call] <- make AggregateLoanInvocation { definition <- definition }):void
+                        };
+                        if (first == no_node()) { (first <- call):void }
+                    }
+                };
                 WritableLocalProductFormal { val bound <- definition, val owner_site <-, val expected <- value_type, } -> {
                     if (bound == definition &&
                         describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
@@ -1625,7 +1637,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                 IndexedAggregateLoan { val consumer <-, } -> consumer == argument;
                 _ -> false
             }) && (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
+                (facts[call] <- make AggregateLoanInvocation { definition <- definition }):void
             };
             if (names[entry.item].kind == formal_binding()) {
                 actual <- names[entry.item].declaration;
@@ -1636,7 +1648,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                     }) &&
                     (case facts[formal] of { InlineProductFormal -> true; _ -> false }) &&
                     (case facts[call] of { NoConstructorCase -> true; _ -> false })) {
-                    (facts[call] <- make ProductLoanInvocation { definition <- definition }):void
+                    (facts[call] <- make AggregateLoanInvocation { definition <- definition }):void
                 }
             };
             if (work[entry.item].inline_sum_initializer) {

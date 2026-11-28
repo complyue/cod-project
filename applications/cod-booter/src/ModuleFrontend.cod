@@ -694,7 +694,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
+        receipt_body <- false; aggregate_body_dependency <- false; mixed_aggregate_loan <- false;
         slot_body <- false; fixed_borrow <- false; text_call <- false; public_text_routine <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });
@@ -721,7 +721,7 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
     ref executable = make DeclarationDemands(0u64, make DeclarationDemand {
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
-        receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
+        receipt_body <- false; aggregate_body_dependency <- false; mixed_aggregate_loan <- false;
         slot_body <- false; fixed_borrow <- false; text_call <- false; public_text_routine <- false; requires_byte_completion <- false;
         signature <- false; body <- false;
     });

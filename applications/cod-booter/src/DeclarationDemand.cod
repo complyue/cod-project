@@ -29,7 +29,7 @@ using "./ModuleExports.cod" SelectedExports;
 using "./ModuleExportStorage.cod" { ModuleInterfaces, sum_type, enum_type };
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" ArrayReadCompletion { NoArrayRead };
-using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, ArrayFieldRecordFormal, InlineProductField, BitsConstruction, BitsPlaceTransfer, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, ProductLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
+using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { CaseFieldReceipt, CaseProductField, InlineProductFormal, ArrayFieldRecordFormal, InlineProductField, BitsConstruction, BitsPlaceTransfer, IndexedAggregateDestination, IndexedAggregateLoan, LexicalProductReference, LexicalSumReference, FreshSumInvocation, AggregateLoanInvocation, ImportedFreshSumInvocation, SumValueResult } };
 
 export data DeclarationDemand {
     scope:UInt64,
@@ -40,7 +40,7 @@ export data DeclarationDemand {
     receipt_pending:UInt64,
     declared_failure:UInt64,
     receipt_body:bool,
-    product_body_dependency:bool,
+    aggregate_body_dependency:bool,
     mixed_aggregate_loan:bool,
     slot_body:bool,
     fixed_borrow:bool,
@@ -233,7 +233,7 @@ func require_called_contracts(nodes:const ExprNodes in N, names:const NameBindin
         if (prove_loans) {
             if (!require_receipt_body(demand, definition, count, receipt_count, used)) return call
         } else {
-            if ((demand[call].product_body_dependency || form == LexicalCallable ||
+            if ((demand[call].aggregate_body_dependency || form == LexicalCallable ||
                 (form == ModuleCallable && sites.function_form && links[definition].next_method == no_node() &&
                     names[definition].declaration == definition && links[definition].active == no_node() &&
                     omits_callable_result(nodes, revision, used, sites.signature))) &&
@@ -546,8 +546,8 @@ export func discover_declaration_demand(
                 };
                 demand[site].callee <- definition;
                 if (site < intrinsic (len)(cases)) {
-                    (demand[site].product_body_dependency <- case cases[site] of {
-                        ProductLoanInvocation { val target <- definition, } -> target == definition;
+                    (demand[site].aggregate_body_dependency <- case cases[site] of {
+                        AggregateLoanInvocation { val target <- definition, } -> target == definition;
                         _ -> false
                     }):void
                 };
@@ -563,7 +563,7 @@ export func discover_declaration_demand(
                     if (mixed_aggregate && links[definition].next_method == no_node() &&
                         inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
                         demand[site].mixed_aggregate_loan <- true;
-                        demand[site].product_body_dependency <- true;
+                        demand[site].aggregate_body_dependency <- true;
                         (checked_call <- true):void
                     };
                     if (needs_receipt ||
