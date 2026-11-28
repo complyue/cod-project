@@ -8,7 +8,7 @@ using "./ModuleExportStorage.cod" {
 };
 using "./GenericTypes.cod" { Products, TypeKeys, TypeKey, TypeCategory { BitsNominal, ScalarType }, matches_member_application };
 using "./NameResolution.cod" { source_aggregate_formal, source_call_scalar, source_place_scalar };
-using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, reference_symbol_shape, prepared_text_writer };
+using "./NativeDeclarations.cod" { checked_source_array_call, published_sum_array, prepared_text_writer };
 using "./NameResolution.cod" direct_source_using;
 using "./ModuleExportStorage.cod" SourceWriter { NoSourceWriter, ProductWriter, AggregateWriter, ParserWriter, ArrayInspector, WorkspaceWriter };
 using "./ParserStorage.cod" AssignmentSyntax { AugmentedPlaceTransfer };
@@ -23,7 +23,7 @@ using "./ParserStorage.cod" FormalMode {
 using "./ParserStorage.cod" SignatureSyntax {
     SignatureHead, ScopedProcedureHead, ValueResultClause, BorrowedResultClause, ThrowsSignatureClause
 };
-using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration, ReferenceSymbolDeclaration };
+using "./ParserStorage.cod" DeclarationSyntax { NominalRecord, EnumTypeDeclaration };
 using "./ParserStorage.cod" BinarySyntax { ArithmeticBinary, ComparisonBinary, InvalidBinary };
 using "./ParserStorage.cod" ArithmeticOperation { Addition };
 using "./ParserStorage.cod" ComparisonRelation { Equal, Unequal };
@@ -102,7 +102,7 @@ using "./NameResolution.cod" {
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
     generic_method_binding, uninstantiated_method, unsupported_generic_type,
-    is_lexical_builder, reference_symbol_binding, lexical_builder_type,
+    is_lexical_builder, lexical_builder_type,
 };
 using "./ModuleExports.cod" {
     SelectedExports, symbol_export, print_export_identity,
@@ -113,7 +113,7 @@ using "./ModuleExports.cod" {
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
     CallableUseProofs, matches_object_call, checked_aggregate_storage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord, UnprovedAggregate },
-    FamilyMembership { FixedMethods },
+    FamilyMembership { FixedMethods }, InterfacePayload { DeferredTextReceiver },
     InterfaceCallableKind { NoCallableKind, CheckedFunction, CheckedProcedure },
     ExceptionSchema { CheckedExceptionSchema, UncheckedExceptionSchema },
 };
@@ -153,7 +153,7 @@ using "./NativeDeclarations.cod" {
 using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
 using "./NativeDeclarations.cod" prepared_workspace_loans;
 using "./NativeDeclarations.cod" SuppliedView {
-    ImportedArrayLengthCall, ImportedSourceTextCall,
+    ImportedArrayLengthCall, ImportedSourceTextCall, BoundReferenceSymbol,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
     ReadonlyByteRead, PreparedArrayConstruction, PreparedGenericConstruction, BoundGenericCall, ArraySlotFormal, IndexedArrayDestination,
     IndexedArraySource, EmptySumArrayFill, CheckedArraySlotBody, CheckedLiteralCall, CheckedReadonlyCall,
@@ -336,6 +336,7 @@ export func unsupported_transfer_signature() -> UInt8 { return 43u8; }
 export func unproved_transfer_owner() -> UInt8 { return 44u8; }
 export func unsupported_imported_call() -> UInt8 { return 45u8; }
 func unsupported_imported_slot_call() -> UInt8 { return 49u8; }
+func unproved_text_receiver() -> UInt8 { return 50u8; }
 
 func ambiguous_value_call() -> UInt8 { return 46u8; }
 func duplicate_value_signature() -> UInt8 { return 47u8; }
@@ -7080,52 +7081,38 @@ func check_imported_source_text(nodes:const ExprNodes in N, names:const NameBind
         return unproved_nonnull_borrow();
     val diagnostic <- check_owner_access(nodes, facts[input].owner, false);
     if (diagnostic != 0u8) return diagnostic;
+    if (case interfaces[method].payload of { DeferredTextReceiver -> true; _ -> false })
+        return unproved_text_receiver();
     # A selected signature supplies neither ordinary completion nor the
     # outstanding scoped bindings. Both are needed before an entered call.
     return unsupported_imported_call()
 }
 
-# The actual is an already selected lexical target. The symbol's nominal
-# requirement comes from its declaration or its checked import identity.
+# A checked installation supplies an existing lexical target to the
+# independently bound symbol view.
 func check_builder_installation(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    selected:const SelectedExports in E, views:const SuppliedViews in V,
+    interfaces:const ModuleInterfaces in I, published:UInt64,
     facts:OperandFacts in F, at:UInt64, name:UInt64, input:UInt64, used:UInt64, revision:UInt64)
-    -> UInt8 where {const owner N, const owner B, const owner E, const owner I, owner F} {
-    val definition <- names[name].declaration;
-    val required_module <- 0u64;
-    val required <- no_node();
-    val readonly <- false;
-    if (names[name].kind == symbolic_selection()) {
-        if (selected[definition].kind != symbol_export()) return unproved_operand();
-        val shape <- selected[definition].shape;
-        if (shape != reference_symbol_shape(false, false) && shape != reference_symbol_shape(false, true))
-            return unproved_operand();
-        readonly <- shape == reference_symbol_shape(false, true);
-        required_module <- selected[definition].owner_module;
-        (required <- selected[definition].owner_identity):void
-    } else {
-        ref declared = make DeclarationSites {
-            name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
-            index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    -> UInt8 where {const owner N, const owner B, const owner E, const owner V, const owner I, owner F} {
+    val access <- 0u8;
+    return case views[name] of {
+        BoundReferenceSymbol { val target_module <-, val target_identity <-, val readonly <-, val nullable <-, } -> {
+            if (nullable) return unproved_operand();
+            if (target_identity == no_node() || target_module == no_node() ||
+                !lexical_builder_conforms(nodes, names, selected, interfaces, published,
+                    facts[input].identity_module, facts[input].identity, target_module, target_identity, used, revision))
+                return wrong_operand_type();
+            if (facts[input].reception != borrowed_ref() || facts[input].target_presence != present_target())
+                return unproved_nonnull_borrow();
+            if (!readonly && facts[input].target_readonly != 0u8) return expected_writable_place();
+            (access <- check_owner_access(nodes, facts[input].owner, !readonly)):void;
+            if (access != 0u8) return access;
+            only_void(facts, at);
+            return 0u8
         };
-        if (names[name].kind != reference_symbol_binding() ||
-            inspect_declaration(nodes, revision, used, definition, declared) != ReferenceSymbolDeclaration ||
-            declared.nullable) return unproved_operand();
-        readonly <- declared.readonly;
-        required_module <- type_module(names, selected, declared.value_type, 0u64);
-        (required <- type_identity(names, selected, declared.value_type)):void
-    };
-    if (required == no_node() || required_module == no_node() ||
-        !lexical_builder_conforms(nodes, names, selected, interfaces, published,
-            facts[input].identity_module, facts[input].identity, required_module, required, used, revision))
-        return wrong_operand_type();
-    if (facts[input].reception != borrowed_ref() || facts[input].target_presence != present_target())
-        return unproved_nonnull_borrow();
-    if (!readonly && facts[input].target_readonly != 0u8) return expected_writable_place();
-    val access <- check_owner_access(nodes, facts[input].owner, !readonly);
-    if (access != 0u8) return access;
-    only_void(facts, at);
-    return 0u8
+        _ -> unproved_operand()
+    }
 }
 
 func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, names:const NameBindings in B, links:const NameWork in L,
@@ -7376,7 +7363,7 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                         return 0u8
                     };
                     if (facts[input.index].kind == source_builder_loan())
-                        return check_builder_installation(nodes, names, selected, interfaces, published,
+                        return check_builder_installation(nodes, names, selected, views, interfaces, published,
                             facts, at, name.index, input.index, used, revision);
                     return 0u8
                 };

@@ -53,7 +53,7 @@ using "./ParserStorage.cod" SignatureSyntax {
 using "./ParserStorage.cod" OwnerConstraintSyntax { NotOwnerConstraint, ReadonlyOwnerConstraint, WritableOwnerConstraint };
 using "./ParserStorage.cod" AstSlot { Vacant, Occupied };
 using "./ParserStorage.cod" ExprPayload {
-    IntegerLiteral, BooleanLiteral, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength, NameReference,
+    IntegerLiteral, BooleanLiteral, ReturnVoid, BindSymbolEffect, InstallSymbolEffect, ArrayDefinition, ArrayLength, NameReference,
     ComparisonExpression, Conjunction, Disjunction, Negation, Conditional, ArithmeticExpression
 };
 using "./ParserStorage.cod" NameSyntax { OrdinaryName, SymbolicName };
@@ -98,7 +98,7 @@ using "./ModuleExportStorage.cod" {
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
     array_length_family_interface, source_text_family_interface,
-    InterfacePayload { NoInterfacePayload }, constructor_type,
+    InterfacePayload { NoInterfacePayload, DeferredTextReceiver }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor, SumConstructorPosition };
@@ -1561,6 +1561,8 @@ export data SuppliedView =
     ImportedArrayLengthCall { first:UInt64, past:UInt64, argument:UInt64, input:UInt64, } |
     ImportedSourceTextCall { family:UInt64, past:UInt64, } |
     PreparedTextWriterMethod {} |
+    BoundReferenceSymbol { symbol_module:UInt64, symbol_identity:UInt64, target_module:UInt64,
+        target_identity:UInt64, readonly:bool, nullable:bool, } |
     PreparedAcquisitionFailure { nominal:ExceptionType, };
 export array SuppliedViews[UInt64]:SuppliedView;
 
@@ -5281,6 +5283,38 @@ func prepare_text_writer_family(nodes:const ExprNodes in N, names:const NameBind
     return true
 }
 
+# A bound name identifies the symbol and its declared view. The selected
+# target and actual owner are supplied at an evaluated read or installation.
+func bind_reference_symbol(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, views:SuppliedViews in V, site:UInt64,
+    used:UInt64, revision:UInt64) -> void where {const owner N, const owner B, const owner E, owner V} {
+    if (!reference_symbol(names, selected, site) || name_syntax(nodes, used, site) != SymbolicName) return;
+    val definition <- names[site].declaration;
+    if (names[site].kind == symbolic_selection()) {
+        val shape <- selected[definition].shape;
+        views[site] <- make BoundReferenceSymbol {
+            symbol_module <- selected[definition].origin_module; symbol_identity <- selected[definition].identity;
+            target_module <- selected[definition].owner_module; target_identity <- selected[definition].owner_identity;
+            readonly <- shape == reference_symbol_shape(false, true) || shape == reference_symbol_shape(true, true);
+            nullable <- shape == reference_symbol_shape(true, false) || shape == reference_symbol_shape(true, true)
+        };
+        return
+    };
+    ref declared = make DeclarationSites {
+        name <- no_node(); parent_type <- no_node(); entries <- no_node(); value_type <- no_node();
+        index_type <- no_node(); owner_name <- no_node(); readonly <- false; nullable <- false;
+    };
+    if (inspect_declaration(nodes, revision, used, definition, declared) != ReferenceSymbolDeclaration)
+        return;
+    views[site] <- make BoundReferenceSymbol {
+        symbol_module <- 0u64; symbol_identity <- definition;
+        target_module <- type_module(names, selected, declared.value_type, 0u64);
+        target_identity <- type_identity(names, selected, declared.value_type);
+        readonly <- declared.readonly; nullable <- declared.nullable
+    };
+    return
+}
+
 export func check_module_interfaces(
     nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, interface_count:UInt64,
@@ -5302,6 +5336,7 @@ export func check_module_interfaces(
     val constructor <- no_node();
     val valid <- false;
     for (at in 0u64 .. used) {
+        bind_reference_symbol(nodes, names, selected, views, at, used, revision);
         if (prepare_text_writer_family(nodes, names, work, views, at, used, revision) ||
             prepared_source_here_relay(views, at) != no_node()) {
             if (first_required == no_node()) { (first_required <- at):void }
@@ -5913,9 +5948,11 @@ func stage_array_length_family(names:const NameBindings in B, work:const NameWor
     return past
 }
 
+data SourceTextMethodSites { formal:UInt64, body:UInt64, }
+
 func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B,
-    work:const NameWork in W, definition:UInt64, used:UInt64, revision:UInt64) -> UInt64
-    where {const owner N, const owner B, const owner W} {
+    work:const NameWork in W, definition:UInt64, used:UInt64, revision:UInt64, sites:SourceTextMethodSites in S)
+    -> UInt64 where {const owner N, const owner B, const owner W, owner S} {
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, definition, callable) != ModuleCallable ||
         callable.function_form || callable.body == no_node()) return no_node();
@@ -5931,20 +5968,73 @@ func unary_text_method(nodes:const ExprNodes in N, names:const NameBindings in B
     ref first = make UInt64 { no_node() };
     if (!first_sequence_entry(nodes, revision, used, clause.parameter_tail, FormalSequence, first) ||
         first >= used || work[first].next != no_node()) return no_node();
+    sites.formal <- first;
+    sites.body <- callable.body;
     return readonly_formal_marker(nodes, names, first, role, used, revision)
 }
 
+# A straight relay lets publication retain the exact pending dispatch. A
+# larger body keeps its signature but needs an operation graph of its own.
+func stage_text_receiver(nodes:const ExprNodes in N, names:const NameBindings in B,
+    views:const SuppliedViews in V, sites:const SourceTextMethodSites in S,
+    row:ModuleInterfaceRow in R, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner V, const owner S, owner R} {
+    ref tail = make UInt64 { no_node() };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (is_scope_block(nodes, sites.body) || !block_tail(nodes, revision, used, sites.body, tail) ||
+        inspect_sequence_entry(nodes, revision, used, tail, entry) != BlockSequence) return;
+    val last <- case nodes[entry.item] of {
+        Occupied { val syntax <- node, } -> case syntax.payload of { ReturnVoid -> true; _ -> false };
+        _ -> false
+    };
+    if (last && inspect_sequence_entry(nodes, revision, used, entry.previous, entry) != BlockSequence) return;
+    if (entry.previous != no_node()) return;
+    val operation <- entry.item;
+    ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node() };
+    if (direct_invocation(nodes, revision, used, operation, call) != DirectInvocationReady ||
+        names[call.callee].kind != callable_binding()) return;
+    val writer <- names[call.callee].declaration;
+    if (!prepared_text_writer(views, writer) ||
+        inspect_sequence_entry(nodes, revision, used, call.arguments, entry) != ArgumentSequence ||
+        checked_ref_argument(nodes, call.arguments) || names[entry.item].kind != formal_binding() ||
+        names[entry.item].declaration != sites.formal) return;
+    val first <- entry.previous;
+    if (inspect_sequence_entry(nodes, revision, used, first, entry) != ArgumentSequence ||
+        entry.previous != no_node() || checked_ref_argument(nodes, first)) return;
+    val receiver <- entry.item;
+    case views[receiver] of {
+        BoundReferenceSymbol {
+            val symbol_module <-, val symbol_identity <-, val target_module <-, val target_identity <-,
+            val readonly <-, val nullable <-,
+        } -> {
+            if (symbol_identity != no_node() && symbol_module != no_node() &&
+                target_identity != no_node() && target_module != no_node() && !readonly && !nullable) {
+                (row.payload <- make DeferredTextReceiver {
+                    operation <- operation; receiver <- receiver; writer <- writer;
+                    symbol_module <- if (symbol_module == 0u64) { (row.defining_module) } else { symbol_module };
+                    symbol_identity <- symbol_identity;
+                    target_module <- if (target_module == 0u64) { (row.defining_module) } else { target_module };
+                    target_identity <- target_identity
+                }):void
+            }
+        };
+        _ -> {}
+    };
+    return
+}
+
 # Keep the signature range private unless every member in the defining
-# family fits. These rows carry no body completion or symbol requirement.
+# family fits. A pending dispatch carries no body completion.
 func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindings in B,
-    selected:const SelectedExports in E, work:const NameWork in W, head:UInt64, used:UInt64,
+    selected:const SelectedExports in E, work:const NameWork in W, views:const SuppliedViews in V, head:UInt64, used:UInt64,
     defining_module:UInt64, revision:UInt64, contracts:ModuleInterfaces in C, first:UInt64) -> UInt64
-    where {const owner N, const owner B, const owner E, const owner W, owner C} {
+    where {const owner N, const owner B, const owner E, const owner W, const owner V, owner C} {
     if (first >= intrinsic (len)(contracts)) return no_node();
     val next <- first + 1u64;
     val method <- head;
     val marker <- no_node();
     val builder <- false;
+    ref sites = make SourceTextMethodSites { formal <- no_node(); body <- no_node() };
     for (unused in 0u64 .. used) {
         if (method == no_node()) {
             write_interface_header(contracts[first], defining_module, head,
@@ -5954,7 +6044,7 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
             return next
         };
         if (method >= used || names[method].declaration != head) return first;
-        marker <- unary_text_method(nodes, names, work, method, used, revision);
+        marker <- unary_text_method(nodes, names, work, method, used, revision, sites);
         if (marker == no_node()) return first;
         builder <- is_lexical_builder(nodes, names, marker, revision, used);
         if (!builder && names[marker].kind != builtin_string()) return first;
@@ -5969,6 +6059,7 @@ func stage_source_text_family(nodes:const ExprNodes in N, names:const NameBindin
         contracts[next].owner_role <- 0u64;
         contracts[next].target_readonly <- 1u8;
         contracts[next].owner_readonly <- 1u8;
+        stage_text_receiver(nodes, names, views, sites, contracts[next], used, revision);
         method <- work[method].next_method;
         (next <- next + 1u64):void
     };
@@ -6036,7 +6127,7 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                             defining_module, contracts, count)):void
                     };
                     if (count == first && ordinary && failure == no_node()) {
-                        (count <- stage_source_text_family(nodes, names, selected, work, at, used,
+                        (count <- stage_source_text_family(nodes, names, selected, work, views, at, used,
                             defining_module, revision, contracts, count)):void
                     };
                     if (count == no_node()) return no_node();

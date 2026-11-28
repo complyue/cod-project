@@ -1139,7 +1139,7 @@ An empty builder constructed in the current lexical scope has an initialized des
 
 For a checked builder installation into a non-null reference symbol, compare the builder and the symbol's required type by defining identity. An exact type or a direct declared abstract parent can satisfy the requirement. The defining visit publishes the builder's parent with its checked interface so an importing visit can apply the same comparison. Installing a writable output requires both writable target access and allocation access to the actual owner. The installation evaluates its operand before supplying the new binding. The completion checker retains failure during that preparation.
 
-The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs a completed imported callable contract for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
+The normal source routes check the builder formals in `ProviderViews.write_provider_view`. The full source check of that module still needs completed dispatch and family-wide binding evidence for `emit`. The seed translates the renderer and the linked provider command continues to exercise its runtime output.
 
 ### Importing ordinary text procedures
 
@@ -1155,7 +1155,15 @@ The source checker completes the fixed signatures for the local `append` and `wr
 
 At a local call, read the completed formal and operand facts, select a member, and apply the normal ordered loans and owner checks. A failed operand produces no entered call. The allocation failure from the catalog append propagates over the frozen **selected** call edges. A reached catch can handle it before it reaches the caller. For deferred use under this source profile, the existing delayed-failure check reports an unsupported escaping append failure. An unused family member's failure contributes no selected-call completion.
 
-The real writer bodies pass both source commands. The dynamic `@sout` operand and the completed family-wide binding requirements still have to be represented before the source checker can admit an entered imported `emit` call.
+The real writer bodies pass both source commands.
+
+### Binding a scoped writer receiver
+
+The defining visit records the canonical reference symbol, declared target, nullability and access at a resolved symbolic name. An installation uses that completed name binding and checks the evaluated target and actual owner independently.
+
+A unary text procedure in the published family can record a pending dispatch when its body directly forwards its formal to a fixed local writer family through a writable non-null reference symbol, with an optional bare return. That record belongs to the method's defining visit and retains the writer family, operation and receiver sites and declared symbol and type identities. The actual `emit` overloads in `string.cod` use this shape. A body outside this profile still has the existing signature-only interface.
+
+Both source commands preserve failure before entry. After successful preparation, a selected method with a pending dispatch reports a located unsupported receiver until completion can prove the possible current target and actual owner. A published pending dispatch grants neither writer completion nor the family's required symbol availability. Those facts are still needed for the full `ProviderViews` route.
 
 ### Target layout for provider rows
 
