@@ -370,7 +370,9 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
                                      recovery:ProductTypeRecovery in P) -> bool
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
         owner H, owner R, owner P} {
-    ref names = make NameResolutionResult { diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); };
+    ref names = make NameResolutionResult {
+        diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); first_uninstantiated_method <- no_node()
+    };
     if (!resolve_module_names_recovering(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
         !emit_object, allow_structural, selections, selected_used, names, recovery) ||
@@ -404,51 +406,60 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
             binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_export(), exported.item);
             return false
         };
-        if (bindings[at].kind != applied_product_binding() && (case nodes[at] of {
-            Occupied { val syntax <- node; } -> case syntax.payload of {
-                AppliedType -> true; _ -> false
+        if (names.first_uninstantiated_method != no_node()) {
+            # The generic body has lexical bindings, but signature and ABI
+            # checking need its concrete product layouts and substitution.
+            if (at == names.first_uninstantiated_method) {
+                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
+                return false
             };
-            Vacant -> false
-        })) {
-            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
-            return false
-        };
-        shape <- inspect_signature(nodes, revision, used, at, signature);
-        if (shape == PointerResultClause) {
-            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_pointer_result(), at);
-            return false
-        };
-        if (shape == BorrowedResultClause) {
-            if (!inspect_type_annotation(nodes, revision, used, signature.annotation, target) || target.owner_name == no_node()) {
-                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
-                return false;
+        } else {
+            if (bindings[at].kind != applied_product_binding() && (case nodes[at] of {
+                Occupied { val syntax <- node; } -> case syntax.payload of {
+                    AppliedType -> true; _ -> false
+                };
+                Vacant -> false
+            })) {
+                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
+                return false
             };
-            marker <- target.target_type;
-            text <- text_type(bindings[marker].kind);
-            product <- bindings[marker].kind == record_type();
-            if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
-                 !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
-                (emit_object && bindings[at].declaration != no_node())) {
-                binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
-                return false;
-            } else {};
-            if ((text && !signature.readonly) ||
-                bindings[target.owner_name].kind != owner_binding()) {
-                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
-                return false;
-            } else {};
-        } else {};
-        if (inspect_catch_binding(nodes, revision, used, at, caught) && caught.annotation != no_node()) {
-            annotation <- caught.annotation;
-            if (!declared_exception_type(nodes, bindings, selected, annotation, used, revision)) {
-                binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
-                return false;
+            shape <- inspect_signature(nodes, revision, used, at, signature);
+            if (shape == PointerResultClause) {
+                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_pointer_result(), at);
+                return false
             };
-            if (emit_object && bindings[annotation].kind == ordinary_selection()) {
-                selection <- bindings[annotation].declaration;
-                if (selected[selection].kind == exception_type_export() && selected[selection].identity == error_root_identity()) {
-                    binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), annotation);
+            if (shape == BorrowedResultClause) {
+                if (!inspect_type_annotation(nodes, revision, used, signature.annotation, target) || target.owner_name == no_node()) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
                     return false;
+                };
+                marker <- target.target_type;
+                text <- text_type(bindings[marker].kind);
+                product <- bindings[marker].kind == record_type();
+                if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
+                     !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
+                    (emit_object && bindings[at].declaration != no_node())) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
+                    return false;
+                } else {};
+                if ((text && !signature.readonly) ||
+                    bindings[target.owner_name].kind != owner_binding()) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
+                    return false;
+                } else {};
+            } else {};
+            if (inspect_catch_binding(nodes, revision, used, at, caught) && caught.annotation != no_node()) {
+                annotation <- caught.annotation;
+                if (!declared_exception_type(nodes, bindings, selected, annotation, used, revision)) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
+                    return false;
+                };
+                if (emit_object && bindings[annotation].kind == ordinary_selection()) {
+                    selection <- bindings[annotation].declaration;
+                    if (selected[selection].kind == exception_type_export() && selected[selection].identity == error_root_identity()) {
+                        binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), annotation);
+                        return false;
+                    };
                 };
             };
         };

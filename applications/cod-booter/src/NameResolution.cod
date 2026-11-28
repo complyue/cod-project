@@ -202,6 +202,8 @@ export data NameResolutionResult {
     diagnostic:UInt8;
     node:UInt64;
     enclosing_defer:UInt64;
+    # Successful lexical binding can leave a method that needs a concrete type.
+    first_uninstantiated_method:UInt64;
 }
 
 data NameState {
@@ -220,6 +222,8 @@ data NameState {
     transfer_resolved:bool;
     native_installation:UInt64;
     scope_node:UInt64;
+    generic_method:UInt64;
+    first_uninstantiated_method:UInt64;
     delayed:UInt64;
     guard:UInt64;
     finalizer:UInt64;
@@ -272,6 +276,7 @@ func type_parameter_binding() -> UInt8 { return 34u8; }
 func type_synonym_binding() -> UInt8 { return 37u8; }
 export func generic_product_binding() -> UInt8 { return 41u8; }
 export func applied_product_binding() -> UInt8 { return 42u8; }
+func generic_constructor_binding() -> UInt8 { return 43u8; }
 
 export func builtin_type_kind(kind:UInt8) -> bool {
     return native_scalar(kind) || text_type(kind) || kind == builtin_void()
@@ -778,9 +783,12 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
     where {const owner S, const owner N, owner B, const owner W, owner R} {
     val revision <- state.syntax_revision;
     val used <- state.syntax_used;
-    # A template parameter shadows a module-level product.
-    if (lookup(source, nodes, work, name, state.module_names, state.first) != no_node() ||
-        builtin_type_name(source, nodes, name) != 0u8) {
+    val parameter <- if (state.generic_method == no_node()) {
+        lookup(source, nodes, work, name, state.module_names, state.first)
+    } else {
+        scoped_type_parameter(source, nodes, bindings, state.generic_method, name, revision, used)
+    };
+    if (parameter != no_node() || builtin_type_name(source, nodes, name) != 0u8) {
         reject_name(state, name, expected_generic_product());
         return
     };
@@ -827,7 +835,10 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
     remember(bindings, name, declaration, generic_product_binding());
     # Keep the defining template and the written arguments in this revision.
     # Concrete type identities belong to layout completion.
-    remember(bindings, at, declaration, applied_product_binding())
+    remember(bindings, at, declaration, applied_product_binding());
+    if (state.generic_method != no_node() && state.first_uninstantiated_method == no_node()) {
+        (state.first_uninstantiated_method <- state.generic_method):void
+    }
 }
 
 func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -837,7 +848,7 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (name_syntax(nodes, state.syntax_used, name) != OrdinaryName) {
         ref application = make TypeApplicationSites { name <- no_node(); arguments <- no_node() };
         if (inspect_type_application(nodes, state.syntax_revision, state.syntax_used, name, application)) {
-            if (template_scope) {
+            if (template_scope || state.generic_method != no_node()) {
                 resolve_template_application(source, nodes, bindings, work, state, name,
                     application.name, application.arguments)
             } else { reject_name(state, name, unsupported_generic_type()) };
@@ -1611,9 +1622,15 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         if (state.diagnostic != 0u8) return;
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
+        val applied <- kind == applied_product_binding();
+        if (applied && (shape != BracedConstruction || work[definition].next_method != no_node())) {
+            reject_name(state, at, unsupported_generic_type());
+            return
+        };
         text_initializer <- kind == builtin_string();
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
-        record_initializer <- (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
+        record_initializer <- applied ||
+            (kind == record_type() && !has_exception_parent(nodes, bindings, definition, state.syntax_revision, state.syntax_used)) ||
             (kind == ordinary_selection() && bindings[definition].imported_kind == record_export());
         if (state.repeated) {
             if (!record_initializer) { reject_name(state, at, unsupported_repeated_construction()); return };
@@ -2933,6 +2950,7 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
     val name <- no_node();
     val found <- no_node();
     val family <- no_node();
+    val product <- no_node();
     val variadic <- false;
     val inherited <- (UnprovedMembership:FamilyMembership);
     val candidate <- no_node();
@@ -2948,9 +2966,14 @@ func register_callables(source:const SourceBytes in S, nodes:const ExprNodes in 
             if (name == no_node()) { reject_name(state, form, invalid_module_tree()); return; };
             found <- lookup(source, nodes, work, name, 0u64, state.used);
             if (found != no_node() && bindings[found].kind == generic_product_binding()) {
-                # This is a candidate for the template's ctor family. Leave
-                # the product's type name visible until ctor binding exists.
-                remember(bindings, form, bindings[found].declaration, generic_product_binding());
+                product <- bindings[found].declaration;
+                if (work[product].next_method != no_node()) {
+                    reject_name(state, form, unsupported_generic_constructor());
+                    return
+                };
+                # The product is the root of its constructor family.
+                work[product].next_method <- form;
+                remember(bindings, form, product, generic_constructor_binding());
             } else {
                 if ((found != no_node() && bindings[found].kind == constructor_type()) ||
                     (found == no_node() && selected[name].constructor_selection != no_node())) {
@@ -3138,23 +3161,25 @@ func bind_constraint_names(source:const SourceBytes in S, nodes:const ExprNodes 
 }
 
 func register_constraints(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                          work:NameWork in W, state:NameState in R, head:UInt64) -> void
+                          work:NameWork in W, state:NameState in R, head:UInt64) -> bool
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val first <- state.used;
     bind_constraint_names(source, nodes, bindings, work, state, head);
-    if (state.diagnostic != 0u8) return;
+    if (state.diagnostic != 0u8) return false;
     # The header uses one constraint namespace. Only owner bindings remain
     # lexical value names in the definition body.
     val next <- first;
     val name <- no_node();
+    val type_parameters <- false;
     for (at in first .. state.used) {
         name <- work[at].active;
         if (bindings[name].kind == owner_binding()) {
             work[next].active <- name;
             (next <- next + 1u64):void;
-        };
+        } else { (type_parameters <- true):void };
     };
-    (state.used <- next):void;
+    state.used <- next;
+    return type_parameters
 }
 
 func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -3169,10 +3194,15 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
         if (clause == no_node()) return;
         shape <- inspect_signature(nodes, state.syntax_revision, state.syntax_used, clause, signature);
         if (shape == PointerResultClause) {
-            reject_name(state, clause, unsupported_pointer_result());
-            return
+            if (state.generic_method == no_node()) {
+                reject_name(state, clause, unsupported_pointer_result());
+                return
+            };
+            if (state.first_uninstantiated_method == no_node()) {
+                (state.first_uninstantiated_method <- state.generic_method):void
+            }
         };
-        if (shape == ValueResultClause || shape == BorrowedResultClause ||
+        if (shape == ValueResultClause || shape == BorrowedResultClause || shape == PointerResultClause ||
             shape == ThrowsSignatureClause || shape == ExceptionResultClause) {
             resolve_type_annotation(source, nodes, bindings, work, state, signature.annotation, state.used);
             if (state.diagnostic != 0u8) return;
@@ -3380,13 +3410,87 @@ func check_owner_inputs(nodes:const ExprNodes in N, bindings:const NameBindings 
     };
 }
 
-func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
-                           work:NameWork in W, state:NameState in R, definition:UInt64) -> void
-    where {const owner S, const owner N, owner B, owner W, owner R} {
-    if (bindings[definition].kind == generic_product_binding()) {
+func bind_constructor_fields(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:const NameBindings in B, work:NameWork in W, state:NameState in R, product:UInt64) -> void
+    where {const owner S, const owner N, const owner B, owner W, owner R} {
+    ref sites = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
+    val revision <- state.syntax_revision;
+    val used <- state.syntax_used;
+    val field <- no_node();
+    if (!inspect_generic_product(nodes, revision, used, product, sites) ||
+        !first_sequence_entry(nodes, revision, product, sites.fields, FormalSequence, field)) {
+        reject_name(state, product, invalid_module_tree());
+        return
+    };
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+    val name <- no_node();
+    for (unused in 0u64 .. used) {
+        if (field == no_node()) return;
+        if (inspect_formal(nodes, revision, product, field, formal) != OrdinaryFormal) {
+            reject_name(state, field, invalid_module_tree());
+            return
+        };
+        name <- binder_name(nodes, revision, product, formal.binding);
+        if (name == no_node() || bindings[name].kind != formal_binding() || bindings[name].declaration != field) {
+            reject_name(state, field, invalid_module_tree());
+            return
+        };
+        if (lookup(source, nodes, work, name, state.first, state.used) != no_node()) {
+            reject_name(state, name, duplicate_binding());
+            return
+        };
+        # The constructor lends the already bound field place. Type and
+        # storage for that place will come from the selected instance.
+        work[state.used].active <- name;
+        state.used <- state.used + 1u64;
+        field <- work[field].next
+    };
+    reject_name(state, product, invalid_module_tree())
+}
+
+func bind_generic_constructor(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:const NameBindings in B, work:NameWork in W, state:NameState in R, definition:UInt64,
+    callable:const CallableSites in C, head:UInt64, formals:UInt64) -> void
+    where {const owner S, const owner N, const owner B, owner W, owner R, const owner C} {
+    val revision <- state.syntax_revision;
+    val used <- state.syntax_used;
+    ref result = make UInt64 { no_node() };
+    if (state.generic_method != definition || !callable.function_form || formals != no_node() ||
+        !find_signature_clause(nodes, revision, used, callable.signature, BorrowedResultClause, result) ||
+        result == no_node()) {
         reject_name(state, definition, unsupported_generic_constructor());
         return
     };
+    ref signature = make SignatureSites {
+        previous <- no_node(); name <- no_node(); annotation <- no_node(); parameter_tail <- no_node(); readonly <- false
+    };
+    ref type = make BindingSites {
+        name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false
+    };
+    val product <- bindings[definition].declaration;
+    if (inspect_signature(nodes, revision, used, result, signature) != BorrowedResultClause || signature.readonly ||
+        !inspect_type_annotation(nodes, revision, used, signature.annotation, type) ||
+        bindings[type.target_type].kind != applied_product_binding() ||
+        bindings[type.target_type].declaration != product ||
+        type.owner_name == no_node() || bindings[type.owner_name].kind != owner_binding()) {
+        reject_name(state, result, unsupported_generic_constructor());
+        return
+    };
+    val destination <- bindings[type.owner_name].declaration;
+    if (inspect_signature(nodes, revision, used, destination, signature) != OwnerSignatureClause || signature.readonly) {
+        reject_name(state, result, unsupported_generic_constructor());
+        return
+    };
+    check_owner_inputs(nodes, bindings, work, state, head, formals, destination);
+    if (state.diagnostic == 0u8) {
+        bind_constructor_fields(source, nodes, bindings, work, state, product)
+    }
+}
+
+func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
+                           work:NameWork in W, state:NameState in R, definition:UInt64) -> void
+    where {const owner S, const owner N, owner B, owner W, owner R} {
+    val constructor <- bindings[definition].kind == generic_constructor_binding();
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false; };
     val mode <- inspect_callable(nodes, state.syntax_revision, state.syntax_used, definition, callable);
     ref head = make UInt64 { no_node() };
@@ -3399,8 +3503,11 @@ func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes 
         reject_name(state, definition, invalid_module_tree());
         return;
     };
-    register_constraints(source, nodes, bindings, work, state, head);
+    val type_parameters <- register_constraints(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) return;
+    if (mode == ModuleCallable && type_parameters) {
+        (state.generic_method <- definition):void
+    };
     resolve_header_types(source, nodes, bindings, work, state, head);
     if (state.diagnostic != 0u8) return;
     val role <- if (mode == ModuleCallable || mode == LexicalCallable) {
@@ -3408,10 +3515,14 @@ func resolve_callable_body(source:const SourceBytes in S, nodes:const ExprNodes 
     } else { OtherCallableParameters:FormalNameRole };
     resolve_formals(source, nodes, bindings, work, state, header.parameter_tail, role);
     if (state.diagnostic != 0u8) return;
+    if (constructor) {
+        bind_generic_constructor(source, nodes, bindings, work, state, definition, callable, head, header.parameter_tail);
+        if (state.diagnostic != 0u8) return
+    };
     if (callable.body != no_node()) {
         resolve_expression(source, nodes, bindings, work, state, callable.body);
     };
-    if (state.diagnostic == 0u8 && mode != CProvider && mode != CEntry) {
+    if (state.diagnostic == 0u8 && !constructor && mode != CProvider && mode != CEntry) {
         val result_owner <- lexical_result_owner(nodes, bindings, work, callable, header.parameter_tail, state.syntax_revision, state.syntax_used);
         if (result_owner != no_node()) {
             ref result = make UInt64 { no_node() };
@@ -3431,11 +3542,14 @@ func resolve_callable(source:const SourceBytes in S, nodes:const ExprNodes in N,
     where {const owner S, const owner N, owner B, owner W, owner R} {
     val enclosing <- state.scope_node;
     val native_installation <- state.native_installation;
+    val generic_method <- state.generic_method;
     state.scope_node <- definition;
     state.native_installation <- no_node();
+    state.generic_method <- no_node();
     resolve_callable_body(source, nodes, bindings, work, state, definition);
     state.scope_node <- enclosing;
     state.native_installation <- native_installation;
+    state.generic_method <- generic_method;
     (state.used <- state.module_names):void;
 }
 
@@ -3453,6 +3567,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
     ref body = make NameState {
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
+        generic_method <- no_node(); first_uninstantiated_method <- no_node();
         module_candidates <- state.module_candidates;
         source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
@@ -3942,6 +4057,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     recovery.first_site <- no_node();
     report.node <- no_node();
     report.enclosing_defer <- no_node();
+    report.first_uninstantiated_method <- no_node();
     report.diagnostic <- invalid_module_tree();
     if (selected_used > intrinsic (len)(selections) || tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64) return false;
@@ -4004,6 +4120,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     ref state = make NameState {
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
+        generic_method <- no_node(); first_uninstantiated_method <- no_node();
         module_candidates <- selected_used != 0u64;
         source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
@@ -4052,5 +4169,6 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     report.node <- state.failed_node;
     report.enclosing_defer <- state.enclosing_defer;
     report.diagnostic <- state.diagnostic;
+    report.first_uninstantiated_method <- state.first_uninstantiated_method;
     return state.diagnostic == 0u8;
 }
