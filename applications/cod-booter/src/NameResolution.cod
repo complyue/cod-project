@@ -1375,6 +1375,7 @@ func resolve_record_fields(source:const SourceBytes in S, nodes:const ExprNodes 
             return;
         };
         bindings[assignment.destination].kind <- record_initializer_label();
+        bindings[item].scope <- state.scope_node;
         bindings[field].scope <- state.scope_node;
         bindings[field].finalizer <- state.finalizer;
         if (mode == FieldTransfer) { resolve_transfer_family(source, nodes, bindings, work, state, field); };
@@ -1398,6 +1399,7 @@ func resolve_record_initializer(source:const SourceBytes in S, nodes:const ExprN
         reject_name(state, body, invalid_module_tree());
         return;
     };
+    bindings[body].scope <- state.scope_node;
     resolve_record_fields(source, nodes, bindings, work, state, body, tail, inline_fields);
 }
 

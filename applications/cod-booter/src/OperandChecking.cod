@@ -6877,8 +6877,9 @@ func branch_result_path(paths:ResultPaths in P, at:UInt64, test:UInt64,
     (paths[at].returns_void <- path_returns_void(paths, test) || (enters && returns_void)):void
 }
 
-func collect_result_path(nodes:const ExprNodes in N, facts:const OperandFacts in F, paths:ResultPaths in P,
-    at:UInt64, used:UInt64, revision:UInt64) -> void where {const owner N, const owner F, owner P} {
+func collect_result_path(nodes:const ExprNodes in N, names:const NameBindings in B,
+    facts:const OperandFacts in F, paths:ResultPaths in P, at:UInt64, used:UInt64, revision:UInt64)
+    -> void where {const owner N, const owner B, const owner F, owner P} {
     ref child = make UInt64 { no_node() };
     if (completion_syntax(nodes, at) == ReturnCompletion &&
         completion_operand(nodes, revision, used, at, child)) {
@@ -6925,7 +6926,21 @@ func collect_result_path(nodes:const ExprNodes in N, facts:const OperandFacts in
         return
     };
     val kind <- facts[at].kind;
-    if (kind == 0u8 || kind == never_result()) return;
+    if (kind == never_result()) return;
+    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node(); };
+    val transfer <- inspect_assignment(nodes, revision, used, at, assignment);
+    # Construction checks the written initializer. Its field name has no
+    # operand to evaluate, so only the input contributes a result path.
+    if (transfer == FieldTransfer && names[assignment.destination].kind == record_initializer_label()) {
+        append_result_path(paths, at, assignment.input, no_node());
+        return
+    };
+    if (kind == 0u8) return;
+    if (transfer == PlaceTransfer || transfer == FieldTransfer || transfer == PlaceRebind ||
+        transfer == FieldRebind || transfer == AugmentedPlaceTransfer) {
+        append_result_path(paths, at, assignment.destination, assignment.input);
+        return
+    };
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     if (direct_invocation(nodes, revision, used, at, call) == DirectInvocationReady) {
         append_result_path(paths, at, call.arguments, no_node());
@@ -6953,13 +6968,6 @@ func collect_result_path(nodes:const ExprNodes in N, facts:const OperandFacts in
     if (operation == LogicalNot || operation == LogicalAnd || operation == LogicalOr) {
         branch_result_path(paths, at, logical.left_operand, logical.right_operand, no_node(),
             operation != LogicalNot, logical.right_evaluation != TakesRhs);
-        return
-    };
-    ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node(); };
-    val transfer <- inspect_assignment(nodes, revision, used, at, assignment);
-    if (transfer == PlaceTransfer || transfer == FieldTransfer || transfer == PlaceRebind ||
-        transfer == FieldRebind || transfer == AugmentedPlaceTransfer) {
-        append_result_path(paths, at, assignment.destination, assignment.input);
         return
     };
     ref index = make IndexSites { target <- no_node(); index <- no_node(); };
@@ -7006,7 +7014,7 @@ func complete_omitted_results(nodes:const ExprNodes in N, names:const NameBindin
     for (at in 0u64 .. tree.used) {
         scope <- names[at].scope;
         if (scope < tree.used && facts[scope].omitted_result) {
-            collect_result_path(nodes, facts, paths, at, tree.used, tree.revision)
+            collect_result_path(nodes, names, facts, paths, at, tree.used, tree.revision)
         };
     };
     return validate_omitted_results(nodes, facts, paths, tree, report)
