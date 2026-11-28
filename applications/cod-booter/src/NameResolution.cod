@@ -295,6 +295,10 @@ export func source_call_scalar(kind:UInt8) -> bool {
         kind == builtin_bool()
 }
 
+export func source_place_scalar(kind:UInt8) -> bool {
+    return kind == builtin_u64() || kind == builtin_bool()
+}
+
 export func unresolved_name() -> UInt8 { return 1u8; }
 export func expected_symbol_binding() -> UInt8 { return 2u8; }
 export func expected_type_binding() -> UInt8 { return 3u8; }
