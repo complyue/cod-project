@@ -92,6 +92,7 @@ class BodyExtraction {
     std::optional<std::vector<CheckedArgument>> pending_result_arguments = {};
     const CheckedFamily *family = nullptr;
     SymbolBindings supplied = {};
+    std::optional<Type> result_destination = {};
   };
   struct ReplayCall {
     size_t callee;
@@ -185,7 +186,6 @@ class BodyExtraction {
     bool foreign_release = false;
     const Location *unbound_replay = nullptr;
     const Expression *void_exit = nullptr;
-    bool case_scope = false;
     std::vector<ValueReturn> value_returns;
     std::vector<CaseReturn> case_returns;
   };
@@ -516,6 +516,7 @@ class BodyExtraction {
     }
 
     bool supplied_body() const { return body_.outline && body_.outline->here; }
+    bool direct_scope_body() const { return body_.outline && body_.outline->direct_scope(); }
 
     Outline outline(const Form &source) const {
       Outline result{&source, id_, module_, {}, here_, {}, {}, {}, {}, {}, {}};
@@ -1180,20 +1181,25 @@ class BodyExtraction {
       return alternative.kind == Kind::block && alternative.children.empty();
     }
 
-    size_t call_full_scope(const Expression &expr, bool case_scope = false) {
+    size_t call_full_scope(const Expression &expr, std::optional<Type> destination = {}) {
       const auto &callable = *expr.children.front();
       const auto &source = *callable.definition;
       expect(!body_.outline && body_.instance.result.type && !source.case_scan_scope && source.parameters.empty(), expr.at,
-             "seed needs an ordinary intermediate full-scope statement");
+             "seed needs a direct full scope in an ordinary body with a declared result");
       const auto callee = extraction_.bodies_.size();
       extraction_.add_outline(outline(source), {});
-      auto &target = extraction_.bodies_.at(callee);
-      target.case_scope = case_scope;
       BoundCall edge{&expr, callee, {}};
       edge.pending_result_arguments.emplace();
       edge.supplied = supplied_;
+      edge.result_destination = std::move(destination);
       body_.calls.push_back(std::move(edge));
-      return target.instance.method;
+      return extraction_.bodies_.at(callee).instance.method;
+    }
+
+    void prepare_scope_value(const Expression &expr, const Type &destination) {
+      expect(scalar_type(destination), expr.at, "seed needs an independent scalar destination for a full scope");
+      require_executable_expression(expr);
+      call_full_scope(expr, destination);
     }
 
     bool fixed_overload_inputs(const CheckedMethod &method, const CheckedMethod &first) const {
@@ -1318,8 +1324,9 @@ class BodyExtraction {
         confirm_intrinsic(expr, expr.text);
         op = index(expr);
         expect(!op.read_only, expr.at, "indexed transfer needs a writable array view");
-        const auto &source = bits_copy_operand(*expr.children[2]);
-        takes_payload(source, op.type, expr.children[2]->at);
+        const auto &input = *expr.children[2];
+        if (implicit_scope_call(input)) prepare_scope_value(input, op.type);
+        else takes_payload(bits_copy_operand(input), op.type, input.at);
         op.builtin = BuiltinOperation::array_transfer;
         op.read_only = true;
         return op;
@@ -1971,7 +1978,11 @@ class BodyExtraction {
     CheckedOperation assign(const Expression &expr) {
       confirm_intrinsic(expr, expr.kind == Kind::transfer ? "<-" : "=");
       const auto &target = operand(expr, 0);
-      const auto &source = expr.kind == Kind::rebind ? operand(expr, 1) : bits_copy_operand(*expr.children[1]);
+      const auto &input = *expr.children[1];
+      const bool scope_value = expr.kind == Kind::transfer && implicit_scope_call(input);
+      const CheckedOperation *source = nullptr;
+      if (!scope_value)
+        source = expr.kind == Kind::rebind ? &operand(expr, 1) : &bits_copy_operand(input);
       CheckedOperation op;
       op.type = op.operand_type = target.type;
       op.view = true;
@@ -1985,19 +1996,20 @@ class BodyExtraction {
                  expr.at, "seed needs a writable stored reference field slot");
           op.regional_storage = destination.regional_storage;
         } else check_slot(target, expr.at);
-        expect(admits_reference(source, target.type, single_owner(target, expr.at),
+        expect(admits_reference(*source, target.type, single_owner(target, expr.at),
                                 target.targets.contains(null_target), target.read_only, expr.at),
                expr.at, "reference rebinding must preserve type, owner and target access");
-        op.targets = source.targets;
+        op.targets = source->targets;
         op.read_only = target.read_only;
-        op.arguments = {{ArgumentMode::borrowed_ptr, target.type, true}, {ArgumentMode::borrowed_ptr, source.type}};
+        op.arguments = {{ArgumentMode::borrowed_ptr, target.type, true}, {ArgumentMode::borrowed_ptr, source->type}};
         return op;
       }
       expect(target.view && !target.read_only && (target.indexed_target || target.binding),
              expr.at, "bits transfer needs a writable place");
       const bool aggregate = inline_aggregate_type(target.type);
-      if (aggregate) takes_payload(source, target.type, expr.at);
-      else takes_value(source, target.type, expr.at);
+      if (scope_value) prepare_scope_value(input, target.type);
+      else if (aggregate) takes_payload(*source, target.type, expr.at);
+      else takes_value(*source, target.type, expr.at);
       const auto mode = aggregate ? ArgumentMode::borrowed_read : ArgumentMode::value;
       op.arguments = {{ArgumentMode::borrowed_ptr, target.type}, {mode, target.type}};
       op.read_only = true;
@@ -2028,28 +2040,31 @@ class BodyExtraction {
       expect((value || nullable || expr.declaration_kind == "ref") && expr.children.size() == 1 &&
              (!value || (expr.owner_name.empty() && !expr.read_only)) && (!nullable || expr.binding == "="),
              expr.at, "seed needs an initialized ref, ptr with '=' or scalar val");
-      const auto &initial = operand(expr, 0);
-      const auto type = expr.annotation ? resolve_annotation(*expr.annotation, expr.at) : initial.type;
-      const bool null = initial.type == Type::null_ref;
-      if (!value && type != initial.type && !(nullable && null))
+      const auto &input = *expr.children.front();
+      const bool scope_value = value && expr.annotation && implicit_scope_call(input);
+      const auto *initial = scope_value ? nullptr : &operand(expr, 0);
+      const auto type = expr.annotation ? resolve_annotation(*expr.annotation, expr.at) : initial->type;
+      const bool null = initial && initial->type == Type::null_ref;
+      if (!value && type != initial->type && !(nullable && null))
         fail(expr.at, "reference initializer does not match the declared target type");
-      expect(initial.type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
+      expect(!initial || initial->type.kind != Type::native_handle, expr.at, "a native handle view needs a handle declaration");
       size_t owner = 0;
       if (value) {
-        takes_value(initial, type, expr.at);
+        if (scope_value) prepare_scope_value(input, type);
+        else takes_value(*initial, type, expr.at);
       } else {
-        if (!nullable && initial.targets.contains(null_target))
+        if (!nullable && initial->targets.contains(null_target))
           fail(expr.at, "a ref initializer requires a present target");
         if (null && !expr.annotation) fail(expr.at, "a null ptr initializer requires a target type");
-        if (null && initial.owners.empty() && !expr.owner_name.empty())
+        if (null && initial->owners.empty() && !expr.owner_name.empty())
           owner = named_owner(expr.owner_name, expr.at);
         else
-          owner = single_owner(initial, expr.at);
+          owner = single_owner(*initial, expr.at);
         if (!expr.owner_name.empty() && owner != named_owner(expr.owner_name, expr.at))
           fail(expr.at, "reference initializer has a different owner from its declaration");
       }
       const auto local = declare(expr.at, expr.text, type, value,
-                                 value ? fixed : expr.read_only || initial.read_only, fixed, owner);
+                                 value ? fixed : expr.read_only || initial->read_only, fixed, owner);
       body_.instance.bindings.at(local.binding).nullable = nullable;
       CheckedOperation op;
       op.binding = local.binding;
@@ -2312,7 +2327,7 @@ class BodyExtraction {
         const auto &value = *arm.children.back();
         if (allow_scope && implicit_scope_call(value)) {
           require_executable_expression(value);
-          const auto method = call_full_scope(value, true);
+          const auto method = call_full_scope(value);
           input.arms.push_back({&arm, pattern, std::move(payload_fields), method});
         } else {
           const auto &result = extract(value);
@@ -2344,7 +2359,7 @@ class BodyExtraction {
     bool record_pending_return(const Expression &expr) {
       if (expr.kind != Kind::return_value || expr.children.size() != 1) return false;
       const auto &value = *expr.children.front();
-      if (body_.case_scope) {
+      if (direct_scope_body()) {
         const auto &result = extract(value);
         body_.value_returns.push_back({&expr, result.type});
         return true;
@@ -2451,8 +2466,7 @@ class BodyExtraction {
         if (discard_iteration_result && guarded_full_scope(expr)) {
           const auto &call = *expr.children[1];
           require_executable_expression(call);
-          // The ignored statement result needs no callee type. Sealing the
-          // recorded call still requires its own normal no-value evidence.
+          // The ignored statement result needs no callee type during extraction.
           call_full_scope(call);
           extract(*expr.children[2]);
           return op;
@@ -2503,6 +2517,11 @@ class BodyExtraction {
       case Kind::return_tail: {
         expect(!supplied_body() && !body_.instance.result.owns_region(), expr.at,
                "seed needs an ordinary callable result at the tail");
+        if (!body_.outline && body_.instance.result.type && !body_.instance.result.borrowed() &&
+            implicit_scope_call(*expr.children.front())) {
+          prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
+          return value_return(*body_.instance.result.type);
+        }
         const auto &tail = operand(expr, 0);
         op.type = tail.type;
         if (tail.type != Type::never && tail.type != Type::void_type) {
@@ -2522,6 +2541,11 @@ class BodyExtraction {
           op.type = Type::never;
           op.operand_type = Type::void_type;
           return op;
+        }
+        if (!body_.outline && !body_.instance.result.borrowed() && expr.children.size() == 1 &&
+            implicit_scope_call(*expr.children.front())) {
+          prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
+          return value_return(*body_.instance.result.type);
         }
         if (body_.instance.result.owns_region()) {
           expect(expr.children.size() == 1, expr.at, "return needs a fresh region");
@@ -2568,6 +2592,12 @@ class BodyExtraction {
         operation.type = Type::never;
         return operation;
       }();
+      if (direct_scope_body() && expr.kind == Kind::return_tail) {
+        const auto &tail = operand(expr, 0);
+        if (tail.type == Type::void_type) return remember(expr, {});
+        body_.value_returns.push_back({&expr, tail.type});
+        return terminal;
+      }
       if (record_pending_return(expr)) return terminal;
       return remember(expr, operation(expr, discard_iteration_result, discard_statement_guard));
     }
@@ -2817,22 +2847,21 @@ class BodyExtraction {
       if (body.instance.result.type) continue;
       const auto method = body.instance.method;
       const auto &source = body.outline ? *body.outline->source : *declarations_.method(method).source;
-      if (!body.case_scope) {
+      if (!body.outline || !body.outline->direct_scope()) {
         expect(body.void_exit, source.at, "seed needs independent evidence of a normal no-value exit");
         results.emplace(method, ResultContract{Type{Type::void_type}});
         continue;
       }
-      if (body.void_exit)
-        implementation_gap(body.void_exit->at, "seed needs a value on every normal full-scope arm exit");
       std::optional<Type> result;
       for (const auto &returned : body.value_returns) {
         if (returned.type == Type::never) continue;
-        expect(scalar_type(returned.type), returned.site->at, "seed needs independent scalar arm returns");
-        expect(!result || *result == returned.type, returned.site->at, "full-scope arm returns require one result type");
+        expect(scalar_type(returned.type), returned.site->at, "seed needs an independent scalar full-scope result");
+        expect(!result || *result == returned.type, returned.site->at, "full-scope returns require one result type");
         result = returned.type;
       }
-      expect(result.has_value(), source.at, "seed needs independent evidence of a full-scope arm result");
-      results.emplace(method, ResultContract{std::move(result)});
+      if (result && body.void_exit)
+        implementation_gap(body.void_exit->at, "seed needs a value on every normal full-scope exit");
+      results.emplace(method, ResultContract{result.value_or(Type::void_type)});
     }
     return results;
   }
@@ -2880,6 +2909,9 @@ class BodyExtraction {
           const auto target = bodies_[call.callee].instance.method;
           CheckedOperation operation;
           operation.type = *results.at(target).type;
+          if (call.result_destination)
+            expect(scalar_type(operation.type) && transfers_value(operation.type, *call.result_destination),
+                   call.site->at, "full-scope result cannot supply the destination scalar type");
           operation.callee = call.callee;
           operation.arguments = *call.pending_result_arguments;
           if (!body.instance.operations.emplace(call.site, std::move(operation)).second)

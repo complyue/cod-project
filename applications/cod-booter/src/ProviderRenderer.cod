@@ -81,10 +81,9 @@ proc emit_borrow_once(header:StringBuilder in H, stubs:StringBuilder in S,
     if (head == no_node() || !register_handle_name(rows, spellings, prefix, types, head)) return false;
     if (types[head].borrowed) return true;
     ref spelling = make StringBuilder();
-    val ready <- false;
-    {{
+    const val ready:bool <- {{
         effect @sout = spelling;
-        (ready <- emit_provider_interface_name(spellings, prefix.spellings, rows, head)):void;
+        emit_provider_interface_name(spellings, prefix.spellings, rows, head)
     }};
     if (!ready) return false;
     write_provider_borrow(header, stubs, make String(spelling));
@@ -229,10 +228,9 @@ proc emit_callable(header:StringBuilder in H, stubs:StringBuilder in S,
                     prefix:const ProviderPrefixes in R, head:UInt64)
     -> bool where {owner H, owner S, const owner L, const owner G, const owner R} {
     ref spelling = make StringBuilder();
-    val ready <- false;
-    {{
+    const val ready:bool <- {{
         effect @sout = spelling;
-        (ready <- emit_provider_interface_name(spellings, prefix.spellings, rows, head)):void;
+        emit_provider_interface_name(spellings, prefix.spellings, rows, head)
     }};
     if (!ready) return false;
     ref name = make String(spelling);
