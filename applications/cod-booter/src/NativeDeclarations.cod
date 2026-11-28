@@ -1536,7 +1536,7 @@ export data SuppliedView =
     CheckedLiteralCall {} |
     CheckedScalarFunctionCall {} |
     CheckedScalarPredicateCall {} |
-    CheckedReadonlyCall { sum_loan:bool; } |
+    CheckedReadonlyCall { aggregate_loan:bool; } |
     CheckedWriterCall {} |
     CheckedSumWriterCall {} |
     CheckedArrayCall { allocates:bool; } |
@@ -1674,6 +1674,19 @@ func checked_bits_sum(contracts:const ModuleInterfaces in C, published:UInt64,
     } else {
         checked_aggregate_storage(contracts, published, type.defining_module, type.identity, sum_type()) == CoDBitsAggregate
     }
+}
+
+func checked_bits_record(contracts:const ModuleInterfaces in C, published:UInt64,
+    aggregate:const AggregateFacts in A, type:const DeclaredType in T)
+    -> bool where {const owner C, const owner A, const owner T} {
+    if (type.kind != record_type()) return false;
+    val storage <- if (type.defining_module == 0u64) {
+        if (type.identity >= intrinsic (len)(aggregate)) return false;
+        (aggregate[type.identity])
+    } else {
+        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
+    };
+    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate
 }
 
 func checked_sum_array_type(nodes:const ExprNodes in N, names:const NameBindings in B,
@@ -2683,7 +2696,7 @@ export func readonly_indexed_byte_reader(views:const SuppliedViews in V, site:UI
 
 # A query receives independent scalar values and one readonly loan at
 # each owner role, in owner-clause order. Check the two lists from their tails.
-func readonly_array_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
+func readonly_query_inputs(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, signature:UInt64, used:UInt64, revision:UInt64) -> bool
     where {const owner N, const owner B, const owner E, const owner C, const owner A} {
@@ -2714,7 +2727,7 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
     ref bytes = make ArraySlotType {
         owner_site <- no_node(); type_module <- 0u64; type_identity <- no_node(); element_module <- 0u64; element_identity <- no_node()
     };
-    ref sum = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     val formal <- tail;
     val role <- last_owner;
     val marker <- no_node();
@@ -2744,9 +2757,13 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
                 !checked_sum_array_type(nodes, names, selected, contracts, published, aggregate, marker, used, revision)) {
                 storage <- readonly_record_array_storage(nodes, names, selected, contracts, published,
                     aggregate, marker, used, revision);
-                if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate &&
-                    (only_arrays || !(describe_type(nodes, names, selected, marker, 0u64, revision, used, sum) &&
-                      checked_bits_sum(contracts, published, aggregate, sum)))) return false
+                if (storage != CLayoutBitsRecord && storage != CoDBitsAggregate) {
+                    if (only_arrays || !describe_type(nodes, names, selected, marker, 0u64, revision, used, type))
+                        return false;
+                    if (!checked_bits_sum(contracts, published, aggregate, type) &&
+                        !(formal == tail && entry.previous == no_node() && clause.previous == result &&
+                          checked_bits_record(contracts, published, aggregate, type))) return false
+                }
             };
             (role <- clause.previous):void
         };
@@ -2755,9 +2772,9 @@ func check_readonly_input_parameters(nodes:const ExprNodes in N, names:const Nam
     return false
 }
 
-# A readonly query receives an exact array, with index words where needed.
-# Its definition still needs a completed body and dependency proof.
-func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBindings in B,
+# Readonly queries bind checked loans and scalar inputs. A single readonly
+# record loan uses the same body and dependency completion.
+func prepare_readonly_query(nodes:const ExprNodes in N, names:const NameBindings in B,
     selected:const SelectedExports in E, contracts:const ModuleInterfaces in C, published:UInt64,
     aggregate:const AggregateFacts in A, work:const NameWork in W, views:SuppliedViews in V,
     at:UInt64, used:UInt64, revision:UInt64) -> void
@@ -2767,7 +2784,7 @@ func prepare_readonly_array_query(nodes:const ExprNodes in N, names:const NameBi
         !(case views[at] of { NoSuppliedView -> true; _ -> false })) return;
     ref callable = make CallableSites { signature <- no_node(); body <- no_node(); function_form <- false };
     if (inspect_callable(nodes, revision, used, at, callable) != ModuleCallable || !callable.function_form) return;
-    if (readonly_array_inputs(nodes, names, selected, contracts, published, aggregate, callable.signature, used, revision)) {
+    if (readonly_query_inputs(nodes, names, selected, contracts, published, aggregate, callable.signature, used, revision)) {
         (views[at] <- make PreparedReadonlyQuery {}):void;
         return
     };
@@ -2947,15 +2964,8 @@ func readonly_array_writer_input(nodes:const ExprNodes in N, names:const NameBin
     ref type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
     if (marker >= used ||
         !describe_type(nodes, names, selected, marker, 0u64, revision, used, type)) return false;
-    if (type.kind == sum_type()) return checked_bits_sum(contracts, published, aggregate, type);
-    if (type.kind != record_type()) return false;
-    val storage <- if (type.defining_module == 0u64) {
-        if (type.identity >= used) return false;
-        (aggregate[type.identity])
-    } else {
-        checked_aggregate_storage(contracts, published, type.defining_module, type.identity, record_type())
-    };
-    return storage == CLayoutBitsRecord || storage == CoDBitsAggregate
+    return checked_bits_sum(contracts, published, aggregate, type) ||
+        checked_bits_record(contracts, published, aggregate, type)
 }
 
 # An exported product writer with only one owner has a single initialized
@@ -4825,7 +4835,7 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
             aggregate, work, views, at, used, revision);
         prepare_parser_writer(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
-        prepare_readonly_array_query(nodes, names, selected, contracts, interface_count,
+        prepare_readonly_query(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);
         prepare_array_inspector(nodes, names, selected, contracts, interface_count,
             aggregate, work, views, at, used, revision);

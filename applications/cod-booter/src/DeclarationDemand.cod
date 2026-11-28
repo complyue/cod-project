@@ -311,7 +311,7 @@ export func discover_declaration_demand(
                  CheckedScalarFunctionCall -> true;
                  ImportedProductWriter -> true; CheckedArrayCall -> true; CheckedImportedArraySlotCall -> true;
                  CheckedSumWriterCall -> true;
-                 CheckedReadonlyCall { val sum_loan <-; } -> sum_loan;
+                 CheckedReadonlyCall { val aggregate_loan <-; } -> aggregate_loan;
                  _ -> false
              })));
         shape <- direct_invocation(nodes, revision, used, site, invocation);
