@@ -89,7 +89,7 @@ static const char *unsupported_source_form(uint32_t code) {
     case 152: return "generic type instantiation";
     case 153: return "nullable pointer result checking";
     case 157: return "generic product constructor binding";
-    case 158: return "generic product export";
+    case 158: return "generic interface recipe";
     default: return NULL;
     }
 }
@@ -340,6 +340,8 @@ static void report(const char *input, uint8_t status, const cod_booter_diagnosti
         fputs(": error: scoped symbolic procedure checking is outside the current compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 18)
         fputs(": error: condition must have type bool\n", stderr);
+    else if (diagnostic->stage == 4 && diagnostic->code == 152)
+        fputs(": error: generic call instantiation is outside the supported compiler profile\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 147)
         fputs(": error: assertion condition is provably false\n", stderr);
     else if (diagnostic->stage == 4 && diagnostic->code == 20)

@@ -11,7 +11,9 @@ using "./ParserStorage.cod" CallableSyntax { ModuleCallable, LexicalCallable, CE
 using "./ParserStorage.cod" SignatureSyntax { ThrowsSignatureClause };
 using "./ParserStorage.cod" DirectInvocationSyntax { DirectInvocationReady, InvalidInvocation };
 using "./ParserStorage.cod" { case_pattern, CasePatternSyntax { ReferenceCaseTarget } };
-using "./NameResolution.cod" { NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type };
+using "./NameResolution.cod" {
+    NameBindings, NameWork, enclosing_callable, callable_binding, local_binding, formal_binding, record_type, uninstantiated_method
+};
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { CaughtField } };
 using "./ExceptionTypes.cod" ExceptionType;
 using "./NativeDeclarations.cod" {
@@ -240,7 +242,7 @@ export func discover_declaration_demand(
     ref receipt_count = make UInt64 { 0u64 };
     val array_formals <- (NoSourceArrayFormal:SourceArrayFormals);
     for (site in 0u64 .. used) {
-        if (local_body(nodes, revision, used, site, callable)) {
+        if (!uninstantiated_method(names[site].kind) && local_body(nodes, revision, used, site, callable)) {
             if (!find_signature_clause(
                 nodes, revision, used, callable.signature, ThrowsSignatureClause, clause)) {
                 problem <- site;
@@ -299,109 +301,111 @@ export func discover_declaration_demand(
     for (site in 0u64 .. used) {
         scope <- enclosing_callable(nodes, names, names[site].scope);
         demand[site].scope <- scope;
-        if (site < intrinsic (len)(cases) &&
-            (case cases[site] of { SumValueResult -> true; _ -> false }) &&
-            !require_receipt_body(demand, site, count, receipt_count, used)) {
-            problem <- site;
-            return false
-        };
-        checked_call <- links[site].imported_interface != no_node() &&
-            (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
-             (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
-             (site < intrinsic (len)(views) && (case views[site] of {
-                 CheckedScalarFunctionCall -> true;
-                 ImportedProductWriter -> true; CheckedArrayCall -> true; CheckedImportedArraySlotCall -> true;
-                 CheckedSumWriterCall -> true;
-                 CheckedWorkspaceWriterCall -> true;
-                 CheckedReadonlyCall { val aggregate_loan <-; } -> aggregate_loan;
-                 _ -> false
-             })));
-        shape <- direct_invocation(nodes, revision, used, site, invocation);
-        if (shape == InvalidInvocation) {
-            problem <- site;
-            return false
-        };
-        callee <- if (shape == DirectInvocationReady) { (invocation.callee) } else { no_node() };
-        if (names[site].kind == callable_binding()) {
-            transfer <- inspect_assignment(nodes, revision, used, site, assignment);
-            if (transfer == PlaceTransfer || transfer == FieldTransfer) { (callee <- site):void; };
-        };
-        if (callee < used && names[callee].kind == callable_binding()) {
-            definition <- names[callee].declaration;
-            if (definition >= used) {
+        if (scope >= used || !uninstantiated_method(names[scope].kind)) {
+            if (site < intrinsic (len)(cases) &&
+                (case cases[site] of { SumValueResult -> true; _ -> false }) &&
+                !require_receipt_body(demand, site, count, receipt_count, used)) {
                 problem <- site;
                 return false
             };
-            demand[site].callee <- definition;
-            if (site < intrinsic (len)(cases)) {
-                (demand[site].product_body_dependency <- case cases[site] of {
-                    ProductLoanInvocation { val target <- definition; } -> target == definition;
-                    _ -> false
-                }):void
+            checked_call <- links[site].imported_interface != no_node() &&
+                (links[site].imported_failure_checked != 0u8 || links[site].expects_here != 0u8 ||
+                 (links[site].imported_array_read_completion != NoArrayRead && links[site].imported_kind == enum_type()) ||
+                 (site < intrinsic (len)(views) && (case views[site] of {
+                     CheckedScalarFunctionCall -> true;
+                     ImportedProductWriter -> true; CheckedArrayCall -> true; CheckedImportedArraySlotCall -> true;
+                     CheckedSumWriterCall -> true;
+                     CheckedWorkspaceWriterCall -> true;
+                     CheckedReadonlyCall { val aggregate_loan <-; } -> aggregate_loan;
+                     _ -> false
+                 })));
+            shape <- direct_invocation(nodes, revision, used, site, invocation);
+            if (shape == InvalidInvocation) {
+                problem <- site;
+                return false
             };
-            if (scope < used) {
-                demand[site].next_call <- demand[scope].first_call;
-                (demand[scope].first_call <- site):void
+            callee <- if (shape == DirectInvocationReady) { (invocation.callee) } else { no_node() };
+            if (names[site].kind == callable_binding()) {
+                transfer <- inspect_assignment(nodes, revision, used, site, assignment);
+                if (transfer == PlaceTransfer || transfer == FieldTransfer) { (callee <- site):void; };
             };
-            checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
-                prepared_byte_function(views, definition, true);
-            if (shape == DirectInvocationReady) {
-                needs_receipt <- collect_aggregate_loan_demand(nodes, names, links, cases,
-                    invocation.arguments, used, revision, mixed_aggregate);
-                if (mixed_aggregate && links[definition].next_method == no_node() &&
-                    inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
-                    demand[site].mixed_aggregate_loan <- true;
-                    demand[site].product_body_dependency <- true;
-                    (checked_call <- true):void
+            if (callee < used && names[callee].kind == callable_binding()) {
+                definition <- names[callee].declaration;
+                if (definition >= used) {
+                    problem <- site;
+                    return false
                 };
-                if (needs_receipt ||
-                    (site < intrinsic (len)(cases) && (case cases[site] of {
-                        FreshSumInvocation { val selected <- definition; } -> selected == definition;
+                demand[site].callee <- definition;
+                if (site < intrinsic (len)(cases)) {
+                    (demand[site].product_body_dependency <- case cases[site] of {
+                        ProductLoanInvocation { val target <- definition; } -> target == definition;
                         _ -> false
-                    }))) {
-                    if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
-                        problem <- site;
-                        return false
+                    }):void
+                };
+                if (scope < used) {
+                    demand[site].next_call <- demand[scope].first_call;
+                    (demand[scope].first_call <- site):void
+                };
+                checked_call <- family_needs_checked_operands(links, demand, definition, used) ||
+                    prepared_byte_function(views, definition, true);
+                if (shape == DirectInvocationReady) {
+                    needs_receipt <- collect_aggregate_loan_demand(nodes, names, links, cases,
+                        invocation.arguments, used, revision, mixed_aggregate);
+                    if (mixed_aggregate && links[definition].next_method == no_node() &&
+                        inspect_callable(nodes, revision, used, definition, callable) == ModuleCallable) {
+                        demand[site].mixed_aggregate_loan <- true;
+                        demand[site].product_body_dependency <- true;
+                        (checked_call <- true):void
                     };
-                    (checked_call <- true):void
+                    if (needs_receipt ||
+                        (site < intrinsic (len)(cases) && (case cases[site] of {
+                            FreshSumInvocation { val selected <- definition; } -> selected == definition;
+                            _ -> false
+                        }))) {
+                        if (!require_receipt_body(demand, definition, count, receipt_count, used)) {
+                            problem <- site;
+                            return false
+                        };
+                        (checked_call <- true):void
+                    }
                 }
-            }
-        };
-        if (prepared_array_construction(views, site) &&
-            (!local_body(nodes, revision, used, scope, callable) ||
-             !require_receipt_body(demand, scope, count, receipt_count, used))) {
-            problem <- site;
-            return false
-        };
-        aggregate_operation <- site < intrinsic (len)(cases) &&
-            (case cases[site] of {
-                BitsConstruction { val consumer <- transfer; val type <- value_type; } ->
-                    type.defining_module == 0u64 && type.kind == sum_type() && consumer > site &&
-                    consumer < used && inspect_assignment(nodes, revision, used, consumer, assignment) == PlaceTransfer &&
-                    assignment.input == site;
-                IndexedAggregateDestination -> true;
-                InlineProductField { val receiver <-; val writable <-; val demand_on_use <-; } ->
-                    writable && demand_on_use && receiver < site &&
-                    (case cases[receiver] of { InlineProductField -> true; _ -> false });
-                LexicalSumReference -> true;
-                ImportedFreshSumInvocation -> true;
-                _ -> false
-            });
-        if (links[site].case_schema_prepared || aggregate_operation || selects_caught_field(fields, site) || checked_call ||
-            native_loan_requires_body(views, site) || read_acquisition_failure(views, site, failure) ||
-            inspect_named_throw(nodes, revision, used, site, construction) ||
-            case_pattern(nodes, used, site) == ReferenceCaseTarget ||
-            predicate_operand(nodes, revision, used, site) != no_node() ||
-            (inspect_local_binding(nodes, revision, used, site, local) && local.declaration_const &&
-                (local.mode == ValueLocal || local.mode == ReferenceLocal)) ||
-            (formal_binding_is_fixed(nodes, revision, used, site) &&
-                inspect_formal(nodes, revision, used, site, formal) == OrdinaryFormal &&
-                formal.mode == ExplicitValueFormal)) {
-            if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
-                !require_body(demand, scope, count, used, scope != root)) {
+            };
+            if (prepared_array_construction(views, site) &&
+                (!local_body(nodes, revision, used, scope, callable) ||
+                 !require_receipt_body(demand, scope, count, receipt_count, used))) {
                 problem <- site;
                 return false
-            }
+            };
+            aggregate_operation <- site < intrinsic (len)(cases) &&
+                (case cases[site] of {
+                    BitsConstruction { val consumer <- transfer; val type <- value_type; } ->
+                        type.defining_module == 0u64 && type.kind == sum_type() && consumer > site &&
+                        consumer < used && inspect_assignment(nodes, revision, used, consumer, assignment) == PlaceTransfer &&
+                        assignment.input == site;
+                    IndexedAggregateDestination -> true;
+                    InlineProductField { val receiver <-; val writable <-; val demand_on_use <-; } ->
+                        writable && demand_on_use && receiver < site &&
+                        (case cases[receiver] of { InlineProductField -> true; _ -> false });
+                    LexicalSumReference -> true;
+                    ImportedFreshSumInvocation -> true;
+                    _ -> false
+                });
+            if (links[site].case_schema_prepared || aggregate_operation || selects_caught_field(fields, site) || checked_call ||
+                native_loan_requires_body(views, site) || read_acquisition_failure(views, site, failure) ||
+                inspect_named_throw(nodes, revision, used, site, construction) ||
+                case_pattern(nodes, used, site) == ReferenceCaseTarget ||
+                predicate_operand(nodes, revision, used, site) != no_node() ||
+                (inspect_local_binding(nodes, revision, used, site, local) && local.declaration_const &&
+                    (local.mode == ValueLocal || local.mode == ReferenceLocal)) ||
+                (formal_binding_is_fixed(nodes, revision, used, site) &&
+                    inspect_formal(nodes, revision, used, site, formal) == OrdinaryFormal &&
+                    formal.mode == ExplicitValueFormal)) {
+                if (scope >= used || (scope != root && !local_body(nodes, revision, used, scope, callable)) ||
+                    !require_body(demand, scope, count, used, scope != root)) {
+                    problem <- site;
+                    return false
+                }
+            };
         };
     };
     # Reached bodies can forward a loan or determine allocation operands.

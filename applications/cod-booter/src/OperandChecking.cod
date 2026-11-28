@@ -89,11 +89,13 @@ using "./NameResolution.cod" {
     formal_binding, local_binding, loop_index, exception_binding, find_enum_member,
     record_type, find_record_field, has_exception_parent, builtin_string, builtin_c_string, builtin_u8, owner_binding,
     definition_name, transfer_name, record_initializer_label, array_type, here_receiver_binding, enum_value,
+    generic_method_binding, uninstantiated_method, unsupported_generic_type,
 };
 using "./ModuleExports.cod" {
     SelectedExports, symbol_export, print_export_identity,
     exception_root_identity, exception_type_export, text_size_export, text_byte_export,
         callable_export, ordinary_callable_shape, array_slot_callable_shape, enum_export, array_export,
+    generic_callable_export,
 };
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleExports, ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header,
@@ -3902,6 +3904,17 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     where {const owner N, const owner B, const owner E, owner L, const owner I, const owner C,
            const owner U, const owner G, owner H, const owner A, owner F, owner D, const owner V, owner R} {
     val callee <- call.callee;
+    val target <- names[callee].declaration;
+    val generic <- if (names[callee].kind == callable_binding()) {
+        target < used && names[target].kind == generic_method_binding()
+    } else {
+        names[callee].kind == ordinary_selection() && target < used && selected[target].kind == generic_callable_export()
+    };
+    if (generic) {
+        val scope <- enclosing_callable(nodes, names, names[at].scope);
+        if (scope < used && uninstantiated_method(names[scope].kind)) return true;
+        return operand_problem(report, at, unsupported_generic_type())
+    };
     if (names[callee].kind != ordinary_selection()) return true;
     val site <- names[callee].declaration;
     if (selected[site].kind != callable_export()) return true;

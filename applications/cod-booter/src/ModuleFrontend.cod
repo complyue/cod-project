@@ -6,7 +6,7 @@ using "./ParserStorage.cod" ExprPayload {
     IndexSelection, ArrayLength, DeferredClauses, LocalCallableSlot, CallableDefinition, RaiseWithCause,
     RethrowWithCause, NamedArgument, OwningHandleBinding, BorrowedHandleBinding, OwnHandleConstruction,
     BorrowHandleConstruction, HereInvocation, RegionDefinition, OwningRegionBinding, RegionConstruction, OwningRegionResult,
-    ConstructorCasePattern, ReferenceCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
+    ConstructorCasePattern, ProcedureSymbol, ScopedProcedureDefinition, ProcedureActivation, ValueSymbol,
     Publication,
     BareReferenceBinding, ReferenceBindingGroup, InitializeReservation, PredicateAssertion, ReferenceIdentity,
     ReturningCondition, AppliedType,
@@ -37,20 +37,22 @@ using "./ParserStorage.cod" {
     first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
     SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
-    NamedThrowSites, inspect_named_throw,
+    NamedThrowSites, inspect_named_throw, TypeApplicationSites, inspect_type_application, type_list_count,
+    case_pattern, CasePatternSyntax { ReferenceCaseTarget },
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./DeclarationDemand.cod" { DeclarationDemand, DeclarationDemands };
 using "./Frontend.cod" FrontendResult;
 using "./ParserInput.cod" ParseResult;
 using "./ModuleExports.cod" {
-    SelectedExports, exception_type_export, error_root_identity, CheckedSelections,
+    SelectedExports, exception_type_export, error_root_identity, CheckedSelections, generic_product_export,
 };
 using "./NameResolution.cod" {
     protected_symbol_name,
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, unsupported_generic_type, unsupported_pointer_result,
     unsupported_generic_constructor, unsupported_generic_export, generic_product_binding, applied_product_binding,
+    generic_method_binding, wrong_type_argument_count, invalid_module_tree, enclosing_callable, uninstantiated_method,
     resolve_module_names_recovering, ProductTypeRecovery, apply_module_name_uses, text_type, is_lexical_builder, owner_binding, ordinary_selection, record_type,
 };
 using "./NativeDeclarations.cod" {
@@ -60,7 +62,7 @@ using "./NativeDeclarations.cod" {
 using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ReceiverImportCheck { ReceiverCallablesReady },
-    ModuleInterfaces,
+    ModuleInterfaces, generic_product_arity,
 };
 using "./ExceptionPayload.cod" { CaughtFieldUses, CaughtFieldUse { NoCaughtField } };
 using "./OperandChecking.cod" {
@@ -270,10 +272,6 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 (ConstructorCasePattern) -> {
                     if (emit_object) { unsupported_constructor_case() } else { 0u8 }
                 };
-                ReferenceCasePattern -> {
-                    requires_operand_checks <- true;
-                    0u8
-                };
                 (ProcedureSymbol) -> { unsupported_procedure_symbol() };
                 ValueSymbol -> unsupported_module_declaration();
                 (ScopedProcedureDefinition) -> { unsupported_scoped_procedure() };
@@ -361,6 +359,22 @@ export func check_parsed_module_profile(nodes:const ExprNodes in N, emit_object:
     return check_source_profile(nodes, result.frontend.tree.used, emit_object, result)
 }
 
+func generic_application_diagnostic(nodes:const ExprNodes in N, bindings:const NameBindings in B,
+    selected:const SelectedExports in E, interfaces:const ModuleInterfaces in I, published:UInt64,
+    revision:UInt64, used:UInt64, at:UInt64) -> UInt8
+    where {const owner N, const owner B, const owner E, const owner I} {
+    ref sites = make TypeApplicationSites { name <- no_node(); arguments <- no_node() };
+    if (!inspect_type_application(nodes, revision, used, at, sites)) return invalid_module_tree();
+    if (bindings[sites.name].kind == generic_product_binding()) return 0u8;
+    val chosen <- bindings[sites.name].declaration;
+    if (bindings[sites.name].kind != ordinary_selection() || chosen >= used ||
+        selected[chosen].kind != generic_product_export()) return invalid_module_tree();
+    val arity <- generic_product_arity(interfaces, published, selected[chosen].origin_module,
+        selected[chosen].identity);
+    if (arity == no_node()) return unsupported_generic_export();
+    return if (arity == type_list_count(nodes, sites.arguments)) { 0u8 } else { wrong_type_argument_count() }
+}
+
 export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                  selections:const CheckedSelections in C, selected_used:UInt64,
                                  selected:SelectedExports in X, bindings:NameBindings in Y,
@@ -371,7 +385,7 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     where {const owner S, const owner N, const owner C, owner X, owner Y, owner W, const owner I, owner F,
         owner H, owner R, owner P} {
     ref names = make NameResolutionResult {
-        diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); first_uninstantiated_method <- no_node()
+        diagnostic <- 0u8; node <- no_node(); enclosing_defer <- no_node(); first_closed_application <- no_node()
     };
     if (!resolve_module_names_recovering(source, nodes, result.frontend.tree, selected, bindings, work,
         interfaces, interface_used,
@@ -398,68 +412,72 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     val annotation <- no_node();
     val selection <- no_node();
     val shape <- OtherSignatureSyntax;
-    ref exported = make SequenceEntry { previous <- no_node(); item <- no_node() };
-    for (at in 0u64 .. result.frontend.tree.used) {
-        if (module_item_publication(nodes, used, at) &&
-            inspect_sequence_entry(nodes, revision, used, at, exported) == ModuleSequence &&
-            bindings[exported.item].kind == generic_product_binding()) {
-            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_export(), exported.item);
+    val generic_diagnostic <- 0u8;
+    val scope <- no_node();
+    for (at in 0u64 .. used) {
+        if (bindings[at].kind == applied_product_binding()) {
+            generic_diagnostic <- generic_application_diagnostic(nodes, bindings, selected, interfaces, interface_used,
+                revision, used, at);
+            if (generic_diagnostic != 0u8) {
+                binding_diagnostic(nodes, result, module_binding_failed(), generic_diagnostic, at);
+                return false
+            }
+        };
+        if (at == names.first_closed_application) {
+            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
             return false
         };
-        if (names.first_uninstantiated_method != no_node()) {
-            # The generic body has lexical bindings, but signature and ABI
-            # checking need its concrete product layouts and substitution.
-            if (at == names.first_uninstantiated_method) {
-                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
-                return false
+        if (!result.requires_operand_checks && case_pattern(nodes, used, at) == ReferenceCaseTarget) {
+            scope <- enclosing_callable(nodes, bindings, bindings[at].scope);
+            if (scope >= used || !uninstantiated_method(bindings[scope].kind)) {
+                (result.requires_operand_checks <- true):void
+            }
+        };
+        if (bindings[at].kind != applied_product_binding() && (case nodes[at] of {
+            Occupied { val syntax <- node; } -> case syntax.payload of {
+                AppliedType -> true; _ -> false
             };
-        } else {
-            if (bindings[at].kind != applied_product_binding() && (case nodes[at] of {
-                Occupied { val syntax <- node; } -> case syntax.payload of {
-                    AppliedType -> true; _ -> false
-                };
-                Vacant -> false
-            })) {
-                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
-                return false
+            Vacant -> false
+        })) {
+            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_generic_type(), at);
+            return false
+        };
+        shape <- inspect_signature(nodes, revision, used, at, signature);
+        if (shape == PointerResultClause && bindings[at].kind != generic_method_binding()) {
+            binding_diagnostic(nodes, result, module_binding_failed(), unsupported_pointer_result(), at);
+            return false
+        };
+        if (shape == BorrowedResultClause) {
+            if (!inspect_type_annotation(nodes, revision, used, signature.annotation, target) || target.owner_name == no_node()) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
+                return false;
             };
-            shape <- inspect_signature(nodes, revision, used, at, signature);
-            if (shape == PointerResultClause) {
-                binding_diagnostic(nodes, result, module_binding_failed(), unsupported_pointer_result(), at);
-                return false
-            };
-            if (shape == BorrowedResultClause) {
-                if (!inspect_type_annotation(nodes, revision, used, signature.annotation, target) || target.owner_name == no_node()) {
-                    binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
-                    return false;
-                };
-                marker <- target.target_type;
-                text <- text_type(bindings[marker].kind);
-                product <- bindings[marker].kind == record_type();
-                if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
-                     !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
-                    (emit_object && bindings[at].declaration != no_node())) {
-                    binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
-                    return false;
-                } else {};
-                if ((text && !signature.readonly) ||
-                    bindings[target.owner_name].kind != owner_binding()) {
-                    binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
-                    return false;
-                } else {};
+            marker <- target.target_type;
+            text <- text_type(bindings[marker].kind);
+            product <- bindings[marker].kind == record_type() || bindings[marker].kind == applied_product_binding();
+            if ((!text && !product && (emit_object || bindings[at].declaration == no_node() ||
+                 !is_lexical_builder(nodes, bindings, marker, revision, used))) ||
+                (emit_object && bindings[at].declaration != no_node())) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 35u8, at);
+                return false;
             } else {};
-            if (inspect_catch_binding(nodes, revision, used, at, caught) && caught.annotation != no_node()) {
-                annotation <- caught.annotation;
-                if (!declared_exception_type(nodes, bindings, selected, annotation, used, revision)) {
-                    binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
+            if ((text && !signature.readonly) ||
+                bindings[target.owner_name].kind != owner_binding()) {
+                binding_diagnostic(nodes, result, module_binding_failed(), 101u8, at);
+                return false;
+            } else {};
+        } else {};
+        if (inspect_catch_binding(nodes, revision, used, at, caught) && caught.annotation != no_node()) {
+            annotation <- caught.annotation;
+            if (!declared_exception_type(nodes, bindings, selected, annotation, used, revision)) {
+                binding_diagnostic(nodes, result, module_binding_failed(), invalid_catch_annotation(), annotation);
+                return false;
+            };
+            if (emit_object && bindings[annotation].kind == ordinary_selection()) {
+                selection <- bindings[annotation].declaration;
+                if (selected[selection].kind == exception_type_export() && selected[selection].identity == error_root_identity()) {
+                    binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), annotation);
                     return false;
-                };
-                if (emit_object && bindings[annotation].kind == ordinary_selection()) {
-                    selection <- bindings[annotation].declaration;
-                    if (selected[selection].kind == exception_type_export() && selected[selection].identity == error_root_identity()) {
-                        binding_diagnostic(nodes, result, module_binding_failed(), unsupported_module_declaration(), annotation);
-                        return false;
-                    };
                 };
             };
         };

@@ -49,7 +49,7 @@ using "./ModuleExportStorage.cod" {
 };
 using "./ParserStorage.cod" FormalMode { ValueFormal };
 using "./ModuleExportStorage.cod" {
-    SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate }
+    InterfacePayload { NoInterfacePayload }, AggregateStorage { UnprovedAggregate }
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./AggregateSchemas.cod" AggregateFacts;
@@ -95,6 +95,7 @@ using "./NativeDeclarations.cod" {
     publish_module_exports, SuppliedViews, SuppliedView { NoSuppliedView, CheckedReadonlyReader },
 };
 using "./NameResolution.cod" EnumAssertion { NoEnumAssertion };
+using "./GenericInterfaces.cod" stage_generic_interfaces;
 using "./DeclarationTypes.cod" {
     prepare_native_operand_types, publish_type_interfaces, DeclaredExpressionResult,
         check_declared_expressions, prepare_enum_assertions
@@ -280,7 +281,7 @@ proc reserve_interfaces(ref var rows:ModuleInterfaces in G, used:UInt64, require
         native_reception <- 0u8;
         native_passes_owner <- 0u8;
         membership <- UnprovedMembership;
-        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
+        payload <- make NoInterfacePayload {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
@@ -1179,6 +1180,18 @@ proc bind_graph_module(source:const SourceBytes in S, lines:const SourceLines in
         (interfaces <- publish_type_interfaces(nodes, names, selected, work, aggregate_facts, used,
                                                result.frontend.tree.revision, publication.module_identity, interfaces, staged_interfaces)):void;
     } else {};
+    if (interfaces != no_node()) {
+        interfaces <- stage_generic_interfaces(nodes, names, selected, work, staged_interfaces, interface_report,
+            used, revision, publication.module_identity, interfaces);
+        if (interface_report.diagnostic != 0u8) {
+            binding_diagnostic(nodes, result, module_binding_failed(), interface_report.diagnostic, interface_report.node);
+            delivered <- report_graph_rejection(source, lines, diagnostic, result.stage, result.diagnostic,
+                result.frontend.diagnostic_first, result.frontend.diagnostic_past, result.related_first,
+                keys, key_first, key_past, run);
+            if (delivered != Complete) return delivered;
+            return Rejected
+        }
+    };
     if (native && interfaces != no_node()) {
         (interfaces <- publish_callable_views(staged, export_uses, callable_uses, count, export_count,
             publication.module_identity, revision, staged_interfaces, interfaces)):void
@@ -1644,7 +1657,7 @@ proc visit_open_revision(handle opened:SourceRevision in S, handle path:Path in 
             enum_code <- 0u64; native_function <- no_node(); callable_kind <- NoCallableKind;
             native_reception <- 0u8;
             native_passes_owner <- 0u8; membership <- UnprovedMembership;
-            sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
+            payload <- make NoInterfacePayload {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
             scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;

@@ -284,6 +284,8 @@ export func enum_member_export() -> UInt8 { return 135u8; }
 export func abstract_type_export() -> UInt8 { return 136u8; }
 export func lexical_builder_export() -> UInt8 { return 137u8; }
 export func scalar_type_export() -> UInt8 { return 138u8; }
+export func generic_product_export() -> UInt8 { return 139u8; }
+export func generic_callable_export() -> UInt8 { return 140u8; }
 export func ordinary_callable_shape() -> UInt8 { return 1u8; }
 export func array_slot_callable_shape() -> UInt8 { return 2u8; }
 export func numeric_record_shape() -> UInt8 { return 2u8; }

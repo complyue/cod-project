@@ -68,6 +68,9 @@ export data CallableObjectView =
 
 export func callable_view_interface() -> UInt8 { return 41u8 }
 export func array_length_family_interface() -> UInt8 { return 42u8 }
+export func generic_product_interface() -> UInt8 { return 43u8 }
+export func generic_callable_interface() -> UInt8 { return 44u8 }
+export func recipe_entry() -> UInt8 { return 45u8 }
 
 export data CallableUseProof =
     UnselectedCallable {} |
@@ -111,12 +114,25 @@ export func matches_object_call(proof:const CallableUseProofs in F, row:UInt64, 
     }
 }
 
-export data SumInterfacePayload =
-    NoSumInterface {} |
+export enum RecipeResultMode:UInt8 { ValueRecipe; ReferenceRecipe; PointerRecipe; }
+
+export data InterfacePayload =
+    NoInterfacePayload {} |
     SumInterface {} |
     ConstructorReference { defining_module:UInt64; declaration:UInt64; } |
     ConstructorInterface { sum_module:UInt64; sum_declaration:UInt64; } |
-    ConstructorField { field_kind:UInt8; field_module:UInt64; field_identity:UInt64; mode:FormalMode; readonly:bool; };
+    ConstructorField { field_kind:UInt8; field_module:UInt64; field_identity:UInt64; mode:FormalMode; readonly:bool; } |
+    GenericProduct { parameters:UInt64; constructor:UInt64; } |
+    GenericCallable { parameters:UInt64; constructor_of:UInt64; function_form:bool; } |
+    RecipeParameter {} |
+    RecipeOwner { readonly:bool; } |
+    RecipeField { mode:FormalMode; readonly:bool; fixed:bool; } |
+    RecipeFormal { mode:FormalMode; owner_role:UInt64; readonly:bool; fixed:bool; } |
+    RecipeResult { mode:RecipeResultMode; owner_role:UInt64; readonly:bool; explicit_value:bool; } |
+    RecipeBuiltin { kind:UInt8; } |
+    RecipeNominal { defining_module:UInt64; declaration:UInt64; } |
+    RecipeTypeParameter { binder:UInt64; } |
+    RecipeApplication { defining_module:UInt64; declaration:UInt64; arguments:UInt64; };
 
 # An interface header has value_kind zero and precedes its entries. A here
 # operation lists its supplier, then receivers. A record lists its fields.
@@ -150,7 +166,7 @@ export data ModuleInterfaceRow {
     membership:FamilyMembership;
     native_reception:UInt8;
     native_passes_owner:UInt8;
-    sum_payload:SumInterfacePayload;
+    payload:InterfacePayload;
     aggregate_storage:AggregateStorage;
     exception_schema:ExceptionSchema;
     field_mode:FormalMode;
@@ -214,8 +230,8 @@ export func write_interface_header(row:ModuleInterfaceRow in R, defining_module:
     return;
 }
 
-export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:UInt64, declaration:UInt64,
-                         kind:UInt8, entries:UInt64, first:UInt64, past:UInt64, payload:const SumInterfacePayload in P) -> void
+export func write_payload_row(interfaces:ModuleInterfaces in I, row:UInt64, module:UInt64, declaration:UInt64,
+                         kind:UInt8, entries:UInt64, first:UInt64, past:UInt64, payload:const InterfacePayload in P) -> void
     where {owner I, const owner P} {
     interfaces[row] <- make ModuleInterfaceRow {
         defining_module <- module; declaration <- declaration; entry_count <- entries; owner_count <- 0u64;
@@ -226,7 +242,7 @@ export func write_sum_row(interfaces:ModuleInterfaces in I, row:UInt64, module:U
         failure_module <- 0u64; failure_identity <- 0u64; name_first <- first; name_past <- past;
         enum_code <- 0u64; native_function <- no_node(); callable_kind <-
             (NoCallableKind:InterfaceCallableKind); native_reception <- 0u8;
-        native_passes_owner <- 0u8; sum_payload <- payload;
+        native_passes_owner <- 0u8; payload <- payload;
         membership <- (UnprovedMembership:FamilyMembership);
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
@@ -249,7 +265,7 @@ export func write_object_view(interfaces:ModuleInterfaces in I, at:UInt64, publi
         failure_module <- 0u64; failure_identity <- no_node(); name_first <- 0u64; name_past <- 0u64;
         enum_code <- 0u64; native_function <- no_node(); callable_kind <- (NoCallableKind:InterfaceCallableKind);
         native_reception <- 0u8; native_passes_owner <- 0u8; membership <- (UnprovedMembership:FamilyMembership);
-        sum_payload <- make NoSumInterface {};
+        payload <- make NoInterfacePayload {};
         aggregate_storage <- (UnprovedAggregate:AggregateStorage);
         exception_schema <- (OrdinarySchema:ExceptionSchema); field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- (NoArrayRead:ArrayReadCompletion); source_numeric_fault <- false; source_writer <- (NoSourceWriter:SourceWriter);
@@ -280,15 +296,25 @@ export func find_interface(interfaces:const ModuleInterfaces in I, published:UIn
     return no_node();
 }
 
+export func generic_product_arity(interfaces:const ModuleInterfaces in I, published:UInt64,
+    module:UInt64, declaration:UInt64) -> UInt64 where {const owner I} {
+    val header <- find_interface(interfaces, published, module, declaration);
+    if (header == no_node() || interfaces[header].interface_kind != generic_product_interface()) return no_node();
+    return case interfaces[header].payload of {
+        GenericProduct { val parameters <-; } | parameters > 0u64 && parameters <= interfaces[header].entry_count -> parameters;
+        _ -> no_node()
+    }
+}
+
 func sum_field_row(row:const ModuleInterfaceRow in R) -> bool where {const owner R} {
-    return case row.sum_payload of {
+    return case row.payload of {
         (ConstructorField { val kind <- field_kind; }) -> { row.value_kind == constructor_type() && kind != 0u8 };
         (_) -> { false };
     };
 }
 
 func constructor_parent(row:const ModuleInterfaceRow in R, module:UInt64, declaration:UInt64) -> bool where {const owner R} {
-    return case row.sum_payload of {
+    return case row.payload of {
         (ConstructorInterface { val parent_module <- sum_module; val parent_declaration <- sum_declaration; }) -> {
             parent_module == module && parent_declaration == declaration
         };
@@ -303,12 +329,12 @@ export func checked_sum_constructor(interfaces:const ModuleInterfaces in I, publ
         interfaces[parent].entry_count >= published - parent || entry <= parent ||
         entry - parent > interfaces[parent].entry_count || interfaces[entry].value_kind != constructor_type())
         return no_node();
-    case interfaces[parent].sum_payload of {
+    case interfaces[parent].payload of {
         (SumInterface) -> {};
         (_) -> { return no_node(); };
     };
     val constructor <- no_node();
-    case interfaces[entry].sum_payload of {
+    case interfaces[entry].payload of {
         (ConstructorReference { val module <- defining_module; val declaration <- declaration; }) -> {
             if (module != interfaces[parent].defining_module) return no_node();
             (constructor <- find_interface(interfaces, published, module, declaration)):void;

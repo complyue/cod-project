@@ -78,6 +78,7 @@ using "./NameResolution.cod" { source_call_scalar, source_place_scalar,
     builtin_u8, builtin_u32, builtin_u64, builtin_i64, builtin_void, builtin_string, builtin_c_string, text_type,
     variadic_method_formal, unprovided_callable_promise, unsupported_ordinary_construction, unsupported_reference_slot_formal,
     local_sum_value_type,
+    generic_product_binding, generic_method_binding,
 };
 using "./ModuleExports.cod" {
     SelectedExports, ModuleExports, exception_type_export, exception_root_identity, error_root_identity,
@@ -86,6 +87,7 @@ using "./ModuleExports.cod" {
     symbol_export, abstract_type_export, lexical_builder_export, scalar_type_export, aggregate_export_shape, numeric_record_shape,
     CheckedSelections, StagedExportNames, StagedExportUses, SelectionSpelling { SourceSpelling, GraphSpelling },
     checked_selection_site, project_public_import, same_selection_spelling,
+    generic_product_export, generic_callable_export,
 };
 using "./ModuleExportStorage.cod" FamilyMembership {
     UnprovedMembership, PromiseOnly, FixedMethods, VariadicMethod
@@ -96,7 +98,7 @@ using "./ModuleExportStorage.cod" {
     CallableUseProofs, checked_callable_context,
     ModuleInterfaceRow, ModuleInterfaces, find_interface, write_interface_header, enum_type, sum_type, checked_aggregate_storage,
     array_length_family_interface,
-    SumInterfacePayload { NoSumInterface }, constructor_type,
+    InterfacePayload { NoInterfacePayload }, constructor_type,
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
 };
 using "./DeclarationTypes.cod" { DeclaredType, describe_type, type_module, type_identity, interior_nul_in_c_string, local_sum_constructor, SumConstructorPosition };
@@ -1068,7 +1070,7 @@ func check_constructor_arguments(nodes:const ExprNodes in N, names:const NameBin
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
         native_function <- no_node(); callable_kind <- NoCallableKind; native_reception <- 0u8;
         membership <- UnprovedMembership;
-        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
+        native_passes_owner <- 0u8; payload <- make NoInterfacePayload {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
@@ -3905,7 +3907,7 @@ func check_local_here(nodes:const ExprNodes in N, names:const NameBindings in B,
         name_first <- 0u64; name_past <- 0u64; enum_code <- 0u64;
         native_function <- no_node(); callable_kind <- NoCallableKind; native_reception <- 0u8;
         membership <- UnprovedMembership;
-        native_passes_owner <- 0u8; sum_payload <- make NoSumInterface {};
+        native_passes_owner <- 0u8; payload <- make NoInterfacePayload {};
         aggregate_storage <- UnprovedAggregate; exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
@@ -4851,7 +4853,7 @@ func check_native_operation_call(nodes:const ExprNodes in N, names:const NameBin
             native_function <- no_node(); callable_kind <- NoCallableKind; native_reception <- 0u8;
             native_passes_owner <- 0u8;
             membership <- UnprovedMembership;
-            sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
+            payload <- make NoInterfacePayload {}; aggregate_storage <- UnprovedAggregate;
             exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
             scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
             array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;
@@ -5822,10 +5824,10 @@ export func publish_interfaces(nodes:const ExprNodes in N, names:const NameBindi
                 (count <- stage_handle_interface(nodes, names, selected, work, contracts, count,
                                                  defining_module, names[at].declaration, used, revision)):void;
             } else {
-                if (form == ModuleCallable && names[at].declaration == at &&
+                ordinary <- form == ModuleCallable && kind == callable_binding() && names[at].declaration == at;
+                if (ordinary &&
                     !find_signature_clause(nodes, revision, used, callable.signature,
                         ThrowsSignatureClause, failure)) return no_node();
-                ordinary <- form == ModuleCallable && names[at].declaration == at;
                 source_handle <- ordinary &&
                     source_handle_callable(nodes, names, selected, work, at, used, revision);
                 callback <- if (ordinary && failure != no_node()) {
@@ -5949,6 +5951,14 @@ func publish_declaration(nodes:const ExprNodes in N, names:const NameBindings in
     (exports[at].shape <- 0u8):void;
     if (kind == ordinary_selection() || kind == symbolic_selection())
         return publish_selection(selected, target, exports, at);
+    if (kind == generic_product_binding()) {
+        exports[at].kind <- generic_product_export();
+        return true
+    };
+    if (kind == callable_binding() && target < used && names[target].kind == generic_method_binding()) {
+        exports[at].kind <- generic_callable_export();
+        return true
+    };
     if (builtin_type_kind(kind)) {
         exports[at].kind <- scalar_type_export();
         exports[at].origin_module <- 0u64;

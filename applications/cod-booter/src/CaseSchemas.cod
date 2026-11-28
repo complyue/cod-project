@@ -36,7 +36,7 @@ using "./AggregateSchemas.cod" AggregateFacts;
 using "./ModuleExportStorage.cod" {
     ModuleInterfaces, find_interface, sum_type, enum_type, constructor_type, checked_sum_constructor, checked_aggregate_storage,
     AggregateStorage, AggregateStorage { CoDBitsAggregate, CLayoutBitsRecord, NonBitsAggregate },
-    SumInterfacePayload { ConstructorField }, ArrayReadCompletion { NoArrayRead }
+    InterfacePayload { ConstructorField }, ArrayReadCompletion { NoArrayRead }
 };
 
 export data ConstructorCaseFact =
@@ -479,7 +479,7 @@ func published_named_field(source:const SourceBytes in S, nodes:const ExprNodes 
 
 func read_published_sum_field(interfaces:const ModuleInterfaces in G, field:UInt64,
     type:DeclaredType in T, readonly:bool in R) -> bool where {const owner G, owner T, owner R} {
-    return case interfaces[field].sum_payload of {
+    return case interfaces[field].payload of {
         ConstructorField {
             val kind <- field_kind; val module <- field_module; val identity <- field_identity;
             val mode <- mode; val fixed <- readonly;

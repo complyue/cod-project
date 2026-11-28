@@ -54,9 +54,9 @@ using "./ModuleExports.cod" {
     SelectedExports, record_export, array_export, enum_export, enum_spelling, sum_export
 };
 using "./ModuleExportStorage.cod" {
-    ModuleInterfaces, find_interface, write_interface_header, write_sum_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
+    ModuleInterfaces, find_interface, write_interface_header, write_payload_row, enum_type, sum_type, constructor_type, checked_sum_constructor,
     ExceptionSchema { OrdinarySchema },
-    SumInterfacePayload { SumInterface, ConstructorReference, ConstructorInterface, ConstructorField },
+    InterfacePayload { SumInterface, ConstructorReference, ConstructorInterface, ConstructorField },
     AggregateStorage { UnprovedAggregate, CoDBitsAggregate, NonBitsAggregate },
 };
 using "./AggregateSchemas.cod" AggregateFacts;
@@ -941,7 +941,7 @@ func stage_enum(nodes:const ExprNodes in N, names:const NameBindings in B, work:
 func stage_constructor_field(interfaces:ModuleInterfaces in I, row:UInt64, first:UInt64, past:UInt64,
                              type:const DeclaredType in T, mode:FormalMode, readonly:bool) -> void
     where {owner I, const owner T} {
-    write_sum_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, first, past, make ConstructorField {
+    write_payload_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, first, past, make ConstructorField {
         field_kind <- type.kind; field_module <- type.defining_module; field_identity <- type.identity;
         mode <- mode; readonly <- readonly;
     });
@@ -949,7 +949,7 @@ func stage_constructor_field(interfaces:ModuleInterfaces in I, row:UInt64, first
 
 func stage_constructor_header(interfaces:ModuleInterfaces in I, start:UInt64, module:UInt64, arm:UInt64,
                               sum:UInt64, entries:UInt64, first:UInt64, past:UInt64) -> void where {owner I} {
-    write_sum_row(interfaces, start, module, arm, constructor_type(), entries, first, past,
+    write_payload_row(interfaces, start, module, arm, constructor_type(), entries, first, past,
                   make ConstructorInterface { sum_module <- module; sum_declaration <- sum; });
 }
 
@@ -987,7 +987,7 @@ func stage_constructor(nodes:const ExprNodes in N, names:const NameBindings in B
 
 func stage_constructor_reference(interfaces:ModuleInterfaces in I, row:UInt64, defining_module:UInt64, arm:UInt64)
     -> void where {owner I} {
-    write_sum_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, 0u64, 0u64,
+    write_payload_row(interfaces, row, 0u64, 0u64, 0u8, 0u64, 0u64, 0u64,
                   make ConstructorReference { defining_module <- defining_module; declaration <- arm; });
 }
 
@@ -1019,7 +1019,7 @@ func stage_sum(nodes:const ExprNodes in N, names:const NameBindings in B, select
         return no_node();
     val member_past <- stage_sum_members(nodes, work, defining_module, first, domain.entries, start + 1u64, revision, used, interfaces);
     if (member_past == no_node()) return no_node();
-    write_sum_row(interfaces, start, defining_module, sum, sum_type(), member_past - start - 1u64,
+    write_payload_row(interfaces, start, defining_module, sum, sum_type(), member_past - start - 1u64,
                   syntax_first(nodes, used, domain.name), syntax_past(nodes, used, domain.name), make SumInterface {});
     ref sites = make SumArmSites { name <- no_node(); previous <- no_node(); fields <- no_node(); };
     val arm <- first;

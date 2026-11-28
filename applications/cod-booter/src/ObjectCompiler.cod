@@ -17,7 +17,7 @@ using "./ModuleExportStorage.cod" {
     ModuleExport, ModuleExports, ModuleInterfaceRow, ModuleInterfaces
 };
 using "./ModuleExportStorage.cod" {
-    SumInterfacePayload { NoSumInterface }, AggregateStorage { UnprovedAggregate }
+    InterfacePayload { NoInterfacePayload }, AggregateStorage { UnprovedAggregate }
 };
 using "./ModuleExportStorage.cod" InterfaceCallableKind { NoCallableKind };
 using "./ModuleIndex.cod" { SourceBytePool, Visits };
@@ -178,7 +178,7 @@ proc traverse_graph(here finish(commands:const NativeCommands in G, units:const 
         native_reception <- 0u8;
         native_passes_owner <- 0u8;
         membership <- UnprovedMembership;
-        sum_payload <- make NoSumInterface {}; aggregate_storage <- UnprovedAggregate;
+        payload <- make NoInterfacePayload {}; aggregate_storage <- UnprovedAggregate;
         exception_schema <- OrdinarySchema; field_mode <- ValueFormal;
         scalar_object_body <- false; scalar_source_body <- false; array_read_completion <- NoArrayRead; source_numeric_fault <- false; source_writer <- NoSourceWriter; object_view <- make NoCallableObjectView {};
         array_slot_checked <- false; slot_target_invariant <- false; source_allocates <- false;

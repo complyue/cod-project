@@ -96,6 +96,7 @@ using "./ModuleExports.cod" {
     find_selected_name, checked_lexical_selection_kind, project_checked_resource, symbol_export,
     array_export, enum_export, sum_export, abstract_type_export, nominal_exception_export,
     native_handle_export, scalar_type_export, permits_module_family_extension,
+    generic_product_export,
 };
 using "./ModuleExportStorage.cod" {
     enum_type, sum_type, constructor_type, ModuleInterfaces, find_interface, array_length_family_interface,
@@ -111,6 +112,7 @@ export enum ModuleNameUse:UInt8 {
     SelectedType;
     SelectedSymbol;
     SelectedPublication;
+    SelectedGenericType;
 }
 
 export data NameBinding {
@@ -202,8 +204,7 @@ export data NameResolutionResult {
     diagnostic:UInt8;
     node:UInt64;
     enclosing_defer:UInt64;
-    # Successful lexical binding can leave a method that needs a concrete type.
-    first_uninstantiated_method:UInt64;
+    first_closed_application:UInt64;
 }
 
 data NameState {
@@ -223,7 +224,7 @@ data NameState {
     native_installation:UInt64;
     scope_node:UInt64;
     generic_method:UInt64;
-    first_uninstantiated_method:UInt64;
+    first_closed_application:UInt64;
     delayed:UInt64;
     guard:UInt64;
     finalizer:UInt64;
@@ -272,11 +273,16 @@ export func reference_symbol_binding() -> UInt8 { return 31u8; }
 export func abstract_type_binding() -> UInt8 { return 32u8; }
 export func lexical_builder_type() -> UInt8 { return 33u8; }
 export func record_initializer_label() -> UInt8 { return 36u8; }
-func type_parameter_binding() -> UInt8 { return 34u8; }
+export func type_parameter_binding() -> UInt8 { return 34u8; }
 func type_synonym_binding() -> UInt8 { return 37u8; }
 export func generic_product_binding() -> UInt8 { return 41u8; }
 export func applied_product_binding() -> UInt8 { return 42u8; }
-func generic_constructor_binding() -> UInt8 { return 43u8; }
+export func generic_constructor_binding() -> UInt8 { return 43u8; }
+export func generic_method_binding() -> UInt8 { return 44u8; }
+
+export func uninstantiated_method(kind:UInt8) -> bool {
+    return kind == generic_method_binding() || kind == generic_constructor_binding()
+}
 
 export func builtin_type_kind(kind:UInt8) -> bool {
     return native_scalar(kind) || text_type(kind) || kind == builtin_void()
@@ -358,7 +364,7 @@ func unsupported_signed_literal() -> UInt8 { return 144u8 }
 export func unsupported_generic_type() -> UInt8 { return 152u8; }
 export func unsupported_pointer_result() -> UInt8 { return 153u8; }
 func expected_generic_product() -> UInt8 { return 154u8; }
-func wrong_type_argument_count() -> UInt8 { return 155u8; }
+export func wrong_type_argument_count() -> UInt8 { return 155u8; }
 func missing_type_arguments() -> UInt8 { return 156u8; }
 export func unsupported_generic_constructor() -> UInt8 { return 157u8; }
 export func unsupported_generic_export() -> UInt8 { return 158u8; }
@@ -404,7 +410,9 @@ func project_bound_name_use(selections:const CheckedSelections in F, selected_us
         return expected_symbol_binding();
     val role <- bindings[at].module_use;
     if (role == (SelectedType:ModuleNameUse) && !admits_selected_type(kind)) return expected_type_binding();
-    if (role == (SelectedValue:ModuleNameUse) && admits_selected_type(kind)) return expected_value_binding();
+    if (role == (SelectedGenericType:ModuleNameUse) && kind != generic_product_export()) return expected_generic_product();
+    if (role == (SelectedValue:ModuleNameUse) &&
+        (admits_selected_type(kind) || kind == generic_product_export())) return expected_value_binding();
     if (kind == enum_export() || kind == sum_export()) {
         val header <- find_interface(interfaces, interface_used, selected.origin_module, selected.identity);
         val expected <- if (kind == enum_export()) { enum_type() } else { sum_type() };
@@ -624,7 +632,8 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
     val kind <- bindings[found].kind;
     val declaration <- bindings[found].declaration;
     if (nominal_type_kind(kind) || builtin_type_kind(kind) || kind == generic_product_binding() ||
-        (kind == ordinary_selection() && work[declaration].module_kind == scalar_type_export())) {
+        (kind == ordinary_selection() && (work[declaration].module_kind == scalar_type_export() ||
+            work[declaration].module_kind == generic_product_export()))) {
         reject_name(state, name, expected_value_binding());
         return;
     } else {};
@@ -784,7 +793,9 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
     val revision <- state.syntax_revision;
     val used <- state.syntax_used;
     val parameter <- if (state.generic_method == no_node()) {
-        lookup(source, nodes, work, name, state.module_names, state.first)
+        if (bindings[state.scope_node].kind == generic_product_binding()) {
+            lookup(source, nodes, work, name, state.module_names, state.first)
+        } else { no_node() }
     } else {
         scoped_type_parameter(source, nodes, bindings, state.generic_method, name, revision, used)
     };
@@ -793,25 +804,36 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
         return
     };
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
-    if (found == no_node()) {
-        val code <- if (work[name].module_selection != no_node()) { expected_generic_product() } else { unresolved_name() };
-        reject_name(state, name, code);
-        return
-    };
-    if (bindings[found].kind != generic_product_binding()) {
-        reject_name(state, name, expected_generic_product());
-        return
-    };
-    val declaration <- bindings[found].declaration;
-    ref product = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
-    if (!inspect_generic_product(nodes, revision, used, declaration, product)) {
-        reject_name(state, name, invalid_module_tree());
-        return
-    };
+    val declaration <- no_node();
     val count <- type_list_count(nodes, tail);
-    if (count != type_list_count(nodes, product.parameters)) {
-        reject_name(state, at, wrong_type_argument_count());
-        return
+    if (found == no_node()) {
+        if (work[name].module_kind != generic_product_export() ||
+            !select_on_lexical_miss(bindings, work, state, name, SelectedGenericType:ModuleNameUse, false)) {
+            val code <- if (work[name].module_selection != no_node()) { expected_generic_product() } else { unresolved_name() };
+            reject_name(state, name, code);
+            return
+        };
+        (declaration <- name):void;
+    } else {
+        declaration <- bindings[found].declaration;
+        if (bindings[found].kind == generic_product_binding()) {
+            ref product = make GenericProductSites { name <- no_node(); parameters <- no_node(); fields <- no_node() };
+            if (!inspect_generic_product(nodes, revision, used, declaration, product)) {
+                reject_name(state, name, invalid_module_tree());
+                return
+            };
+            if (count != type_list_count(nodes, product.parameters)) {
+                reject_name(state, at, wrong_type_argument_count());
+                return
+            };
+            remember(bindings, name, declaration, generic_product_binding())
+        } else {
+            if (bindings[found].kind != ordinary_selection() || work[declaration].module_kind != generic_product_export()) {
+                reject_name(state, name, expected_generic_product());
+                return
+            };
+            remember(bindings, name, declaration, ordinary_selection())
+        }
     };
     val argument <- no_node();
     if (!first_sequence_entry(nodes, revision, at, tail, TypeSequence, argument)) {
@@ -832,12 +854,17 @@ func resolve_template_application(source:const SourceBytes in S, nodes:const Exp
         reject_name(state, at, invalid_module_tree());
         return
     };
-    remember(bindings, name, declaration, generic_product_binding());
     # Keep the defining template and the written arguments in this revision.
     # Concrete type identities belong to layout completion.
     remember(bindings, at, declaration, applied_product_binding());
-    if (state.generic_method != no_node() && state.first_uninstantiated_method == no_node()) {
-        (state.first_uninstantiated_method <- state.generic_method):void
+    if (state.generic_method != no_node()) {
+        if (bindings[state.generic_method].kind == callable_binding()) {
+            (bindings[state.generic_method].kind <- generic_method_binding()):void
+        }
+    } else {
+        if (bindings[state.scope_node].kind != generic_product_binding() && state.first_closed_application == no_node()) {
+            (state.first_closed_application <- at):void
+        }
     }
 }
 
@@ -848,10 +875,8 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     if (name_syntax(nodes, state.syntax_used, name) != OrdinaryName) {
         ref application = make TypeApplicationSites { name <- no_node(); arguments <- no_node() };
         if (inspect_type_application(nodes, state.syntax_revision, state.syntax_used, name, application)) {
-            if (template_scope || state.generic_method != no_node()) {
-                resolve_template_application(source, nodes, bindings, work, state, name,
-                    application.name, application.arguments)
-            } else { reject_name(state, name, unsupported_generic_type()) };
+            resolve_template_application(source, nodes, bindings, work, state, name,
+                application.name, application.arguments);
             return
         }
     };
@@ -874,6 +899,10 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
     } else {};
     val found <- lookup(source, nodes, work, name, 0u64, state.module_names);
     if (found == no_node()) {
+        if (work[name].module_kind == generic_product_export()) {
+            reject_name(state, name, missing_type_arguments());
+            return
+        };
         if (select_on_lexical_miss(bindings, work, state, name, (SelectedType:ModuleNameUse), false)) {
             if (work[name].module_scalar != 0u8) { (bindings[name].kind <- work[name].module_scalar):void }
         } else { reject_name(state, name, unresolved_name()) };
@@ -885,7 +914,8 @@ func resolve_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N
         remember(bindings, name, declaration, work[declaration].module_scalar);
         return
     };
-    if (kind == generic_product_binding()) {
+    if (kind == generic_product_binding() ||
+        (kind == ordinary_selection() && work[declaration].module_kind == generic_product_export())) {
         reject_name(state, name, missing_type_arguments());
         return
     };
@@ -1612,6 +1642,7 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         }
     };
     val record_initializer <- false;
+    val generic_constructor <- false;
     val text_initializer <- false;
     val builder_initializer <- false;
     val array_initializer <- false;
@@ -1623,9 +1654,14 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
         val kind <- bindings[requested].kind;
         val definition <- bindings[requested].declaration;
         val applied <- kind == applied_product_binding();
-        if (applied && (shape != BracedConstruction || work[definition].next_method != no_node())) {
-            reject_name(state, at, unsupported_generic_type());
-            return
+        if (applied) {
+            if (shape == StorageReservation ||
+                (shape == BracedConstruction && bindings[definition].kind == generic_product_binding() &&
+                 work[definition].next_method != no_node())) {
+                reject_name(state, at, unsupported_generic_type());
+                return
+            };
+            (generic_constructor <- shape == PositionalConstruction):void
         };
         text_initializer <- kind == builtin_string();
         builder_initializer <- is_lexical_builder(nodes, bindings, requested, state.syntax_revision, state.syntax_used);
@@ -1667,12 +1703,12 @@ func resolve_construction(source:const SourceBytes in S, nodes:const ExprNodes i
             reject_name(state, at, invalid_module_tree());
             return;
         };
-        val valid_count <- if (builder_initializer) {
+        val valid_count <- if (generic_constructor) { true } else { if (builder_initializer) {
             first == no_node() || (first != tail && work[first].next == tail)
         } else {
             if (array_initializer) { first < tail && work[first].next == tail }
             else { text_initializer && first != no_node() && first == tail }
-        };
+        } };
         if (shape != PositionalConstruction || !valid_count) {
             reject_name(state, at, unsupported_ordinary_construction());
             return;
@@ -3198,9 +3234,10 @@ func resolve_header_types(source:const SourceBytes in S, nodes:const ExprNodes i
                 reject_name(state, clause, unsupported_pointer_result());
                 return
             };
-            if (state.first_uninstantiated_method == no_node()) {
-                (state.first_uninstantiated_method <- state.generic_method):void
-            }
+            if (bindings[state.generic_method].kind == callable_binding()) {
+                (bindings[state.generic_method].kind <- generic_method_binding()):void
+            };
+            (bindings[clause].kind <- generic_method_binding()):void
         };
         if (shape == ValueResultClause || shape == BorrowedResultClause || shape == PointerResultClause ||
             shape == ThrowsSignatureClause || shape == ExceptionResultClause) {
@@ -3567,7 +3604,7 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
     ref body = make NameState {
         syntax_revision <- state.syntax_revision; syntax_used <- state.syntax_used;
         used <- state.used; first <- state.used; module_names <- state.module_names; scope_node <- definition;
-        generic_method <- no_node(); first_uninstantiated_method <- no_node();
+        generic_method <- no_node(); first_closed_application <- no_node();
         module_candidates <- state.module_candidates;
         source_only <- state.source_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         runtime_floor <- if (is_function(nodes, definition)) { mark } else { (state.runtime_floor) };
@@ -3578,6 +3615,9 @@ func resolve_lexical_callable(source:const SourceBytes in S, nodes:const ExprNod
         failed_node <- no_node(); enclosing_defer <- no_node();
     };
     resolve_callable_body(source, nodes, bindings, work, body, definition);
+    if (state.first_closed_application == no_node()) {
+        (state.first_closed_application <- body.first_closed_application):void
+    };
     if (body.diagnostic != 0u8) {
         reject_name(state, body.failed_node, body.diagnostic);
         (state.enclosing_defer <- body.enclosing_defer):void;
@@ -3911,10 +3951,6 @@ func resolve_publication(source:const SourceBytes in S, nodes:const ExprNodes in
         reject_name(state, name, expected_symbol_binding());
         return;
     };
-    if (bindings[found].kind == generic_product_binding()) {
-        reject_name(state, name, unsupported_generic_export());
-        return
-    };
     remember(bindings, name, bindings[found].declaration, bindings[found].kind);
 }
 
@@ -4057,7 +4093,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     recovery.first_site <- no_node();
     report.node <- no_node();
     report.enclosing_defer <- no_node();
-    report.first_uninstantiated_method <- no_node();
+    report.first_closed_application <- no_node();
     report.diagnostic <- invalid_module_tree();
     if (selected_used > intrinsic (len)(selections) || tree.diagnostic != 0u8 || tree.used == 0u64 || tree.used > syntax_len(nodes) ||
         tree.root != tree.used - 1u64) return false;
@@ -4120,7 +4156,7 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     ref state = make NameState {
         syntax_revision <- tree.revision; syntax_used <- tree.used;
         used <- 0u64; first <- 0u64; module_names <- 0u64; runtime_floor <- 0u64; scope_node <- tree.root;
-        generic_method <- no_node(); first_uninstantiated_method <- no_node();
+        generic_method <- no_node(); first_closed_application <- no_node();
         module_candidates <- selected_used != 0u64;
         source_only <- declarations_only; local_sum_input <- no_node(); inline_field_input <- no_node(); lexical_reference_initializer <- no_node();
         transfer_binding <- no_node(); transfer_resolved <- false; native_installation <- no_node();
@@ -4169,6 +4205,6 @@ export func resolve_module_names_recovering(source:const SourceBytes in S, nodes
     report.node <- state.failed_node;
     report.enclosing_defer <- state.enclosing_defer;
     report.diagnostic <- state.diagnostic;
-    report.first_uninstantiated_method <- state.first_uninstantiated_method;
+    report.first_closed_application <- state.first_closed_application;
     return state.diagnostic == 0u8;
 }
