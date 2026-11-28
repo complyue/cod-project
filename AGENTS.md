@@ -22,6 +22,10 @@ PRs are a normal publication route. Honor the user’s scoped merge delegation, 
 
 The `cod` command (Compile on Demand) compiles for the host and runs with `go run` semantics and leaves no user executable. The seed’s default bootstrap produces `cod-booter`. Seed, booter and first-release `e-wrks/cod` target Go-like compile speed and moderate runtime performance. The booter ships one practical code-generation mode. User-selectable performance tuning belongs to `cfe` (Compile for Ever) in `e-wrks/cod`, which builds an optimized executable for later use and owns cross-builds. The production installation uses LLVM components managed by `codup`. It is experimental in the first release and formally supported in 2.0. [Compiler modes](applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)
 
+## Concurrency design target
+
+CoD prioritizes engineering efficiency for a heavy task that draws on multiple OS threads, OS processes or cluster machines. Production `go` launches one go process on one dedicated OS thread with fresh dynamic bindings. Traditional coroutines are outside the language design. Booter source does not use the Actor model, and the seed does not implement it. [Charter principles](design/RegionalSemanticPlatformCharter.md#核心原则) · [Go process launch](design/SymbolicDynamicScope.md#go-process-launch)
+
 ## Before coding
 
 1. Identify the component, intended behavior and real acceptance workload. Clarify an ambiguous component. Read the relevant qualified contract and registry entry.

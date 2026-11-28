@@ -265,8 +265,8 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 
 状态：已启动预研；基础执行与消息语义已确定，具体接口和生命周期继续讨论。
 
-语言概念统一为 Actor 和静态强类型的 `chan`。每个 Actor 对应一条专属 OS 线程，
-拥有独立执行栈和隔离的 TLS；语言不提供另一套线程并发模式。
+CoD 面向一项任务调动多个线程、进程或集群机器的重任务场景。生产语言用 `go` 启动 go process，每次在一个新的专属 OS 线程上执行。可以启动一个自由过程，也可以把 region、handle 的所有权显式移交给新正文。两种写法都从新的初始 TLS 开始，调用者已安装的动态绑定不会传入。Actor 间通过静态强类型的 `chan` 通信。[设计原则](../design/RegionalSemanticPlatformCharter.md#核心原则) · [启动写法](../design/SymbolicDynamicScope.md#go-process-launch)
+
 基础发送采用 UDP 式语义，不保证接收、不提供回执。应用按需建立可靠流、重试和业务结算协议。
 当系统有依据判断后续发送大概率失败时，应向发送者报系统故障；
 其余情况提供“发后不管”的发送语义。
@@ -288,4 +288,4 @@ ForInvoice<Consumer> ≡ Consumer<Invoice>
 | 两端各有哪些权限，如何建连、关闭和传递回信端点？ | worker 只持发送端，collector 只持接收端。检验不相容的消息、方向和多接收者情形。 |
 | 系统故障如何报告，消息 owner 在哪里？ | 比较入队前、入队后和交接后发生故障。区分已消耗的发送者名字、接收端丢弃与应用结算。 |
 
-Actor 启动与退出、模块生命周期及外部表示的兼容性仍各有待决条款。[讨论清单与验收场景](../design/ActorChannels.md#decisions-to-discuss-next)
+若 OS 线程创建失败，需确定错误如何报告，以及谁仍负责释放移交列表中的 region 与 handle。Actor 退出、模块生命周期及外部表示的兼容性也有待细化。[讨论清单与验收场景](../design/ActorChannels.md#decisions-to-discuss-next)
