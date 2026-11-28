@@ -2081,6 +2081,16 @@ func resolve_assignment(source:const SourceBytes in S, nodes:const ExprNodes in 
             reject_name(state, assignment.destination, fixed_reference_rebind());
             return
         };
+        if (name < state.syntax_used && bindings[name].kind == formal_binding()) {
+            val parameter <- bindings[name].declaration;
+            ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ValueFormal };
+            if (formal_binding_is_fixed(nodes, state.syntax_revision, state.syntax_used, parameter) &&
+                inspect_formal(nodes, state.syntax_revision, state.syntax_used, parameter, formal) == OrdinaryFormal &&
+                formal.mode == ReferenceFormal) {
+                reject_name(state, assignment.destination, fixed_reference_rebind());
+                return
+            }
+        };
         if (native_handle_destination(nodes, bindings, assignment.destination, state.syntax_revision, state.syntax_used)) {
             reject_name(state, assignment.destination, unsupported_handle_rebind());
             return

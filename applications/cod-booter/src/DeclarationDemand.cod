@@ -3,7 +3,7 @@ using "./ParserStorage.cod" {
     DirectCallSites, direct_invocation, NamedThrowSites, inspect_named_throw,
     first_sequence_entry, inspect_sequence_entry, SequenceEntry, SequenceSyntax { ArgumentSequence },
     module_tail, AssignmentSites, inspect_assignment, predicate_operand, formal_binding_is_fixed,
-    FormalSites, inspect_formal, FormalSyntax { OrdinaryFormal }, FormalMode { ExplicitValueFormal },
+    FormalSites, inspect_formal, FormalSyntax { OrdinaryFormal }, FormalMode { ExplicitValueFormal, ReferenceFormal },
     LocalBindingSites, inspect_local_binding, LocalMode { ValueLocal, ReferenceLocal },
     AssignmentSyntax { PlaceTransfer, FieldTransfer, InvalidAssignment },
 };
@@ -39,6 +39,7 @@ export data DeclarationDemand {
     product_body_dependency:bool,
     mixed_aggregate_loan:bool,
     slot_body:bool,
+    fixed_borrow:bool,
     signature:bool,
     body:bool,
 }
@@ -104,7 +105,7 @@ func family_needs_checked_operands(links:const NameWork in W, demand:const Decla
     for (unused in 0u64 .. used) {
         if (definition == no_node()) return false;
         if (definition >= used || demand[definition].declared_failure != no_node() ||
-            links[definition].sum_loan_formals || demand[definition].slot_body) return true;
+            links[definition].sum_loan_formals || demand[definition].slot_body || demand[definition].fixed_borrow) return true;
         (definition <- links[definition].next_method):void
     };
     return true
@@ -246,8 +247,22 @@ export func discover_declaration_demand(
     ref clause = make UInt64 { no_node() };
     ref count = make UInt64 { 0u64 };
     ref receipt_count = make UInt64 { 0u64 };
+    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ExplicitValueFormal };
     val array_formals <- (NoSourceArrayFormal:SourceArrayFormals);
+    val scope <- no_node();
     for (site in 0u64 .. used) {
+        # Record fixed reference formals before binding any caller demand.
+        # The selected target's access still belongs to ordinary operand checking.
+        scope <- names[site].scope;
+        if (scope < used && !uninstantiated_method(names[scope].kind) &&
+            formal_binding_is_fixed(nodes, revision, used, site) &&
+            inspect_formal(nodes, revision, used, site, formal) == OrdinaryFormal && formal.mode == ReferenceFormal) {
+            if (!local_body(nodes, revision, used, scope, callable) || !require_body(demand, scope, count, used, true)) {
+                problem <- site;
+                return false
+            };
+            (demand[scope].fixed_borrow <- true):void
+        };
         if (!uninstantiated_method(names[site].kind) && local_body(nodes, revision, used, site, callable)) {
             if (!find_signature_clause(
                 nodes, revision, used, callable.signature, ThrowsSignatureClause, clause)) {
@@ -294,8 +309,6 @@ export func discover_declaration_demand(
     ref local = make LocalBindingSites {
         binding <- no_node(); initializer <- no_node(); mode <- ValueLocal; declaration_const <- false
     };
-    ref formal = make FormalSites { binding <- no_node(); signature <- no_node(); mode <- ExplicitValueFormal };
-    val scope <- no_node();
     val definition <- no_node();
     val checked_call <- false;
     val shape <- InvalidInvocation;

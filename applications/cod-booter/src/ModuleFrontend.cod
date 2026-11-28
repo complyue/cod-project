@@ -226,14 +226,22 @@ func construction_query_supported(nodes:const ExprNodes in N, operand:UInt64) ->
     };
 }
 
-func fixed_reference_field(nodes:const ExprNodes in N, revision:UInt64, used:UInt64, binding:UInt64)
-    -> bool where {const owner N} {
-    ref field = make BindingSites {
+func fixed_reference_profile(nodes:const ExprNodes in N, revision:UInt64, used:UInt64,
+    binding:UInt64, mode:FormalMode, emit_object:bool, requires_operand_checks:bool in P)
+    -> UInt8 where {const owner N, owner P} {
+    ref site = make BindingSites {
         name <- no_node(); annotation <- no_node(); target_type <- no_node();
         owner_name <- no_node(); readonly <- false
     };
-    return inspect_binding(nodes, revision, used, binding, field) == TypedBinding &&
-        field.owner_name == no_node()
+    if (inspect_binding(nodes, revision, used, binding, site) != TypedBinding)
+        return unsupported_fixed_formal();
+    if (site.owner_name == no_node()) {
+        if (!emit_object && (mode == ReferenceFormal || mode == PointerFormal)) return 0u8;
+        return unsupported_fixed_formal()
+    };
+    if (mode != ReferenceFormal) return unsupported_fixed_formal();
+    requires_operand_checks <- true;
+    return 0u8
 }
 
 # Declaration checking can resolve projection operands without emitting an address.
@@ -300,12 +308,9 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                         return unsupported_reference_slot_formal();
                     if (mode == IdentityOnlyRefFormal) return unsupported_identity_reference();
                     if (fixed) {
-                        if (mode != ExplicitValueFormal) {
-                            if (emit_object || (mode != ReferenceFormal && mode != PointerFormal) ||
-                                !fixed_reference_field(nodes, revision, used, binding.index))
-                                return unsupported_fixed_formal();
-                            return 0u8
-                        };
+                        if (mode != ExplicitValueFormal)
+                            return fixed_reference_profile(nodes, revision, used, binding.index, mode, emit_object,
+                                requires_operand_checks);
                         (requires_operand_checks <- true):void
                     };
                     if (mode == ExceptionFormal) { 29u8 } else { 0u8 }
@@ -572,7 +577,7 @@ export func analyze_bound_operands(source:const SourceBytes in S, nodes:const Ex
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; signature <- false; body <- false;
+        slot_body <- false; fixed_borrow <- false; signature <- false; body <- false;
     });
     ref products = make Products(0u64, make Product {
         module <- 0u64; declaration <- no_node(); arguments <- no_node(); arity <- 0u64;
@@ -598,7 +603,7 @@ export func analyze_bound_completion(nodes:const ExprNodes in N, bindings:const 
         scope <- no_node(); first_call <- no_node(); next_call <- no_node(); callee <- no_node();
         pending <- no_node(); receipt_pending <- no_node(); declared_failure <- no_node();
         receipt_body <- false; product_body_dependency <- false; mixed_aggregate_loan <- false;
-        slot_body <- false; signature <- false; body <- false;
+        slot_body <- false; fixed_borrow <- false; signature <- false; body <- false;
     });
     ref no_native_loans = make SuppliedViews(0u64, make NoSuppliedView {});
     ref no_constructions = make ExceptionConstructionFacts(0u64, make NoExceptionConstruction {});

@@ -435,7 +435,7 @@ Both source commands check `InitializationChecking.cod`, including its imports o
 
 The declaration and provider commands bind private fixed-arity symbolic procedure signatures with by-value builtin scalar inputs and a scalar or `void` result. They resolve each input in written order and check the result using the completed type bindings. A declaration introduces a symbol identity and generates no C interface. Publishing the symbol, installing or invoking a procedure handler, and accepting a procedure symbol in the object command remain outside this profile.
 
-The isolated `@followDependency` declaration from `ModuleGraph.cod` passes both source commands. The complete module still stops at `visit_open_revision`'s fixed reference formal `const used:UInt64 in G`.
+The isolated `@followDependency` declaration from `ModuleGraph.cod` passes both source commands. The complete module reaches the corresponding local `effect` definition in `visit_open_revision`, which still has a scoped procedure profile limit.
 
 ### Readonly queries
 
@@ -567,7 +567,9 @@ Demanded source bodies can call a directly selected ordinary function proved to 
 
 An initialized `const val` local evaluates its initializer once and holds an independent readonly scalar on normal completion. Both source commands check the initializer and enforce readonly access even in a private unused body. A readonly loan is allowed, and copying the value into a writable local gives that local independent storage. The source commands also check a fixed scalar initialized from a field of a supported indexed product formal, including the array owner and bounds at the read. The object command emits fixed locals with supported scalar initializers.
 
-Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls. Fixed reference formals and fixed formals in C and `here` signatures remain outside this profile. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)
+Ordinary definitions can use `const val n:T` for a supported scalar `T`. The parameter receives its own copy at the written argument position. Its storage allows reads and readonly loans. The source commands check that restriction even in a private unused definition, and the object command emits supported module calls.
+
+Ordinary definitions can also use fixed references such as `const used:UInt64 in G` and `const ready:bool in G`. The formal keeps its selected target for the invocation. A writable target allows a store or a writable loan, while `const used:const UInt64 in G` restricts that target to reads and readonly loans. The source commands check the defining body and its same-module callers, including calls written before the callee's definition. The object command uses the ordinary borrowed scalar calling convention. C and `here` fixed formals retain their profile limit. [Parameter checking](docs/ModuleGraph.md#parsing-parameters-for-graph-table-growth)
 
 For a local nominal `UInt64`-indexed `bool` array, the source commands check lexical allocation and fill, indexed reads, and writes through a live writable target. The destination and its bounds check precede the value operand. This covers tag writes in `InitializationFlow`. Reference-slot formals and object emission for these arrays remain outside this profile.
 

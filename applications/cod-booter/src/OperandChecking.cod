@@ -606,6 +606,10 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
     if (syntax != OrdinaryFormal ||
         inspect_binding(nodes, revision, used, parameter.binding, binding) != TypedBinding) return unproved_operand();
     val form <- parameter.mode;
+    val fixed <- formal_binding_is_fixed(nodes, revision, used, formal);
+    val fixed_value <- fixed && form == ExplicitValueFormal && binding.owner_name == no_node();
+    if (fixed && !fixed_value && (form != ReferenceFormal || binding.owner_name >= used ||
+        !source_place_scalar(names[binding.target_type].kind))) return unproved_operand();
     if (source_only && formal < intrinsic (len)(cases)) {
         case cases[formal] of {
             CaseSumFormal { val bound <- definition, val owner_site <- owner_site, val readonly <- readonly,
@@ -668,9 +672,7 @@ func check_formal(nodes:const ExprNodes in N, names:const NameBindings in B, fac
         return 0u8
     };
     val annotation <- binding.annotation;
-    val fixed <- formal_binding_is_fixed(nodes, revision, used, formal);
-    if (fixed && (form != ExplicitValueFormal || binding.owner_name != no_node())) return unproved_operand();
-    val readonly <- if (binding.readonly || fixed) { 1u8 } else { 0u8 };
+    val readonly <- if (binding.readonly || fixed_value) { 1u8 } else { 0u8 };
     val place <- form == PlaceFormal || form == InitializingPlaceFormal;
     if (binding.owner_name != no_node()) {
         val slot <- source_only && form == ReferenceSlotFormal;
