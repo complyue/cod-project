@@ -29,7 +29,7 @@ export data CaughtFieldUse =
     CaughtField { binding:UInt64, nominal:ExceptionType, ordinal:UInt64, kind:UInt8, readonly:bool, };
 export array CaughtFieldUses[UInt64]:CaughtFieldUse;
 
-export func unknown_exception_field() -> UInt8 { return 47u8 }
+export func unknown_exception_field() -> UInt8 { return 51u8 }
 
 func set_field(fields:PayloadFields in F, index:UInt64, first:UInt64, past:UInt64, kind:UInt8,
     readonly:bool) -> void where {owner F} {
