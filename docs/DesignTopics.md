@@ -158,7 +158,9 @@ Haskell，再按 CoD 的模块解释规则决定声明的可见性、优先级�
 
 类型级函数以及更完整的类型级编程优先从 `mixin` 扩展。模块声明静态参数，使用者在 mixin 处提供具体的类型级或 kind 级实参。例如给模板传入 `deque` 和 `UInt64`，可以得到已有的成员类型 `deque[UInt64]`。若模板声明新的名义类型，两个接收模块各自混入，各有自己的类型身份。需要互传同一类型的值时，在共享 vocabulary 模块定义一次并导出，双方选入即可。静态参数语法、计算结果的发布形式及求值规则留待设计。[静态模块参数](../design/ModuleWorlds.md#static-module-parameters-for-mixin)
 
-候选写法用 `'…'` 包围一个类型级表达式，用 `''' … '''` 包围一个类型级块。可先用一个函数按名义类型族匹配 `deque[t]`、`Maybe[t]` 并返回 `t`，检验签名与分支方程的写法。将来若加入兜底方程，再决定重叠如何处理。[完整例子与待决边界](../design/ModuleWorlds.md#quoted-type-level-expressions-and-blocks)
+类型级不使用 OO 写法。声明 `'type Container [elem: Type]'` 和 `'deque[T] : Container { T -> elem }'` 后，前缀投影 `'elem deque[UInt64]'` 求值得到类型 `UInt64`。投影的导出与选择、谁能提供映射，以及冲突时如何诊断留待具体用例决定。[字段映射与前缀投影](../design/ModuleWorlds.md#product-kinds-and-prefix-projections)
+
+候选的 `''' … '''` 类型级块可以分别写函数签名和分支方程，例如按输入类型计算更宽的类型。将来若加入兜底方程，再决定重叠如何处理。[函数方程例子](../design/ModuleWorlds.md#type-level-functions-with-equations)
 
 另一个待讨论的例子是，模板原本声明两个独立的 symbol，先向 `@output` 写入 9，再读取 `@input`。若接收方显式写 `with { @cell as @output; @cell as @input; }`，是否应接受并读到 9，还是要求这两个角色在接收方也保持独立？这个选择留待用例检验。
 

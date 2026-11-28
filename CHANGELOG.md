@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Apply type-level field projections in prefix form
+
+<a id="h-type-level-prefix-projections-20261128"></a>
+**H-TYPE-LEVEL-PREFIX-PROJECTIONS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) selects type-level syntax without OO access. Given `'type Container [elem: Type]'`, the explicit declaration `'deque[T] : Container { T -> elem }'` makes `'elem deque[UInt64]'` evaluate to the type `UInt64`. [D-15 r93→94](design/ModuleWorlds.md#product-kinds-and-prefix-projections) qualifies the product-kind example under P-208, continuing [r93 nominal identity and production-only scope](https://github.com/complyue/cod-project/blob/7b25b65c8d4b756641d4bccf51c7a09e6a5df52864af/design/ModuleWorlds.md#static-module-parameters-for-mixin) under P-102/P-642. Projection publication, authority to contribute mappings, and conflicting contributions remain open. Registry r1384→1385.
+
 ## 2026-11-28 — Set the bootstrap boundary for mixin and type-level programming
 
 <a id="h-static-mixin-bootstrap-scope-20261128"></a>
