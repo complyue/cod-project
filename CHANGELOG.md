@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Plan external seed SDK and versioned target sysroots
+
+<a id="h-codup-target-sysroots-20261128"></a>
+**H-CODUP-TARGET-SYSROOTS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) endorsed an external LLVM dependency for the planned seed repository and requested retaining the Rust sysroot comparison and musl distribution research. [Pipeline r17→18](applications/cod-booter/docs/CompilerPipeline.md#host-tools-and-target-sysroots) and [roadmap r56→57](applications/cod-booter/README.md#next-stage-repositories-and-native-runtime) continue the [native toolset and host/cross contract](https://github.com/complyue/cod-project/blob/5ceeb07e4da6f5fe4ad93895245549414962834c/applications/cod-booter/docs/CompilerPipeline.md#codup-toolchain-for-native-packages) under D-20-TARGET-TOOLCHAIN and D-20-REPOSITORIES. P-754/P-755 are **continued** because the release supplies the host tools and the selected target’s native inputs to the existing mixed-package workload. Specific suppliers, directory layouts and the first target matrix remain open. Registry r1396→1397.
+
 ## 2026-11-28 — Require a swarm on selected owning handle types
 
 <a id="h-swarm-bound-handle-types-20261128"></a>

@@ -1,8 +1,10 @@
 # Compiler modes, selectable stages and persistent stage reuse
 
-Revision 17 · 2026-11-27 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
+Revision 18 · 2026-11-28 · Compiler modes and stage controls confirmed. Persistent artifact design remains a planning draft.
 
 ## Design authority
+
+At r18 the [sysroot planning decision](../../../CHANGELOG.md#h-codup-target-sysroots-20261128) applies the r17 mixed-package contract to versioned host tools and separately installable target support. P-754/P-755 continue the host, cross-build and native ABI requirements.
 
 At r17 [D-20-TARGET-TOOLCHAIN](../../../design/DesignAuthorityRegistry.md#d-20-target-toolchain) records the [project user's first native package toolset](../../../CHANGELOG.md#h-native-package-toolchain-20261127). A package can ship its provider sources alongside CoD and build them for the same target. P-754/P-755 continue the r16 host, cross-build and freestanding contracts. The [mixed-package examples](#codup-toolchain-for-native-packages) specify production acceptance. Package manifest syntax and additional language toolchains have separate scope.
 
@@ -68,6 +70,24 @@ The production installation managed by `codup` includes matching `clang` and `cl
 `codup` manages the compiler tools and matching target components. Platform SDKs and board-supplied startup or libraries follow each target’s requirements. The production CoD package build selects its inputs and links the resulting objects with the CoD output. Both `cod` and `cfe` use the chosen installation. Rust, Zig and Fortran source toolchains are deferred until a package needs one. Packages may link externally built libraries through a compatible target C interface when their required link dependencies are available. [Clang toolchain components](https://clang.llvm.org/docs/Toolchain.html) · [Generated provider interface](LLVMInterop.md#native-package-providers-for-nominal-regions)
 
 For hosted acceptance, start with the planned `codup` installation on a host without system LLVM. Build one package containing CoD, a generated C adapter and a C++ provider that uses the standard library. Run it with `cod`, then build it for a supported cross target with `cfe` and run the saved executable there. The same declared method must return the expected value in both cases. For a freestanding target, link a board startup routine from assembly, exercise region exhaustion and observable board output, and inspect the final link for the promised CRT independence. A static executable can contain libc. Cross-target delivery dates and the first supported board remain open.
+
+#### Host tools and target sysroots
+
+Follow rustup’s installation model. A versioned installation starts with tools that run on the host and support for the host target. Additional target components belong to the selected toolchain release and can be installed independently. For example, an x86-64 Linux host can use its installed Clang and LLD for a `cfe` build targeting `aarch64-linux-musl` when those tools support AArch64. The release supplies the AArch64 libraries. `cod` continues to compile and run for the host. [Rustup cross-compilation](https://rust-lang.github.io/rustup/cross-compilation.html)
+
+Rust uses *sysroot* for the compiler installation prefix. Its `rustc --print target-libdir --target <triple>` command identifies the selected target’s Rust libraries. `rustup target add` installs the corresponding `rust-std` component. Rust 1.100.1 also packages `libc.a` and startup objects such as `crt1.o` for self-contained musl links on applicable targets. Compiling C or C++ source additionally needs target headers and a matching native toolchain. In this plan, *target sysroot* means the tree of target headers, startup objects and libraries selected for Clang by `--target` and `--sysroot`. [Rust compiler paths](https://doc.rust-lang.org/rustc/command-line-arguments/print-options.html#sysroot) · [Rust musl distribution inputs](https://github.com/rust-lang/rust/blob/1.100.1/src/bootstrap/src/core/build_steps/compile.rs#L379-L415) · [Clang cross-compilation](https://clang.llvm.org/docs/CrossCompilation.html)
+
+| Installed component | Contents and consumer |
+| --- | --- |
+| Host tools | CoD executables and language library, Clang C/C++ drivers and resource headers, integrated assembler, link tools and the shared libraries the tools load. Multiple supported targets reuse these executables. |
+| Target support | The target CoD runtime, compiler builtins and native SDK inputs for the selected ABI. A hosted static-musl target needs musl headers, applicable Linux API headers, startup objects and static libc. For libc++, include its target headers and library plus libc++abi and libunwind where required. |
+| Compiler development SDK | Matching LLVM and Clang development headers, libraries and CMake exports for building the seed. The package author’s C++ compiler and headers are supplied by the first two components. |
+
+Assemble releases from verified prebuilt components where available. Record the source version, host or target ABI, digest and redistribution notices. The LLVM 23.1.3 release, for example, lists Linux x86-64 and ARM64, macOS ARM64 and Windows x64 and ARM64 binaries. Intel macOS would need another verified supplier or a release build. A Linux host tool linked with glibc can emit static musl executables with the matching target inputs. If a required component is missing, report the selected target and missing input. An incompatible host library cannot supply the target ABI. Apple and Windows platform SDKs and freestanding board startup follow their own supply and redistribution terms. The sysroot supplier for each target, supported host/target matrix, install paths and CLI spelling remain open. [LLVM release assets](https://github.com/llvm/llvm-project/releases/expanded_assets/llvmorg-23.1.3) · [LLVM licensing](https://llvm.org/docs/DeveloperPolicy.html#license)
+
+Zig ships musl source and caches a build for the requested Linux target. HarmonyOS ships Clang with its platform’s musl-based C library and SDK. Chimera Linux also runs a Clang/LLD toolchain on a musl host. For CoD, prefer prebuilt target support so installing a supported target does not compile LLVM or libc on the user’s machine. [Zig’s Linux-musl example](https://ziglang.org/learn/overview/) · [HarmonyOS NDK](https://developer.huawei.com/consumer/en/doc/harmonyos-guides/ndk-development-overview/) · [Chimera toolchain](https://chimera-linux.org/about/)
+
+Use the hosted mixed-package example above to verify distribution. Move the installed toolchain to another prefix with the build-machine SDK unavailable. Run the host program, then use the same host tools with the musl target component and run the saved `cfe` executable on that target. For an advertised fully static Linux artifact, inspect its ELF headers for absence of a program interpreter and shared-library dependencies. The current development booter records an absolute SDK library path at link time. A distributed toolchain must still find its bundled libraries after relocation. [Development link rule](https://github.com/complyue/cod-project/blob/0f09243f0202bd89875577ab11732846da07b0fd/applications/cod-booter/Makefile#L125-L127)
 
 ## Independently selectable compiler operations
 
