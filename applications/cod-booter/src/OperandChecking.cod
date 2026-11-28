@@ -133,7 +133,7 @@ using "./CaseSchemas.cod" {
     ConstructorCaseFact { IndexedCaseSubject, DirectCaseSubject, ValueCaseSubject, FieldLoanCaseSubject, ReceiptCaseSubject, CaseSumFormal,
         CaseConstructor, CaseFieldReceipt, CaseProductField, CaseSumReceipt, CaseSumProjection,
         InlineProductFormal, WritableLocalProductFormal, InlineProductField, ArrayFieldRecordFormal, StoredArrayField,
-        StoredArrayElementReference, StoredArrayElementTransfer, SumValueResult,
+        StoredArrayElementReference, BitsPlaceTransfer, SumValueResult,
         IndexedAggregateLoan, IndexedAggregateDestination, LexicalSumReference, LexicalProductReference, LexicalSumRebind,
         FreshSumInvocation, ProductLoanInvocation, FreshSumArgument, BitsConstruction, BitsFieldInitializer,
         FixedReferenceRecordConstruction, ReferenceFieldInitializer, StoredProductReference, StoredProductAlias }
@@ -6925,7 +6925,7 @@ func check_indexed_bits_transfer(names:const NameBindings in B, facts:OperandFac
     return 0u8
 }
 
-func check_stored_element_transfer(facts:OperandFacts in F, at:UInt64, destination:UInt64,
+func check_bits_place_transfer(facts:OperandFacts in F, at:UInt64, destination:UInt64,
     input:UInt64, type:const DeclaredType in T) -> UInt8 where {owner F, const owner T} {
     if (facts[at].discarded_result == 0u8 || input >= at || destination >= at)
         return unsupported_transfer_signature();
@@ -6933,8 +6933,10 @@ func check_stored_element_transfer(facts:OperandFacts in F, at:UInt64, destinati
         set_result(facts, at, never_result());
         return 0u8
     };
-    if ((facts[destination].kind != source_product_loan() && facts[destination].kind != product_kind()) ||
-        facts[destination].reception != borrowed_ref() || facts[destination].target_readonly != 0u8 ||
+    val kind <- facts[destination].kind;
+    val aggregate_target <- if (type.kind == sum_type()) { kind == source_sum_target() }
+        else { kind == source_product_loan() || kind == product_kind() };
+    if (!aggregate_target || facts[destination].reception != borrowed_ref() || facts[destination].target_readonly != 0u8 ||
         facts[destination].target_presence != present_target() || facts[destination].owner == no_node())
         return expected_writable_place();
     if (facts[destination].identity_module != type.defining_module || facts[destination].identity != type.identity)
@@ -7617,9 +7619,9 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
                 (facts[at].checks_array_bounds <- false):void;
                 return 0u8
             };
-            StoredArrayElementTransfer { val destination <-, val input <-, val type <- value_type, } -> {
+            BitsPlaceTransfer { val destination <-, val input <-, val type <- value_type, } -> {
                 if (!source_only) return unsupported_product_layout();
-                return check_stored_element_transfer(facts, at, destination, input, type)
+                return check_bits_place_transfer(facts, at, destination, input, type)
             };
             StoredProductAlias { val input <-, } -> {
                 if (!source_only || input >= at) return unsupported_product_layout();
@@ -8089,10 +8091,11 @@ func discard_aggregate_statement(nodes:const ExprNodes in N, cases:const Constru
     ref assignment = make AssignmentSites { destination <- no_node(); input <- no_node(); operator_at <- no_node() };
     if (inspect_assignment(nodes, revision, used, at, assignment) != PlaceTransfer ||
         assignment.input >= intrinsic (len)(cases) || assignment.destination >= intrinsic (len)(cases)) return;
-    if (case cases[assignment.destination] of {
-        IndexedAggregateDestination { val transfer <-, } -> transfer == at;
-        _ -> false
-    }) {
+    if ((case cases[at] of { BitsPlaceTransfer -> true; _ -> false }) ||
+        (case cases[assignment.destination] of {
+            IndexedAggregateDestination { val transfer <-, } -> transfer == at;
+            _ -> false
+        })) {
         discard_result(facts, at, explicit_discard());
         return
     };

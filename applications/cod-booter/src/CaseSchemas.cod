@@ -78,7 +78,7 @@ export data ConstructorCaseFact =
     LexicalSumReference { construction:UInt64, owner_site:UInt64, readonly:bool, } |
     LexicalProductReference { construction:UInt64, owner_site:UInt64, readonly:bool, } |
     StoredArrayElementReference { input:UInt64, value_type:DeclaredType, readonly:bool, } |
-    StoredArrayElementTransfer { destination:UInt64, input:UInt64, value_type:DeclaredType, } |
+    BitsPlaceTransfer { destination:UInt64, input:UInt64, value_type:DeclaredType, } |
     LexicalBitsArray {
         owner_site:UInt64, array_module:UInt64, array_type:UInt64, element:DeclaredType, readonly:bool,
     } |
@@ -1354,7 +1354,7 @@ func prepare_stored_element_transfer(nodes:const ExprNodes in N, names:const Nam
     if (describe_stored_product_element(nodes, names, facts, assignment.input, used, revision, loan, element) == (NoLexicalArray:LexicalArrayAccess))
         return;
     remember_indexed_aggregate_loan(nodes, facts, at, loan, element, false);
-    (facts[at] <- make StoredArrayElementTransfer {
+    (facts[at] <- make BitsPlaceTransfer {
         destination <- target; input <- assignment.input; value_type <- element
     }):void
 }
@@ -2226,6 +2226,103 @@ func prepare_indexed_bits_write(nodes:const ExprNodes in N, names:const NameBind
     return true
 }
 
+func formal_sum_initializer(nodes:const ExprNodes in N, names:const NameBindings in B, transfer:UInt64,
+    assignment:const AssignmentSites in T, revision:UInt64, construction:ConstructionSites in C) -> bool
+    where {const owner N, const owner B, const owner T, owner C} {
+    return names[transfer].kind == 0u8 && names[assignment.destination].kind == formal_binding() &&
+        aggregate_initializer_syntax(nodes, names, assignment.input, transfer, revision, construction) &&
+        names[construction.requested].kind == constructor_type()
+}
+
+func prepare_formal_sum_write(nodes:const ExprNodes in N, names:const NameBindings in B,
+    selected:const SelectedExports in E, work:const NameWork in W, interfaces:const ModuleInterfaces in G,
+    published:UInt64, facts:ConstructorCaseFacts in F, at:UInt64, assignment:const AssignmentSites in T,
+    used:UInt64, revision:UInt64, report:DeclaredExpressionResult in R) -> bool
+    where {const owner N, const owner B, const owner E, const owner W, const owner G, owner F,
+        const owner T, owner R} {
+    val destination <- assignment.destination;
+    val formal <- names[destination].declaration;
+    val input <- assignment.input;
+    if (formal >= destination) return case_problem(report, destination, wrong_construction_type());
+    return case facts[formal] of {
+        CaseSumFormal { val type <- value_type, } -> {
+            if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+                input, at, type, used, revision, report)) return false;
+            facts[at] <- make BitsPlaceTransfer { destination <- destination; input <- input; value_type <- type };
+            true
+        };
+        _ -> case_problem(report, destination, wrong_construction_type())
+    }
+}
+
+# Complete the destination's existing element and field receipts before
+# binding the RHS. An indexed source is an independent readonly loan.
+func prepare_indexed_sum_field_write(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    names:const NameBindings in B, selected:const SelectedExports in E, work:const NameWork in W,
+    spellings:const SourceBytes in G, spelling_used:UInt64, interfaces:const ModuleInterfaces in G,
+    published:UInt64, aggregate:const AggregateFacts in A, facts:ConstructorCaseFacts in F,
+    at:UInt64, assignment:const AssignmentSites in T, used:UInt64, revision:UInt64,
+    report:DeclaredExpressionResult in R) -> bool
+    where {const owner S, const owner N, const owner B, const owner E, const owner W, const owner G,
+        const owner A, owner F, const owner T, owner R} {
+    ref field = make FieldSelectionSites { receiver <- no_node(); field <- no_node() };
+    ref indexed = make IndexSites { target <- no_node(); index <- no_node() };
+    if (!inspect_field_selection(nodes, revision, at, assignment.destination, field) ||
+        !inspect_index_selection(nodes, revision, at, field.receiver, indexed)) return true;
+    val input <- assignment.input;
+    ref construction = make ConstructionSites {
+        requested <- no_node(); queried_operand <- no_node(); placement <- no_node();
+        initializer <- no_node(); contents <- no_node()
+    };
+    val constructs <- aggregate_initializer_syntax(nodes, names, input, at, revision, construction) &&
+        names[construction.requested].kind == constructor_type();
+    ref source_type = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref source_loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node()
+    };
+    val copies <- !constructs &&
+        (describe_prepared_bits_element(nodes, names, facts, input, used, revision, sum_type(), source_loan,
+            source_type) != (NoLexicalArray:LexicalArrayAccess) ||
+         describe_indexed_case_loan(nodes, names, selected, interfaces, published, input, used, revision,
+            sum_type(), ReferenceFormal, source_loan, source_type));
+    if (!constructs && !copies) return true;
+
+    ref record = make DeclaredType { kind <- 0u8; defining_module <- 0u64; identity <- no_node() };
+    ref destination_loan = make IndexedCaseLoan {
+        expression <- no_node(); array <- no_node(); index <- no_node(); owner_site <- no_node();
+        array_module <- 0u64; array_type <- no_node()
+    };
+    if (describe_prepared_bits_element(nodes, names, facts, field.receiver, used, revision, record_type(), destination_loan,
+            record) == (NoLexicalArray:LexicalArrayAccess) &&
+        !describe_indexed_case_loan(nodes, names, selected, interfaces, published, field.receiver, used, revision,
+            record_type(), ReferenceFormal, destination_loan, record))
+        return if (work[input].repeated_indexed_initializer || work[input].inline_sum_initializer) {
+            case_problem(report, assignment.destination, wrong_construction_type())
+        } else { true };
+    ref type = make DeclaredType { kind <- record.kind; defining_module <- record.defining_module; identity <- record.identity };
+    ref ordinal = make UInt64 { no_node() };
+    ref readonly = make bool { false };
+    if (!case_bits_type(record, aggregate, interfaces, published) ||
+        !describe_record_member(source, nodes, names, selected, work, spellings, spelling_used, interfaces, published,
+            field.field, used, revision, true, type, ordinal, readonly) || ordinal == no_node() ||
+        type.kind != sum_type() || !case_bits_type(type, aggregate, interfaces, published))
+        return case_problem(report, field.field, wrong_construction_type());
+    if (constructs) {
+        if (!prepare_bits_construction(nodes, names, selected, work, interfaces, published, facts,
+            input, at, type, used, revision, report)) return false
+    } else {
+        if (type.identity != source_type.identity || type.defining_module != source_type.defining_module)
+            return case_problem(report, input, wrong_construction_type());
+        remember_indexed_aggregate_loan(nodes, facts, at, source_loan, source_type, false)
+    };
+    remember_indexed_aggregate_loan(nodes, facts, assignment.destination, destination_loan, record, true);
+    remember_inline_product_field(facts, assignment.destination, field.receiver, field.field, ordinal,
+        readonly, true, true, record, type);
+    facts[at] <- make BitsPlaceTransfer { destination <- assignment.destination; input <- input; value_type <- type };
+    return true
+}
+
 func remember_indexed_aggregate_destination(nodes:const ExprNodes in N, facts:ConstructorCaseFacts in F,
     destination:UInt64, transfer:UInt64, loan:const IndexedCaseLoan in L, type:const DeclaredType in T)
     -> void where {const owner N, owner F, const owner L, const owner T} {
@@ -2480,7 +2577,8 @@ export func needs_constructor_case_plan(nodes:const ExprNodes in N, names:const 
                }) &&
               inspect_field_selection(nodes, revision, used, assignment.input, projection) &&
               inspect_index_selection(nodes, revision, used, projection.receiver, indexed)) ||
-             indexed_aggregate_transfer(nodes, names, at, revision, assignment, construction))) ||
+             indexed_aggregate_transfer(nodes, names, at, revision, assignment, construction) ||
+             formal_sum_initializer(nodes, names, at, assignment, revision, construction))) ||
             case_pattern(nodes, used, at) == ConstructorCaseTarget ||
             (inspect_case(nodes, revision, used, at, choice) &&
              (name_syntax(nodes, used, choice.subject) == OrdinaryName ||
@@ -2613,6 +2711,8 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             (indexed_field_projection(nodes, at, revision, assignment.destination, field, indexed) ||
              borrowed_product_field_destination(nodes, names, facts, at, revision, assignment.destination, field))) {
             facts[assignment.destination] <- make WritableFieldUse {};
+            if (!prepare_indexed_sum_field_write(source, nodes, names, selected, work, spellings, spelling_used,
+                interfaces, published, aggregate, facts, at, assignment, used, revision, report)) return false;
             if (first == no_node()) { (first <- at):void }
         };
         if (transfer == PlaceTransfer &&
@@ -2620,6 +2720,11 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
                 facts, at, assignment, used, revision) ||
              prepare_indexed_product_copy(nodes, names, selected, interfaces, published, aggregate,
                 views, facts, at, assignment, used, revision))) {
+            if (first == no_node()) { (first <- at):void }
+        };
+        if (transfer == PlaceTransfer && formal_sum_initializer(nodes, names, at, assignment, revision, construction)) {
+            if (!prepare_formal_sum_write(nodes, names, selected, work, interfaces, published,
+                facts, at, assignment, used, revision, report)) return false;
             if (first == no_node()) { (first <- at):void }
         };
         if (transfer == PlaceTransfer && indexed_aggregate_transfer(nodes, names, at, revision, assignment, construction)) {
