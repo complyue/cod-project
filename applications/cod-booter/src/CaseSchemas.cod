@@ -1,6 +1,7 @@
 using "./NativeDeclarations.cod" {
     SuppliedViews, prepared_writable_product_formal, describe_byte_array, ArraySlotType,
-    SuppliedView { PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination, IndexedArraySource }, ArraySlotElement { ProductArrayElement, SumArrayElement }
+    SuppliedView { PreparedArrayConstruction, ArraySlotFormal, IndexedArrayDestination, IndexedArraySource,
+        ImportedWorkspaceSumWriterCandidate }, ArraySlotElement { ProductArrayElement, SumArrayElement }
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./SourceAccess.cod" same_bytes;
@@ -2678,6 +2679,12 @@ export func prepare_constructor_cases(source:const SourceBytes in S, nodes:const
             }
         };
         case views[at] of {
+            ImportedWorkspaceSumWriterCandidate { val output <-, } -> {
+                if (output < at && inspect_field_selection(nodes, revision, used, output, field) &&
+                    (case facts[output] of { NoConstructorCase -> true; _ -> false })) {
+                    (facts[output] <- make WritableFieldUse {}):void
+                }
+            };
             PreparedArrayConstruction {
                 val fill <-, val kind <- element, val module <- element_module, val identity <- element_identity,
             } -> {

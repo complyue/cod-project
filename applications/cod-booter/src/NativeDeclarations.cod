@@ -69,7 +69,7 @@ using "./ParserStorage.cod" HandleConstructionSyntax {
     OwnHandleMake, BorrowHandleMake, InvalidHandleConstruction
 };
 using "./ParserStorage.cod" LocalMode { ValueLocal };
-using "./NameResolution.cod" { source_call_scalar, source_place_scalar,
+using "./NameResolution.cod" { source_call_scalar, source_place_scalar, source_aggregate_formal, direct_source_using,
     NameBindings, NameWork, here_receiver_binding,
     c_handle_type, handle_binding, formal_binding, local_binding, loop_index, enclosing_callable,
     record_type, array_type, c_constructor, c_operation, c_entry, callable_binding, owner_binding,
@@ -1556,6 +1556,7 @@ export data SuppliedView =
     ImportedTextPredicateCandidate {} |
     ImportedProductWriterCandidate {} |
     ImportedAggregateWriterCandidate {} |
+    ImportedWorkspaceSumWriterCandidate { output:UInt64, } |
     ImportedProductWriter {} |
     PreparedArrayReaderLeaf { declared_array:UInt64, } |
     PreparedArrayReaderForward { declared_array:UInt64, callee:UInt64, } |
@@ -3455,8 +3456,17 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
                 if (!binding.readonly && names[marker].kind == builtin_u64()) {
                     (scalar_loans <- scalar_loans + 1u64):void
                 } else {
-                    if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type) ||
-                        !checked_bits_record(contracts, published, aggregate, type)) return;
+                    if (!describe_type(nodes, names, selected, binding.annotation, 0u64, revision, used, type)) return;
+                    if (type.kind == sum_type()) {
+                        if (result_kind == builtin_void() && !binding.readonly && work[formal].next == no_node() &&
+                            readonly_arrays != 0u64 && writable_arrays == 0u64 && !reads_record &&
+                            writable_records == 0u64 && scalar_loans == 0u64 &&
+                            checked_bits_sum(contracts, published, aggregate, type)) {
+                            (views[at] <- make PreparedWorkspaceLoans { publication_signature <- true }):void
+                        };
+                        return
+                    };
+                    if (!checked_bits_record(contracts, published, aggregate, type)) return;
                     if (binding.readonly) { (reads_record <- true):void } else {
                         if (writable_records == 0u64) { (product_owner <- role):void }
                         else { (shared_product_owner <- shared_product_owner && product_owner == role):void };
@@ -3472,6 +3482,24 @@ func prepare_workspace_loans(nodes:const ExprNodes in N, names:const NameBinding
 
 export func prepared_workspace_writer(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
     return site < intrinsic (len)(views) && (case views[site] of { PreparedWorkspaceWriter -> true; _ -> false })
+}
+
+# Find the writable sum position in a completed workspace writer's rows.
+export func workspace_sum_output(contracts:const ModuleInterfaces in C, published:UInt64, header:UInt64)
+    -> UInt64 where {const owner C} {
+    if (header >= published || published > intrinsic (len)(contracts)) return no_node();
+    val count <- contracts[header].entry_count;
+    if (contracts[header].source_writer != WorkspaceWriter ||
+        contracts[header].array_read_completion == NoArrayRead ||
+        contracts[header].result_kind != builtin_void() ||
+        count < 2u64 || count >= published - header) return no_node();
+    val output <- header + count;
+    val output_role <- contracts[output].owner_role;
+    if (output_role >= contracts[header].owner_count ||
+        !source_aggregate_formal(contracts, output, sum_type(), output_role, 0u8) ||
+        checked_aggregate_storage(contracts, published, contracts[output].type_module,
+            contracts[output].type_identity, sum_type()) != CoDBitsAggregate) return no_node();
+    return output
 }
 
 export func prepared_workspace_loans(views:const SuppliedViews in V, site:UInt64) -> bool where {const owner V} {
@@ -3655,6 +3683,7 @@ export func first_source_call_profile(views:const SuppliedViews in V, used:UInt6
             ImportedTextPredicateCandidate -> true;
             ImportedProductWriterCandidate -> true;
             ImportedAggregateWriterCandidate -> true;
+            ImportedWorkspaceSumWriterCandidate -> true;
             ImportedScalarPredicateCandidate -> true;
             _ -> false
         }) return site
@@ -5096,8 +5125,10 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
         return false;
     };
     val head <- no_node();
+    val selection <- no_node();
     ref call = make DirectCallSites { callee <- no_node(); arguments <- no_node(); };
     ref public_item = make SequenceEntry { previous <- no_node(); item <- no_node(); };
+    ref sum_output = make SequenceEntry { previous <- no_node(); item <- no_node(); };
     ref sites = make HereSites {
         call <- no_node(); supplied <- no_node(); receivers <- no_node(); body <- no_node(); full_scope <- false;
     };
@@ -5210,6 +5241,17 @@ export func prepare_module_calls(nodes:const ExprNodes in N, names:const NameBin
                 if (contracts[head].source_writer == AggregateWriter &&
                     work[names[call.callee].declaration].selected_aggregate_writer == head) {
                     (views[at] <- make ImportedAggregateWriterCandidate {}):void
+                };
+                if (workspace_sum_output(contracts, interface_count, head) != no_node()) {
+                    selection <- names[call.callee].declaration;
+                    if (selected[selection].shape == ordinary_callable_shape() && selected[selection].checked == 0u8 &&
+                        selected[selection].dependency_module == selected[selection].origin_module &&
+                        direct_source_using(nodes, selected[selection].selection_site, used, revision) &&
+                        call.arguments < at &&
+                        inspect_sequence_entry(nodes, revision, used, call.arguments, sum_output) == ArgumentSequence &&
+                        sum_output.item < call.arguments && !checked_ref_argument(nodes, call.arguments)) {
+                        (views[at] <- make ImportedWorkspaceSumWriterCandidate { output <- sum_output.item }):void
+                    };
                 };
                 if (contracts[head].scalar_source_body && contracts[head].result_kind == builtin_bool()) {
                     (views[at] <- make ImportedScalarPredicateCandidate {}):void

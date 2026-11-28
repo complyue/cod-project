@@ -151,7 +151,7 @@ using "./NativeDeclarations.cod" {
     published_enum_array_header, SourceArrayFormals { ArrayReferenceSlotFormal }
 };
 using "./NativeDeclarations.cod" { completed_niladic_source_kind, has_prepared_native_loans };
-using "./NativeDeclarations.cod" prepared_workspace_loans;
+using "./NativeDeclarations.cod" { prepared_workspace_loans, workspace_sum_output };
 using "./NativeDeclarations.cod" SuppliedView {
     ImportedArrayLengthCall, ImportedSourceTextCall, ImportedTextWriterCall, BoundReferenceSymbol, PreparedTextInstallation,
     SuppliedArrayView, PreparedNativeLoanCall, PreparedNativeOperand,
@@ -3056,6 +3056,10 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
             if (facts[value].target_readonly != 0u8 &&
                 links[argument].imported_target_readonly == 0u8 && !inline_output)
                 return expected_writable_place();
+            if (expected == source_sum_target() && links[argument].imported_target_readonly == 0u8) {
+                if (facts[value].reservation != no_node()) return unproved_nonnull_borrow();
+                (scoped_call <- true):void
+            };
             if (expected == source_product_loan() && value != argument && names[value].kind != formal_binding() &&
                 !scoped_imported_product_actual(names, facts, cases, at, value, argument,
                     links[argument].imported_target_readonly == 0u8, readonly_call, inline_product_loan, inline_output))
@@ -3760,6 +3764,8 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
         contracts[header].failure_checked != 0u8 || contracts[header].array_read_completion == NoArrayRead)
         return no_node();
     val past <- header + 1u64 + count;
+    val sum_output <- workspace_sum_output(contracts, published, header);
+    val input_past <- if (sum_output == no_node()) { past } else { sum_output };
     val role <- no_node();
     val kind <- 0u8;
     val access <- 0u8;
@@ -3768,12 +3774,13 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
     val scalar_loan <- false;
     val report_writer <- result == builtin_void() && count > 2u64 && owners == 2u64 &&
         !contracts[header].array_slot_failures.out_of_memory;
-    for (row in header + 1u64 .. past) {
+    for (row in header + 1u64 .. input_past) {
         if (!checked_source_scalar_parameter(contracts, published, row)) {
             role <- contracts[row].owner_role;
             kind <- contracts[row].value_kind;
             access <- contracts[row].target_readonly;
             if (role >= owners || access > 1u8) return no_node();
+            if (sum_output != no_node() && (kind != array_type() || access != 1u8)) return no_node();
             if (kind == builtin_u64() && checked_inspector_scalar_place(contracts[row], role)) {
                 if (result != builtin_bool() || scalar_loan) return no_node();
                 (scalar_loan <- true):void
@@ -3790,6 +3797,10 @@ func checked_workspace_writer_past(contracts:const ModuleInterfaces in I, publis
                 }
             }
         }
+    };
+    if (sum_output != no_node()) {
+        requires_body <- true;
+        return if (readonly_array) { past } else { no_node() }
     };
     # A supported report update is available to an already-required body.
     # Its operands do not by themselves require checking an enclosing body.
