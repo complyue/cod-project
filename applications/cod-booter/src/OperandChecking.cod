@@ -2514,10 +2514,10 @@ func check_direct_call(source:const SourceBytes in S, nodes:const ExprNodes in N
         val provider <- names[callee].declaration;
         if (provider >= used) return unproved_call_target();
         if (source_only && has_prepared_native_loans(views, at)) {
-            val diagnostic <- check_prepared_native_loans(nodes, names, links, facts, views,
+            val native_diagnostic <- check_prepared_native_loans(nodes, names, links, facts, views,
                 0u64, provider, at, arguments, used, revision);
-            if (diagnostic == 0u8 && facts[at].kind != never_result()) { (facts[at].loans_scoped_aggregate <- true):void };
-            return diagnostic
+            if (native_diagnostic == 0u8 && facts[at].kind != never_result()) { (facts[at].loans_scoped_aggregate <- true):void };
+            return native_diagnostic
         };
         if (!prepared_native_operation(views, at, provider)) return unproved_call_target();
         return remember_native_result(facts, at, links[at].value_kind, links[at].value_module,
@@ -2695,8 +2695,8 @@ func check_imported_call(nodes:const ExprNodes in N, names:const NameBindings in
             } else {
                 if (returned_kind == scalar_enum() ||
                     (returned_kind == enum_type() && links[at].imported_array_read_completion != NoArrayRead)) {
-                    diagnostic <- remember_native_result(facts, at, enum_type(), links[at].imported_type_module,
-                        links[at].imported_type_identity)
+                    (diagnostic <- remember_native_result(facts, at, enum_type(), links[at].imported_type_module,
+                        links[at].imported_type_identity)):void
                 } else {
                     if (returned_kind == independent_sum_bits()) {
                         set_fact(facts, at, returned_kind, independent_value(), no_node(),
@@ -3787,15 +3787,16 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     val slot_call <- selected[site].shape == array_slot_callable_shape();
     if (!slot_call && selected[site].shape != ordinary_callable_shape()) return true;
     val obligation <- selected[site].checked != 0u8;
-    val header <- find_interface(contracts, interface_count, selected[site].origin_module, selected[site].identity);
+    val origin_module <- selected[site].origin_module;
+    val header <- find_interface(contracts, interface_count, origin_module, selected[site].identity);
     if (slot_call) {
-        val module <- selected[site].origin_module;
-        if (!source_only || selected[site].dependency_module != module ||
+        if (!source_only || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision))
             return operand_problem(report, at, unsupported_imported_slot_call());
-        val past <- checked_array_slot_call_past(contracts, interface_count, header, module, selected[site].identity);
-        if (past == no_node() || !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count) ||
+        val slot_past <- checked_array_slot_call_past(contracts, interface_count, header,
+            origin_module, selected[site].identity);
+        if (slot_past == no_node() || !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, slot_past - 1u64, interface_count) ||
             obligation != (contracts[header].failure_identity != no_node()))
             return operand_problem(report, at, unsupported_imported_slot_call());
         if (obligation && !valid_imported_failure(contracts, interface_count, catalog,
@@ -3815,17 +3816,17 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (source_only && header != no_node() &&
         contracts[header].interface_kind == array_length_family_interface()) {
-        val module <- selected[site].origin_module;
-        if (obligation || selected[site].dependency_module != module ||
+        if (obligation || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision)) return true;
-        val past <- array_length_family_past(contracts, interface_count, visits, visit_count, header, module);
-        ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
-        val argument <- call.arguments;
-        if (past != no_node() && argument < at &&
-            inspect_sequence_entry(nodes, revision, used, argument, entry) == ArgumentSequence &&
-            entry.previous == no_node() && entry.item < argument && !checked_ref_argument(nodes, argument)) {
+        val length_past <- array_length_family_past(contracts, interface_count, visits, visit_count, header, origin_module);
+        ref length_entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+        val length_argument <- call.arguments;
+        if (length_past != no_node() && length_argument < at &&
+            inspect_sequence_entry(nodes, revision, used, length_argument, length_entry) == ArgumentSequence &&
+            length_entry.previous == no_node() && length_entry.item < length_argument &&
+            !checked_ref_argument(nodes, length_argument)) {
             (supplied[at] <- make ImportedArrayLengthCall {
-                first <- header + 1u64; past <- past; argument <- argument; input <- entry.item
+                first <- header + 1u64; past <- length_past; argument <- length_argument; input <- length_entry.item
             }):void
         };
         return true
@@ -3834,12 +3835,11 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     val array_read <- source_only && header != no_node() && contracts[header].array_read_completion != NoArrayRead;
     if (source_only && header != no_node() && contracts[header].scalar_source_body &&
         (contracts[header].entry_count != 0u64 || contracts[header].result_kind == builtin_bool())) {
-        val module <- selected[site].origin_module;
-        val past <- checked_parameterized_scalar_past(contracts, interface_count, header);
-        if (obligation || past == no_node() || selected[site].dependency_module != module ||
+        val scalar_past <- checked_parameterized_scalar_past(contracts, interface_count, header);
+        if (obligation || scalar_past == no_node() || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count))
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, scalar_past - 1u64, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
@@ -3858,8 +3858,8 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         if (obligation || handles || array_read) return operand_problem(report, at, unsupported_imported_call());
         # Preparation precedes body demand. An unmatched header leaves no call evidence.
         if (!checked_source_call(contracts, interface_count, header) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-            selected[site].dependency_module != selected[site].origin_module ||
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
             contracts[header].membership != FixedMethods || contracts[header].callable_kind != CheckedFunction ||
             contracts[header].entry_count != 0u64 || contracts[header].failure_identity != no_node() ||
@@ -3873,19 +3873,19 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ProductWriter) {
         if (obligation || !checked_product_writer_header(contracts, interface_count, header) ||
-            selected[site].dependency_module != selected[site].origin_module ||
+            selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header + contracts[header].entry_count, interface_count))
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, header + contracts[header].entry_count, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         val output_only <- contracts[header].owner_count == 1u64;
         val output <- if (output_only) {
-            ref first = make UInt64 { no_node() };
-            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first))
+            ref first_output_actual = make UInt64 { no_node() };
+            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first_output_actual))
                 return operand_problem(report, at, invalid_operand_tree());
-            first
+            first_output_actual
         } else { call.arguments };
         prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
             aggregate, cases, output, used, revision, record_type(), true);
@@ -3901,31 +3901,31 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == AggregateWriter) {
-        val module <- selected[site].origin_module;
         val has_payload <- links[site].selected_aggregate_writer == header;
         val only_array_output <- has_payload && contracts[header].owner_count == 2u64;
-        val past <- if (has_payload) { header + 1u64 + contracts[header].entry_count } else {
+        val writer_past <- if (has_payload) { header + 1u64 + contracts[header].entry_count } else {
             checked_record_writer_past(contracts, interface_count, header)
         };
-        if (obligation || past == no_node() || selected[site].dependency_module != module ||
+        if (obligation || writer_past == no_node() || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count))
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, writer_past - 1u64, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
-        val readonly_record <- !has_payload && contracts[past - 1u64].value_kind == record_type() &&
-            contracts[past - 1u64].target_readonly == 1u8;
+        val readonly_record <- !has_payload && contracts[writer_past - 1u64].value_kind == record_type() &&
+            contracts[writer_past - 1u64].target_readonly == 1u8;
         if (!only_array_output) {
             if (readonly_record) {
                 prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
                     aggregate, cases, call.arguments, used, revision, record_type(), false)
             } else {
-                ref first = make UInt64 { no_node() };
-                if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
+                ref first_writer_actual = make UInt64 { no_node() };
+                if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first_writer_actual) ||
+                    first_writer_actual >= at)
                     return operand_problem(report, at, invalid_operand_tree());
                 prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
-                    aggregate, cases, links[first].next, used, revision, record_type(), true)
+                    aggregate, cases, links[first_writer_actual].next, used, revision, record_type(), true)
             }
         };
         remember_imported_call(links, contracts, at, header, true);
@@ -3944,29 +3944,28 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ArrayInspector) {
-        val module <- selected[site].origin_module;
         ref product = make UInt64 { no_node() };
-        val past <- checked_array_inspector_past(contracts, interface_count, header, product);
-        if (obligation || past == no_node() ||
-            selected[site].dependency_module != module ||
+        val inspector_past <- checked_array_inspector_past(contracts, interface_count, header, product);
+        if (obligation || inspector_past == no_node() ||
+            selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, inspector_past - 1u64, interface_count)) return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         val indexed_output <- false;
         if (product != no_node()) {
-            ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+            ref product_entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
             ref index = make IndexSites { target <- no_node(); index <- no_node() };
-            ref first = make UInt64 { no_node() };
-            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first))
+            ref first_inspector_actual = make UInt64 { no_node() };
+            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first_inspector_actual))
                 return operand_problem(report, at, invalid_operand_tree());
-            val argument <- argument_at_position(links, first, product - header - 1u64);
-            if (inspect_sequence_entry(nodes, revision, used, argument, entry) != ArgumentSequence)
+            val product_actual <- argument_at_position(links, first_inspector_actual, product - header - 1u64);
+            if (inspect_sequence_entry(nodes, revision, used, product_actual, product_entry) != ArgumentSequence)
                 return operand_problem(report, at, invalid_operand_tree());
-            if (inspect_index_selection(nodes, revision, used, entry.item, index)) {
+            if (inspect_index_selection(nodes, revision, used, product_entry.item, index)) {
                 prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
-                    aggregate, cases, argument, used, revision, record_type(), true);
+                    aggregate, cases, product_actual, used, revision, record_type(), true);
                 (indexed_output <- true):void
             }
         };
@@ -3989,12 +3988,11 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (source_only && header != no_node() && contracts[header].source_writer == ParserWriter) {
-        val module <- selected[site].origin_module;
-        val past <- checked_parser_writer_past(contracts, interface_count, header);
-        if (obligation || past == no_node() || selected[site].dependency_module != module ||
+        val parser_past <- checked_parser_writer_past(contracts, interface_count, header);
+        if (obligation || parser_past == no_node() || selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, parser_past - 1u64, interface_count)) return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         remember_imported_call(links, contracts, at, header, true);
@@ -4004,13 +4002,12 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return true
     };
     if (array_read && contracts[header].callable_kind == CheckedProcedure) {
-        val past <- checked_array_procedure_past(contracts, interface_count, header);
-        if (past != no_node()) {
-            val module <- selected[site].origin_module;
-            if (obligation || selected[site].dependency_module != module ||
+        val procedure_past <- checked_array_procedure_past(contracts, interface_count, header);
+        if (procedure_past != no_node()) {
+            if (obligation || selected[site].dependency_module != origin_module ||
                 !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-                !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-                !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
+                !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+                !contains_checked_interface(visits, visit_count, origin_module, procedure_past - 1u64, interface_count)) return true;
             if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, true, true))
                 return operand_problem(report, at, wrong_argument_count());
             remember_imported_call(links, contracts, at, header, true);
@@ -4027,17 +4024,16 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (array_read) {
         ref aggregate_loan = make bool { false };
-        val past <- checked_readonly_query_past(contracts, interface_count, header, aggregate_loan);
-        if (past != no_node()) {
-            val module <- selected[site].origin_module;
-            if (obligation || selected[site].dependency_module != module ||
+        val query_past <- checked_readonly_query_past(contracts, interface_count, header, aggregate_loan);
+        if (query_past != no_node()) {
+            if (obligation || selected[site].dependency_module != origin_module ||
                 !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-                !contains_checked_interface(visits, visit_count, module, header, interface_count) ||
-                !contains_checked_interface(visits, visit_count, module, past - 1u64, interface_count)) return true;
+                !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+                !contains_checked_interface(visits, visit_count, origin_module, query_past - 1u64, interface_count)) return true;
             if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
                 return operand_problem(report, at, wrong_argument_count());
             if (aggregate_loan && !prepare_imported_query_aggregate_loans(nodes, names, selected, links, contracts, interface_count,
-                aggregate, cases, call.arguments, header + 1u64, past, used, revision))
+                aggregate, cases, call.arguments, header + 1u64, query_past, used, revision))
                 return operand_problem(report, at, invalid_operand_tree());
             remember_imported_call(links, contracts, at, header, true);
             links[at].imported_type_module <- contracts[header].type_module;
@@ -4057,21 +4053,22 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
          (scalar_reader && contracts[header].entry_count == 4u64) ||
          (boolean_reader && contracts[header].entry_count >= 4u64));
     if (text_predicate || indexed_reader) {
-        val past <- checked_readonly_reader_past(contracts, interface_count, header);
-        if (obligation || past == no_node() ||
-            selected[site].dependency_module != selected[site].origin_module ||
+        val reader_past <- checked_readonly_reader_past(contracts, interface_count, header);
+        if (obligation || reader_past == no_node() ||
+            selected[site].dependency_module != origin_module ||
             !direct_source_using(nodes, selected[site].selection_site, used, revision) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-            !contains_checked_interface(visits, visit_count, selected[site].origin_module, past - 1u64, interface_count))
+            !contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+            !contains_checked_interface(visits, visit_count, origin_module, reader_past - 1u64, interface_count))
             return true;
         if (!bind_imported_call(nodes, links, contracts, at, header, call.arguments, used, revision, false, true))
             return operand_problem(report, at, wrong_argument_count());
         if (text_predicate) {
-            ref first = make UInt64 { no_node() };
-            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first) || first >= at)
+            ref first_predicate_actual = make UInt64 { no_node() };
+            if (!first_sequence_entry(nodes, revision, used, call.arguments, ArgumentSequence, first_predicate_actual) ||
+                first_predicate_actual >= at)
                 return operand_problem(report, at, invalid_operand_tree());
             prepare_imported_indexed_loan(nodes, names, selected, contracts, interface_count,
-                aggregate, cases, links[first].next, used, revision, record_type(), false)
+                aggregate, cases, links[first_predicate_actual].next, used, revision, record_type(), false)
         };
         remember_imported_call(links, contracts, at, header, true);
         links[at].imported_array_read_completion <- contracts[header].array_read_completion;
@@ -4081,9 +4078,9 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
     };
     if (array_read && (obligation || !checked_array_reader_header(contracts, interface_count, header) ||
         (scalar_reader &&
-            (!contains_checked_interface(visits, visit_count, selected[site].origin_module, header, interface_count) ||
-             !contains_checked_interface(visits, visit_count, selected[site].origin_module, header + 3u64, interface_count))) ||
-        selected[site].dependency_module != selected[site].origin_module ||
+            (!contains_checked_interface(visits, visit_count, origin_module, header, interface_count) ||
+             !contains_checked_interface(visits, visit_count, origin_module, header + 3u64, interface_count))) ||
+        selected[site].dependency_module != origin_module ||
         !direct_source_using(nodes, selected[site].selection_site, used, revision))) {
         if (scalar_reader) return true;
         return operand_problem(report, at, unsupported_imported_call())
@@ -4105,7 +4102,7 @@ func prepare_imported_call(nodes:const ExprNodes in N, names:const NameBindings 
         return operand_problem(report, at, unsupported_imported_call());
     if (!source_only && !matches_object_call(views, selected[site].checked_resource,
         revision, selected[site].selection_site, selected[site].selection_public_row,
-        selected[site].dependency_module, selected[site].origin_module, selected[site].identity,
+        selected[site].dependency_module, origin_module, selected[site].identity,
         contracts[header].native_function)) return operand_problem(report, at, unproved_call_target());
     if (source_only && contracts[header].has_here == 1u8) {
         if (links[at].expects_here != 1u8 || links[at].active == no_node())
@@ -6471,8 +6468,8 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         return check_augmented_transfer(nodes, facts, at, assignment.destination, assignment.input,
                                        used, revision);
     if ((mode == PlaceRebind || mode == PlaceTransfer || mode == FieldTransfer) && names[at].scope == no_node()) return 0u8;
+    val destination <- assignment.destination;
     if (mode == PlaceRebind) {
-        val destination <- assignment.destination;
         if (source_only && destination < intrinsic (len)(cases)) {
             case cases[destination] of {
                 StoredArrayField { val receiver <-; val fixed <-; val target_readonly <-; } -> {
@@ -6498,7 +6495,6 @@ func check_operand(source:const SourceBytes in S, nodes:const ExprNodes in N, na
         return check_text_installation(nodes, facts, at, destination, assignment.input)
     };
     if (mode == PlaceTransfer || mode == FieldTransfer) {
-        val destination <- assignment.destination;
         val input <- assignment.input;
         if (source_only && mode == PlaceTransfer && destination < intrinsic (len)(cases)) {
             case cases[destination] of {
