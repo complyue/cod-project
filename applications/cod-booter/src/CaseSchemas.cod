@@ -158,6 +158,7 @@ func describe_published_array_element(names:const NameBindings in B, selected:co
         selected[selection].kind != array_export()) return false;
     val head <- find_interface(interfaces, published, selected[selection].origin_module, selected[selection].identity);
     if (head == no_node() || interfaces[head].interface_kind != array_type() ||
+        interfaces[head].entry_count != 0u64 ||
         interfaces[head].array_index_kind != builtin_u64() || interfaces[head].element_kind != expected_kind)
         return false;
     element.kind <- expected_kind;
@@ -1320,7 +1321,7 @@ func prepare_aggregate_loan_call(nodes:const ExprNodes in N, names:const NameBin
                     # The selected array schema identifies the element. The
                     # operand check still validates its actual view and index.
                     if (describe_indexed_product_argument(nodes, names, selected, interfaces, published, facts,
-                            entry.item, used, revision, loan, record) && (loan.array_module == 0u64 || readonly) &&
+                            entry.item, used, revision, loan, record) &&
                         case_bits_type(record, aggregate, interfaces, published)) {
                         remember_indexed_aggregate_loan(nodes, facts, argument, loan, record, !readonly);
                         if (first == no_node()) { (first <- call):void }

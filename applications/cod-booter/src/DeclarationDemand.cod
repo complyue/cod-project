@@ -123,9 +123,10 @@ func collect_aggregate_loan_demand(nodes:const ExprNodes in N, names:const NameB
             return false;
         if (entry.item < intrinsic (len)(cases)) {
             case cases[entry.item] of {
-                # Imported indexed loans keep their existing demand rule.
-                IndexedAggregateLoan { val consumer <-; val array_module <-; } -> {
-                    if (consumer == argument && array_module == 0u64) { (needs_receipt <- true):void }
+                # Check the body for writable indexed loans, including when
+                # the array schema came from a published dependency.
+                IndexedAggregateLoan { val consumer <-; val array_module <-; val writable <-; } -> {
+                    if (consumer == argument && (array_module == 0u64 || writable)) { (needs_receipt <- true):void }
                 };
                 InlineProductField { val type <- value_type; } -> {
                     if (type.kind == record_type()) { (mixed_aggregate <- true):void }
