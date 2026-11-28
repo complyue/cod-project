@@ -414,6 +414,8 @@ struct Expression {
         ? children[index].get() : nullptr;
   }
   std::span<const std::unique_ptr<Expression>> initializer_items() const {
+    if (kind == Kind::make_exception && initializer_block && exception_placement != ExceptionPlacement::default_region)
+      return std::span(children).first(children.size() - 1);
     if (kind != Kind::make_object && (kind != Kind::make_region || !annotation)) return children;
     const auto *block = construction_initializer();
     if (!block) return {};
@@ -443,6 +445,12 @@ struct Expression {
 using Expr = std::unique_ptr<Expression>;
 
 struct HereSignature;
+inline const Expression &ungrouped_expression(const Expression &expr) {
+  const auto *operand = &expr;
+  while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
+  return *operand;
+}
+
 struct Parameter {
   enum class CallerPlace { none, writable, initializing, reference_slot };
   std::string name;

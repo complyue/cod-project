@@ -6,12 +6,6 @@
 
 namespace cod::language {
 
-inline const Expression &ungrouped_expression(const Expression &expr) {
-  const auto *operand = &expr;
-  while (operand->kind == Expression::Kind::grouped) operand = operand->children.front().get();
-  return *operand;
-}
-
 inline bool matches_native_handle(const Type &type, const Type &marker) {
   return type.kind == Type::native_handle && type.identity == marker.identity;
 }

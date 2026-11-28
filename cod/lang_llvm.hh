@@ -129,7 +129,6 @@ class LLVMEmission {
   bool owns_lexical_allocations_ = false;
   std::map<size_t, llvm::AllocaInst *> exception_holder_slots_;
   std::vector<llvm::AllocaInst *> exception_parameter_slots_;
-  llvm::AllocaInst *exception_result_destination_ = nullptr;
   ResultMode result_mode_ = ResultMode::value;
   std::vector<llvm::Value *> here_arguments_;
   llvm::Value *here_destination_ = nullptr;
@@ -738,10 +737,9 @@ class LLVMEmission {
     b_.CreateBr(control_->exit);
   }
   template <typename Initialize>
-  void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields,
-                                   std::string_view spelling = {}) {
+  llvm::Value *initialize_exception_region(const Location &at, size_t category, const Initialize &emit_fields,
+                                           llvm::Value *capacity) {
     auto *layout = product_layout(*program_->exception_types.at(category).schema);
-    auto *capacity = integer(COD_LANG_EXCEPTION_REGION_DEFAULT);
     auto *size = llvm::ConstantExpr::getSizeOf(layout);
     auto *alignment = integer(module_.getDataLayout().getABITypeAlign(layout).value());
     auto *allocate = block("exception.allocate"), *insufficient = block("exception.capacity");
@@ -762,19 +760,42 @@ class LLVMEmission {
     control_ = &construction;
     emit_fields(layout, exception_payload(owner));
     control_ = construction.parent;
-    if (reachable()) {
-      const auto origin = spelling.empty() ? site(at) : site(at, NamedExceptionSite{category, spelling});
-      save_abrupt(outcome(empty_scalar(), integer(category), integer(origin), null_pointer(),
-                          nullptr, nullptr, nullptr, nullptr, owner));
-      b_.CreateBr(control_->exit);
-    }
+    auto *completed = reachable() ? block("exception.initialized") : nullptr;
+    if (completed) b_.CreateBr(completed);
     b_.SetInsertPoint(construction.exit);
     release_failure_owner(b_, owner);
     b_.CreateBr(control_->exit);
+    if (!completed) return nullptr;
+    b_.SetInsertPoint(completed);
+    return owner;
   }
-  llvm::Value *construct_exception(const Expression &expr, size_t category) {
-    raise_constructed_exception(expr.at, category, [&](llvm::StructType *layout, llvm::Value *payload) {
-      for (const auto &initializer : expr.children) {
+  template <typename Initialize>
+  void raise_constructed_exception(const Location &at, size_t category, const Initialize &emit_fields) {
+    auto *owner = initialize_exception_region(at, category, emit_fields, integer(COD_LANG_EXCEPTION_REGION_DEFAULT));
+    if (!reachable()) return;
+    save_abrupt(outcome(empty_scalar(), integer(category), integer(site(at)), null_pointer(),
+                        nullptr, nullptr, nullptr, nullptr, owner));
+    b_.CreateBr(control_->exit);
+  }
+  struct OwnedException {
+    llvm::Value *value{}, *owner{};
+  };
+  OwnedException construct_braced_exception(const Expression &expr, size_t category) {
+    llvm::Value *capacity = integer(COD_LANG_EXCEPTION_REGION_DEFAULT);
+    if (expr.exception_placement == Expression::ExceptionPlacement::capacity) {
+      const auto &input = *expr.children.back();
+      auto *prepared = emit_expression(input);
+      if (!reachable()) return {};
+      capacity = convert(prepared, checked_.at(&input).type, Type::uint64);
+      constexpr auto limit = std::uint64_t{std::numeric_limits<std::ptrdiff_t>::max()};
+      auto *valid = block("exception.capacity.valid"), *invalid = block("exception.capacity.invalid");
+      b_.CreateCondBr(b_.CreateICmpULE(capacity, integer(limit)), valid, invalid);
+      b_.SetInsertPoint(invalid);
+      fail_path(ExceptionCategory::invalid_capacity, expr.at);
+      b_.SetInsertPoint(valid);
+    }
+    auto *owner = initialize_exception_region(expr.at, category, [&](llvm::StructType *layout, llvm::Value *payload) {
+      for (const auto &initializer : expr.initializer_items()) {
         const auto &input = *initializer->children.front();
         auto *value = emit_expression(input);
         if (!reachable()) break;
@@ -782,8 +803,11 @@ class LLVMEmission {
         assign_place(b_.CreateStructGEP(layout, payload, index), convert_result(*initializer, input, value),
                      *initializer, &CheckedOperation::operand_type);
       }
-    }, expr.annotation->name);
-    return nullptr;
+    }, capacity);
+    if (!reachable()) return {};
+    const auto origin = site(expr.at, NamedExceptionSite{category, expr.annotation->name});
+    auto *value = b_.CreateInsertValue(llvm::Constant::getNullValue(exception_), integer(category), 0);
+    return {b_.CreateInsertValue(value, integer(origin), 1), owner};
   }
   void require(llvm::Value *condition, const Location &at, const std::string &message) {
     auto *good = block("numeric.valid"), *bad = block("numeric.failure");
@@ -1072,7 +1096,7 @@ class LLVMEmission {
   }
   llvm::Value *native_call(const Expression &expr, llvm::Function *target, size_t method, std::vector<llvm::Value *> prepared,
                            std::vector<llvm::Value *> *here_sites = nullptr,
-                           std::span<llvm::Value *const> current_owners = {}) {
+                           std::span<llvm::Value *const> current_owners = {}, llvm::Value *exception_result = nullptr) {
     const auto &layout = call_layouts_.at(method);
     if (prepared.size() != layout.operands) throw std::logic_error("unchecked native call arity");
     llvm::AllocaInst *destination = nullptr;
@@ -1110,8 +1134,8 @@ class LLVMEmission {
     }
     if (layout.native_borrow_destination) prepared.push_back(slot(native_handle_pair(), "native.call.result"));
     if (layout.exception_result) {
-      if (!exception_result_destination_) throw std::logic_error("owning call without its checked exception result destination");
-      prepared.push_back(exception_result_destination_);
+      if (!exception_result) throw std::logic_error("owning call without its checked exception result destination");
+      prepared.push_back(exception_result);
     }
     if (invocation.here_arguments.size() != layout.here_formals)
       throw std::logic_error("call disagrees with its here parameter roles");
@@ -1996,40 +2020,50 @@ class LLVMEmission {
     b_.CreateStore(owner, storage_.at(holder));
     return empty_scalar();
   }
-  llvm::Value *receive_exception_holder(const Expression &binding) {
-    using Reception = std::pair<size_t, std::optional<size_t>>;
-    const auto &fact = checked_.at(&binding);
-    const auto plan = fact.type == Type::never ? std::optional<Reception>{}
-        : std::optional{Reception{fact.place.value(), fact.exception_owner}};
-    {
-      const std::optional<Reception> selected = plan;
-      if (!selected) return emit_expression(*binding.children.front());
-      const auto [place, source] = *selected;
-      auto [destination, inserted] = exception_holder_slots_.try_emplace(place, nullptr);
-      if (inserted) destination->second = slot(b_.getPtrTy(), "exception.owner");
-      llvm::Value *value;
-      if (source) {
-        value = load(storage_.at(*source));
-        auto *owner = take_pointer(b_, exception_holder_slots_.at(*source));
-        b_.CreateStore(owner, destination->second);
-      } else {
-        b_.CreateStore(null_pointer(), destination->second);
-        auto *previous = std::exchange(exception_result_destination_, destination->second);
-        value = emit_expression(*binding.children.front());
-        exception_result_destination_ = previous;
-        if (!reachable()) return static_cast<llvm::Value *>(nullptr);
-      }
-      b_.CreateStore(value, storage_.at(place));
-      const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
-        return entry.exception_release && entry.action == &binding;
-      });
-      if (action == scope_->actions.end()) throw std::logic_error("uncollected exception holder release");
-      auto *record = action->activation_record;
-      prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
-      b_.CreateStore(destination->second, b_.CreateStructGEP(action->layout, record, 1));
-      b_.CreateStore(record, scope_->head);
-      return static_cast<llvm::Value *>(empty_scalar());
+  OwnedException emit_exception_source(const Expression &written) {
+    const auto &expr = ungrouped_expression(written);
+    const auto &fact = checked_.at(&expr);
+    if (fact.exception_owner) {
+      const auto source = *fact.exception_owner;
+      return {load(storage_.at(source)), take_pointer(b_, exception_holder_slots_.at(source))};
     }
+    if (!fact.owns_exception_result) throw std::logic_error("unchecked owning exception source");
+    if (expr.kind == Expression::Kind::make_exception) {
+      auto prepared = construct_braced_exception(expr, fact.type.identity);
+      if (reachable()) prepared.value = pack(prepared.value, fact.type);
+      return prepared;
+    }
+    const auto arguments = prepare_arguments(expr);
+    if (!reachable()) return {};
+    const auto method = program_->instances.at(*fact.callee).method;
+    auto *owner = slot(b_.getPtrTy(), "exception.call.result");
+    const auto result = native_call(expr, methods_.at(method), method, arguments, nullptr, {}, owner);
+    auto *value = propagate(result);
+    return {value, load(owner)};
+  }
+  llvm::Value *discard_exception(const Expression &expr) {
+    const auto prepared = emit_exception_source(expr);
+    if (!reachable()) return nullptr;
+    release_failure_owner(b_, prepared.owner);
+    return empty_scalar();
+  }
+  llvm::Value *receive_exception_holder(const Expression &binding) {
+    const auto prepared = emit_exception_source(*binding.children.front());
+    if (!reachable()) return nullptr;
+    const auto place = checked_.at(&binding).place.value();
+    auto *holder = slot(b_.getPtrTy(), "exception.owner");
+    exception_holder_slots_.emplace(place, holder);
+    b_.CreateStore(prepared.value, storage_.at(place));
+    b_.CreateStore(prepared.owner, holder);
+    const auto action = std::ranges::find_if(scope_->actions, [&](const auto &entry) {
+      return entry.exception_release && entry.action == &binding;
+    });
+    if (action == scope_->actions.end()) throw std::logic_error("uncollected exception holder release");
+    auto *record = action->activation_record;
+    prepare_cleanup_record(*scope_, record, std::distance(scope_->actions.begin(), action));
+    b_.CreateStore(holder, b_.CreateStructGEP(action->layout, record, 1));
+    b_.CreateStore(record, scope_->head);
+    return empty_scalar();
   }
   llvm::Value *install_native_effect(const Expression &effect) {
     using Plan = std::pair<size_t, CheckedOperation::NativeAcquisition>;
@@ -2781,8 +2815,10 @@ class LLVMEmission {
         }
       }
       {
-        const Projection source = result_source(checked_.at(&operand));
-        emit_expression(operand, source);
+        const auto &input = ungrouped_expression(operand);
+        const auto &result = checked_.at(&input);
+        if (result.owns_exception_result) return discard_exception(input);
+        emit_expression(input, result_source(result));
         return reachable() ? empty_scalar() : nullptr;
       }
     }
@@ -2873,6 +2909,7 @@ class LLVMEmission {
       [[fallthrough]];
     }
     case K::value_call: case K::call: case K::behave: case K::perform: case K::pipeline: case K::processor_composition: {
+      if (fact.owns_exception_result) return discard_exception(expr);
       if (fact.symbol && program_->symbols[*fact.symbol].live_scope)
         return invoke_scoped_effect(expr, *fact.symbol);
       if (fact.builtin == BuiltinOperation::text_size || fact.builtin == BuiltinOperation::text_byte ||
@@ -3066,12 +3103,12 @@ class LLVMEmission {
     }
     case K::return_value: case K::break_value: case K::continue_value: {
       llvm::Value *value = empty_scalar();
-      if (fact.exception_owner) {
+      if (fact.owns_exception_result) {
         if (!completion_.result_owner) throw std::logic_error("exception return without a pending owner slot");
-        const auto holder = *fact.exception_owner;
-        auto *owner = take_pointer(b_, exception_holder_slots_.at(holder));
-        b_.CreateStore(owner, completion_.result_owner);
-        value = load(storage_.at(holder));
+        const auto prepared = emit_exception_source(*expr.children.front());
+        if (!reachable()) return nullptr;
+        b_.CreateStore(prepared.owner, completion_.result_owner);
+        value = prepared.value;
       } else if (fact.operand_type.kind == Type::region && fact.operand_type.owned) {
         const auto *make = expr.children.front().get();
         while (make->kind == K::grouped) make = make->children.front().get();
@@ -3198,6 +3235,8 @@ class LLVMEmission {
       return acquire_region(expr);
     case K::exception_binding:
       return receive_exception_holder(expr);
+    case K::make_exception:
+      return discard_exception(expr);
     case K::native_handle_binding: {
       if (expr.binding == "=") {
         auto *source = emit_expression(*expr.children.front(), Projection::target);
@@ -3295,7 +3334,11 @@ class LLVMEmission {
       return discard ? empty_scalar() : load_place(address, expr);
     }
     case K::raise: {
-      if (expr.annotation) return construct_exception(expr, fact.operand_type.identity);
+      if (expr.annotation) {
+        const auto prepared = construct_braced_exception(expr, fact.operand_type.identity);
+        if (reachable()) raise_exception(prepared.value, prepared.owner);
+        return nullptr;
+      }
       llvm::Value *value = fact.place ? load(storage_.at(*fact.place)) : emit_expression(*expr.children[0]);
       if (!reachable()) return nullptr;
       value = unpack(value, program_->exception_type(0));
@@ -3466,7 +3509,6 @@ class LLVMEmission {
     region_controllers_ = frame.region_controllers.empty() ? nullptr : &frame.region_controllers;
     exception_holder_slots_.clear();
     exception_parameter_slots_.clear();
-    exception_result_destination_ = nullptr;
     result_mode_ = ResultMode::value;
     allocation_capabilities_.clear();
     lexical_allocations_ = nullptr;

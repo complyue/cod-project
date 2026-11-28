@@ -424,7 +424,9 @@ class BodyExtraction {
            !method.regional_initializer && method.operation.empty() &&
            method.type_parameters.empty() && source.captures.empty() &&
            (method.result.type ?
-            borrowed_result || method.result.owns_region() || (method.result.mode == ResultMode::value &&
+            borrowed_result || method.result.owns_region() ||
+            (method.result.owns_exception() && nominal_exception(*method.result.type)) ||
+            (method.result.mode == ResultMode::value &&
               (declarations_.declarations_.bits_payload(*method.result.type) || method.result.type == Type::void_type)) :
             allow_omitted_void && !source.c_linkage && method.here.empty() && method.result.mode == ResultMode::value),
            at, "seed needs a fixed ordinary callable body");
@@ -509,6 +511,7 @@ class BodyExtraction {
     SymbolBindings supplied_;
     struct ActiveCatch { size_t place, protected_depth; };
     std::vector<ActiveCatch> catches_;
+    std::set<size_t> exception_holders_;
     size_t protected_depth_ = 0;
     bool in_iteration_ = false;
     bool in_deferred_block_ = false;
@@ -661,6 +664,7 @@ class BodyExtraction {
       result.type = source.type;
       result.binding = source.binding;
       result.place = source.place;
+      result.exception_owner = source.exception_owner;
       result.owners = source.owners;
       result.targets = source.targets;
       result.read_only = source.read_only;
@@ -761,6 +765,7 @@ class BodyExtraction {
       expect(!parameter.not_init_ref && !parameter.variadic && !parameter.automatic_conversion &&
              (!parameter.selects_caller_place() || slot) &&
              (mode == ArgumentMode::value ? scalar_type(type) :
+                (mode == ArgumentMode::owning_exception && nominal_exception(type)) ||
                 native_handle || product_loan || (method_ && method_->product_initializer) ||
                 ordinary_loan(parameter, mode, type)),
              parameter.at, "seed needs an admitted scalar, array, product, text or native handle formal");
@@ -770,6 +775,7 @@ class BodyExtraction {
       const auto local = declare(parameter.at, parameter.name, type, value,
                                  parameter.read_only || (mode == ArgumentMode::value && parameter.fixed_binding),
                                  parameter.fixed_binding || native_handle || type == Type::string, owner, true, capture);
+      if (mode == ArgumentMode::owning_exception) exception_holders_.insert(*local.place);
       body_.instance.bindings.at(local.binding).nullable =
           mode == ArgumentMode::borrowed_ptr || (method_ && method_->product_initializer);
       frame.inputs.push_back({*local.place, mode, parameter.selects_caller_place()});
@@ -878,6 +884,7 @@ class BodyExtraction {
       const auto *local = std::get_if<Local>(binding);
       expect(local, expr.at, "seed needs a direct lexical procedure call");
       auto op = place_operand(body_.instance, *local);
+      if (op.place && exception_holders_.contains(*op.place)) op.exception_owner = op.place;
       if (op.type.kind == Type::native_handle && op.type.owned) {
         op.type.owned = false;
         op.reborrows_native_owner = true;
@@ -1407,8 +1414,11 @@ class BodyExtraction {
       }
     }
 
-    std::optional<CheckedOperation> call(const Expression &expr, bool region_receiver = false,
-                                         bool intermediate_statement = false) {
+    enum class CallSite { value, statement, region_binding, exception_source };
+
+    std::optional<CheckedOperation> call(const Expression &expr, CallSite site = CallSite::value) {
+      const bool region_receiver = site == CallSite::region_binding;
+      const bool intermediate_statement = site == CallSite::statement;
       CheckedOperation op;
       if (expr.text == "[]<-" && expr.children.size() == 3) {
         confirm_intrinsic(expr, expr.text);
@@ -1452,6 +1462,11 @@ class BodyExtraction {
       const auto &definition = extraction_.declarations_.method(method_id);
       expect(definition.result.owns_region() == region_receiver, expr.at,
              "an owning region result requires a direct owning declaration");
+      if (definition.result.owns_exception()) {
+        expect((site == CallSite::exception_source || intermediate_statement) && !definition.source->c_linkage &&
+               selected->methods.size() == 1 && nominal_exception(*definition.result.type),
+               expr.at, "seed needs a direct nominal owning exception result with an owning or discarded destination");
+      }
       if (form_.kind == Form::Kind::function && definition.source->kind != Form::Kind::function)
         fail(expr.at, "a function cannot invoke a procedure");
       const bool allow_omitted_void = intermediate_statement && body_.instance.result.type &&
@@ -1505,7 +1520,11 @@ class BodyExtraction {
                  !parameter.selects_caller_place() && (mode == ArgumentMode::borrowed_read || mode == ArgumentMode::borrowed_ref),
                  source.at, "seed needs a direct ordinary borrow of the current reference symbol");
         if (mode == ArgumentMode::value) takes_value(arg, formal, source.at);
-        else {
+        else if (mode == ArgumentMode::owning_exception) {
+          expect(selected->methods.size() == 1 && ungrouped_expression(source).kind == Kind::name &&
+                 arg.exception_owner && arg.type == formal && (parameter.read_only || !arg.read_only),
+                 source.at, "seed needs a named exception holder of the formal's exact type and access");
+        } else {
           const auto &at = source.at;
           const auto &roles = target.input_owners();
           const auto role = std::ranges::find(roles, parameter.owner, &OwnerParameter::name);
@@ -1555,6 +1574,8 @@ class BodyExtraction {
       body_.calls.push_back(std::move(edge));
       op.type = *target.result.type;
       op.callee = callee;
+      op.owns_exception_result = target.result.owns_exception();
+      if (op.owns_exception_result) op.read_only = target.result.read_only;
       if (target.result.borrowed()) {
         const auto &roles = target.input_owners();
         const auto role = std::ranges::find(roles, target.result.owner, &OwnerParameter::name);
@@ -1725,7 +1746,7 @@ class BodyExtraction {
              (initializer.kind == Kind::call && !initializer.intrinsic),
              initializer.at, "seed needs a fresh region or a direct owning region factory");
       const auto &value = remember(initializer, initializer.kind == Kind::make_region
-          ? fresh_region(initializer) : call(initializer, true).value());
+          ? fresh_region(initializer) : call(initializer, CallSite::region_binding).value());
       if (value.type != owned_region_type(schema))
         fail(initializer.at, "constructed region does not match the declared root schema");
 
@@ -2195,7 +2216,8 @@ class BodyExtraction {
                "catch needs a resolved exception category");
         if (nominal_exception(type->second)) scalar_exception_schema(declarations(), type->second, handler->at);
         scopes_.emplace_back();
-        const auto local = declare(handler->at, handler->text, type->second, true, true, true, 0);
+        const auto local = declare(handler->at, handler->text, type->second, true, handler->read_only, true, 0);
+        exception_holders_.insert(*local.place);
         CheckedOperation receipt;
         receipt.type = type->second;
         receipt.place = local.place;
@@ -2207,8 +2229,6 @@ class BodyExtraction {
       }
       supplied_ = incoming;
       if (finalizer) {
-        expect(!body_.instance.result.owns_exception(), finalizer->at,
-               "seed needs a supported owning exception result");
         // Cleanup has its own completion. Its normal value is discarded,
         // and a terminating finalizer leaves no local continuation.
         const auto &cleanup = extract(*finalizer);
@@ -2220,17 +2240,25 @@ class BodyExtraction {
       return op;
     }
 
-    CheckedOperation braced_throw(const Expression &expr) {
+    CheckedOperation braced_exception(const Expression &expr) {
       expect(expr.annotation && expr.annotation->kind == Type::named,
-             expr.at, "seed needs a braced throw with a named exception");
+             expr.at, "seed needs a braced construction with a named exception");
       const auto type = names().types.find(expr.annotation->name);
-      expect(type != names().types.end(), expr.at, "throw needs a resolved exception category");
+      expect(type != names().types.end(), expr.at, "construction needs a resolved exception category");
+      const bool yields_owner = expr.kind == Kind::make_exception;
+      using Placement = Expression::ExceptionPlacement;
+      if (yields_owner) {
+        expect(expr.initializer_block && expr.exception_placement != Placement::cause,
+               expr.at, "seed needs braced exception construction without a cause");
+        if (expr.exception_placement == Placement::capacity)
+          takes_value(extract(*expr.children.back()), Type::uint64, expr.children.back()->at);
+      }
       const auto &schema = scalar_exception_schema(declarations(), type->second, expr.at);
       const auto fields = product_initializers(schema, expr);
       expect(std::set(fields.begin(), fields.end()).size() == schema.fields.size(), expr.at,
              "seed needs a complete exception payload");
       for (size_t i = 0; i < fields.size(); ++i) {
-        const auto &item = *expr.children[i];
+        const auto &item = *expr.initializer_items()[i];
         const auto &field = schema.fields[fields[i]];
         const auto &value = operand(item, 0);
         if (value.type != Type::never) takes_value(value, field.type, item.at);
@@ -2242,13 +2270,26 @@ class BodyExtraction {
         if (value.type == Type::never) break;
       }
       CheckedOperation op;
-      op.type = Type::never;
+      op.type = yields_owner ? type->second : Type::never;
+      op.owns_exception_result = yields_owner;
       op.operand_type = type->second;
       return op;
     }
 
     CheckedOperation throw_exception(const Expression &expr) {
-      if (expr.annotation || !expr.children.empty()) return braced_throw(expr);
+      if (expr.annotation) return braced_exception(expr);
+      if (!expr.children.empty()) {
+        const auto &source = ungrouped_expression(*expr.children.front());
+        expect(expr.children.size() == 1 && source.kind == Kind::name, source.at,
+               "seed needs a direct named exception holder to throw");
+        const auto &value = extract(source);
+        expect(value.exception_owner && nominal_exception(value.type), source.at,
+               "seed needs a nominal exception holder to throw");
+        CheckedOperation op;
+        op.type = Type::never;
+        op.place = op.exception_owner = value.exception_owner;
+        return op;
+      }
       if (catches_.empty()) fail(expr.at, "bare throw requires an active catch");
       const auto &caught = catches_.back();
       // The existing transfer takes the holder from this catch. A nested
@@ -2262,17 +2303,44 @@ class BodyExtraction {
     }
 
     CheckedOperation exception_field(const Expression &expr, const CheckedOperation &base) {
-      expect(expr.children.front()->kind == Kind::name && base.place &&
-             std::ranges::find(catches_, *base.place, &ActiveCatch::place) != catches_.end() &&
-             nominal_exception(base.type), expr.at, "seed needs a field read from the active nominal catch");
+      expect(expr.children.front()->kind == Kind::name && base.exception_owner && nominal_exception(base.type),
+             expr.at, "seed needs a field read from a named nominal exception holder");
       const auto &schema = scalar_exception_schema(declarations(), base.type, expr.at);
       const auto index = product_field(schema, expr);
       CheckedOperation op;
       op.type = schema.fields[index].type;
       op.operand_type = base.type;
       op.product_field = index;
-      op.exception_owner = base.place;
+      op.exception_owner = base.exception_owner;
       op.read_only = true;
+      return op;
+    }
+
+    const CheckedOperation &exception_source(const Expression &expr) {
+      const auto &source = ungrouped_expression(expr);
+      require_executable_expression(source);
+      if (source.kind == Kind::call) return remember(source, call(source, CallSite::exception_source).value());
+      if (source.kind == Kind::make_exception) return remember(source, braced_exception(source));
+      expect(source.kind == Kind::name, source.at, "seed needs a direct exception holder or factory");
+      return extract(source);
+    }
+
+    void prepare_exception_source(const Expression &expr, const Type &type, bool read_only) {
+      const auto &source = exception_source(expr);
+      expect((source.owns_exception_result || source.exception_owner) && source.type == type &&
+             nominal_exception(type) && (read_only || !source.read_only), expr.at,
+             "seed needs an owning exception of the destination's exact nominal type and access");
+    }
+
+    CheckedOperation bind_exception(const Expression &expr) {
+      expect(!in_iteration_ && !in_deferred_block_ && !supplied_body(), expr.at,
+             "seed needs a non-repeated owning exception declaration in the callable scope");
+      const auto type = resolve_annotation(*expr.annotation, expr.at);
+      CheckedOperation op;
+      prepare_exception_source(*expr.children.front(), type, expr.read_only);
+      const auto local = declare(expr.at, expr.text, type, true, expr.read_only, true, 0);
+      op.place = local.place;
+      exception_holders_.insert(*local.place);
       return op;
     }
 
@@ -2319,7 +2387,9 @@ class BodyExtraction {
       const auto type = resolve_annotation(*expr.annotation, expr.at);
       if (type.kind == Type::enumeration) return assert_enum(expr, type);
       if (type == Type::void_type) {
-        operand(expr, 0);
+        const auto &value = ungrouped_expression(*expr.children.front());
+        if (value.kind == Kind::call || value.kind == Kind::make_exception) exception_source(value);
+        else operand(expr, 0);
         return {};
       }
       expect(type == Type::c_string, expr.at,
@@ -2510,9 +2580,14 @@ class BodyExtraction {
       case Kind::symbol: case Kind::touch: return scalar_symbol(expr, selected_symbol(expr));
       case Kind::callable: return define_local(expr);
       case Kind::unary: case Kind::binary: return eager(expr);
-      case Kind::call: return call(expr).value();
+      case Kind::call:
+        return call(expr, discard_iteration_result ? CallSite::exception_source : CallSite::value).value();
+      case Kind::make_exception:
+        expect(discard_iteration_result, expr.at, "seed needs an owning or discarded exception destination");
+        return braced_exception(expr);
       case Kind::make_object: return make(expr);
       case Kind::region_binding: return bind_region(expr);
+      case Kind::exception_binding: return bind_exception(expr);
       case Kind::native_handle_binding: return bind_native_handle(expr);
       case Kind::make_borrowed_handle: return attach_native_handle(expr);
       case Kind::effect: return expr.definition ? install_handler(expr) : install_effect(expr);
@@ -2535,8 +2610,6 @@ class BodyExtraction {
         expect(method_ && body_.instance.result.type && !in_iteration_ && !in_deferred_block_ &&
                expr.children.size() == 1 && expr.children.front()->kind == Kind::block,
                expr.at, "seed needs a non-repeated plain deferred block in a declared callable");
-        expect(!body_.instance.result.owns_exception(), expr.at,
-               "seed needs a supported owning exception result");
         const auto &body = *expr.children.front();
         auto supplied = supplied_;
         in_deferred_block_ = true;
@@ -2565,12 +2638,14 @@ class BodyExtraction {
           }
           if (intermediate && item.kind == Kind::call) {
             require_executable_expression(item);
-            auto call_operation = call(item, false, true);
+            auto call_operation = call(item, CallSite::statement);
             // Later statements consume no result from a pending call.
             if (!call_operation) continue;
             op.type = remember(item, std::move(*call_operation)).type;
           } else {
-            const auto &result = extract(item, discard_iteration_result || (intermediate && guarded_full_scope(item)),
+            const bool discard = discard_iteration_result || (intermediate &&
+                (guarded_full_scope(item) || ungrouped_expression(item).kind == Kind::make_exception));
+            const auto &result = extract(item, discard,
                                          intermediate && item.braced_if_with_empty_alternative());
             op.type = result.type;
             if (!intermediate && text_type(result.type) && result.view && result.read_only && result.owners.size() == 1) {
@@ -2644,6 +2719,14 @@ class BodyExtraction {
       case Kind::return_tail: {
         expect(!form_.supplied_group, expr.at, "seed needs a local callable result at the tail");
         const auto &result = body_.instance.result;
+        const auto &value = ungrouped_expression(*expr.children.front());
+        if (result.owns_exception() && (value.kind == Kind::call || value.kind == Kind::name || value.kind == Kind::make_exception)) {
+          prepare_exception_source(value, *result.type, result.read_only);
+          op.owns_exception_result = true;
+          op.operand_type = *result.type;
+          op.type = Type::never;
+          return op;
+        }
         if (!body_.outline && result.type && result.mode == ResultMode::value &&
             implicit_scope_call(*expr.children.front())) {
           prepare_scope_value(*expr.children.front(), *result.type);
@@ -2688,7 +2771,11 @@ class BodyExtraction {
           prepare_scope_value(*expr.children.front(), *body_.instance.result.type);
           return value_return(*body_.instance.result.type);
         }
-        if (body_.instance.result.owns_region()) {
+        if (body_.instance.result.owns_exception()) {
+          expect(expr.children.size() == 1, expr.at, "return needs an owning exception result");
+          prepare_exception_source(*expr.children.front(), *body_.instance.result.type, body_.instance.result.read_only);
+          op.owns_exception_result = true;
+        } else if (body_.instance.result.owns_region()) {
           expect(expr.children.size() == 1, expr.at, "return needs a fresh region");
           const auto &value = ungrouped_expression(*expr.children.front());
           expect(value.kind == Kind::make_region, value.at, "seed needs a direct fresh region return");
