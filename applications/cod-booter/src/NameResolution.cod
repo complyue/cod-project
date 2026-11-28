@@ -23,14 +23,15 @@ using "./ParserStorage.cod" ExprPayload {
 using "./ParserStorage.cod" NodeLink { NoLink, LinkTo };
 using "./ParserStorage.cod" SequenceSyntax {
     OtherSequenceSyntax, InvalidSequence, ModuleSequence, BlockSequence, ArgumentSequence, HereReceiverSequence, FormalSequence, ClauseSequence, EnumSequence, SumSequence,
-    CaseReceiverSequence, TypeSequence,
+    CaseReceiverSequence, TypeSequence, ProcedureTypeSequence,
 };
 using "./ParserStorage.cod" { inspect_reference_case, CasePatternSyntax { NamedCaseMember, ConstructorCaseTarget, ReferenceCaseTarget } };
 using "./ParserStorage.cod" DeclarationSyntax {
     OtherDeclaration, InvalidDeclaration, NominalRecord, NativeRecord, HandleTypeDeclaration, ArrayTypeDeclaration,
     EnumTypeDeclaration, AbstractTypeDeclaration, TypeSynonymDeclaration, NativeSymbolDeclaration, ReferenceSymbolDeclaration,
-    LocalPublication, NominalSum, GenericProductDeclaration,
+    LocalPublication, NominalSum, GenericProductDeclaration, ProcedureSymbolDeclaration,
 };
+using "./ParserStorage.cod" { ProcedureTypeSites, inspect_procedure_type, module_item_publication };
 using "./ParserStorage.cod" CallableSyntax {
     InvalidCallable, OtherCallableSyntax, ModuleCallable, ModuleCallablePromise, LexicalCallable,
         CProvider, CEntry,
@@ -281,6 +282,7 @@ export func applied_product_binding() -> UInt8 { return 42u8; }
 export func generic_constructor_binding() -> UInt8 { return 43u8; }
 export func generic_method_binding() -> UInt8 { return 44u8; }
 export func closed_product_binding() -> UInt8 { return 45u8; }
+func procedure_symbol_binding() -> UInt8 { return 46u8; }
 export func product_application_binding(kind:UInt8) -> bool {
     return kind == applied_product_binding() || kind == closed_product_binding()
 }
@@ -303,7 +305,8 @@ export func text_type(kind:UInt8) -> bool {
 }
 
 func symbol_binding(kind:UInt8) -> bool {
-    return kind == symbolic_selection() || kind == native_symbol_binding() || kind == reference_symbol_binding();
+    return kind == symbolic_selection() || kind == native_symbol_binding() || kind == reference_symbol_binding() ||
+        kind == procedure_symbol_binding();
 }
 
 export func native_scalar(kind:UInt8) -> bool {
@@ -327,6 +330,8 @@ export func duplicate_binding() -> UInt8 { return 5u8; }
 export func unproved_module_binding() -> UInt8 { return 6u8; }
 export func unproved_guard_binding() -> UInt8 { return 7u8; }
 export func invalid_module_tree() -> UInt8 { return 8u8; }
+export func unsupported_procedure_symbol() -> UInt8 { return 123u8; }
+export func unsupported_scoped_procedure() -> UInt8 { return 124u8; }
 export func name_storage_exhausted() -> UInt8 { return 9u8; }
 export func nested_defer_in_drain() -> UInt8 { return 10u8; }
 export func declaration_in_deferred_group() -> UInt8 { return 11u8; }
@@ -661,8 +666,12 @@ func resolve_value(source:const SourceBytes in S, nodes:const ExprNodes in N, bi
             reject_name(state, name, dynamic_symbol_in_function());
             return;
         } else {};
+        if (kind == procedure_symbol_binding()) {
+            reject_name(state, name, unsupported_scoped_procedure());
+            return
+        };
     } else {
-        if (kind == native_symbol_binding() || kind == reference_symbol_binding()) {
+        if (kind == native_symbol_binding() || kind == reference_symbol_binding() || kind == procedure_symbol_binding()) {
             reject_name(state, name, expected_symbol_binding());
             return;
         };
@@ -2638,6 +2647,10 @@ func register_module(source:const SourceBytes in S, nodes:const ExprNodes in N, 
         };
         kind <- declaration_binding_kind(declaration_shape);
         if (kind != 0u8) {
+            if (kind == procedure_symbol_binding() && module_item_publication(nodes, state.syntax_used, item)) {
+                reject_name(state, form, unsupported_procedure_symbol());
+                return
+            };
             declare_module_name(source, nodes, bindings, work, state, declaration.name, form, kind);
             if (kind == generic_product_binding()) {
                 remember(bindings, form, form, kind)
@@ -2667,6 +2680,7 @@ func declaration_binding_kind(shape:DeclarationSyntax) -> UInt8 {
         (TypeSynonymDeclaration) -> { type_synonym_binding() };
         (NativeSymbolDeclaration) -> { native_symbol_binding() };
         (ReferenceSymbolDeclaration) -> { reference_symbol_binding() };
+        ProcedureSymbolDeclaration -> procedure_symbol_binding();
         (_) -> { 0u8 };
     };
 }
@@ -3958,7 +3972,49 @@ func resolve_publication(source:const SourceBytes in S, nodes:const ExprNodes in
         reject_name(state, name, expected_symbol_binding());
         return;
     };
+    if (bindings[found].kind == procedure_symbol_binding()) {
+        reject_name(state, name, unsupported_procedure_symbol());
+        return
+    };
     remember(bindings, name, bindings[found].declaration, bindings[found].kind);
+}
+
+func resolve_procedure_type_name(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:const NameWork in W, state:NameState in R,
+    annotation:UInt64, type:ProcedureTypeSites in P) -> void
+    where {const owner S, const owner N, owner B, const owner W, owner R, owner P} {
+    if (!inspect_procedure_type(nodes, state.syntax_revision, state.syntax_used, annotation, type)) {
+        reject_name(state, annotation, invalid_module_tree());
+        return
+    };
+    resolve_type_name(source, nodes, bindings, work, state, type.name);
+}
+
+func resolve_procedure_symbol_signature(source:const SourceBytes in S, nodes:const ExprNodes in N,
+    bindings:NameBindings in B, work:const NameWork in W, state:NameState in R, tail:UInt64, result:UInt64)
+    -> void where {const owner S, const owner N, owner B, const owner W, owner R} {
+    ref first = make UInt64 { no_node() };
+    if (!first_sequence_entry(nodes, state.syntax_revision, state.syntax_used, tail, ProcedureTypeSequence, first)) {
+        reject_name(state, tail, invalid_module_tree());
+        return
+    };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    ref type = make ProcedureTypeSites { name <- no_node(); mode <- ValueFormal; readonly <- false };
+    val parameter <- first;
+    for (unused in 0u64 .. state.syntax_used) {
+        if (parameter == no_node()) {
+            resolve_procedure_type_name(source, nodes, bindings, work, state, result, type);
+            return
+        };
+        if (inspect_sequence_entry(nodes, state.syntax_revision, state.syntax_used, parameter, entry) != ProcedureTypeSequence) {
+            reject_name(state, parameter, invalid_module_tree());
+            return
+        };
+        resolve_procedure_type_name(source, nodes, bindings, work, state, entry.item, type);
+        if (state.diagnostic != 0u8) return;
+        (parameter <- work[parameter].next):void
+    };
+    reject_name(state, tail, invalid_module_tree());
 }
 
 func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in N, bindings:NameBindings in B,
@@ -4018,6 +4074,10 @@ func resolve_module_form(source:const SourceBytes in S, nodes:const ExprNodes in
     if (shape == NativeSymbolDeclaration || shape == ReferenceSymbolDeclaration) {
         resolve_type_name(source, nodes, bindings, work, state, declaration.value_type);
         return;
+    };
+    if (shape == ProcedureSymbolDeclaration) {
+        resolve_procedure_symbol_signature(source, nodes, bindings, work, state, declaration.entries, declaration.value_type);
+        return
     };
     if (shape == LocalPublication) {
         resolve_publication(source, nodes, bindings, work, state, declaration.name);

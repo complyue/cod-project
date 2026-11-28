@@ -1744,6 +1744,7 @@ export enum DeclarationSyntax:UInt8 {
     NamedRegion,
     ValueSymbolDeclaration,
     GenericProductDeclaration,
+    ProcedureSymbolDeclaration,
 }
 
 export data DeclarationSites {
@@ -1755,6 +1756,21 @@ export data DeclarationSites {
     owner_name:UInt64,
     readonly:bool,
     nullable:bool,
+}
+
+func read_procedure_symbol_declaration(nodes:const ExprNodes in N, revision:UInt64, at:UInt64,
+    name:const NodeId in I, inputs:const NodeLink in L, result:const NodeId in O, arrow:UInt64,
+    sites:DeclarationSites in S) -> DeclarationSyntax
+    where {const owner N, const owner I, const owner L, const owner O, owner S} {
+    ref contract = make ProcedureSymbolSites {
+        symbol <- no_node(); input_tail <- no_node(); result_type <- no_node(); arrow <- no_node()
+    };
+    if (!read_procedure_symbol(nodes, revision, at, name, inputs, result, arrow, contract))
+        return InvalidDeclaration:DeclarationSyntax;
+    sites.name <- contract.symbol;
+    sites.entries <- contract.input_tail;
+    sites.value_type <- contract.result_type;
+    return ProcedureSymbolDeclaration:DeclarationSyntax
 }
 
 export data TypeApplicationSites { name:UInt64, arguments:UInt64, }
@@ -1996,6 +2012,9 @@ export func inspect_declaration(nodes:const ExprNodes in N, revision:UInt64, use
                     sites.name <- name.index;
                     sites.value_type <- annotation.index;
                     ValueSymbolDeclaration:DeclarationSyntax
+                };
+                (ProcedureSymbol { val name <-, val input_types <-, val result_type <-, val arrow <-, }) -> {
+                    read_procedure_symbol_declaration(nodes, revision, at, name, input_types, result_type, arrow, sites)
                 };
                 (ReferenceSymbol { val name <- name, val target <- target, val owner_name <- owner_name,
                                    val readonly <- readonly, val nullable <- nullable, }) -> {

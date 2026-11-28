@@ -433,7 +433,9 @@ The two source commands check the imported exception payload schema helpers. The
 
 Both source commands check `InitializationChecking.cod`, including its imports of command extraction, control completion, readiness completion and diagnostic selection. The checked workspace signatures include writable Boolean array loans. The control helpers can return the `UInt64` index of a discovered state or flag record while updating their initialized workspace. Their readonly flag-history loan can use the same actual owner as the writable state tables. The extractor still rejects a demanded tag with no reset before the later phases consume the linked operation graph.
 
-The two source commands reach the symbolic procedure declaration `@followDependency` in `ModuleGraph.cod` and report it as outside the current profile. The provider command preserves the previous C source and header on that rejection.
+The declaration and provider commands bind private fixed-arity symbolic procedure signatures with by-value builtin scalar inputs and a scalar or `void` result. They resolve each input in written order and check the result using the completed type bindings. A declaration introduces a symbol identity and generates no C interface. Publishing the symbol, installing or invoking a procedure handler, and accepting a procedure symbol in the object command remain outside this profile.
+
+The isolated `@followDependency` declaration from `ModuleGraph.cod` passes both source commands. The complete module still stops at `visit_open_revision`'s fixed reference formal `const used:UInt64 in G`.
 
 ### Readonly queries
 

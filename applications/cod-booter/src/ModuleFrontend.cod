@@ -21,7 +21,7 @@ using "./ParserStorage.cod" DeclarationSyntax {
 using "./ParserStorage.cod" CallableSyntax { ModuleCallable, CProvider, CEntry };
 using "./ParserStorage.cod" SignatureSyntax { BorrowedResultClause, PointerResultClause, OtherSignatureSyntax };
 using "./ParserStorage.cod" BindingSyntax { TypedBinding };
-using "./ParserStorage.cod" SequenceSyntax { ModuleSequence };
+using "./ParserStorage.cod" SequenceSyntax { ModuleSequence, ProcedureTypeSequence };
 using "./ParserStorage.cod" ModuleSelectionMode {
     UseResource, ReexportResource
 };
@@ -29,17 +29,18 @@ using "./ParserStorage.cod" ResourceNature { OrdinaryResource };
 using "./ParserStorage.cod" SelectionSyntax { SelectionReady };
 using "./ParserStorage.cod" LocalMode { ExceptionLocal, ReferenceLocal, ValueLocal };
 using "./ParserStorage.cod" FormalMode {
-    ExplicitValueFormal, ReferenceFormal, PointerFormal, ExceptionFormal,
+    ValueFormal, ExplicitValueFormal, ReferenceFormal, PointerFormal, ExceptionFormal,
     HandleFormal, RetainedHandleFormal, ReferenceSlotFormal, IdentityOnlyRefFormal,
 };
 using "./CaseSchemas.cod" { ConstructorCaseFacts, ConstructorCaseFact { NoConstructorCase } }
 using "./ParserStorage.cod" {
     ExprNodes, no_node, ConstructionSites, inspect_construction, syntax_first, syntax_past,
-    first_module_item, SequenceEntry, inspect_sequence_entry, module_item_publication,
+    first_module_item, first_sequence_entry, SequenceEntry, inspect_sequence_entry, module_item_publication,
     DeclarationSites, inspect_declaration, CallableSites, inspect_callable, ModuleSelectionSites, inspect_module_selection,
     SignatureSites, inspect_signature, BindingSites, inspect_binding, inspect_type_annotation, CatchSites, inspect_catch_binding, is_here_formal,
     NamedThrowSites, inspect_named_throw, TypeApplicationSites, inspect_type_application, type_list_count,
     case_pattern, CasePatternSyntax { ReferenceCaseTarget },
+    ProcedureSymbolSites, inspect_procedure_symbol, ProcedureTypeSites, inspect_procedure_type,
 };
 using "./SourceStorage.cod" SourceBytes;
 using "./DeclarationDemand.cod" { DeclarationDemand, DeclarationDemands };
@@ -49,7 +50,8 @@ using "./ModuleExports.cod" {
     SelectedExports, exception_type_export, error_root_identity, CheckedSelections, generic_product_export,
 };
 using "./NameResolution.cod" {
-    protected_symbol_name,
+    protected_symbol_name, unsupported_procedure_symbol, unsupported_scoped_procedure,
+    builtin_void, native_scalar, expected_type_binding,
     NameBindings, NameWork, NameResolutionResult, unsupported_module_declaration,
     unsupported_ordinary_construction, unsupported_generic_type, unsupported_pointer_result,
     unsupported_generic_constructor, unsupported_generic_export, generic_product_binding, product_application_binding,
@@ -99,8 +101,6 @@ func unsupported_nominal_sum() -> UInt8 { return 114u8; }
 func unsupported_named_region() -> UInt8 { return 116u8; }
 func unsupported_const_local() -> UInt8 { return 117u8; }
 func unsupported_constructor_case() -> UInt8 { return 120u8; }
-func unsupported_procedure_symbol() -> UInt8 { return 123u8; }
-func unsupported_scoped_procedure() -> UInt8 { return 124u8; }
 func unsupported_reference_group() -> UInt8 { return 134u8; }
 func unsupported_identity_reference() -> UInt8 { return 135u8; }
 func unsupported_reserved_initializer() -> UInt8 { return 136u8; }
@@ -275,7 +275,7 @@ func unsupported_source_form(nodes:const ExprNodes in N, revision:UInt64, used:U
                 (ConstructorCasePattern) -> {
                     if (emit_object) { unsupported_constructor_case() } else { 0u8 }
                 };
-                (ProcedureSymbol) -> { unsupported_procedure_symbol() };
+                (ProcedureSymbol) -> { if (emit_object) { unsupported_procedure_symbol() } else { 0u8 } };
                 ValueSymbol -> unsupported_module_declaration();
                 (ScopedProcedureDefinition) -> { unsupported_scoped_procedure() };
                 (ProcedureActivation) -> { unsupported_scoped_procedure() };
@@ -378,6 +378,51 @@ func generic_application_diagnostic(nodes:const ExprNodes in N, bindings:const N
     return if (arity == type_list_count(nodes, sites.arguments)) { 0u8 } else { wrong_type_argument_count() }
 }
 
+func check_procedure_type(nodes:const ExprNodes in N, bindings:const NameBindings in B,
+    revision:UInt64, used:UInt64, annotation:UInt64, output:bool, result:ModuleBindingResult in R)
+    -> bool where {const owner N, const owner B, owner R} {
+    ref type = make ProcedureTypeSites { name <- no_node(); mode <- ValueFormal; readonly <- false };
+    if (!inspect_procedure_type(nodes, revision, used, annotation, type)) {
+        binding_diagnostic(nodes, result, module_binding_failed(), invalid_module_tree(), annotation);
+        return false
+    };
+    val kind <- bindings[type.name].kind;
+    if (type.mode == ValueFormal || type.mode == ExplicitValueFormal) {
+        if (native_scalar(kind)) return true;
+        if (kind == builtin_void()) {
+            if (output && type.mode == ValueFormal && !type.readonly) return true;
+            binding_diagnostic(nodes, result, module_binding_failed(), expected_type_binding(), type.name);
+            return false
+        }
+    };
+    binding_diagnostic(nodes, result, module_binding_failed(), unsupported_procedure_symbol(), annotation);
+    return false
+}
+
+# The type-name rows and ordered syntax links are complete before profile checking.
+func check_procedure_symbol_signature(nodes:const ExprNodes in N, bindings:const NameBindings in B,
+    work:const NameWork in W, contract:const ProcedureSymbolSites in P,
+    revision:UInt64, used:UInt64, result:ModuleBindingResult in R)
+    -> bool where {const owner N, const owner B, const owner W, const owner P, owner R} {
+    ref first = make UInt64 { no_node() };
+    ref entry = make SequenceEntry { previous <- no_node(); item <- no_node() };
+    if (first_sequence_entry(nodes, revision, used, contract.input_tail, ProcedureTypeSequence, first)) {
+        val parameter <- first;
+        for (unused in 0u64 .. used) {
+            if (parameter == no_node())
+                return check_procedure_type(nodes, bindings, revision, used, contract.result_type, true, result);
+            if (inspect_sequence_entry(nodes, revision, used, parameter, entry) != ProcedureTypeSequence) {
+                binding_diagnostic(nodes, result, module_binding_failed(), invalid_module_tree(), parameter);
+                return false
+            };
+            if (!check_procedure_type(nodes, bindings, revision, used, entry.item, false, result)) return false;
+            (parameter <- work[parameter].next):void
+        }
+    };
+    binding_diagnostic(nodes, result, module_binding_failed(), invalid_module_tree(), contract.symbol);
+    return false
+}
+
 export func bind_selected_module_recovering(source:const SourceBytes in S, nodes:const ExprNodes in N,
                                  selections:const CheckedSelections in C, selected_used:UInt64,
                                  selected:SelectedExports in X, bindings:NameBindings in Y,
@@ -409,6 +454,9 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
         name <- no_node(); annotation <- no_node(); target_type <- no_node(); owner_name <- no_node(); readonly <- false;
     };
     ref caught = make CatchSites { name <- no_node(); annotation <- no_node(); readonly <- false; };
+    ref procedure_contract = make ProcedureSymbolSites {
+        symbol <- no_node(); input_tail <- no_node(); result_type <- no_node(); arrow <- no_node()
+    };
     val marker <- no_node();
     val text <- false;
     val product <- false;
@@ -418,6 +466,9 @@ export func bind_selected_module_recovering(source:const SourceBytes in S, nodes
     val generic_diagnostic <- 0u8;
     val scope <- no_node();
     for (at in 0u64 .. used) {
+        if (inspect_procedure_symbol(nodes, revision, used, at, procedure_contract) &&
+            !check_procedure_symbol_signature(nodes, bindings, work, procedure_contract, revision, used, result))
+            return false;
         if (product_application_binding(bindings[at].kind)) {
             generic_diagnostic <- generic_application_diagnostic(nodes, bindings, selected, interfaces, interface_used,
                 revision, used, at);
