@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-11-28 — Declare inter-worker ownership handoffs on the swarm provider
+
+<a id="h-swarm-provider-handoff-20261128"></a>
+**H-SWARM-PROVIDER-HANDOFF-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) directs that resource ownership handoff be modeled as a swarm provider operation with an explicit, formal means of declaring supported and unsupported transfers. [D-32 r7→8](design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations) continues [same-swarm authority and ordinary-region-only chans](https://github.com/complyue/cod-project/blob/9bf0bf9ebfa2c3bd1ea1b85648594ce036918cfd/design/ActorChannels.md#resource-pools-and-ownership-handoff) under P-789/P-711. The declaration table, policy for missing or conflicting rows and worker-selection example are proposals. Source grammar, evidence for runtime placement and ownership on failure remain open. Registry r1390→1391.
+
+## 2026-11-28 — Define swarm implementations and restrict chan payloads to ordinary regions
+
+<a id="h-swarm-implementations-and-chan-payloads-20261128"></a>
+**H-SWARM-IMPLEMENTATIONS-AND-CHAN-PAYLOADS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) identifies thread pools, local process pools and dynamically recruited cross-machine process pools as swarm implementations. The user requires every region passed through a chan to be ordinary and excludes swarm regions. [D-32 r6→7](design/ActorChannels.md#resource-pools-and-ownership-handoff) supersedes the [r6 same-pool chan example and open cross-machine placement question](https://github.com/complyue/cod-project/blob/7e247e4fe1d94b312ad5fa560f9912675bb2e1c1/design/ActorChannels.md#resource-pools-and-ownership-handoff). P-789 continues same-swarm ownership at launch. P-711 continues swarm-independent whole-packet delivery and validation. D-10 r285→286 and D-12 r39→40 retain fresh initial TLS and one dedicated thread per active go process on its worker. D-22 r79→80 retains local construction without a swarm. Charter §1 principle 8, the project rules and the design topics use the corrected boundaries. Source spellings, recruitment protocol and send-fault ownership remain open. Registry r1389→1390.
+
 ## 2026-11-28 — Distinguish local regions, pool-bound handoff and packet delivery
 
 <a id="h-region-locality-and-packet-chans-20261128"></a>

@@ -24,7 +24,7 @@ The `cod` command (Compile on Demand) compiles for the host and runs with `go ru
 
 ## Concurrency design target
 
-CoD prioritizes engineering efficiency for a heavy task that draws on multiple OS threads, OS processes or cluster machines. Every production `go` launch requires a target resource pool. The local execution uses one dedicated OS thread with fresh dynamic bindings. Ownership can pass only within the same pool, at launch or over a typed chan. Traditional coroutines are outside the language design. Booter source does not use the Actor model, and the seed does not implement it. [Charter principles](design/RegionalSemanticPlatformCharter.md#核心原则) · [Go process launch](design/SymbolicDynamicScope.md#go-process-launch)
+CoD prioritizes engineering efficiency for a heavy task that draws on multiple OS threads, OS processes or cluster machines. Every production `go` launch requires a target resource pool. A swarm can use threads, local processes or dynamically recruited processes across machines. Each active go process has a dedicated OS thread and fresh initial TLS. Swarm regions can pass at launch within their swarm. Typed chans carry only ordinary regions, including when both ends are in the same swarm. Traditional coroutines are outside the language design. Booter source does not use the Actor model, and the seed does not implement it. [Charter principles](design/RegionalSemanticPlatformCharter.md#核心原则) · [Go process launch](design/SymbolicDynamicScope.md#go-process-launch)
 
 ## Before coding
 

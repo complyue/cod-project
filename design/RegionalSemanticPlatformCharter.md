@@ -7,7 +7,7 @@
 
 **设计依据。** [D-00](DesignAuthorityRegistry.md#d-00) 记录原纲领的确认范围。2026-11-25 新增的第七项核心原则由[项目用户确认](../CHANGELOG.md#h-default-run-and-optimized-build-20261125)。生产编译器的 `cfe` 入口及其交叉构建职责见[入口决定](../CHANGELOG.md#h-cfe-output-directory-20261126)和[目标平台决定](../CHANGELOG.md#h-production-cross-build-20261126)。适用范围和验收见[编译模式约定](../applications/cod-booter/docs/CompilerPipeline.md#default-execution-and-optimized-builds)。
 
-2026-11-28 的[重任务与 go process 决定](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128)确立第八项核心原则。[资源池决定](../CHANGELOG.md#h-go-resource-pools-20261128)进一步明确了启动目标与所有权边界。Actor 的专属线程与独立动态上下文沿用已有设计。
+2026-11-28 的[重任务与 go process 决定](../CHANGELOG.md#h-heavy-tasks-and-go-process-20261128)确立第八项核心原则。[资源池决定](../CHANGELOG.md#h-go-resource-pools-20261128)进一步明确了启动目标与所有权边界。资源池的实现与 chan 的区域约束见[swarm 与 chan 决定](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128)。Actor 的专属线程与独立动态上下文沿用已有设计。
 
 ## 1. 项目定位
 
@@ -27,7 +27,7 @@
 6. **编辑也是受检查的语义操作。** 人类和智能体使用同一套身份、版本、校验和发布规则，不靠任意改写持久内存来维护程序。
 7. **默认快速编译并直接运行。** 命令行上的 `cod`（Compile on Demand）默认采用 `go run` 语义，为当前宿主编译并直接执行程序，不向用户交付可执行文件。seed 的默认自举任务则生成并保留 `cod-booter` 可执行文件。seed、booter 和首版 `e-wrks/cod` 以 Go 式快速编译和中等运行时性能的机器码为目标。`e-wrks/cod` 的优化编译入口 `cfe`（Compile for Ever）负责本机构建与交叉构建，以高质量机器码为目标，默认保存可执行文件，供用户稍后运行。`cfe` 在首版实验，2.0 正式提供。
 
-8. **CoD 以重任务的工程效率为优化目标。** 一项重任务可以调动多个 OS 线程、多个 OS 进程，乃至集群中的多台物理机器。比如把同一个索引构建任务分片，由各节点处理再汇总。轻任务的资源比例相反：一个 OS 线程就足以服务几十、几百乃至上千项独立任务，例如 Web API 转发。CoD 的并发模型面向前者；语言不提供传统协程机制。每次 `go` 启动都要有目标资源池。池内可以移交资源所有权；跨池不得移交。本机执行采用专属 OS 线程，跨进程或跨机器的工作通过显式通信来组织。[启动与 effects 边界](SymbolicDynamicScope.md#go-process-launch)
+8. **CoD 以重任务的工程效率为优化目标。** 一项重任务可以调动多个 OS 线程、多个 OS 进程，乃至集群中的多台物理机器。比如把同一个索引构建任务分片，由各节点处理再汇总。轻任务的资源比例相反：一个 OS 线程就足以服务几十、几百乃至上千项独立任务，例如 Web API 转发。CoD 的并发模型面向前者；语言不提供传统协程机制。每次 `go` 启动都要有目标资源池。swarm 可以采用线程池、本机进程池，也可以动态招募跨机 worker 进程。swarm region 的所有权只在同一 swarm 内移交。类型化 `chan` 只传递普通 region，两端可以属于不同的 swarm。每个运行中的 go process 使用专属 OS 线程和独立的动态上下文。[启动与 effects 边界](SymbolicDynamicScope.md#go-process-launch)
 
 ## 2. 统一表示与职责分层
 

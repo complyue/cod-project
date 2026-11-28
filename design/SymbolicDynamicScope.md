@@ -1,12 +1,14 @@
 # CoD symbols, dynamic scope and callable kinds
 
-Design revision: 285 · Recorded: 2026-11-28 · Phase: language/application co-design.
+Design revision: 286 · Recorded: 2026-11-28 · Phase: language/application co-design.
 
 ## Design authority
 
+At r286 the [swarm implementation and chan decision](../CHANGELOG.md#h-swarm-implementations-and-chan-payloads-20261128) separates the selected worker’s placement from the launch effects boundary. P-788 continues fresh initial TLS on each entry. P-789 requires an ordinary region for a chan send even within one swarm.
+
 At r285 the [region and packet decision](../CHANGELOG.md#h-region-locality-and-packet-chans-20261128) scopes the same-pool check to pool-bound resource handoff. P-788 retains the required target on every launch. D-32/P-711 covers swarm-independent packet delivery over a typed chan.
 
-At r284 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires a target resource pool for both r283 entry forms and applies the same ownership boundary to launch and owning chan messages. D-10-ACTOR-CHAN/P-788 continues the entry and effects rules. D-32-RESOURCE-POOLS/P-789 records the pool and placement questions.
+At r284 the [resource pool direction](../CHANGELOG.md#h-go-resource-pools-20261128) requires a target resource pool for both r283 entry forms. D-10-ACTOR-CHAN/P-788 continues the entry and effects rules. D-32-RESOURCE-POOLS/P-789 records the pool and placement questions.
 
 At r283 the [named launch decision](../CHANGELOG.md#h-go-owning-parameters-20261128) admits owning region and handle parameters on the named entry procedure in a `go` launch. D-10-ACTOR-CHAN/P-788 continues the r282 effects boundary and applies the existing consuming-call rules to successful child entry.
 
@@ -2400,7 +2402,7 @@ An on-demand compilation that changes the program's symbol set needs a compatibl
 
 ## Actor concurrency direction
 
-**CoD concurrency uses Actors communicating through statically typed chans.** A *go process* is the independently running execution started by `go`. It gives an Actor its own stack, TLS and one dedicated OS thread for its lifetime. Several can run within one OS process. Launch is local. Distributing parts of a heavy task to other OS processes or physical machines uses explicit placement and communication. The [charter](RegionalSemanticPlatformCharter.md#核心原则) excludes a traditional coroutine mechanism.
+**CoD concurrency uses Actors communicating through statically typed chans.** A *go process* is the independently running execution started by `go`. It gives an Actor its own stack, TLS and one dedicated OS thread for its lifetime. Several can run within one OS process. The target swarm can place work on a thread, in a local worker process or in a recruited process on another machine. The [charter](RegionalSemanticPlatformCharter.md#核心原则) excludes a traditional coroutine mechanism.
 
 [H-ACTOR-CHAN-BOUNDARY-20261123](../CHANGELOG.md#h-actor-chan-boundary-20261123) supplies this scoped contract under [D-10-ACTOR-CHAN](DesignAuthorityRegistry.md#d-10-actor-chan), continuing H-151/H-152's Actor direction and message type parameter. A chan has a statically checked message type. Its sending and receiving ends can be modeled independently. Their formal producer/transformer/consumer types will follow support for higher-kinded type synonyms. The concrete signatures, receiver count and ownership of endpoint references remain open. An unchecked wire representation or native address is not a well-typed CoD message.
 
@@ -2414,11 +2416,11 @@ A candidate regional message carries a user-defined root, inputs and a typed des
 
 ### Go process launch
 
-`go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. Every launch requires an actual target resource pool, including a niladic entry with no owners to hand off. An expression with no target pool cannot launch a go process. The established local execution uses one dedicated OS thread and fresh initial TLS. Pool worker reuse and subprocess placement are design questions. [Go language specification](https://go.dev/ref/spec#Go_statements)
+`go` starts concurrent execution and the launcher can continue independently. Go's `go` statement is the inspiration for this reading. Every launch requires an actual target resource pool, including a niladic entry with no owners to hand off. An expression with no target pool cannot launch a go process. The established local execution uses one dedicated OS thread and fresh initial TLS. A thread or process reused by the swarm starts each entry with fresh initial TLS. Worker selection and recruitment protocols remain open. [Go language specification](https://go.dev/ref/spec#Go_statements)
 
 Both entry forms can transfer ownership to the child. The examples use the **proposed spelling** `go on(p)` to select the target pool. The pool can be passed to a library as an argument. In the named form, *entry procedure* names the role of the ordinary procedure where the child starts. Its declared signature specifies which arguments it consumes. For example, assume `r` owns a `Partition` region and `h` owns an `IndexOutput` handle whose provider permits use and release on the child thread.
 
-The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. The same rule applies if a typed chan carries that pool-bound resource. Packet regions travel through a typed chan independently of the endpoints’ pools. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
+The following handoffs assume that the launcher, its owned resources and the receiving child satisfy the same-pool requirement for `p`. If `p` is a distinct pool from the source of an owner, the ownership handoff is invalid. Only an ordinary region may travel through a typed chan. A swarm region is ineligible even if both endpoints are in its swarm. An ordinary packet can travel between distinct swarms. The final target-selection syntax remains open. [Resource pools and ownership handoff](ActorChannels.md#resource-pools-and-ownership-handoff)
 
 ```cod
 proc build_index(own region part:Partition, own handle sink:IndexOutput, id:UInt64) -> void {
@@ -2438,9 +2440,9 @@ go on(p) { own region r <-, own handle h <- } {{
 }}
 ```
 
-In either form the child takes over the existing release responsibility for each transferred resource. On normal or exceptional exit it releases each resource it still owns exactly once. Each native handle retains its provider’s cross-thread use and release contract. In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
+In either form the child takes over the existing release responsibility for each transferred resource. On normal or exceptional exit it releases each resource it still owns exactly once. Each native handle must support use and release at the selected worker’s placement. In the block form the double braces belong to the child entry. The launch does not retain the launcher's lexical frame as a synchronous `here` callback.
 
-**The effects boundary is at `go`.** The new thread starts with its initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
+**The effects boundary is at `go`.** The worker thread starts this invocation with initial CoD TLS. None of the launcher's active dynamically scoped bindings cross, including installed proc handlers and their replay bindings. A symbol has the same identity on either side. A child use needs a binding valid in the child. Giving the child a region or handle makes that owner available by name and does not install an effect binding for it.
 
 For example, let the launcher install `@amount` with value 7, read it into a scalar `n`, and execute `go on(p) build_index(r, h, n)`. The entry receives 7 as its third argument. The launcher's installation cannot satisfy a read of `@amount` in the child. If the child independently installs 29, its read sees 29 and the launcher's read still sees 7 while its own installation is active. The same boundary applies to the block form.
 
