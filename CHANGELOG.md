@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-28 — Keep physical worker identity private to the swarm provider
+
+<a id="h-provider-private-workers-20261128"></a>
+**H-PROVIDER-PRIVATE-WORKERS-20261128.** The [project user](codex://threads/01a1d9b7-6ec6-7331-b986-bbc05a8feb50) directs the swarm design away from CoD-addressable worker objects and handles. [D-32 r8→9](design/ActorChannels.md#resource-pools-and-ownership-handoff) continues the [r8 provider declaration and joint-placement requirement](https://github.com/complyue/cod-project/blob/aff3ee0de4c09c55b797d4bdb26503567f22910d/design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations) under P-789. A launch targets the swarm. Physical recruitment, placement and replacement belong to its provider. Job identities and typed endpoints retain their separate application roles. Admission and handoff failure policy remain open. Registry r1391→1392.
+
 ## 2026-11-28 — Declare inter-worker ownership handoffs on the swarm provider
 
 <a id="h-swarm-provider-handoff-20261128"></a>
