@@ -279,7 +279,7 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 
 跨网络的 Actor 通过 UDP 上的 AKCP 流传输任意长度的 packet region。packet region 始终不关联资源池，经类型化 `chan` 传递，两端可以属于不同的池。流中允许有缺口，传输以整个 region 为单位原子地成功或失败。接收 Actor 只能看到完整且通过校验的 region。传输支持队列和背压，容量恢复时可以继续推进。[区域传输](../design/ActorChannels.md#regional-transport-over-akcp)
 
-普通 region 在 `make` 时无须指定 swarm，可作为本地工作空间，也可在满足消息契约时作为 packet 经 `chan` 发送。swarm region 的所有权可随启动参数在同一 swarm 内移交。即使同一 swarm 的两个线程共享地址空间，向 `chan` 发送 swarm region 也不合法。同机进程可用共享内存支持启动时的移交。待检验的选择包括成员身份怎样进入静态签名、如何验证动态招募的 worker，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
+普通 region 在 `make` 时无须指定 swarm，可作为本地工作空间，也可在满足消息契约时作为 packet 经 `chan` 发送。主进程持有 `own swarm s <- ...`。child go process 持有借用的 `swarm s`。声明 `own region within(s) r <- ...` 后，region 的绑定可在同一 swarm 内随启动参数移交。始终由原来那个仍然 live 的 `s` 释放 `r`。即使同一 swarm 的两个线程共享地址空间，向 `chan` 发送 swarm region 也不合法。同机进程可用共享内存支持启动时的移交。待检验的选择包括成员身份怎样进入静态签名、如何验证动态招募的 worker，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
 CoD 程序指定目标 swarm 和入口。物理 worker 由 provider 内部管理，没有可指称的 CoD worker 对象或 handle。provider 通过公开接口声明可移交的资源与放置条件。拟用 `swarm type XXX` 上的 transfer method specialization 表达这项能力。找不到匹配 handler 的 owning 实参在编译期报错。同一类型的两个 swarm 可以复用方法，但各自拥有独立身份。一次启动携带的所有 owning 实参必须能交给同一个子 go process。应用用任务标识和类型化回复端点关联结果。provider 的准入与故障处理仍待设计。[provider 声明示例](../design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations)
 
@@ -292,4 +292,4 @@ CoD 程序指定目标 swarm 和入口。物理 worker 由 provider 内部管理
 | 两端各有哪些权限，如何建连、关闭和传递回信端点？ | worker 只持发送端，collector 只持接收端。检验不相容的消息、方向和多接收者情形。 |
 | 系统故障如何报告，消息 owner 在哪里？ | 比较入队前、入队后和交接后发生故障。区分已消耗的发送者名字、接收端丢弃与应用结算。 |
 
-若 OS 线程创建失败，需确定错误如何报告，以及谁仍负责释放移交列表中的 region 与 handle。Actor 退出、模块生命周期及外部表示的兼容性也有待细化。[讨论清单与验收场景](../design/ActorChannels.md#decisions-to-discuss-next)
+若启动失败，需确定错误如何报告，以及如何处理尚未完成的移交。释放 swarm region 时仍须由原来的 swarm 执行，handle 则按其自身契约清理。Actor 退出、模块生命周期及外部表示的兼容性也有待细化。[讨论清单与验收场景](../design/ActorChannels.md#decisions-to-discuss-next)

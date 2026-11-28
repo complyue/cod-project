@@ -1,8 +1,10 @@
 # Actors and typed chan: network and cluster research
 
-Design and research revision: 11 · 2026-11-28
+Design and research revision: 12 · 2026-11-28
 
 ## Design authority
+
+At r12 the [main-process swarm ownership decision](../CHANGELOG.md#h-main-owns-swarm-20261128) assigns the owning swarm binding to the main process and a borrow to each child. D-32-RESOURCE-POOLS/P-789 requires the actual live swarm to release every region declared within it. P-788 continues entry transfer and fresh TLS.
 
 At r11 the [transfer dispatch decision](../CHANGELOG.md#h-swarm-transfer-specialization-20261128) confirms static rejection when a provider has no matching transfer handler. The intended declaration is a method specialization dispatched on `swarm type XXX`. P-789 continues actual-swarm ownership and joint placement for the launch. The table below illustrates method selection.
 
@@ -90,7 +92,7 @@ A **swarm** is a first-class resource pool. Every `go` launch names a target swa
 
 CoD source names the swarm and the entry to run. A **worker** is a provider-private means of executing that entry. CoD exposes no worker object, handle or selectable worker identity. A provider may identify its own threads or processes for scheduling, recovery and tracing. A worker identifier in a trace carries no CoD authority to direct a later launch or transfer an owner.
 
-A producer can hand a **swarm region** to a go process through an owning entry parameter or the block’s owner list. The producer, resource and launched go process must satisfy the same actual swarm requirement. The provider must place the entry where it can use and release that resource. For example, shared memory can support a handoff to a local subprocess. Recruiting a remote worker into the same swarm establishes membership, but the local mapping cannot give that worker access to the bytes.
+A producer can hand a **swarm region** to a go process through an owning entry parameter or the block’s owner list. The producer, resource and launched go process must satisfy the same actual swarm requirement. The provider must place the entry where it can use the region and preserve release by the same live swarm. For example, shared memory can support a handoff to a local subprocess. Recruiting a remote worker into the same swarm establishes membership, but the local mapping cannot give that worker access to the bytes.
 
 A typed `chan` carries **only ordinary regions**. A packet is an ordinary region used as a message and has no swarm association. The same rule applies when sender and receiver belong to the very same swarm, even when both are threads in one OS process. A swarm region is ineligible as a chan payload, including inside a wrapper.
 
@@ -110,7 +112,7 @@ The proposed declaration form is a transfer method specialized on the swarm type
 
 Two separately created swarms of type `LocalProcessPool` can use the same transfer method. A region belonging to the first still cannot be handed to an entry launched in the second. Dispatch identifies an operation. The owning launch also requires the same actual swarm.
 
-Swarm identity, the resource’s actual owner, and the provider declaration answer separate questions. Two regions with the same roots can have different backing. A matching structural schema proves no shared-memory capability. For a nominal resource, an equally shaped type from another declaration cannot satisfy a specialization naming the original type. On success the selected operation makes the resource usable at the recipient with one release responsibility. Its declaration alone cannot guarantee successful execution. [Nominal resource identity](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) · [Owning inputs at launch](SymbolicDynamicScope.md#go-process-launch)
+Swarm identity, the resource’s actual owner, and the provider declaration answer separate questions. Two regions with the same roots can have different backing. A matching structural schema proves no shared-memory capability. For a nominal resource, an equally shaped type from another declaration cannot satisfy a specialization naming the original type. On success the selected operation makes the resource usable at the recipient. For a swarm region, the same live swarm remains responsible for release. Its declaration alone cannot guarantee successful execution. [Nominal resource identity](GraphGrainedMemoryManagement.md#opaque-nominal-region-types) · [Owning inputs at launch](SymbolicDynamicScope.md#go-process-launch)
 
 Consider `go on(s) build_index(part, sink, id)`, using the candidate launch spelling. The entry consumes a swarm region and a handle. The compiler checks the provider’s declared support for both owning arguments under one compatible placement. Two individually supported transfers that require incompatible placements cannot justify this launch. On admission the provider must arrange for the same child to receive both owners and maintain the placement conditions through handoff. Recruitment or replacement can change how the provider meets that obligation without changing the call or its types. Temporary lack of capacity for a supported launch is a separate issue. The wait or failure policy and the ownership outcome after an admitted handoff fails remain open.
 
@@ -120,32 +122,36 @@ Consider `go on(s) build_index(part, sink, id)`, using the candidate launch spel
 | --- | --- | --- |
 | Ordinary region for local work | Omit the swarm at construction. | A procedure in the same go process can borrow, consume or return it. Running inside a swarm gives a local region no implicit association. |
 | Ordinary region sent as a packet | Independent of swarms. | If it satisfies the chan’s message contract, the endpoint can send it within or across swarms. Reception publishes the whole validated packet. |
-| Swarm region | Belongs to one actual swarm. | An owning launch can hand it off within that swarm when its transport permits. Every chan rejects it. |
+| Swarm region | The actual swarm in `own region within(s) r <- ...` releases it. | An owning launch can hand the binding to a child borrowing that swarm. Every chan rejects it. |
 
 For example, a coordinator in one pool sends a packet of keys to a worker in another. The worker interprets those keys using its own index. The packet needs no pool identity at construction, in transit or on receipt. The coordinator keeps its swarm index region. Sending that index itself would fail even to another worker in the coordinator’s swarm. The [packet contract](DomainLanguageDesign.md#dl-04) governs the delivered representation and its compatibility. The [chan contract](#confirmed-basis) governs send feedback.
 
-**Candidate source spelling.** `swarm s` would declare a first-class resource pool with its own identity. On region construction, `within s` would create a swarm region associated with that identity. Compare these constructions in a producer already participating in `s`:
+### Swarm ownership and region release
+
+The main process holds the owning swarm binding. Each child go process holds a borrowed `swarm s`. This applies equally to a child in the main OS process and one executing on a recruited host. The child cannot take an `own swarm` binding or destroy the borrowed swarm.
 
 ```cod
-own region scratch <- make region Partition(bytes -> capacity) { count <- 0 }
-own region batch <- make region within s Partition(bytes -> capacity) { count <- 0 }
-go on(s) build_index(batch)
+own swarm s <- ...
+own region within(s) r <- ...
 ```
 
-Assume `Partition` has a single `count` root and the entry procedure takes its owner. Passing `scratch` at the same launch would fail, even if both threads use the same address space. Passing `batch` to a distinct pool would also fail. In the candidate grammar, `within` qualifies the creation of the whole region. A nested `make Node in r { ... }` still places an object in its actual owner `r`. Both `swarm` and `within` can be contextual. The declaration and construction spellings, who may originate a region for a newly declared pool, and the source form for creating a packet remain open.
+Here the right-hand sides stand for acquisitions. The declaration of `r` ties its release to that **actual instance** of `s`. A consuming launch can hand the region binding to a child in `s`. On every path that releases `r`, including cleanup after a handoff, the still-live `s` releases it exactly once. A second swarm of the same type cannot substitute. References into the data graph remain bounded by the actual region. This gives structured ownership tracking from the main process through the swarm and region to the graph. [Regional ownership and graph lifetime](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph)
+
+Compare a local declaration, `own region scratch <- ...`. Its ordinary lifetime remains local and it needs no swarm for release. With the candidate launch spelling `go on(s) build_index(r)`, the target must match the swarm in `within(s)`. Passing local scratch as a swarm region is invalid. The main process must keep `s` live through outstanding child borrows and all releases owed by `s`. How shutdown coordinates these obligations, and the precise constructor and launch spellings, remain open.
 
 ### A shared-memory region between local processes
 
 A swarm region with the structural `Partition` schema can use OS shared memory for an owning launch to another process on the same host. Consider one partition whose nodes refer to each other through region-relative locators. The parent finishes its writes. A local subprocess maps the same backing at its own base address and resolves the same root, shared nodes and cycles. The handoff must publish the completed writes before the receiving entry can use the region. Linux shared-memory objects and descriptor passing provide the native pieces for such a transport. The source root schema can stay the same. [Regional graph representation](GraphGrainedMemoryManagement.md#one-region-per-pointer-graph) · [POSIX shared memory on Linux](https://man7.org/linux/man-pages/man7/shm_overview.7.html) · [Unix-domain descriptor passing](https://man7.org/linux/man-pages/man7/unix.7.html)
 
-Mapping the bytes and transferring the owner are separate events. After successful handoff the sender’s consumed binding and stale sender access paths cannot use the region, even if its native mapping still exists. The receiving side has the release obligation. A process-local native pointer or handle requires its own valid transport before the receiving program can use it. The mapping alone does not synchronize concurrent mutation or establish a lifetime for an external resource.
+Mapping the bytes and transferring the owner are separate events. After successful handoff the sender’s consumed binding and stale sender access paths cannot use the region, even if its native mapping still exists. At release, the actual live swarm discharges the region’s release obligation regardless of which process mapped its bytes. A process-local native pointer or handle requires its own valid transport before the receiving program can use it. The mapping alone does not synchronize concurrent mutation or establish a lifetime for an external resource.
 
 **Design probes**
 
 | Case | Outcome or decision |
 | --- | --- |
 | Niladic entry or owner-free block with no target pool | Reject the launch. Having no ownership to check does not supply a target. |
-| Owning launch within one swarm, different OS processes on one host, relocatable shared backing | Permit the swarm-region handoff. Verify a different mapping base, preserved graph edges, visible completed writes and one release responsibility. |
+| Owning launch within one swarm, different OS processes on one host, relocatable shared backing | Permit the swarm-region handoff. Verify a different mapping base, preserved graph edges, visible completed writes and exactly one release by the original live swarm. |
+| Child attempts to take ownership of its borrowed swarm, or to release a region of `s` through a distinct swarm of the same type | Reject both. A swarm cannot finish destruction while a child still needs its borrow or while any region still requires its release. |
 | Two threads in one swarm send the swarm’s region through a typed chan | Reject the send even when the root matches the message schema and both threads can address the bytes. |
 | Owning launch across two distinct swarms in the same address space | Reject transfer of the swarm region. |
 | A recruited worker on another machine receives an ordinary packet via chan | Apply ordinary packet type and whole-region validation. Swarm membership supplies no mapping for a host-local resource. |
@@ -527,7 +533,7 @@ same workloads rather than reopening those decisions.
 | How does pressure reach the sender? | Budget queued regions, assembly, completed output and transport windows separately. | Decide when admission waits, expires or declines, how capacity resumes, and who owns each payload during a wait. |
 | Who can close a chan, and what does close do? | A distinct owner/close capability; account for queued data and blocked receivers. | Specify late sends, drain/discard, shared collectors and the relationship to Actor termination. |
 | How does an Actor stop? | Examine cooperative stopping and defined interruption points, with explicit cleanup and application cancellation messages. | Arbitrary native-thread termination, native faults and uninterruptible foreign calls need their own boundaries; sedh's subprocess SIGKILL is not that contract. |
-| What happens if local thread creation fails? | Follow the owners passed to the entry procedure or named in the block's owner list when the child cannot enter. | Decide where failure is observed and which scope releases each resource. |
+| What happens if local thread creation fails? | Follow the owners passed to the entry procedure or named in the block's owner list when the child cannot enter. | Decide where failure is observed and how the provider accounts for each resource. Any release of a swarm region still goes through its live swarm. |
 | How do Actor startup and shared modules interact? | Start with fresh TLS while preserving module semantic identity and established module lifetimes. | Decide module initialization, shared resources and final OS-process shutdown. |
 | How are region boundaries recovered after a stream hole? | Compare region-aware framing over AKCP with a region envelope spanning existing records. | Decide how to identify transfers, detect a missing header/tail, validate complete coverage and root compatibility, and reclaim incomplete storage on expiry or epoch change. |
 
@@ -542,9 +548,9 @@ These are design acceptance workloads, not a test suite or a claim of implemente
 
 | Scenario | Observation required before the associated scope can be accepted |
 | --- | --- |
-| Both launch forms in one OS process | For each form, observe a dedicated child OS thread, fresh initial TLS and independent installations of the same symbol. The named entry procedure and the owner-list body can each use their transferred region and handle after the launcher leaves its scope. Check a mixed scalar argument, reject reuse of a consumed owner, and observe one release per resource still owned on normal or exceptional child exit. |
+| Both launch forms in one OS process | For each form, observe a dedicated child OS thread, fresh initial TLS and independent installations of the same symbol. The named entry procedure and the owner-list body can each use their transferred region and handle after the launching helper returns while the main process still owns the swarm. Check a mixed scalar argument, reject reuse of a consumed owner, and trace cleanup on normal and exceptional child exit. The live swarm releases the handed-off region exactly once and the native handle follows its own release contract. |
 | Nested launch with only an independent scalar argument | The nested launch still requires an explicit target swarm. There is no resource handoff for the provider to perform for that argument. Ordinary launch admission still applies. |
-| Named entry with a swarm region and an omitted scalar default | Run the caller-context default in the launcher. If it reads a valid local installation of `@amount` holding 7, the child receives the scalar 7 and starts with fresh initial TLS. If that default raises before entry, the launch has not consumed the prepared region. In the definition-context variant, the default runs in the child’s parameter preamble. If it raises after entry, child cleanup releases the transferred region even though the entry body never starts. [Parameter initialization order](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) · [Consuming calls](ExceptionControl.md#e4--consuming-calls-and-results) |
+| Named entry with a swarm region and an omitted scalar default | Run the caller-context default in the launcher. If it reads a valid local installation of `@amount` holding 7, the child receives the scalar 7 and starts with fresh initial TLS. If that default raises before entry, the launch has not consumed the prepared region. In the definition-context variant, the default runs in the child’s parameter preamble. If it raises after entry, cleanup of the handed-off region goes through its live swarm even though the entry body never starts. [Parameter initialization order](SymbolicDynamicScope.md#named-arguments-defaults-and-complete-binding) · [Consuming calls](ExceptionControl.md#e4--consuming-calls-and-results) |
 | Static payload mismatch | An incompatible message is rejected by the source type contract; an invalid external representation never becomes an admitted typed value. |
 | A deliberately lost message | Ordinary send remains fire-and-forget; all retained payload storage is accounted for, without a synthesized receipt or sender-view revival. |
 | A continuing communication fault | The selected fault policy reports the system condition to the sender; the ownership outcome is derivable and a later recovery has defined behavior. |

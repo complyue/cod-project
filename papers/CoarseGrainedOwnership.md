@@ -10,6 +10,8 @@ CoD lets an operation work across several such lifetimes. A region groups object
 
 This paper makes two claims with different evidence. The ownership rules let a program retire a graph without scheduling a separate release for each node. The resulting placement **can** make a large contiguous buffer available to a long-running process. We give an exact allocation trace for the second claim, a case where grouping wastes space, and an experiment for finding out which outcome a real service gets.
 
+In the production language design, a swarm gives this model another level. The main process owns the swarm. A child go process borrows it and may receive a region declared within it. The same live swarm releases that region, including all the storage for its graph. Handing the region binding to the child changes who can use it while preserving the identity responsible for its release. [Swarm ownership and region release](../design/ActorChannels.md#swarm-ownership-and-region-release)
+
 ## Start with the events that end a lifetime
 
 Consider one import followed by many searches with overlapping lifetimes. Each search reads a specific timetable revision. Its caller wants an itinerary after the frontier has been discarded. The application can give the following groups distinct actual owners.
