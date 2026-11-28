@@ -281,7 +281,7 @@ CoD 面向一项任务调动多个线程、进程或集群机器的重任务场�
 
 普通 region 在 `make` 时无须指定 swarm，可作为本地工作空间，也可在满足消息契约时作为 packet 经 `chan` 发送。swarm region 的所有权可随启动参数在同一 swarm 内移交。即使同一 swarm 的两个线程共享地址空间，向 `chan` 发送 swarm region 也不合法。同机进程可用共享内存支持启动时的移交。待检验的选择包括成员身份怎样进入静态签名、如何验证动态招募的 worker，以及队列何时接下释放责任。[资源池与共享内存示例](../design/ActorChannels.md#resource-pools-and-ownership-handoff)
 
-swarm 内 worker 之间的所有权移交由 swarm provider 提供操作，并显式声明支持哪些资源和传输路径。动态招募时，一个入口的所有 owning 实参都要能交给同一个 worker。声明形式及选定 worker 后的故障处理仍待设计。[provider 声明示例](../design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations)
+CoD 程序指定目标 swarm 和入口。物理 worker 由 provider 内部管理，没有可指称的 CoD worker 对象或 handle。provider 显式声明可移交的资源与放置条件。一次启动携带的所有 owning 实参必须能交给同一个子 go process。应用用任务标识和类型化回复端点关联结果。provider 的准入与故障处理仍待设计。[provider 声明示例](../design/ActorChannels.md#declaring-a-swarm-providers-handoff-operations)
 
 发送端和接收端可独立建模。其正式类型表达等待 higher-kinded type synonym，再用 producer、transformer、consumer 描述。[高阶类型别名议题](#higher-kinded-type-synonyms) · [管道类型语言讨论](#named-signatures-and-pipelines)
 
